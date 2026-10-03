@@ -266,11 +266,16 @@ export function createAutonomousStore(stateDir) {
     readLoopLease() { return leases.readJobLease(LOOP_LEASE_KEY); },
     releaseLoopLease(options) { return leases.releaseJob(LOOP_LEASE_KEY, options); },
 
-    async requestPause({ afterGoal = false } = {}) {
+    /**
+     * `by` records who asked. The daemon withdraws only a pause it asked for
+     * itself, and a later request from anybody else overwrites its mark — so
+     * the operator's pause can never be withdrawn as if it were the daemon's.
+     */
+    async requestPause({ afterGoal = false, by = 'operator' } = {}) {
       const run = await this.read();
       if (!run) throw new SpikeError('NO_AUTONOMOUS_RUN', 'There is no autonomous run to pause');
       // A pause request is a flag, never a kill: an inference in flight finishes.
-      return this.write({ ...run, pauseRequested: true, pauseAfterGoal: afterGoal });
+      return this.write({ ...run, pauseRequested: true, pauseAfterGoal: afterGoal, pauseRequestedBy: by });
     },
 
     async markPaused(reason) {
@@ -342,7 +347,7 @@ export function createAutonomousStore(stateDir) {
     async clearPause() {
       const run = await this.read();
       return this.write({
-        ...run, status: RUN_STATUS.RUNNING, pauseRequested: false, pauseAfterGoal: false, pauseReason: null,
+        ...run, status: RUN_STATUS.RUNNING, pauseRequested: false, pauseAfterGoal: false, pauseReason: null, pauseRequestedBy: null,
       });
     },
 
@@ -354,10 +359,14 @@ export function createAutonomousStore(stateDir) {
      * stop a person has to resolve. This is for whoever asked for the pause and
      * no longer wants it, whatever state the run is in.
      */
-    async withdrawPauseRequest() {
+    async withdrawPauseRequest({ onlyIfRequestedBy = null } = {}) {
       const run = await this.read();
       if (!run) return null;
-      return this.write({ ...run, pauseRequested: false, pauseAfterGoal: false });
+      // Conditional on the mark, re-read right here: the file has no lock, so
+      // this narrows the window in which somebody else's request could be
+      // undone to the few milliseconds between this read and this write.
+      if (onlyIfRequestedBy !== null && run.pauseRequestedBy !== onlyIfRequestedBy) return null;
+      return this.write({ ...run, pauseRequested: false, pauseAfterGoal: false, pauseRequestedBy: null });
     },
   };
 }

@@ -111,6 +111,15 @@ export function readDaemonConfig(env = process.env) {
       intervalMs: intFrom(env, 'IA_LOOP_DAEMON_SWEEP_INTERVAL_MS', 10 * 60_000, { min: 1 }),
     }),
 
+    reload: Object.freeze({
+      /** Reload the daemon by itself when its own code changes; off: only tell the operator. */
+      enabled: enabledFrom(env, 'IA_LOOP_DAEMON_RELOAD'),
+      /** How often the daemon fingerprints its own code (a few hundred stat calls). */
+      checkIntervalMs: intFrom(env, 'IA_LOOP_DAEMON_CODE_CHECK_INTERVAL_MS', 60_000, { min: 1 }),
+      /** How long a pending reload may hold back a new attach while work drains. */
+      holdAttachMs: intFrom(env, 'IA_LOOP_DAEMON_RELOAD_HOLD_MS', 10 * 60_000),
+    }),
+
     notify: Object.freeze({
       toast: enabledFrom(env, 'IA_LOOP_DAEMON_TOAST'),
     }),

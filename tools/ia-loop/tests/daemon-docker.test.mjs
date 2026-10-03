@@ -96,6 +96,18 @@ test('still down after starting: the stale-socket fix stops Docker, renames both
   assert.ok(events.some((e) => e.type === DAEMON_EVENTS.DOCKER_STALE_SOCKET_FIX));
 });
 
+test('mid-run the stale-socket fix is deferred: Docker Desktop is never killed while work may be using it', async () => {
+  const machine = fakeMachine({ infoOk: () => false });
+  let asked = 0;
+  const { result, events } = await ensure(machine, { mayRepair: async () => { asked += 1; return false; } });
+  assert.equal(asked, 1);
+  assert.equal(result.ready, false);
+  assert.equal(result.stage, 'REPAIR_DEFERRED');
+  assert.ok(!machine.calls.some((c) => c.startsWith('taskkill')), 'no taskkill');
+  assert.deepEqual(machine.renamed, [], 'no rename');
+  assert.ok(events.some((e) => e.type === DAEMON_EVENTS.DOCKER_FAILED && e.stage === 'REPAIR_DEFERRED'));
+});
+
 test('still down after the fix: not ready, and the loop is not attached', async () => {
   const machine = fakeMachine({ infoOk: () => false });
   const { result, events } = await ensure(machine);

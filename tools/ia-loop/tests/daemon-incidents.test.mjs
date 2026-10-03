@@ -204,6 +204,69 @@ test('an earlier GIT_FAILED the phase got past does not classify a later stop', 
   assert.equal(incident.kind, null);
 });
 
+test('a missing SSH key is not a filesystem race: Permission denied (publickey) stays with the operator', () => {
+  const output = `
+Blocker: [GIT_FAILED] git push origin ai-loop/goal-072 failed: Command failed: git push origin ai-loop/goal-072
+git@github.com: Permission denied (publickey).
+fatal: Could not read from remote repository.
+
+Goal 072 needs a human: UNKNOWN_FATAL
+`;
+  assert.equal(classifyHumanStop({ run: stopped('UNKNOWN_FATAL'), output }).kind, null);
+});
+
+test('a hook that refused the commit stays with the operator, even when it says "No such file or directory"', () => {
+  const output = `
+Blocker: [GIT_FAILED] git commit failed: Command failed: git commit -m "feat: x"
+.husky/pre-commit: line 4: npx: No such file or directory
+husky - pre-commit hook exited with code 127 (error)
+
+Goal 072 needs a human: UNKNOWN_FATAL
+`;
+  assert.equal(classifyHumanStop({ run: stopped('UNKNOWN_FATAL'), output }).kind, null);
+
+  const closure = `
+Blocker: [GIT_FAILED] git commit failed: Command failed: git commit
+error: cannot open .git/COMMIT_EDITMSG: Permission denied
+hint: The 'pre-commit' hook was ignored because it's not set as executable.
+
+Closure of Goal 101 needs a human: UNKNOWN_FATAL
+`;
+  assert.equal(classifyHumanStop({ run: stopped('UNKNOWN_FATAL', '101'), output: closure }).kind, null);
+});
+
+test('a transient-looking line counts only inside the GIT_FAILED message, not elsewhere in the window', () => {
+  const output = `
+warning: unable to unlink 'apps/web/.next/cache/x': Permission denied
+note: some unrelated tool said No such file or directory
+...
+Blocker: [GIT_FAILED] git merge failed: Command failed: git merge --ff-only ai-loop/goal-072
+fatal: Not possible to fast-forward, aborting.
+
+Goal 072 needs a human: UNKNOWN_FATAL
+`;
+  assert.equal(classifyHumanStop({ run: stopped('UNKNOWN_FATAL'), output }).kind, null);
+});
+
+test('"Permission denied" on a file operation inside the GIT_FAILED message is still transient', () => {
+  const output = `
+Blocker: [GIT_FAILED] git worktree remove failed: Command failed: git worktree remove .ai-worktrees/goal-072
+error: unable to unlink old 'apps/web/node_modules/.bin/next': Permission denied
+
+Goal 072 needs a human: UNKNOWN_FATAL
+`;
+  const incident = classifyHumanStop({ run: stopped('UNKNOWN_FATAL'), output });
+  assert.equal(incident.kind, DAEMON_INCIDENTS.GOAL_GIT_TRANSIENT);
+  assert.match(incident.evidence, /unable to unlink/);
+});
+
+test('PLANNING_WORKTREE_ADD only for the planning worktree of the Goal being closed', () => {
+  const output = PLANNING_WORKTREE_RACE.replace('Closure of Goal 059', 'Closure of Goal 060');
+  const incident = classifyHumanStop({ run: stopped('UNKNOWN_FATAL', '060'), output });
+  assert.notEqual(incident.kind, DAEMON_INCIDENTS.PLANNING_WORKTREE_ADD);
+  assert.notEqual(incident.kind, DAEMON_INCIDENTS.CLOSURE_GIT_TRANSIENT, 'another Goal\'s planning failure is not this closure\'s race');
+});
+
 // --- Budget and note -----------------------------------------------------------
 
 test('each kind has a per-Goal retry limit', () => {
@@ -351,6 +414,19 @@ test('PLANNING_MODEL_CONFLICT: keeps the refused plan as a patch, resets plannin
   assert.equal(runtime.closure.planningWorktreeCreated, false);
   assert.ok(calls.some((c) => c.startsWith('worktree remove --force')));
   assert.ok(events.some((e) => e.type === DAEMON_EVENTS.REPLAN_AUTHORIZED));
+});
+
+test('PLANNING_MODEL_CONFLICT: a diff that failed saved nothing, so the worktree is never force-removed', async () => {
+  for (const failing of ['-C E:\\repo\\.ai-worktrees\\plan-after-goal-081 diff', '-C E:\\repo\\.ai-worktrees\\plan-after-goal-081 add']) {
+    const { git, calls } = fakeGit({ [failing]: { code: 128, stderr: 'fatal: unable to read tree' } });
+    const patches = {};
+    const { deps } = baseDeps({ git, pathExists: async () => true, savePatch: async (name, content) => { patches[name] = content; } });
+    const outcome = await remedyIncident({ kind: DAEMON_INCIDENTS.PLANNING_MODEL_CONFLICT, goal: '081', planningJobId: 'p1' }, deps);
+    assert.equal(outcome.action, 'GIVE_UP');
+    assert.match(outcome.reason, /^PLANNING_DIFF_FAILED: fatal: unable to read tree/);
+    assert.ok(!calls.some((c) => c.startsWith('worktree remove')), failing);
+    assert.deepEqual(patches, {});
+  }
 });
 
 test('WORKER_HEARTBEAT_LOST: waits for that role to heartbeat again, or gives up', async () => {

@@ -20,7 +20,8 @@
  * daemon that is busy or gone cannot hang it.
  */
 
-import { access, mkdir, rename, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { access, mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -29,21 +30,23 @@ import { systemClock } from './lib/clock.mjs';
 import { createJobStore } from './lib/job-store.mjs';
 import { createLeaseStore } from './lib/leases.mjs';
 import { createProcessInspector } from './lib/process-inspector.mjs';
-import { activeWorktreesFromRuntime, killProcessTree, sweepOrphanProcesses } from './lib/orphan-processes.mjs';
+import { killProcessTree, sweepOrphanProcesses } from './lib/orphan-processes.mjs';
 import { WORKTREE_ROOT } from './lib/worktree-manager.mjs';
-import { acquireWorkerIdentity, describeHolder, startWorkerIdentityHeartbeat } from './lib/worker-identity.mjs';
+import {
+  acquireWorkerIdentity, computeCodeVersion, describeHolder, startWorkerIdentityHeartbeat,
+} from './lib/worker-identity.mjs';
 import { parseDuration } from './lib/pause-safety.mjs';
 import { isDirectExecution } from './lib/direct-execution.mjs';
-import { createDaemon } from './lib/daemon.mjs';
+import { createDaemon, daemonProtectedWorktrees } from './lib/daemon.mjs';
 import { readDaemonConfig } from './lib/daemon-config.mjs';
 import { ensureDocker } from './lib/daemon-docker.mjs';
 import { createRotatingLog, stampLine } from './lib/daemon-logs.mjs';
 import {
-  buildInstallCommand, buildUninstallCommand, createChildSpawner, createMemoryProbe, createToastSender,
-  renderCommand, runCommand, startDetached, startDetachedProgram,
+  buildInstallCommand, buildTaskXml, buildUninstallCommand, createChildSpawner, createMemoryProbe, createToastSender,
+  currentUserId, encodeTaskXml, renderCommand, runCommand, startDetached, startDetachedProgram,
 } from './lib/daemon-os.mjs';
 import {
-  DAEMON_REQUESTS, createDaemonStateStore, judgeDaemonLease, retireDeadDaemonLease,
+  DAEMON_REQUESTS, createDaemonStateStore, daemonPaths, judgeDaemonLease, retireDeadDaemonLease,
 } from './lib/daemon-state.mjs';
 import { DAEMON_CHILD_ENV, DAEMON_LEASE_ROLE } from './lib/daemon-vocabulary.mjs';
 
@@ -246,19 +249,29 @@ export async function stopCommand({
     return 2;
   }
 
-  // The daemon did not exit on its own. Kill its tree — but only after
-  // confirming the pid is still that daemon, never a recycled number.
+  // The daemon did not exit on its own. Kill its tree — but only once the
+  // pid is proven to still be that daemon: the start time of the process
+  // behind the pid must match the one the lease recorded. A pid the OS
+  // recycled, or one whose start time cannot be read, is not killed.
   const again = await currentDaemon({ stateDir, inspector });
   if (again.running && again.lease?.workerInstanceId === lease.workerInstanceId) {
     const startedNow = await inspector.startedAt(lease.pid).catch(() => null);
-    if (!startedNow || !lease.processStartedAt
-      || Math.abs(Date.parse(startedNow) - Date.parse(lease.processStartedAt)) <= 2_000) {
-      out(`The daemon did not exit in ${Math.round(graceMs / 1000)}s; killing its process tree (pid ${lease.pid}).`);
-      await killTree(lease.pid);
-      const after = await currentDaemon({ stateDir, inspector });
-      await retireDeadDaemonLease({ leaseStore: dstore.leases, judgement: after });
+    const confirmed = Boolean(startedNow && lease.processStartedAt)
+      && Math.abs(Date.parse(startedNow) - Date.parse(lease.processStartedAt)) <= 2_000;
+    if (!confirmed) {
+      out(`The daemon (pid ${lease.pid}) did not exit in ${Math.round(graceMs / 1000)}s, and that pid could not be confirmed `
+        + `to still be the daemon (process started ${startedNow ?? 'unknown'}, lease says ${lease.processStartedAt ?? 'unknown'}). `
+        + 'Nothing was killed; check the process and end it by hand if it is the daemon.');
+      return 1;
     }
+    out(`The daemon did not exit in ${Math.round(graceMs / 1000)}s; killing its process tree (pid ${lease.pid}).`);
+    await killTree(lease.pid);
+    const after = await currentDaemon({ stateDir, inspector });
+    await retireDeadDaemonLease({ leaseStore: dstore.leases, judgement: after });
   }
+  // The request was for the daemon just killed (or one that exited by
+  // itself); the next start must not read it as its own.
+  await rm(dstore.paths.request(DAEMON_REQUESTS.STOP), { force: true }).catch(() => {});
   out('Stopped. Leases the loop held are left for run-recover, which the next start runs.');
   return 0;
 }
@@ -284,23 +297,35 @@ export async function resumeCommand({ stateDir = STATE_DIR, from = null, resolve
 export async function taskCommand({
   action, dryRun = false, run = runCommand, taskName = readDaemonConfig().taskName,
   repoRoot = REPO_ROOT, platform = process.platform, out = console.log,
+  userId = currentUserId(), nodePath = process.execPath,
+  xmlPath = join(daemonPaths(STATE_DIR).root, 'logon-task.xml'),
+  writeXml = async (path, bytes) => { await mkdir(dirname(path), { recursive: true }); await writeFile(path, bytes); },
 }) {
-  const command = action === 'install' ? buildInstallCommand({ taskName, repoRoot }) : buildUninstallCommand({ taskName });
+  const xml = action === 'install' ? buildTaskXml({ repoRoot, userId, nodePath }) : null;
+  const command = action === 'install' ? buildInstallCommand({ taskName, xmlPath }) : buildUninstallCommand({ taskName });
   if (dryRun) {
     out(renderCommand(command));
+    if (xml) out(`\n${xmlPath}:\n${xml}`);
     return 0;
   }
   if (platform !== 'win32') {
     out('The logon task is a Windows Scheduled Task; on this platform start the daemon with your own service manager.');
     return 1;
   }
+  if (xml) await writeXml(xmlPath, encodeTaskXml(xml));
   const result = await run(command.command, command.args, { timeoutMs: 60_000 });
   if (result.code !== 0) {
-    out(`schtasks failed (exit ${result.code}): ${(result.stderr || result.stdout || '').trim()}`);
+    const detail = (result.stderr || result.stdout || '').trim();
+    out(`schtasks failed (exit ${result.code}): ${detail}`);
+    if (action === 'install' && /denied|negado/i.test(detail)) {
+      out(`A logon task for your own user (${userId}) should not need elevation. If this Windows still refuses, `
+        + 'run the same command once from an elevated terminal; the task itself keeps running with your normal rights.');
+    }
     return 1;
   }
   out(action === 'install'
-    ? `Scheduled Task "${taskName}" installed: at your logon it runs npm run ia-loop:start (hidden).`
+    ? `Scheduled Task "${taskName}" installed: one minute after ${userId} logs on it runs `
+      + `${nodePath} tools\\ia-loop\\run-daemon.mjs start (hidden, on battery too).`
     : `Scheduled Task "${taskName}" removed.`);
   return 0;
 }
@@ -309,8 +334,48 @@ export async function taskCommand({
 // run: the daemon process itself
 // ---------------------------------------------------------------------------
 
+/**
+ * The fingerprint of the code a daemon process runs: the worker's own
+ * fingerprint (lib/ and workers/, worker-identity.mjs) plus the root
+ * entrypoints the daemon loads, which that fingerprint leaves out on purpose.
+ */
+export async function computeDaemonCodeVersion({ root = HERE, entrypoints = ['run-daemon.mjs', 'run-worker.mjs'] } = {}) {
+  const { version } = await computeCodeVersion({ root });
+  const parts = [version];
+  for (const name of entrypoints) {
+    const info = await stat(join(root, name)).catch(() => null);
+    parts.push(`${name}:${info ? `${info.size}:${Math.round(info.mtimeMs)}` : 'missing'}`);
+  }
+  return createHash('sha256').update(parts.join('\n')).digest('hex').slice(0, 16);
+}
+
+/**
+ * What the process does once the daemon loop has ended, after its lease is
+ * released. A reload hands over to a fresh daemon: launched detached, it
+ * takes the lease the old one just gave up, restarts the workers and
+ * attaches the loop again. Returns the exit code.
+ */
+export async function afterDaemonExit({ result, relaunch, log = () => {}, notify = async () => {} }) {
+  if (result?.mode !== 'reload') return result?.mode === 'crashed' ? 1 : 0;
+  try {
+    const child = relaunch();
+    log('RELOAD', `new daemon launched (pid ${child?.pid ?? '?'}); this one exits`);
+    return 0;
+  } catch (error) {
+    log('ERROR', `could not launch the reloaded daemon: ${error.message}`);
+    await notify({ title: 'IA Loop: o daemon não religou', text: `A recarga falhou (${error.message}). Rode npm run ia-loop:start.` })
+      .catch(() => {});
+    return 1;
+  }
+}
+
 export async function runDaemonProcess({ stateDir = STATE_DIR, foreground = false } = {}) {
-  const config = readDaemonConfig();
+  const baseConfig = readDaemonConfig();
+  // A reload relaunches the daemon detached; one running in the operator's
+  // terminal must not move out of it by itself, so it only reports the change.
+  const config = foreground
+    ? Object.freeze({ ...baseConfig, reload: Object.freeze({ ...baseConfig.reload, enabled: false }) })
+    : baseConfig;
   const dstore = createDaemonStateStore(stateDir);
   const leaseStore = createLeaseStore(stateDir);
   const inspector = createProcessInspector();
@@ -360,7 +425,8 @@ export async function runDaemonProcess({ stateDir = STATE_DIR, foreground = fals
       repoRoot: REPO_ROOT, toolsDir: HERE, logFor, childEnv: { [DAEMON_CHILD_ENV]: '1' },
     }),
     killTree: (pid) => killProcessTree(pid),
-    ensureDocker: () => ensureDocker({
+    ensureDocker: (options = {}) => ensureDocker({
+      ...options,
       config: config.docker,
       run: runCommand,
       startDesktop: async (path) => startDetachedProgram(path),
@@ -375,7 +441,7 @@ export async function runDaemonProcess({ stateDir = STATE_DIR, foreground = fals
     sweepOrphans: (runtime) => sweepOrphanProcesses({
       roots: [join(REPO_ROOT, WORKTREE_ROOT)],
       repoRoot: REPO_ROOT,
-      activeWorktrees: activeWorktreesFromRuntime(runtime, REPO_ROOT),
+      activeWorktrees: daemonProtectedWorktrees(runtime, REPO_ROOT),
     }),
     git: (args) => runCommand('git', args, { cwd: REPO_ROOT, timeoutMs: 120_000 }),
     savePatch: async (name, content) => {
@@ -383,6 +449,7 @@ export async function runDaemonProcess({ stateDir = STATE_DIR, foreground = fals
       await writeFile(join(dstore.paths.incidents, name), content, 'utf8');
     },
     pathExists,
+    codeVersion: () => computeDaemonCodeVersion(),
   });
 
   // In the foreground, Ctrl+C reaches every child on the console too: the
@@ -405,8 +472,16 @@ export async function runDaemonProcess({ stateDir = STATE_DIR, foreground = fals
   await stopLeaseHeartbeat();
   await leaseStore.releaseWorker(DAEMON_LEASE_ROLE).catch(() => {});
   log('EXIT', `daemon exiting (${result?.mode ?? 'unknown'})`);
+  const code = await afterDaemonExit({
+    result,
+    relaunch: () => startDetached({
+      script: fileURLToPath(import.meta.url), args: ['run'], cwd: REPO_ROOT, bootLogPath: dstore.paths.bootLog,
+    }),
+    log,
+    notify: createToastSender(),
+  });
   // Pending timers (a grace period, a probe) must not keep a stopped daemon up.
-  return process.exit(result?.mode === 'crashed' ? 1 : 0);
+  return process.exit(code);
 }
 
 // ---------------------------------------------------------------------------

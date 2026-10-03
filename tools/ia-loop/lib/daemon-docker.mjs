@@ -63,6 +63,12 @@ export async function ensureDocker({
   clock,
   emit = async () => {},
   log = () => {},
+  /**
+   * Whether the destructive step (killing Docker Desktop for the stale-socket
+   * fix) may run now. The daemon allows it at boot and while the loop is
+   * idle; mid-job it would pull the database out from under a gate.
+   */
+  mayRepair = async () => true,
 }) {
   const dockerUp = async () => (await run('docker', ['info'], { timeoutMs: 30_000 })).code === 0;
 
@@ -81,6 +87,12 @@ export async function ensureDocker({
     await startDesktop(config.desktopPath);
 
     if (!(await waitForDocker())) {
+      if (!(await mayRepair())) {
+        const detail = 'Docker is down and the stale-socket fix (which kills Docker Desktop) waits until no job is running';
+        log('DOCKER', detail);
+        await emit({ type: DAEMON_EVENTS.DOCKER_FAILED, stage: 'REPAIR_DEFERRED', detail });
+        return { ready: false, stage: 'REPAIR_DEFERRED', detail };
+      }
       log('DOCKER', `still down after ${Math.round(config.startTimeoutMs / 1000)}s; applying the stale-socket fix`);
       const suffix = `stale-${staleSuffix(clock.now())}`;
       for (const image of ['Docker Desktop.exe', 'com.docker.backend.exe']) {

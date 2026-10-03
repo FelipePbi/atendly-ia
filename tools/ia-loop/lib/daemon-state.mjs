@@ -156,6 +156,11 @@ export function renderDaemonStatus({ lease, snapshot, now = Date.now() }) {
   if (snapshot.memory?.percent !== undefined && snapshot.memory?.percent !== null) {
     lines.push(`  Memory committed: ${snapshot.memory.percent.toFixed(1)}% (at ${snapshot.memory.at})`);
   }
+  if (snapshot.code?.changed) {
+    lines.push(`  Code: changed at ${snapshot.code.changed.at} — ${snapshot.code.reload
+      ? 'the daemon reloads itself at the next safe window'
+      : 'automatic reload is off; restart with npm run ia-loop:stop, then npm run ia-loop:start'}`);
+  }
   if (snapshot.ownedPause) lines.push(`  Pause requested by the daemon: ${snapshot.ownedPause.by} since ${snapshot.ownedPause.requestedAt}`);
   if (snapshot.heldIncident) lines.push(`  Held incident: ${snapshot.heldIncident.kind} (Goal ${snapshot.heldIncident.goal}) — resume with npm run ia-loop:daemon -- --resume`);
   if (snapshot.lastIncident) {

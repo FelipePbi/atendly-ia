@@ -15,9 +15,9 @@ import { join } from 'node:path';
 
 import { createAutonomousStore, LOOP_LEASE_KEY } from '../lib/autonomous-state.mjs';
 import { createFakeClock } from '../lib/clock.mjs';
-import { createDaemon, crashLoopVerdict, workerRestartPlan } from '../lib/daemon.mjs';
+import { createDaemon, crashLoopVerdict, daemonProtectedWorktrees, workerRestartPlan } from '../lib/daemon.mjs';
 import { readDaemonConfig } from '../lib/daemon-config.mjs';
-import { DAEMON_REQUESTS, createDaemonStateStore } from '../lib/daemon-state.mjs';
+import { DAEMON_REQUESTS, createDaemonStateStore, renderDaemonStatus } from '../lib/daemon-state.mjs';
 import {
   ATTACH_HOLDS, DAEMON_EVENTS, DAEMON_INCIDENTS, DAEMON_PAUSE_OWNERS, DAEMON_SHUTDOWN_MESSAGE,
 } from '../lib/daemon-vocabulary.mjs';
@@ -62,6 +62,7 @@ async function waitFor(predicate, what = 'condition') {
  */
 function harness(dir, {
   env = {}, behaviours = {}, probeMemory, ensureDocker, git, clock = createFakeClock(Date.parse('2026-10-03T12:00:00Z')),
+  sweepOrphans, codeVersion = null, failSpawn = () => false,
 } = {}) {
   const config = readDaemonConfig({ ...BASE_ENV, ...env });
   const spawned = [];
@@ -70,6 +71,7 @@ function harness(dir, {
   let nextPid = 5000;
 
   const spawnChild = (name, script, args, opts = {}) => {
+    if (failSpawn(name)) throw new Error(`spawn ${name} EPERM`);
     let resolveExit;
     const exited = new Promise((resolve) => { resolveExit = resolve; });
     const child = {
@@ -112,6 +114,8 @@ function harness(dir, {
     ensureDocker,
     git: git ?? (async (args) => ({ code: 0, stdout: args[0] === 'rev-list' ? '0\n' : '', stderr: '' })),
     pathExists: async () => false,
+    sweepOrphans,
+    codeVersion,
   });
 
   const store = createJobStore(dir);
@@ -502,6 +506,7 @@ test('high memory requests a pause the daemon owns; low memory for long enough w
   const h = harness(dir, { env: MEMORY_ENV, probeMemory: async () => ({ percent }) });
   await h.daemon.start();
   await h.daemon.tick();
+  await h.daemon.settle();
   assert.equal((await h.auto.read()).pauseRequested, true);
   assert.equal(h.all('run-auto').length, 0, 'not attached into a memory peak');
   assert.equal(h.daemon.state.ownedPause.by, DAEMON_PAUSE_OWNERS.MEMORY);
@@ -512,18 +517,23 @@ test('high memory requests a pause the daemon owns; low memory for long enough w
   percent = 90;
   h.clock.advance(120_000);
   await h.daemon.tick();
+  await h.daemon.settle();
   assert.equal(h.daemon.state.ownedPause.by, DAEMON_PAUSE_OWNERS.MEMORY, 'between thresholds: kept');
 
   percent = 70;
   h.clock.advance(1);
   await h.daemon.tick();
+  await h.daemon.settle();
   h.clock.advance(59_999);
   await h.daemon.tick();
+  await h.daemon.settle();
   assert.notEqual(h.daemon.state.ownedPause, null, 'not low for long enough yet');
   h.clock.advance(1);
   await h.daemon.tick();
+  await h.daemon.settle();
   assert.equal(h.daemon.state.ownedPause, null);
   assert.equal((await h.events(DAEMON_EVENTS.MEMORY_PAUSE_CLEARED)).length, 1);
+  await h.daemon.tick();
   await waitFor(() => h.live('run-auto').length === 1, 'the resume');
 }));
 
@@ -533,20 +543,24 @@ test('an operator pause is never withdrawn by the memory rule', () => withStateD
   const h = harness(dir, { env: MEMORY_ENV, probeMemory: async () => ({ percent }) });
   await h.daemon.start();
   await h.daemon.tick();
+  await h.daemon.settle();
   assert.equal(h.daemon.state.ownedPause.by, DAEMON_PAUSE_OWNERS.MEMORY);
 
   // The operator asks for a pause too: from now on it is theirs.
   await h.store.appendEvent({ type: 'AUTONOMOUS_RUN_PAUSE_REQUESTED', afterGoal: false });
   h.clock.advance(1);
   await h.daemon.tick();
+  await h.daemon.settle();
   assert.equal(h.daemon.state.ownedPause, null);
   assert.equal((await h.events(DAEMON_EVENTS.PAUSE_HANDED_TO_OPERATOR)).length, 1);
 
   percent = 50;
   h.clock.advance(1);
   await h.daemon.tick();
+  await h.daemon.settle();
   h.clock.advance(120_000);
   await h.daemon.tick();
+  await h.daemon.settle();
   assert.equal((await h.auto.read()).pauseRequested, true);
   assert.equal((await h.events(DAEMON_EVENTS.MEMORY_PAUSE_CLEARED)).length, 0);
 }));
@@ -556,6 +570,7 @@ test('a pause already requested when memory peaks is not taken over', () => with
   const h = harness(dir, { env: MEMORY_ENV, probeMemory: async () => ({ percent: 99 }) });
   await h.daemon.start();
   await h.daemon.tick();
+  await h.daemon.settle();
   assert.equal(h.daemon.state.ownedPause, null);
   assert.equal((await h.events(DAEMON_EVENTS.MEMORY_HIGH)).length, 1);
 }));
@@ -614,4 +629,323 @@ test('stop --now kills every tree and leaves the leases for recovery', () => wit
   assert.equal(h.spawned.filter((c) => c.alive).length, 0);
   assert.notEqual(await createLeaseStore(dir).readWorkerLease('developer'), null, 'left for recover');
   assert.equal((await h.auto.read()).pauseRequested, false, 'no pause was asked for');
+}));
+
+// --- Review fixes: pauses ----------------------------------------------------------
+
+test('a resume is cancelled by a pause the operator asks for after it', () => withStateDir(async (dir) => {
+  await writeRun(dir, { status: 'PAUSED', pauseRequested: true, pauseReason: 'operator' });
+  const h = harness(dir);
+  await h.daemon.start();
+  // The resume is accepted while the workers are not up yet, so it waits.
+  await h.dstore.writeRequest(DAEMON_REQUESTS.RESUME, {});
+  await h.daemon.tick();
+  assert.match(h.daemon.state.attachHold, new RegExp(ATTACH_HOLDS.WORKERS_NOT_HEALTHY));
+  assert.equal(h.daemon.state.resumePending.runId, 'auto-1');
+
+  // Meanwhile the operator pauses again (ia-loop:pause appends this event).
+  await h.store.appendEvent({ type: 'AUTONOMOUS_RUN_PAUSE_REQUESTED', autonomousRunId: 'auto-1', afterGoal: false });
+  await healthyWorkers(dir);
+  await h.daemon.tick();
+  assert.equal(h.all('run-auto').length, 0, 'the newer pause wins over the older resume');
+  assert.equal(h.daemon.state.resumePending, null);
+  assert.match(h.daemon.state.attachHold, new RegExp(ATTACH_HOLDS.RUN_PAUSED));
+  assert.equal((await h.events(DAEMON_EVENTS.RESUME_CANCELLED)).length, 1);
+
+  // A resume asked after that pause resumes.
+  await h.dstore.writeRequest(DAEMON_REQUESTS.RESUME, {});
+  await h.daemon.tick();
+  await waitFor(() => h.live('run-auto').length === 1, 'run-auto');
+}));
+
+test('the memory release never withdraws a pause the operator asked for, even before its event lands', () => withStateDir(async (dir) => {
+  await writeRun(dir);
+  let percent = 96;
+  const h = harness(dir, { env: MEMORY_ENV, probeMemory: async () => ({ percent }) });
+  await h.daemon.start();
+  await h.daemon.tick();
+  await h.daemon.settle();
+  assert.equal(h.daemon.state.ownedPause.by, DAEMON_PAUSE_OWNERS.MEMORY);
+  assert.equal((await h.auto.read()).pauseRequestedBy, 'daemon');
+
+  // run-pause writes the run first and appends its event after: catch it in between.
+  await h.auto.requestPause({ afterGoal: false });
+  percent = 50;
+  h.clock.advance(1);
+  await h.daemon.tick();
+  await h.daemon.settle();
+  h.clock.advance(120_000);
+  await h.daemon.tick();
+  await h.daemon.settle();
+  const run = await h.auto.read();
+  assert.equal(run.pauseRequested, true);
+  assert.equal(run.pauseRequestedBy, 'operator');
+  assert.equal(h.daemon.state.ownedPause, null);
+  assert.equal((await h.events(DAEMON_EVENTS.PAUSE_HANDED_TO_OPERATOR)).length, 1);
+  assert.equal((await h.events(DAEMON_EVENTS.MEMORY_PAUSE_CLEARED)).length, 0);
+
+  // And the store's own guard: a conditional withdraw leaves another requester's pause alone.
+  assert.equal(await h.auto.withdrawPauseRequest({ onlyIfRequestedBy: 'daemon' }), null);
+  assert.equal((await h.auto.read()).pauseRequested, true);
+}));
+
+// --- Review fixes: Docker, recovery, spawn, corrupt lease --------------------------
+
+test('the stale-socket repair is allowed at boot and on an idle loop, never mid-run', () => withStateDir(async (dir) => {
+  const verdicts = [];
+  const h = harness(dir, {
+    env: { IA_LOOP_DAEMON_DOCKER: '1' },
+    ensureDocker: async ({ mayRepair }) => { verdicts.push(await mayRepair()); return { ready: true, stage: 'READY', detail: 'ok' }; },
+  });
+  await writeLease(dir, 'jobs', 'job-1', { jobId: 'job-1' });
+  await h.daemon.start();
+  await h.daemon.tick();
+  await h.daemon.settle();
+  assert.deepEqual(verdicts, [true], 'boot: nothing can be using Docker yet');
+
+  h.clock.advance(h.config.docker.checkIntervalMs);
+  await h.daemon.tick();
+  await h.daemon.settle();
+  assert.deepEqual(verdicts, [true, false], 'a job holds a lease');
+
+  await rm(join(dir, 'leases', 'jobs', 'job-1.lock'), { force: true });
+  h.clock.advance(h.config.docker.checkIntervalMs);
+  await h.daemon.tick();
+  await h.daemon.settle();
+  assert.deepEqual(verdicts, [true, false, true]);
+
+  // With run-auto attached it is mid-run, whatever the leases say.
+  await writeRun(dir);
+  await healthyWorkers(dir);
+  await h.daemon.tick();
+  await waitFor(() => h.live('run-auto').length === 1, 'run-auto');
+  h.clock.advance(h.config.docker.checkIntervalMs);
+  await h.daemon.tick();
+  await waitFor(() => verdicts.length === 4, 'the mid-run check');
+  assert.equal(verdicts[3], false);
+}));
+
+test('run-recover that exits 0 but leaves the same lease counts as a failed attempt and backs off', () => withStateDir(async (dir) => {
+  await writeRun(dir);
+  await healthyWorkers(dir);
+  const old = new Date(Date.now() - 3_600_000).toISOString();
+  await writeLease(dir, 'jobs', LOOP_LEASE_KEY, { jobId: LOOP_LEASE_KEY, pid: 1, heartbeatAt: old, expiresAt: old });
+  const h = harness(dir, { behaviours: { 'run-recover': (child) => child.exit(0) } });
+  await h.daemon.start();
+  await h.daemon.tick();
+  await h.daemon.settle();
+  assert.equal(h.daemon.state.attachFailures, 1);
+  await h.daemon.tick();
+  await h.daemon.tick();
+  assert.equal(h.all('run-recover').length, 1, 'not again five seconds later');
+  assert.match(h.daemon.state.attachHold, new RegExp(ATTACH_HOLDS.BACKING_OFF));
+  h.clock.advance(h.config.attach.backoffBaseMs);
+  await h.daemon.tick();
+  await h.daemon.settle();
+  assert.equal(h.all('run-recover').length, 2);
+}));
+
+test('a run-auto that cannot even be spawned is a failed attempt with backoff, not a retry every tick', () => withStateDir(async (dir) => {
+  await writeRun(dir);
+  await healthyWorkers(dir);
+  let attempts = 0;
+  const h = harness(dir, { failSpawn: (name) => name === 'run-auto' && (attempts += 1) > 0 });
+  await h.daemon.start();
+  await h.daemon.tick();
+  await h.daemon.settle();
+  await h.daemon.tick();
+  await h.daemon.tick();
+  assert.equal(attempts, 1);
+  assert.equal(h.daemon.state.attachFailures, 1);
+  assert.match(h.daemon.state.attachHold, new RegExp(ATTACH_HOLDS.BACKING_OFF));
+}));
+
+test('a corrupt loop lease holds the loop, is reported once, and the snapshot keeps being written', () => withStateDir(async (dir) => {
+  await writeRun(dir);
+  await healthyWorkers(dir);
+  await writeLease(dir, 'jobs', LOOP_LEASE_KEY, { jobId: LOOP_LEASE_KEY, pid: 1, heartbeatAt: 'not a date' });
+  const h = harness(dir);
+  await h.daemon.start();
+  for (let i = 0; i < 3; i += 1) {
+    h.clock.advance(5_000);
+    await h.daemon.tick();
+  }
+  assert.equal(h.spawned.filter((c) => c.name.startsWith('run-')).length, 0, 'neither attached nor recovered');
+  assert.match(h.daemon.state.attachHold, new RegExp(ATTACH_HOLDS.LOOP_LEASE_CORRUPT));
+  assert.equal((await h.events(DAEMON_EVENTS.LOOP_LEASE_CORRUPT)).length, 1);
+  assert.equal(h.notes.filter((n) => /corrompido/.test(n.title)).length, 1);
+  const snapshot = await h.dstore.readSnapshot();
+  assert.match(snapshot.attachHold, /LOOP_LEASE_CORRUPT/);
+  assert.equal(snapshot.lastIncident.outcome, 'LOOP_LEASE_CORRUPT');
+}));
+
+// --- Review fixes: requests and stopping -------------------------------------------
+
+test('a stop asked before this daemon started, or a day-old resume, is ignored and said so', () => withStateDir(async (dir) => {
+  await writeRun(dir, { status: 'PAUSED', pauseRequested: true });
+  const h = harness(dir);
+  await mkdir(h.dstore.paths.requests, { recursive: true });
+  await writeFile(h.dstore.paths.request(DAEMON_REQUESTS.STOP), JSON.stringify({ mode: 'now', requestedAt: new Date(Date.now() - 60_000).toISOString() }));
+  await writeFile(h.dstore.paths.request(DAEMON_REQUESTS.RESUME), JSON.stringify({ requestedAt: new Date(Date.now() - 25 * 3_600_000).toISOString() }));
+  await h.daemon.start();
+  await h.daemon.tick();
+  assert.equal(h.daemon.stopped, false);
+  assert.equal(h.daemon.state.resumePending, null);
+  const ignored = await h.events(DAEMON_EVENTS.REQUEST_IGNORED);
+  assert.deepEqual(ignored.map((e) => e.request).sort(), ['resume', 'stop']);
+}));
+
+test('a resume that arrives while the daemon is stopping is reported, not dropped silently', () => withStateDir(async (dir) => {
+  await writeRun(dir);
+  await healthyWorkers(dir);
+  const h = harness(dir);
+  await h.daemon.start();
+  await h.daemon.tick();
+  await waitFor(() => h.live('run-auto').length === 1, 'run-auto');
+  await h.dstore.writeRequest(DAEMON_REQUESTS.STOP, { mode: 'graceful' });
+  await h.daemon.tick();
+  await h.dstore.writeRequest(DAEMON_REQUESTS.RESUME, {});
+  await h.daemon.tick();
+  const [ignored] = await h.events(DAEMON_EVENTS.REQUEST_IGNORED);
+  assert.equal(ignored.request, 'resume');
+  assert.match(ignored.reason, /stopping/);
+  assert.ok(h.notes.some((n) => /retomada ignorada/.test(n.title)));
+  await h.auto.markPaused('pause requested');
+  h.live('run-auto')[0].exit(0);
+  await waitFor(() => h.live('run-auto').length === 0, 'run-auto gone');
+  await h.daemon.settle();
+}));
+
+test('a graceful stop is not held forever by the loop lease of a dead run-auto; a live one still holds it', () => withStateDir(async (dir) => {
+  await writeRun(dir);
+  const old = new Date(Date.now() - 3_600_000).toISOString();
+  await writeLease(dir, 'jobs', LOOP_LEASE_KEY, { jobId: LOOP_LEASE_KEY, pid: 1, heartbeatAt: old, expiresAt: old });
+  const h = harness(dir);
+  await h.daemon.start();
+  await h.dstore.writeRequest(DAEMON_REQUESTS.STOP, { mode: 'graceful' });
+  await h.daemon.tick();
+  assert.deepEqual(await h.daemon.done, { mode: 'graceful' });
+
+  await writeLease(dir, 'jobs', LOOP_LEASE_KEY, { jobId: LOOP_LEASE_KEY, pid: 1 });
+  const live = harness(dir);
+  await live.daemon.start();
+  await live.dstore.writeRequest(DAEMON_REQUESTS.STOP, { mode: 'graceful' });
+  await live.daemon.tick();
+  await live.daemon.tick();
+  assert.equal(live.daemon.stopped, false);
+  assert.match(live.daemon.state.stopBlockers.join('\n'), /orchestrator still holds the loop/);
+}));
+
+// --- Review fixes: orphan sweep ----------------------------------------------------
+
+test('the periodic sweep never runs while a job or a worktree is leased', () => withStateDir(async (dir) => {
+  const calls = [];
+  const h = harness(dir, {
+    env: { IA_LOOP_DAEMON_SWEEP: '1', IA_LOOP_DAEMON_SWEEP_INTERVAL_MS: '600000' },
+    sweepOrphans: async (runtime) => { calls.push(runtime); return { killed: [], reported: [], failed: [] }; },
+  });
+  await writeLease(dir, 'jobs', 'job-1', { jobId: 'job-1' });
+  await h.daemon.start();
+  await h.daemon.tick();
+  await h.daemon.settle();
+  assert.equal(calls.length, 0, 'mid-attempt');
+
+  await rm(join(dir, 'leases', 'jobs', 'job-1.lock'), { force: true });
+  h.clock.advance(59_999);
+  await h.daemon.tick();
+  await h.daemon.settle();
+  assert.equal(calls.length, 0, 'the retry comes a minute later, not every tick');
+  h.clock.advance(1);
+  await h.daemon.tick();
+  await h.daemon.settle();
+  assert.equal(calls.length, 1);
+}));
+
+test('the sweep protects the planning worktree of the Goal being closed, which the V36 rule drops', () => {
+  const runtime = { goal: '072', goalClosed: true, closure: { goal: '072' } };
+  const protectedPaths = daemonProtectedWorktrees(runtime, 'E:\\repo');
+  assert.ok(protectedPaths.some((p) => p.endsWith('plan-after-goal-072')));
+  assert.deepEqual(daemonProtectedWorktrees(null, 'E:\\repo'), []);
+});
+
+// --- Review fixes: the daemon reloads its own code ---------------------------------
+
+const RELOAD_ENV = Object.freeze({ IA_LOOP_DAEMON_CODE_CHECK_INTERVAL_MS: '1', IA_LOOP_DAEMON_RELOAD_HOLD_MS: '60000' });
+
+test('changed daemon code: reported once, and the daemon reloads at the next safe window', () => withStateDir(async (dir) => {
+  let version = 'v1';
+  await healthyWorkers(dir);
+  const h = harness(dir, { env: RELOAD_ENV, codeVersion: async () => version });
+  await writeLease(dir, 'jobs', 'job-1', { jobId: 'job-1' });
+  await h.daemon.start();
+  await h.daemon.tick();
+  await h.daemon.settle();
+  assert.equal(h.daemon.state.code.boot, 'v1');
+
+  version = 'v2';
+  h.clock.advance(1);
+  await h.daemon.tick();
+  await h.daemon.settle();
+  assert.equal(h.daemon.state.code.changed.version, 'v2');
+  h.clock.advance(1);
+  await h.daemon.tick();
+  assert.equal(h.daemon.stopped, false, 'a job is still running');
+  assert.match(h.daemon.state.attachHold, new RegExp(ATTACH_HOLDS.RELOAD_PENDING));
+  assert.match(renderDaemonStatus({ lease: null, snapshot: null }).join('\n'), /NOT RUNNING/);
+  const lease = { pid: 1, acquiredAt: new Date().toISOString(), heartbeatAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 90_000).toISOString() };
+  assert.match(renderDaemonStatus({ lease, snapshot: h.daemon.state }).join('\n'), /Code: changed .* reloads itself at the next safe window/);
+
+  await rm(join(dir, 'leases', 'jobs', 'job-1.lock'), { force: true });
+  h.clock.advance(1);
+  await h.daemon.tick();
+  assert.deepEqual(await h.daemon.done, { mode: 'reload', codeVersion: 'v2' });
+  for (const name of ['developer', 'tech-lead']) assert.deepEqual(h.all(name)[0].sent, [DAEMON_SHUTDOWN_MESSAGE]);
+  assert.equal((await h.dstore.readSnapshot()).stopMode, 'reload');
+  assert.equal((await h.events(DAEMON_EVENTS.CODE_CHANGED)).length, 1);
+  assert.equal((await h.events(DAEMON_EVENTS.RELOADING)).length, 1);
+  assert.equal(h.notes.filter((n) => /código do daemon/.test(n.title)).length, 1);
+}));
+
+test('a reload never cuts run-auto short, and a window that stays shut stops holding the attach', () => withStateDir(async (dir) => {
+  let version = 'v1';
+  await writeRun(dir);
+  await writeLease(dir, 'jobs', 'job-1', { jobId: 'job-1' });
+  const h = harness(dir, { env: { ...RELOAD_ENV, IA_LOOP_DAEMON_RELOAD_HOLD_MS: '1000' }, codeVersion: async () => version });
+  await h.daemon.start();
+  version = 'v2';
+  // The workers report healthy only once the change is seen, so nothing attaches first.
+  await h.daemon.tick();
+  await h.daemon.settle();
+  await healthyWorkers(dir);
+  await h.daemon.tick();
+  assert.match(h.daemon.state.attachHold, new RegExp(ATTACH_HOLDS.RELOAD_PENDING));
+  assert.equal(h.all('run-auto').length, 0);
+
+  h.clock.advance(1_000);
+  await h.daemon.tick();
+  await waitFor(() => h.live('run-auto').length === 1, 'run-auto after the hold');
+  await rm(join(dir, 'leases', 'jobs', 'job-1.lock'), { force: true });
+  await h.daemon.tick();
+  assert.equal(h.daemon.stopped, false, 'run-auto is attached: no reload under it');
+
+  // run-auto reaches a pause and leaves: now the reload happens.
+  await h.auto.markPaused('pause requested');
+  h.live('run-auto')[0].exit(0);
+  await waitFor(() => h.live('run-auto').length === 0, 'run-auto gone');
+  await h.daemon.settle();
+  await h.daemon.tick();
+  assert.equal((await h.daemon.done).mode, 'reload');
+}));
+
+test('with the reload switched off, a code change is only reported', () => withStateDir(async (dir) => {
+  let version = 'v1';
+  const h = harness(dir, { env: { ...RELOAD_ENV, IA_LOOP_DAEMON_RELOAD: '0' }, codeVersion: async () => version });
+  await h.daemon.start();
+  version = 'v2';
+  await h.daemon.tick();
+  await h.daemon.settle();
+  await h.daemon.tick();
+  assert.equal(h.daemon.stopped, false);
+  assert.equal(h.daemon.state.code.changed.version, 'v2');
+  assert.match(h.notes[0].text, /recarga automática está desligada/);
 }));

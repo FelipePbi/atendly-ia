@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -16,15 +16,15 @@ import { createLeaseStore } from '../lib/leases.mjs';
 import { LIVENESS } from '../lib/process-inspector.mjs';
 import { acquireWorkerIdentity } from '../lib/worker-identity.mjs';
 import {
-  buildInstallCommand, buildUninstallCommand, createChildSpawner, createMemoryProbe, createToastSender,
-  renderCommand, startDetached, taskAction,
+  buildInstallCommand, buildTaskXml, buildUninstallCommand, createChildSpawner, createMemoryProbe, createToastSender,
+  encodeTaskXml, renderCommand, startDetached, startDetachedProgram, taskLaunch,
 } from '../lib/daemon-os.mjs';
 import {
   DAEMON_REQUESTS, createDaemonStateStore, judgeDaemonLease, renderDaemonStatus,
 } from '../lib/daemon-state.mjs';
 import { DAEMON_CHILD_ENV, DAEMON_LEASE_ROLE } from '../lib/daemon-vocabulary.mjs';
 import {
-  parseDaemonArgs, resumeCommand, startCommand, stopCommand, taskCommand,
+  afterDaemonExit, computeDaemonCodeVersion, parseDaemonArgs, resumeCommand, startCommand, stopCommand, taskCommand,
 } from '../run-daemon.mjs';
 
 async function withStateDir(run) {
@@ -75,40 +75,79 @@ test('parseDaemonArgs refuses what makes no sense', () => {
 
 // --- Logon task -----------------------------------------------------------
 
-test('install: ONLOGON task for the current user, hidden, running npm run ia-loop:start', () => {
-  const command = buildInstallCommand({ taskName: 'IA Loop Daemon', repoRoot: 'E:\\Projetos\\atendly-ia' });
-  assert.equal(command.command, 'schtasks.exe');
-  assert.deepEqual(command.args.slice(0, 4), ['/Create', '/TN', 'IA Loop Daemon', '/SC']);
-  assert.ok(command.args.includes('ONLOGON'));
-  assert.ok(!command.args.includes('/RU'), 'no /RU: no password is stored or asked for');
-  const action = command.args.at(-1);
-  assert.equal(action, taskAction({ repoRoot: 'E:\\Projetos\\atendly-ia' }));
-  assert.match(action, /-WindowStyle Hidden/);
-  assert.match(action, /Set-Location -LiteralPath 'E:\\Projetos\\atendly-ia'; npm run ia-loop:start/);
+test('install: a logon task XML for the current user, node by absolute path, no npm, on battery too', () => {
+  const xml = buildTaskXml({ repoRoot: 'E:\\Projetos\\atendly-ia', userId: 'PC\\felipe', nodePath: 'C:\\node\\node.exe' });
+  assert.match(xml, /<LogonTrigger>[\s\S]*<UserId>PC\\felipe<\/UserId>[\s\S]*<\/LogonTrigger>/, 'scoped to this user: no elevation');
+  assert.match(xml, /<LogonType>InteractiveToken<\/LogonType>/, 'no password stored or asked for');
+  assert.match(xml, /<RunLevel>LeastPrivilege<\/RunLevel>/);
+  assert.match(xml, /<DisallowStartIfOnBatteries>false<\/DisallowStartIfOnBatteries>/);
+  assert.match(xml, /<StopIfGoingOnBatteries>false<\/StopIfGoingOnBatteries>/);
+  assert.match(xml, /<ExecutionTimeLimit>PT0S<\/ExecutionTimeLimit>/);
+  assert.match(xml, /<MultipleInstancesPolicy>IgnoreNew<\/MultipleInstancesPolicy>/);
+  assert.match(xml, /<WorkingDirectory>E:\\Projetos\\atendly-ia<\/WorkingDirectory>/);
+
+  const launch = taskLaunch({ repoRoot: 'E:\\Projetos\\atendly-ia', nodePath: 'C:\\node\\node.exe' });
+  assert.equal(launch.command, 'powershell.exe');
+  assert.match(launch.arguments, /-ExecutionPolicy Bypass -WindowStyle Hidden/);
+  assert.match(launch.arguments, /& 'C:\\node\\node\.exe' 'E:\\Projetos\\atendly-ia\\tools\\ia-loop\\run-daemon\.mjs' start/);
+  assert.doesNotMatch(launch.arguments, /npm/, 'npm.ps1 is blocked by the default ExecutionPolicy');
+  // The quotes of the PowerShell command survive as XML entities.
+  assert.match(xml, /<Arguments>[^<]*-Command &quot;&amp; &apos;C:\\node\\node\.exe&apos;/);
+
+  const bytes = encodeTaskXml(xml);
+  assert.deepEqual([...bytes.subarray(0, 2)], [0xff, 0xfe], 'UTF-16 LE with BOM, as schtasks /XML reads it');
+  assert.equal(bytes.subarray(2).toString('utf16le'), xml);
+
+  assert.deepEqual(buildInstallCommand({ taskName: 'IA Loop Daemon', xmlPath: 'C:\\t.xml' }).args,
+    ['/Create', '/TN', 'IA Loop Daemon', '/XML', 'C:\\t.xml', '/F']);
   assert.deepEqual(buildUninstallCommand({ taskName: 'X' }).args, ['/Delete', '/TN', 'X', '/F']);
 });
 
-test('--dry-run prints the exact command and runs nothing', async () => {
+test('--dry-run prints the command and the XML, and writes and runs nothing', async () => {
   const { out, text } = collect();
   let ran = false;
-  const code = await taskCommand({ action: 'install', dryRun: true, run: async () => { ran = true; }, taskName: 'IA Loop Daemon', repoRoot: 'E:\\r', out });
+  let wrote = false;
+  const code = await taskCommand({
+    action: 'install', dryRun: true, run: async () => { ran = true; }, writeXml: async () => { wrote = true; },
+    taskName: 'IA Loop Daemon', repoRoot: 'E:\\r', userId: 'PC\\u', nodePath: 'C:\\node.exe', xmlPath: 'C:\\s\\task.xml', out,
+  });
   assert.equal(code, 0);
   assert.equal(ran, false);
-  assert.equal(text(), renderCommand(buildInstallCommand({ taskName: 'IA Loop Daemon', repoRoot: 'E:\\r' })));
-  assert.match(text(), /^schtasks\.exe \/Create \/TN "IA Loop Daemon"/);
+  assert.equal(wrote, false);
+  assert.match(text(), /^schtasks\.exe \/Create \/TN "IA Loop Daemon" \/XML C:\\s\\task\.xml \/F/);
+  assert.ok(text().includes(buildTaskXml({ repoRoot: 'E:\\r', userId: 'PC\\u', nodePath: 'C:\\node.exe' })));
 });
 
-test('install and uninstall go through the runner, and a failure is reported', async () => {
+test('install writes the XML first, then goes through the runner; a refusal is reported with the elevation hint', async () => {
   const calls = [];
+  const written = [];
+  const writeXml = async (path, bytes) => { written.push({ path, bytes }); };
   const ok = async (command, args) => { calls.push([command, ...args]); return { code: 0, stdout: 'SUCCESS', stderr: '' }; };
-  assert.equal(await taskCommand({ action: 'install', run: ok, taskName: 'T', repoRoot: 'E:\\r', platform: 'win32', out: () => {} }), 0);
-  assert.equal(await taskCommand({ action: 'uninstall', run: ok, taskName: 'T', repoRoot: 'E:\\r', platform: 'win32', out: () => {} }), 0);
+  const base = { taskName: 'T', repoRoot: 'E:\\r', platform: 'win32', userId: 'PC\\u', nodePath: 'C:\\node.exe', xmlPath: 'C:\\s\\task.xml', writeXml };
+  assert.equal(await taskCommand({ ...base, action: 'install', run: ok, out: () => {} }), 0);
+  assert.equal(await taskCommand({ ...base, action: 'uninstall', run: ok, out: () => {} }), 0);
   assert.deepEqual(calls.map((c) => c[1]), ['/Create', '/Delete']);
+  assert.equal(written.length, 1, 'only install writes a definition');
+  assert.equal(written[0].path, 'C:\\s\\task.xml');
 
   const { out, text } = collect();
   const denied = async () => ({ code: 1, stdout: '', stderr: 'ERROR: Access is denied.' });
-  assert.equal(await taskCommand({ action: 'install', run: denied, taskName: 'T', repoRoot: 'E:\\r', platform: 'win32', out }), 1);
+  assert.equal(await taskCommand({ ...base, action: 'install', run: denied, out }), 1);
   assert.match(text(), /Access is denied/);
+  assert.match(text(), /elevated terminal/);
+});
+
+// --- Docker Desktop launch --------------------------------------------------
+
+test('Docker Desktop starts through cmd /c start, so the daemon is never its parent', () => {
+  let seen;
+  const fake = (command, args, options) => { seen = { command, args, options }; return { on() {}, unref() {} }; };
+  assert.equal(startDetachedProgram('C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe', { spawnImpl: fake }), true);
+  assert.equal(seen.command, 'cmd.exe');
+  assert.deepEqual(seen.args, ['/d', '/s', '/c', 'start "" "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"']);
+  assert.equal(seen.options.detached, true);
+  assert.equal(seen.options.windowsVerbatimArguments, true);
+  assert.equal(startDetachedProgram('x', { spawnImpl: () => { throw new Error('ENOENT'); } }), false);
 });
 
 // --- Toast and memory probe -----------------------------------------------
@@ -261,11 +300,17 @@ test('stop writes the request and returns once the daemon released its lease', (
 
 test('stop --now kills the daemon tree itself if it does not exit, then frees the lock', () => withStateDir(async (dir) => {
   const leaseStore = createLeaseStore(dir);
-  await acquireWorkerIdentity({ leaseStore, role: DAEMON_LEASE_ROLE, inspector: inspectorWith() });
   let t = 0;
   let killed = null;
   let alive = true;
-  const inspector = { ...inspectorWith(), exists: () => (alive ? LIVENESS.ALIVE : LIVENESS.GONE) };
+  await acquireWorkerIdentity({ leaseStore, role: DAEMON_LEASE_ROLE, inspector: inspectorWith() });
+  // The lease records when this process started; the pid still shows that start.
+  const { processStartedAt } = await leaseStore.readWorkerLease(DAEMON_LEASE_ROLE);
+  const inspector = {
+    ...inspectorWith(),
+    startedAt: async () => processStartedAt,
+    exists: () => (alive ? LIVENESS.ALIVE : LIVENESS.GONE),
+  };
   const code = await stopCommand({
     stateDir: dir, now: true, inspector, graceMs: 1_000, pollMs: 500,
     wait: async (ms) => { t += ms; }, clockNow: () => t,
@@ -275,6 +320,28 @@ test('stop --now kills the daemon tree itself if it does not exit, then frees th
   assert.equal(code, 0);
   assert.equal(killed, process.pid);
   assert.equal(await leaseStore.readWorkerLease(DAEMON_LEASE_ROLE), null, 'the dead daemon lease is retired');
+  assert.deepEqual(await createDaemonStateStore(dir).takeRequests(), {}, 'the stop request does not outlive the daemon it was for');
+}));
+
+test('stop --now never kills a pid whose start time does not prove it is the daemon', () => withStateDir(async (dir) => {
+  const leaseStore = createLeaseStore(dir);
+  let t = 0;
+  let killed = null;
+  const recorded = inspectorWith();
+  await acquireWorkerIdentity({ leaseStore, role: DAEMON_LEASE_ROLE, inspector: recorded });
+  // Unreadable, or a different process behind the same pid number.
+  for (const startedAt of [async () => null, async () => '2001-01-01T00:00:00.000Z']) {
+    const { out, text } = collect();
+    const code = await stopCommand({
+      stateDir: dir, now: true, inspector: { ...recorded, startedAt }, graceMs: 1_000, pollMs: 500,
+      wait: async (ms) => { t += ms; }, clockNow: () => t,
+      killTree: async (pid) => { killed = pid; },
+      out,
+    });
+    assert.equal(code, 1);
+    assert.equal(killed, null);
+    assert.match(text(), /Nothing was killed/);
+  }
 }));
 
 test('resume is recorded as a request, even before the daemon starts', () => withStateDir(async (dir) => {
@@ -292,6 +359,38 @@ test('a request is acted on once', () => withStateDir(async (dir) => {
   assert.equal((await dstore.takeRequests()).stop.mode, 'now');
   assert.deepEqual(await dstore.takeRequests(), {});
 }));
+
+// --- Reload -------------------------------------------------------------------
+
+test('the daemon fingerprint moves with lib/ and with the root entrypoints the worker fingerprint skips', () => withStateDir(async (dir) => {
+  await mkdir(join(dir, 'lib'), { recursive: true });
+  await writeFile(join(dir, 'lib', 'a.mjs'), 'export const a = 1;\n');
+  await writeFile(join(dir, 'run-daemon.mjs'), '// v1\n');
+  const first = await computeDaemonCodeVersion({ root: dir });
+  assert.equal(await computeDaemonCodeVersion({ root: dir }), first, 'stable while nothing changes');
+  await writeFile(join(dir, 'run-daemon.mjs'), '// version two\n');
+  const second = await computeDaemonCodeVersion({ root: dir });
+  assert.notEqual(second, first);
+  await writeFile(join(dir, 'lib', 'a.mjs'), 'export const a = 22;\n');
+  assert.notEqual(await computeDaemonCodeVersion({ root: dir }), second);
+}));
+
+test('after a reload the process launches a fresh daemon; any other end launches nothing', async () => {
+  const launched = [];
+  const relaunch = () => { launched.push('run'); return { pid: 4242 }; };
+  assert.equal(await afterDaemonExit({ result: { mode: 'reload' }, relaunch }), 0);
+  assert.deepEqual(launched, ['run']);
+  assert.equal(await afterDaemonExit({ result: { mode: 'graceful' }, relaunch }), 0);
+  assert.equal(await afterDaemonExit({ result: { mode: 'crashed' }, relaunch }), 1);
+  assert.equal(launched.length, 1);
+
+  const notes = [];
+  const code = await afterDaemonExit({
+    result: { mode: 'reload' }, relaunch: () => { throw new Error('spawn EPERM'); }, notify: async (n) => { notes.push(n); },
+  });
+  assert.equal(code, 1);
+  assert.match(notes[0].text, /ia-loop:start/);
+});
 
 // --- Status -------------------------------------------------------------------
 

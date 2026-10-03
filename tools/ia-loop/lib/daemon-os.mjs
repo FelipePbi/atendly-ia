@@ -9,7 +9,7 @@
 
 import { spawn } from 'node:child_process';
 import { openSync, closeSync, mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, win32 } from 'node:path';
 
 /**
  * Runs a command and resolves `{ code, stdout, stderr }`. Never rejects.
@@ -115,27 +115,119 @@ export function createMemoryProbe({ run = runCommand, platform = process.platfor
 // ---------------------------------------------------------------------------
 
 /**
- * The command the logon task runs. `npm run` rather than `node` directly, so
- * the daemon and every child carry `npm_execpath` exactly as when the operator
- * starts it by hand (windows-command-resolver.mjs prefers it). PowerShell with
- * a hidden window, because a task running as the logged-on user otherwise
- * shows a console for the second the launcher lives.
+ * What the logon task executes: node itself, by absolute path, on
+ * run-daemon.mjs — no npm in between.
+ *
+ * `npm` from a task means npm.ps1 under Windows PowerShell 5.1, and with no
+ * ExecutionPolicy set (the default, Restricted) that script refuses to load:
+ * the task would fail at every logon without a word. node.exe is a plain
+ * executable, so no policy applies. Children still find npm without
+ * `npm_execpath`: windows-command-resolver.mjs falls back to the npm-cli.js
+ * that ships beside node.exe.
+ *
+ * PowerShell stays only as a host with a hidden window (a task running as
+ * the logged-on user otherwise shows a console for the 20s `start` waits);
+ * `-ExecutionPolicy Bypass` keeps it indifferent to the machine's policy.
  */
-export function taskAction({ repoRoot }) {
-  const root = String(repoRoot).replace(/'/g, "''");
-  return `powershell.exe -NoProfile -WindowStyle Hidden -Command "Set-Location -LiteralPath '${root}'; npm run ia-loop:start"`;
+export function taskLaunch({ repoRoot, nodePath = process.execPath }) {
+  const script = win32.join(repoRoot, 'tools', 'ia-loop', 'run-daemon.mjs');
+  const ps = (value) => `'${String(value).replace(/'/g, "''")}'`;
+  return {
+    command: 'powershell.exe',
+    arguments: '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden '
+      + `-Command "& ${ps(nodePath)} ${ps(script)} start"`,
+    workingDirectory: repoRoot,
+  };
+}
+
+const xmlText = (value) => String(value)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+
+/** DOMAIN\user of whoever installs the task: the task runs as that user, at that user's logon. */
+export function currentUserId(env = process.env) {
+  const user = env.USERNAME || 'unknown';
+  return env.USERDOMAIN ? `${env.USERDOMAIN}\\${user}` : user;
 }
 
 /**
- * `schtasks /Create`: at logon of the current user (no /RU, so no password is
- * stored or asked for), limited rights, a one-minute delay so the desktop and
- * Docker Desktop get going first, /F to replace an older definition.
+ * The task definition, in Task Scheduler's own XML.
+ *
+ * XML rather than `/SC ONLOGON` flags because the flags cannot say what this
+ * task needs:
+ *
+ * - The logon trigger names the user. A logon trigger without a user means
+ *   "any user", and creating that requires an elevated prompt; one scoped to
+ *   the installing user, run with that user's interactive token and least
+ *   privilege, is a task the user may create for themselves.
+ * - Battery: schtasks' defaults refuse to start on battery and kill the task
+ *   when the power cable is pulled. A laptop running the loop must not.
+ * - No execution time limit (the default is 72h, then the task's processes
+ *   are terminated), and a second instance is never started beside a first.
+ *
+ * InteractiveToken stores no password and needs none: the task only ever runs
+ * while the user is logged on, which is exactly when the daemon is wanted.
  */
-export function buildInstallCommand({ taskName, repoRoot }) {
-  return {
-    command: 'schtasks.exe',
-    args: ['/Create', '/TN', taskName, '/SC', 'ONLOGON', '/DELAY', '0001:00', '/RL', 'LIMITED', '/IT', '/F', '/TR', taskAction({ repoRoot })],
-  };
+export function buildTaskXml({ repoRoot, userId = currentUserId(), nodePath = process.execPath, delay = 'PT1M' }) {
+  const launch = taskLaunch({ repoRoot, nodePath });
+  return [
+    '<?xml version="1.0" encoding="UTF-16"?>',
+    '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">',
+    '  <RegistrationInfo>',
+    '    <Description>IA Loop daemon: starts tools/ia-loop/run-daemon.mjs at logon.</Description>',
+    '  </RegistrationInfo>',
+    '  <Triggers>',
+    '    <LogonTrigger>',
+    '      <Enabled>true</Enabled>',
+    `      <UserId>${xmlText(userId)}</UserId>`,
+    `      <Delay>${delay}</Delay>`,
+    '    </LogonTrigger>',
+    '  </Triggers>',
+    '  <Principals>',
+    '    <Principal id="Author">',
+    `      <UserId>${xmlText(userId)}</UserId>`,
+    '      <LogonType>InteractiveToken</LogonType>',
+    '      <RunLevel>LeastPrivilege</RunLevel>',
+    '    </Principal>',
+    '  </Principals>',
+    '  <Settings>',
+    '    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>',
+    '    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>',
+    '    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>',
+    '    <AllowHardTerminate>true</AllowHardTerminate>',
+    '    <StartWhenAvailable>true</StartWhenAvailable>',
+    '    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>',
+    '    <IdleSettings>',
+    '      <StopOnIdleEnd>false</StopOnIdleEnd>',
+    '      <RestartOnIdle>false</RestartOnIdle>',
+    '    </IdleSettings>',
+    '    <AllowStartOnDemand>true</AllowStartOnDemand>',
+    '    <Enabled>true</Enabled>',
+    '    <Hidden>false</Hidden>',
+    '    <RunOnlyIfIdle>false</RunOnlyIfIdle>',
+    '    <WakeToRun>false</WakeToRun>',
+    '    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>',
+    '    <Priority>7</Priority>',
+    '  </Settings>',
+    '  <Actions Context="Author">',
+    '    <Exec>',
+    `      <Command>${xmlText(launch.command)}</Command>`,
+    `      <Arguments>${xmlText(launch.arguments)}</Arguments>`,
+    `      <WorkingDirectory>${xmlText(launch.workingDirectory)}</WorkingDirectory>`,
+    '    </Exec>',
+    '  </Actions>',
+    '</Task>',
+    '',
+  ].join('\r\n');
+}
+
+/** schtasks reads /XML as UTF-16 LE with a byte-order mark, as Task Scheduler exports it. */
+export function encodeTaskXml(xml) {
+  return Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(xml, 'utf16le')]);
+}
+
+/** `schtasks /Create /XML`: /F replaces an older definition of the same name. */
+export function buildInstallCommand({ taskName, xmlPath }) {
+  return { command: 'schtasks.exe', args: ['/Create', '/TN', taskName, '/XML', xmlPath, '/F'] };
 }
 
 export function buildUninstallCommand({ taskName }) {
@@ -177,12 +269,20 @@ export function startDetached({ script, args = [], cwd, env = process.env, bootL
 }
 
 /**
- * Starts a GUI program (Docker Desktop) outside the daemon's job object.
- * Non-detached children die with the daemon; Docker Desktop must not.
+ * Starts a GUI program (Docker Desktop) so that it belongs to nobody.
+ *
+ * Spawned directly, the program's parent pid is the daemon, and
+ * `taskkill /T` on the daemon (`stop --now` when the daemon is stuck) walks
+ * parent pids and takes Docker Desktop down with it — the very database the
+ * next start needs. `cmd /c start` launches it and exits at once, so its
+ * parent is a process that no longer exists and no tree reaches it.
+ * `detached` keeps the short-lived cmd outside the daemon's job object.
  */
 export function startDetachedProgram(path, { spawnImpl = spawn } = {}) {
   try {
-    const child = spawnImpl(path, [], { detached: true, stdio: 'ignore' });
+    const child = spawnImpl('cmd.exe', ['/d', '/s', '/c', `start "" "${path}"`], {
+      detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true,
+    });
     child.on?.('error', () => {});
     child.unref?.();
     return true;

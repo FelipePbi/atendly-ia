@@ -38,14 +38,33 @@ export const CLOSURE_REDO_ATTEMPTS = 3;
 /**
  * The Windows filesystem races git reports. Seen verbatim: "unable to stat
  * just-written file", "unable to create file …: No such file or directory",
- * "Could not reset index file", plus the antivirus/indexer pair.
+ * "Could not reset index file", plus the antivirus/indexer pair — a file
+ * operation refused with "Permission denied", or a file in use.
+ *
+ * "Permission denied" alone is not on the list: `Permission denied
+ * (publickey)` is a missing SSH key, and no retry fixes that.
  */
-export const TRANSIENT_FS_PATTERN = /unable to stat|No such file or directory|unable to create file|Could not reset index|Permission denied|being used by another process/;
+export const TRANSIENT_FS_PATTERN = new RegExp([
+  'unable to stat',
+  'No such file or directory',
+  'unable to create file',
+  'Could not reset index',
+  '(?:unable to|cannot|could not|failed to) (?:unlink|open|create|rename|stat|lock|remove|write)[^\\n]*Permission denied',
+  'being used by another process',
+].join('|'));
+
+/**
+ * Failures that look like a filesystem race but are a decision: SSH refused
+ * the key, or a hook (husky, pre-commit, pre-push, the remote's) rejected the
+ * change. A hook script that is missing reports "No such file or directory"
+ * too. Retrying any of these repeats the refusal, so they go to a person.
+ */
+export const NOT_TRANSIENT_PATTERN = /publickey|Host key verification|\bhooks?\b|husky|pre-commit|pre-push|commit-msg|pre-receive|remote rejected/i;
 
 const GOAL_STOP = /Goal (\d{3}) needs a human: ([A-Z_]+)/g;
 const CLOSURE_STOP = /Closure of Goal (\d{3}) needs a human: ([A-Z_]+)/g;
 const PLANNING_WORKTREE_ADD = /git worktree add -b ai-loop\/plan-after-goal-(\d{3})/g;
-const GIT_FAILED_BLOCKER = /Blocker: \[GIT_FAILED\]/;
+const GIT_FAILED_BLOCKER = /Blocker: \[GIT_FAILED\]/g;
 const REV_PARSE_FAILED = /git rev-parse[^\n]*failed/;
 const HEARTBEAT_LOST_LINE = /The (tech_lead|developer) worker is no longer heartbeating/g;
 
@@ -63,6 +82,26 @@ const lastMatch = (pattern, text) => {
 function evidenceWindow(output, stopIndex) {
   const upTo = stopIndex >= 0 ? output.slice(0, stopIndex + 200) : output;
   return upTo.slice(-12_000);
+}
+
+/**
+ * The last `Blocker: [GIT_FAILED]` message and the lines printed with it, up
+ * to the first blank line. A transient error counts only when it belongs to
+ * the failure being classified: anywhere in the last 12k characters it could
+ * be an unrelated warning from minutes earlier.
+ */
+function gitFailedBlock(window) {
+  const blocker = lastMatch(GIT_FAILED_BLOCKER, window);
+  if (!blocker) return null;
+  const rest = window.slice(blocker.index);
+  const end = rest.search(/\n[ \t]*\r?\n/);
+  return (end >= 0 ? rest.slice(0, end) : rest).slice(0, 4_000);
+}
+
+/** The transient line of a GIT_FAILED block, unless the block says it is a refusal. */
+function transientEvidence(block) {
+  if (!block || NOT_TRANSIENT_PATTERN.test(block)) return null;
+  return firstLine(block, TRANSIENT_FS_PATTERN);
 }
 
 /** The first line matching a pattern, trimmed, for the `--resolved` note. */
@@ -109,26 +148,25 @@ export function classifyHumanStop({ run, output = '', events = [], runtime = nul
       }
     }
 
-    if (GIT_FAILED_BLOCKER.test(window)) {
-      const planning = lastMatch(PLANNING_WORKTREE_ADD, window);
-      if (planning) {
+    const block = gitFailedBlock(window);
+    if (block && !NOT_TRANSIENT_PATTERN.test(block)) {
+      // Only the planning worktree of the Goal being closed: a leftover line
+      // about another Goal's planning is not this stop.
+      const planning = lastMatch(PLANNING_WORKTREE_ADD, block);
+      if (planning && planning[1] === closedGoal) {
         return {
           kind: DAEMON_INCIDENTS.PLANNING_WORKTREE_ADD, goal: planning[1],
-          evidence: firstLine(window, TRANSIENT_FS_PATTERN) ?? firstLine(window, /git worktree add/),
+          evidence: firstLine(block, TRANSIENT_FS_PATTERN) ?? firstLine(block, /git worktree add/),
         };
       }
-      if (REV_PARSE_FAILED.test(window) || TRANSIENT_FS_PATTERN.test(window)) {
-        return {
-          kind: DAEMON_INCIDENTS.CLOSURE_GIT_TRANSIENT, goal: closedGoal,
-          evidence: firstLine(window, REV_PARSE_FAILED) ?? firstLine(window, TRANSIENT_FS_PATTERN),
-        };
+      const transient = firstLine(block, REV_PARSE_FAILED) ?? transientEvidence(block);
+      if (!planning && transient) {
+        return { kind: DAEMON_INCIDENTS.CLOSURE_GIT_TRANSIENT, goal: closedGoal, evidence: transient };
       }
     }
-  } else if (goalStop && GIT_FAILED_BLOCKER.test(window) && TRANSIENT_FS_PATTERN.test(window)) {
-    return {
-      kind: DAEMON_INCIDENTS.GOAL_GIT_TRANSIENT, goal,
-      evidence: firstLine(window, TRANSIENT_FS_PATTERN),
-    };
+  } else if (goalStop) {
+    const evidence = transientEvidence(gitFailedBlock(window));
+    if (evidence) return { kind: DAEMON_INCIDENTS.GOAL_GIT_TRANSIENT, goal, evidence };
   }
 
   if (stop && (stop[2] === 'UNKNOWN_FATAL' || reason === 'UNKNOWN_FATAL')) {
@@ -251,8 +289,13 @@ export async function remedyIncident(incident, deps) {
       // a patch and the runtime as it was, then planning starts over.
       const worktree = join(repoRoot, '.ai-worktrees', `plan-after-goal-${incident.goal}`);
       if (await pathExists(worktree)) {
-        await git(['-C', worktree, 'add', '-N', '.']);
-        const diff = await git(['-C', worktree, 'diff']);
+        // `remove --force` destroys the planning's work; it runs only after
+        // that work is safely in a patch. A diff that failed saved nothing.
+        const intent = await git(['-C', worktree, 'add', '-N', '.']);
+        const diff = intent.code === 0 ? await git(['-C', worktree, 'diff']) : intent;
+        if (diff.code !== 0) {
+          return { action: 'GIVE_UP', reason: `PLANNING_DIFF_FAILED: ${String(diff.stderr || diff.stdout || `exit ${diff.code}`).trim().slice(0, 200)}` };
+        }
         await savePatch(`plan-after-goal-${incident.goal}-${incident.planningJobId}.patch`, diff.stdout ?? '');
         await git(['worktree', 'remove', '--force', worktree]);
       }

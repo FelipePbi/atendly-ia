@@ -28,8 +28,9 @@
  */
 
 import { open as openFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
-import { RUN_STATUS, createAutonomousStore } from './autonomous-state.mjs';
+import { LOOP_LEASE_KEY, RUN_STATUS, createAutonomousStore } from './autonomous-state.mjs';
 import { createJobStore } from './job-store.mjs';
 import { classifyLease, createLeaseStore, LEASE_STATUS } from './leases.mjs';
 import { judgeSafeWindow, readSafeWindowFacts, SAFE_WINDOW_BLOCKERS } from './pause-safety.mjs';
@@ -43,9 +44,11 @@ import {
   classifyHumanStop, incidentBudget, incidentKey, remedyIncident, resolvedNoteFor,
 } from './daemon-incidents.mjs';
 import {
-  ATTACH_HOLDS, DAEMON_CHILDREN, DAEMON_EVENTS, DAEMON_PAUSE_OWNERS, DAEMON_SHUTDOWN_MESSAGE,
+  ATTACH_HOLDS, DAEMON_CHILDREN, DAEMON_EVENTS, DAEMON_PAUSE_OWNERS, DAEMON_PAUSE_REQUESTER, DAEMON_SHUTDOWN_MESSAGE,
   DAEMON_WORKER_ROLES, HELD_STAGES,
 } from './daemon-vocabulary.mjs';
+import { WORKTREE_ROOT } from './worktree-manager.mjs';
+import { activeWorktreesFromRuntime } from './orphan-processes.mjs';
 
 const ANSI = /\u001b\[[0-9;]*m/g;
 
@@ -58,6 +61,26 @@ export const DEFAULT_WORKER_SCRIPTS = Object.freeze(Object.fromEntries(
 const ATTACH_HEALTHY_AFTER_MS = 5 * 60_000;
 /** How many notification keys are remembered across restarts. */
 const NOTIFIED_KEEP = 100;
+/**
+ * A resume asked for while the daemon was down still counts — that is how
+ * `--resume` before `start` works — but not forever: a request a day old
+ * describes a situation nobody remembers.
+ */
+export const RESUME_REQUEST_MAX_AGE_MS = 24 * 60 * 60_000;
+
+/**
+ * The worktrees the periodic orphan sweep must never touch: those of the
+ * running Goal (orphan-processes.mjs's own rule) plus the planning worktree
+ * of the Goal being closed. activeWorktreesFromRuntime returns nothing once
+ * `goalClosed` is set, which is exactly when that planning worktree is busy.
+ */
+export function daemonProtectedWorktrees(runtime, repoRoot) {
+  const paths = new Set(activeWorktreesFromRuntime(runtime, repoRoot));
+  for (const goal of [runtime?.goal, runtime?.closure?.goal]) {
+    if (goal) paths.add(join(repoRoot, WORKTREE_ROOT, `plan-after-goal-${goal}`));
+  }
+  return [...paths];
+}
 
 /** Crashes inside the window, and whether they are too many. Same rule as run-worker.mjs. */
 export function crashLoopVerdict(timestamps, { now, limit, windowMs }) {
@@ -111,6 +134,8 @@ export function createDaemon(deps) {
     workerScripts = DEFAULT_WORKER_SCRIPTS,
     pid = process.pid,
     logDir = null,
+    /** The fingerprint of the daemon's own code; null turns the reload off. */
+    codeVersion = null,
   } = deps;
 
   const store = createJobStore(stateDir);
@@ -120,6 +145,8 @@ export function createDaemon(deps) {
 
   const iso = (ms = clock.now()) => new Date(ms).toISOString();
   const startedAt = iso();
+  /** Request files are stamped with wall-clock time by the CLI, so they are judged by it. */
+  const startedAtWallMs = Date.now();
 
   /** What must survive a daemon restart. Loaded from the last snapshot. */
   let persisted = {
@@ -155,7 +182,11 @@ export function createDaemon(deps) {
     checkedAt: null,
     task: null,
   };
-  const memory = { percent: null, at: null, high: false, lowSince: null, lastSampleAt: null };
+  const memory = { percent: null, at: null, high: false, lowSince: null, lastSampleAt: null, task: null };
+  /** The daemon's own code: what it booted with and whether that moved. */
+  const code = { boot: null, changed: null, lastCheckAt: null, task: null };
+  /** Docker repairs that kill Docker Desktop are allowed at boot, and later only while the loop is idle. */
+  let dockerChecks = 0;
   const sweep = { lastAt: null, task: null };
   const attach = { failures: 0, nextAt: 0, hold: null, holdDetail: null };
   let stopping = null;
@@ -380,14 +411,34 @@ export function createDaemon(deps) {
   // Docker
   // -------------------------------------------------------------------------
 
+  /**
+   * No job and no worktree is leased: nothing is using the database or a
+   * container right now. Leases are the evidence, not the run status, because
+   * a worker mid-job is exactly what a killed Docker Desktop would break.
+   */
+  async function loopIsQuiet() {
+    try {
+      const [jobs, worktrees] = await Promise.all([leaseStore.listJobLeases(), leaseStore.listWorktreeLeases()]);
+      return !jobs.filter(Boolean).some((lease) => (lease.jobId ?? lease.key) !== LOOP_LEASE_KEY)
+        && !worktrees.filter(Boolean).length;
+    } catch {
+      return false;
+    }
+  }
+
   function maybeCheckDocker() {
     if (!config.docker.enabled || docker.task || stopping) return;
     if (docker.checkedAt !== null && clock.now() - docker.checkedAt < config.docker.checkIntervalMs) return;
     docker.checking = true;
+    dockerChecks += 1;
+    const atBoot = dockerChecks === 1;
     docker.task = (async () => {
       let result;
       try {
-        result = await ensureDocker();
+        // The stale-socket fix kills Docker Desktop. At boot nothing can be
+        // using it yet; later only an idle loop may lose it. Mid-run the
+        // check just reports, and the next idle check repairs.
+        result = await ensureDocker({ mayRepair: async () => atBoot || (!loop.task && await loopIsQuiet()) });
       } catch (error) {
         result = { ready: false, stage: 'ERROR', detail: error.message };
       }
@@ -416,26 +467,42 @@ export function createDaemon(deps) {
 
   async function requestOwnedPause(by, run) {
     const eventsOffset = await eventsSize();
-    await auto.requestPause({ afterGoal: false });
+    await auto.requestPause({ afterGoal: false, by: DAEMON_PAUSE_REQUESTER });
     persisted.ownedPause = { by, requestedAt: iso(), runId: run.autonomousRunId, eventsOffset };
+  }
+
+  /** Whether the operator asked for a pause after a byte offset of events.jsonl. */
+  async function operatorPausedSince(offset) {
+    const since = await readEventsSince(offset ?? 0);
+    return since.some((event) => event.type === 'AUTONOMOUS_RUN_PAUSE_REQUESTED');
   }
 
   /**
    * Withdraws a pause the daemon asked for. A PAUSED run is resumed by the
    * next attach (run-auto clears the pause itself); a run that has not
    * reached its boundary yet just loses the request.
+   *
+   * Ownership is checked again first, right before acting: an operator who
+   * asked for a pause a moment ago must not lose it to a memory reading that
+   * happened to come back low in the same tick.
    */
   async function releaseOwnedPause(eventType, detail = null) {
+    await reconcileOwnedPause();
     const owned = persisted.ownedPause;
+    if (!owned) return false;
     persisted.ownedPause = null;
-    if (!owned) return;
     const run = await readRun();
     if (run && run.autonomousRunId === owned.runId) {
-      if (run.status === RUN_STATUS.PAUSED) persisted.resumePending = run.autonomousRunId;
-      else if (run.pauseRequested) await auto.withdrawPauseRequest();
+      if (run.status === RUN_STATUS.PAUSED) {
+        // The attach that resumes it checks the same offset again.
+        persisted.resumePending = { runId: run.autonomousRunId, eventsOffset: owned.eventsOffset ?? 0 };
+      } else if (run.pauseRequested) {
+        await auto.withdrawPauseRequest({ onlyIfRequestedBy: DAEMON_PAUSE_REQUESTER });
+      }
     }
     await emit({ type: eventType, by: owned.by, runId: owned.runId, detail });
     log('PAUSE', `pause owned by ${owned.by} released${detail ? `: ${detail}` : ''}`);
+    return true;
   }
 
   /**
@@ -453,8 +520,12 @@ export function createDaemon(deps) {
       log('PAUSE', `pause handed to the operator: ${reason}`);
     };
     if (!run || run.autonomousRunId !== owned.runId) return handOver('RUN_REPLACED');
-    const since = await readEventsSince(owned.eventsOffset ?? 0);
-    if (since.some((event) => event.type === 'AUTONOMOUS_RUN_PAUSE_REQUESTED')) return handOver('OPERATOR_REQUESTED_PAUSE');
+    if (await operatorPausedSince(owned.eventsOffset)) return handOver('OPERATOR_REQUESTED_PAUSE');
+    // run-pause writes the run before it appends its event; the mark closes
+    // that gap from the other side.
+    if (run.pauseRequested && run.pauseRequestedBy && run.pauseRequestedBy !== DAEMON_PAUSE_REQUESTER) {
+      return handOver('OPERATOR_REQUESTED_PAUSE');
+    }
     if (!run.pauseRequested && run.status !== RUN_STATUS.PAUSED) return handOver('PAUSE_WITHDRAWN_ELSEWHERE');
     return undefined;
   }
@@ -463,11 +534,22 @@ export function createDaemon(deps) {
   // Memory
   // -------------------------------------------------------------------------
 
-  async function maybeSampleMemory() {
-    if (!config.memory.enabled) return;
+  /**
+   * A task, like the Docker check: the probe is a PowerShell process that can
+   * take seconds (30s at worst), and the tick that restarts workers must not
+   * wait for it.
+   */
+  function maybeSampleMemory() {
+    if (!config.memory.enabled || memory.task) return;
     if (memory.lastSampleAt !== null && clock.now() - memory.lastSampleAt < config.memory.intervalMs) return;
     memory.lastSampleAt = clock.now();
-    const sample = await probeMemory().catch(() => null);
+    memory.task = (async () => {
+      const sample = await probeMemory().catch(() => null);
+      await applyMemorySample(sample);
+    })().catch((error) => log('ERROR', `memory check failed: ${error.message}`)).finally(() => { memory.task = null; });
+  }
+
+  async function applyMemorySample(sample) {
     if (!sample || !Number.isFinite(sample.percent)) return;
     memory.percent = sample.percent;
     memory.at = iso();
@@ -497,8 +579,9 @@ export function createDaemon(deps) {
       memory.high = false;
       memory.lowSince ??= clock.now();
       if (persisted.ownedPause?.by === DAEMON_PAUSE_OWNERS.MEMORY && clock.now() - memory.lowSince >= clearAfterMs) {
-        await releaseOwnedPause(DAEMON_EVENTS.MEMORY_PAUSE_CLEARED, `memory at ${sample.percent.toFixed(1)}%`);
-        await notify({ title: 'IA Loop: memória normalizada', text: `Memória em ${sample.percent.toFixed(1)}%; a pausa da memória foi retirada.` });
+        if (await releaseOwnedPause(DAEMON_EVENTS.MEMORY_PAUSE_CLEARED, `memory at ${sample.percent.toFixed(1)}%`)) {
+          await notify({ title: 'IA Loop: memória normalizada', text: `Memória em ${sample.percent.toFixed(1)}%; a pausa da memória foi retirada.` });
+        }
       }
       return;
     }
@@ -517,6 +600,13 @@ export function createDaemon(deps) {
     if (sweep.lastAt !== null && clock.now() - sweep.lastAt < config.sweep.intervalMs) return;
     sweep.lastAt = clock.now();
     sweep.task = (async () => {
+      // A unit mid-attempt can own a server whose parent just exited; the
+      // V36 sweep is safe at the end of an attempt, not in the middle of one.
+      // Busy now: look again in a minute rather than a whole interval.
+      if (!(await loopIsQuiet())) {
+        sweep.lastAt = clock.now() - config.sweep.intervalMs + Math.min(60_000, config.sweep.intervalMs);
+        return;
+      }
       const runtime = await store.readRuntime().catch(() => null);
       const result = await sweepOrphans(runtime);
       if (result.killed.length || result.failed.length) {
@@ -538,10 +628,18 @@ export function createDaemon(deps) {
     const capture = createOutputCapture();
     const eventsOffset = await eventsSize();
     const startedAtMs = clock.now();
-    const handle = spawnChild(name, `${name}.mjs`, args, {
-      ipc: false,
-      onOutput: (text) => capture.append(String(text).replace(ANSI, '')),
-    });
+    let handle;
+    try {
+      handle = spawnChild(name, `${name}.mjs`, args, {
+        ipc: false,
+        onOutput: (text) => capture.append(String(text).replace(ANSI, '')),
+      });
+    } catch (error) {
+      // A spawn that throws is a failed attempt like any other: the caller
+      // counts it and backs off, instead of retrying it on every tick.
+      log('ERROR', `cannot start ${name}: ${error.message}`);
+      return { code: -1, output: `cannot start ${name}: ${error.message}`, eventsOffset, startedAtMs };
+    }
     loop.child = { name, handle, startedAtMs, args };
     log('CHILD', `${name}${args.length ? ` ${args.join(' ')}` : ''} started (pid ${handle.pid})`);
     await emit({ type: DAEMON_EVENTS.CHILD_STARTED, child: name, pid: handle.pid, args });
@@ -712,12 +810,43 @@ export function createDaemon(deps) {
     await afterRunAuto(result);
   }
 
+  /**
+   * A loop lease that cannot be parsed. Neither attaching nor recovering is
+   * safe on top of it, so the loop holds, and the operator hears about it
+   * once per distinct lease rather than once per tick.
+   */
+  async function holdCorruptLease(run, error) {
+    const detail = `${error.code ?? 'LEASE_CORRUPT'}: ${error.message}`;
+    const key = `lease-corrupt:${run.autonomousRunId}:${error.message}`;
+    if (!persisted.notified[key]) {
+      persisted.lastIncident = { kind: null, goal: run.currentGoal ?? null, outcome: 'LOOP_LEASE_CORRUPT', reason: detail, at: iso() };
+      await emit({ type: DAEMON_EVENTS.LOOP_LEASE_CORRUPT, runId: run.autonomousRunId, detail });
+      await notify({
+        title: 'IA Loop: lease do loop corrompido',
+        text: `${detail}. Inspecione .state/leases/jobs/${LOOP_LEASE_KEY}.lock; o daemon não anexa nem recupera até ele ser legível.`,
+        key,
+      });
+    }
+    return setHold(ATTACH_HOLDS.LOOP_LEASE_CORRUPT, detail);
+  }
+
+  const sameLease = (a, b) => Boolean(a && b)
+    && a.workerInstanceId === b.workerInstanceId && a.version === b.version && a.heartbeatAt === b.heartbeatAt;
+
   async function recoverRun(lease) {
     log('RECOVER', `loop lease of ${lease.workerInstanceId ?? 'unknown'} is stale; running run-recover`);
     await emit({ type: DAEMON_EVENTS.RECOVERY_STARTED, owner: lease.workerInstanceId ?? null, heartbeatAt: lease.heartbeatAt ?? null });
     const result = await runLoopChild(DAEMON_CHILDREN.RUN_RECOVER, []);
     await emit({ type: DAEMON_EVENTS.RECOVERY_FINISHED, code: result.code });
-    if (result.code !== 0) await countAttachFailure(result, await readRun());
+    if (result.code !== 0) return countAttachFailure(result, await readRun());
+    // run-recover can succeed without retiring the lease (it judged the holder
+    // possibly alive, say). The next tick would find the same lease and run it
+    // again five seconds later, forever; an unchanged lease is a failed try.
+    const after = await auto.readLoopLease().catch(() => null);
+    if (sameLease(lease, after)) {
+      return countAttachFailure({ ...result, output: `${result.output}\nrun-recover exited 0 but the loop lease is unchanged` }, await readRun());
+    }
+    return undefined;
   }
 
   const bothWorkersRunning = async () => {
@@ -759,7 +888,17 @@ export function createDaemon(deps) {
       args = ['--from', held.from, '--resolved', held.note];
       why = held.kind ? `retry of ${held.kind}` : 'operator resolved the stop';
     } else if (run.status === RUN_STATUS.PAUSED) {
-      if (persisted.resumePending !== run.autonomousRunId) return setHold(ATTACH_HOLDS.RUN_PAUSED, run.pauseReason ?? null);
+      const pending = persisted.resumePending;
+      if (pending?.runId !== run.autonomousRunId) return setHold(ATTACH_HOLDS.RUN_PAUSED, run.pauseReason ?? null);
+      // run-auto clears whatever pause is on the run when it attaches. A
+      // pause the operator asked for after this resume was decided is newer
+      // than the resume, and attaching would silently undo it.
+      if (await operatorPausedSince(pending.eventsOffset)) {
+        persisted.resumePending = null;
+        log('RESUME', `resume of ${run.autonomousRunId} cancelled: the operator asked for a pause after it`);
+        await emit({ type: DAEMON_EVENTS.RESUME_CANCELLED, runId: run.autonomousRunId, reason: 'OPERATOR_REQUESTED_PAUSE' });
+        return setHold(ATTACH_HOLDS.RUN_PAUSED, run.pauseReason ?? null);
+      }
       why = 'resuming a pause';
     } else if (run.pauseRequested) {
       // RUNNING with a pause requested and nobody attached: attaching would
@@ -775,11 +914,30 @@ export function createDaemon(deps) {
     }
 
     if (memory.high) return setHold(ATTACH_HOLDS.MEMORY_HIGH);
+    // The probe runs as a task; the very first attach waits for its answer
+    // instead of starting work into a peak it has not seen yet.
+    if (config.memory.enabled && memory.task && memory.percent === null) return setHold(ATTACH_HOLDS.MEMORY_CHECKING);
 
-    // Leases are stamped with wall-clock time, so they are judged by it too.
-    const lease = run ? await auto.readLoopLease().catch(() => null) : null;
+    let lease = null;
+    if (run) {
+      try {
+        lease = await auto.readLoopLease();
+      } catch (error) {
+        // Unreadable is not absent: attaching over a lease nobody could read
+        // would start a second orchestrator beside a possibly live one.
+        if (error.code === 'LEASE_CORRUPT') return holdCorruptLease(run, error);
+        return setHold(ATTACH_HOLDS.LOOP_LEASE_UNREADABLE, error.message);
+      }
+    }
     if (lease && run && run.status !== RUN_STATUS.COMPLETED) {
-      if (classifyLease(lease, { now: Date.now() }).status === LEASE_STATUS.ACTIVE) {
+      // Leases are stamped with wall-clock time, so they are judged by it too.
+      let leaseStatus;
+      try {
+        leaseStatus = classifyLease(lease, { now: Date.now() }).status;
+      } catch (error) {
+        return holdCorruptLease(run, error);
+      }
+      if (leaseStatus === LEASE_STATUS.ACTIVE) {
         return setHold(ATTACH_HOLDS.ORCHESTRATOR_ELSEWHERE, `held by ${lease.workerInstanceId ?? 'unknown'} (pid ${lease.pid ?? '?'})`);
       }
       if (clock.now() < attach.nextAt) return setHold(ATTACH_HOLDS.BACKING_OFF, `until ${iso(attach.nextAt)}`);
@@ -821,7 +979,8 @@ export function createDaemon(deps) {
       }
       persisted.pendingStart = { args: ['--from', from, ...(resolved ? ['--resolved', resolved] : [])], at: iso() };
     } else if (run.status === RUN_STATUS.PAUSED) {
-      persisted.resumePending = run.autonomousRunId;
+      // The offset lets the attach see a pause asked for after this resume.
+      persisted.resumePending = { runId: run.autonomousRunId, eventsOffset: await eventsSize() };
     } else if (run.status === RUN_STATUS.RUNNING) {
       if (run.pauseRequested) await auto.clearPause();
     } else if (run.status === RUN_STATUS.PAUSED_FOR_HUMAN) {
@@ -859,10 +1018,41 @@ export function createDaemon(deps) {
     }
   }
 
+  async function ignoreRequest(name, request, reason) {
+    log('REQUEST', `${name} request ignored: ${reason}`);
+    await emit({ type: DAEMON_EVENTS.REQUEST_IGNORED, request: name, requestedAt: request.requestedAt ?? null, reason });
+  }
+
+  /**
+   * A request file outlives the process it was meant for: `stop --now` that
+   * had to kill a stuck daemon, say, leaves its request behind. A stop asked
+   * before this daemon started was meant for an earlier one. A resume asked
+   * while the daemon was down is legitimate (`--resume` before `start`), up
+   * to an age.
+   */
   async function handleRequests() {
     const requests = await dstore.takeRequests().catch(() => ({}));
-    if (requests.stop) await requestStop(requests.stop.mode === 'now' ? 'now' : 'graceful');
-    if (requests.resume && !stopping) await handleResume(requests.resume);
+    const at = (request) => Date.parse(request?.requestedAt ?? '');
+    if (requests.stop) {
+      if (at(requests.stop) < startedAtWallMs) {
+        await ignoreRequest('stop', requests.stop, `asked at ${requests.stop.requestedAt}, before this daemon started at ${new Date(startedAtWallMs).toISOString()}`);
+      } else {
+        await requestStop(requests.stop.mode === 'now' ? 'now' : 'graceful');
+      }
+    }
+    if (requests.resume) {
+      if (Date.now() - at(requests.resume) > RESUME_REQUEST_MAX_AGE_MS) {
+        await ignoreRequest('resume', requests.resume, `asked at ${requests.resume.requestedAt}, older than ${RESUME_REQUEST_MAX_AGE_MS / 3_600_000}h`);
+      } else if (stopping) {
+        await ignoreRequest('resume', requests.resume, `the daemon is stopping (${stopping.mode})`);
+        await notify({
+          title: 'IA Loop: retomada ignorada',
+          text: 'O daemon está parando; a retomada foi descartada. Depois de iniciar de novo, rode npm run ia-loop:daemon -- --resume.',
+        });
+      } else {
+        await handleResume(requests.resume);
+      }
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -877,20 +1067,37 @@ export function createDaemon(deps) {
    * child there is nothing that could move the run, so there is nothing to
    * wait for.
    */
+  /**
+   * The safe-window blockers that matter to a daemon with no loop task.
+   *
+   * With no run-auto child, a RUNNING run cannot move, so it is not waited
+   * for. Neither is a loop lease that is no longer ACTIVE: its run-auto is
+   * dead (killed, rebooted), nothing will ever release it, and the next start
+   * recovers it. An ACTIVE lease the daemon did not take is a live
+   * orchestrator elsewhere, and that one is waited for.
+   */
+  async function safeWindowBlockers() {
+    try {
+      const facts = await readSafeWindowFacts(stateDir);
+      const now = Date.now();
+      let orphanLease = false;
+      if (facts.loopLease && !loop.task) {
+        try { orphanLease = classifyLease(facts.loopLease, { now }).status !== LEASE_STATUS.ACTIVE; } catch { orphanLease = false; }
+      }
+      return judgeSafeWindow({ ...facts, now }).blockers.filter((b) => b.code !== SAFE_WINDOW_BLOCKERS.RUN_RUNNING_WITHOUT_ORCHESTRATOR
+        && !(orphanLease && [SAFE_WINDOW_BLOCKERS.RUN_RUNNING, SAFE_WINDOW_BLOCKERS.ORCHESTRATOR_HOLDS_LOOP].includes(b.code)));
+    } catch (error) {
+      return [{ code: SAFE_WINDOW_BLOCKERS.STATE_UNREADABLE, detail: error.message }];
+    }
+  }
+
   async function progressStop() {
     if (stopping?.mode !== 'graceful' || finishing) return;
     if (loop.task) {
       stopBlockers = [`${loop.child?.name ?? 'a loop task'} is still running (it stops at the next safe boundary)`];
       return;
     }
-    let blockers;
-    try {
-      const facts = await readSafeWindowFacts(stateDir);
-      blockers = judgeSafeWindow({ ...facts, now: Date.now() }).blockers
-        .filter((b) => b.code !== SAFE_WINDOW_BLOCKERS.RUN_RUNNING_WITHOUT_ORCHESTRATOR);
-    } catch (error) {
-      blockers = [{ code: SAFE_WINDOW_BLOCKERS.STATE_UNREADABLE, detail: error.message }];
-    }
+    const blockers = await safeWindowBlockers();
     const signature = blockers.map((b) => b.code).join(',');
     stopBlockers = blockers.map((b) => b.detail);
     if (blockers.length) {
@@ -912,7 +1119,7 @@ export function createDaemon(deps) {
     finishing = true;
     const live = Object.values(workers).filter((w) => w.handle);
 
-    if (mode === 'graceful') {
+    if (mode === 'graceful' || mode === 'reload') {
       // Asked, then waited for: a worker that releases its own role lease
       // lets the next start begin at once.
       const handles = live.map((worker) => worker.handle);
@@ -934,7 +1141,72 @@ export function createDaemon(deps) {
     await writeSnapshot({ stoppedAt: iso(), stopMode: mode });
     await emit({ type: DAEMON_EVENTS.STOPPED, mode });
     log('STOP', `stopped (${mode})`);
-    resolveDone({ mode });
+    resolveDone({ mode, ...(mode === 'reload' ? { codeVersion: code.changed?.version ?? null } : {}) });
+  }
+
+  // -------------------------------------------------------------------------
+  // The daemon's own code
+  // -------------------------------------------------------------------------
+
+  async function readCodeVersion() {
+    if (!codeVersion) return null;
+    try {
+      return (await codeVersion()) ?? null;
+    } catch (error) {
+      log('WARN', `cannot fingerprint the daemon code: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * A running process keeps executing the code it loaded at start, so an
+   * edited daemon never runs its fix until someone restarts it. Workers have
+   * the same problem and exit WORKER_CODE_CHANGED; the daemon notices the
+   * same way, by fingerprint, and reloads itself (maybeReload).
+   */
+  function maybeCheckCode() {
+    if (!codeVersion || code.task || code.changed || finishing) return;
+    if (code.lastCheckAt !== null && clock.now() - code.lastCheckAt < config.reload.checkIntervalMs) return;
+    code.lastCheckAt = clock.now();
+    code.task = (async () => {
+      const version = await readCodeVersion();
+      if (!version || !code.boot || version === code.boot) return;
+      code.changed = { version, at: iso(), holdUntil: clock.now() + config.reload.holdAttachMs };
+      log('RELOAD', `daemon code changed (${code.boot} -> ${version})`);
+      await emit({ type: DAEMON_EVENTS.CODE_CHANGED, from: code.boot, to: version, reload: config.reload.enabled });
+      await notify({
+        title: 'IA Loop: o código do daemon mudou',
+        text: config.reload.enabled
+          ? 'O daemon se reinicia sozinho na próxima janela segura (sem run-auto nem job ativo).'
+          : 'A recarga automática está desligada: reinicie com npm run ia-loop:stop e npm run ia-loop:start.',
+        key: `code:${version}`,
+      });
+    })().catch((error) => log('ERROR', `code check failed: ${error.message}`)).finally(() => { code.task = null; });
+  }
+
+  /**
+   * Reloads once the loop is at rest: no run-auto child (a run-auto lives
+   * for a whole run and is never cut short for this) and the same safe
+   * window a graceful stop waits for. While the window is shut by work that
+   * is finishing, no new run-auto is attached, so the window can open — but
+   * only for `holdAttachMs`: a window held shut by something that does not
+   * end must not stop the loop. After that the loop attaches as usual and the
+   * reload waits for run-auto to exit.
+   */
+  async function maybeReload() {
+    if (!code.changed || !config.reload.enabled || loop.task || stopping) return false;
+    const blockers = await safeWindowBlockers();
+    if (blockers.length) {
+      if (clock.now() < code.changed.holdUntil) {
+        setHold(ATTACH_HOLDS.RELOAD_PENDING, blockers.map((b) => b.detail).join('; '));
+        return true;
+      }
+      return false;
+    }
+    log('RELOAD', `reloading the daemon (code ${code.boot} -> ${code.changed.version})`);
+    await emit({ type: DAEMON_EVENTS.RELOADING, from: code.boot, to: code.changed.version });
+    await finish('reload');
+    return true;
   }
 
   // -------------------------------------------------------------------------
@@ -967,6 +1239,7 @@ export function createDaemon(deps) {
         ? { ready: docker.ready, checking: docker.checking, detail: docker.detail, checkedAt: docker.checkedAt === null ? null : iso(docker.checkedAt) }
         : null,
       memory: { percent: memory.percent, at: memory.at, high: memory.high },
+      code: { boot: code.boot, changed: code.changed ? { version: code.changed.version, at: code.changed.at } : null, reload: config.reload.enabled },
       ...persisted,
       ...extra,
     };
@@ -993,7 +1266,8 @@ export function createDaemon(deps) {
       persisted.incidentCounts ??= {};
       persisted.notified ??= {};
     }
-    log('START', `daemon pid ${pid} started`);
+    code.boot = await readCodeVersion();
+    log('START', `daemon pid ${pid} started${code.boot ? ` (code ${code.boot})` : ''}`);
     await emit({ type: DAEMON_EVENTS.STARTED, pid, docker: config.docker.enabled, memory: config.memory.enabled, sweep: config.sweep.enabled });
 
     // A pause the previous daemon asked for to stop cleanly is this start's to
@@ -1013,15 +1287,20 @@ export function createDaemon(deps) {
       if (stopped || finishing) return;
       ensureWorkers();
       maybeCheckDocker();
-      await maybeSampleMemory();
-      maybeSweep();
+      // Ownership first: a memory reading must never act on a pause the
+      // operator has taken over since the last tick.
       if (persisted.ownedPause) await reconcileOwnedPause();
+      maybeSampleMemory();
+      maybeSweep();
+      maybeCheckCode();
       if (stopping) await progressStop();
-      else await decideAttach();
-      if (!stopped) await writeSnapshot();
+      else if (!(await maybeReload())) await decideAttach();
     } catch (error) {
       log('ERROR', `tick failed: ${error.stack ?? error.message}`);
     } finally {
+      // Even a failed tick leaves a fresh snapshot: status must show the
+      // daemon is alive and what it last held on.
+      if (!stopped && !finishing) await writeSnapshot();
       ticking = false;
     }
   }
@@ -1042,7 +1321,7 @@ export function createDaemon(deps) {
     for (let i = 0; i < 50; i += 1) {
       // Exit handlers are queued as microtasks; let them start first.
       await new Promise((resolve) => { setImmediate(resolve); });
-      const pending = [loop.task, docker.task, sweep.task, ...pendingExits].filter(Boolean);
+      const pending = [loop.task, docker.task, memory.task, sweep.task, code.task, ...pendingExits].filter(Boolean);
       if (!pending.length) return;
       await Promise.all(pending);
     }

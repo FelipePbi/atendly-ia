@@ -42,7 +42,9 @@ sem o daemon, e o daemon é a implementação delas: mudar uma regra é mudar o 
    pedido (`clearPause`) antes de retomar. Pedido esquecido para o loop horas depois sem motivo.
    **Com o daemon (V37):** `--resume` limpa o pedido; o daemon retira sozinho só as pausas que ele
    mesmo pediu (memória alta, `ia-loop:stop`), e perde a posse delas assim que o operador pede
-   uma pausa também.
+   uma pausa também. A run marca quem pediu (`pauseRequestedBy`), e a retirada só apaga um
+   pedido que ainda seja do daemon. Uma pausa pedida depois de um `--resume` ainda não
+   executado cancela essa retomada.
 6. **Supervisor fora das tarefas do Claude.** Supervisor, guarda, keeper e amostrador de memória
    rodam como processos desanexados (`Start-Process ... -WindowStyle Hidden`), não como tarefa
    em segundo plano da sessão do Claude, que morre por limite de tempo ou quando o app fecha.
@@ -56,7 +58,9 @@ sem o daemon, e o daemon é a implementação delas: mudar uma regra é mudar o 
    `npm run ia-loop:recover -- --dry-run` antes de reanexar continua útil para conferir.
    **Com o daemon (V37):** a tarefa de logon sobe o daemon, que liga o Docker Desktop, aplica o
    conserto dos sockets se ele não subir, espera os containers ficarem saudáveis, roda o
-   `run-recover` para o lease velho do loop e só então reanexa.
+   `run-recover` para o lease velho do loop e só então reanexa. O conserto dos sockets mata o
+   Docker Desktop, então o daemon só o aplica na própria subida ou com o loop parado, nunca
+   no meio de um job.
 9. **Ler o resultado do job antes de atribuir a causa.** Conferir em `results/` o código e a
    hora da falha antes de dizer que um job morreu por desligamento, reinício ou falta de memória.
 

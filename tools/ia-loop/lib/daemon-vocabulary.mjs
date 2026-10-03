@@ -45,6 +45,16 @@ export const DAEMON_EVENTS = Object.freeze({
   PAUSE_HANDED_TO_OPERATOR: 'DAEMON_PAUSE_HANDED_TO_OPERATOR',
   ORPHAN_SWEEP: 'DAEMON_ORPHAN_SWEEP',
   NOTIFICATION: 'DAEMON_NOTIFICATION',
+  /** A stop or resume request that was not acted on, and why. */
+  REQUEST_IGNORED: 'DAEMON_REQUEST_IGNORED',
+  /** A resume the operator cancelled by asking for a pause after it. */
+  RESUME_CANCELLED: 'DAEMON_RESUME_CANCELLED',
+  /** The loop lease on disk cannot be parsed. */
+  LOOP_LEASE_CORRUPT: 'DAEMON_LOOP_LEASE_CORRUPT',
+  /** The daemon's own code changed on disk since it started. */
+  CODE_CHANGED: 'DAEMON_CODE_CHANGED',
+  /** The daemon stops to hand over to a copy of itself running the new code. */
+  RELOADING: 'DAEMON_RELOADING',
 });
 
 /**
@@ -103,6 +113,13 @@ export const DAEMON_PAUSE_OWNERS = Object.freeze({
 });
 
 /**
+ * What the daemon writes in the run's `pauseRequestedBy` when it asks for a
+ * pause. Any other value (`operator`, or none) is somebody else's pause, and
+ * the daemon never withdraws it.
+ */
+export const DAEMON_PAUSE_REQUESTER = 'daemon';
+
+/**
  * Where a held stop is in its handling. A catalogued incident found while a
  * pause was requested waits at REMEDY; one whose remedy already ran (or that
  * the operator resolved with `--resume --resolved`) waits at RETRY, and only
@@ -124,9 +141,17 @@ export const ATTACH_HOLDS = Object.freeze({
   DOCKER_NOT_READY: 'DOCKER_NOT_READY',
   /** Committed memory is above the high threshold: no new work starts. */
   MEMORY_HIGH: 'MEMORY_HIGH',
+  /** The first memory reading is still running: nothing starts before it is known. */
+  MEMORY_CHECKING: 'MEMORY_CHECKING',
   ORCHESTRATOR_ELSEWHERE: 'ORCHESTRATOR_ELSEWHERE',
   BACKING_OFF: 'BACKING_OFF',
   STOPPING: 'STOPPING',
+  /** The loop lease on disk is unreadable: a person has to look at it. */
+  LOOP_LEASE_CORRUPT: 'LOOP_LEASE_CORRUPT',
+  /** The loop lease could not be read right now (locked, mid-write); the next tick reads again. */
+  LOOP_LEASE_UNREADABLE: 'LOOP_LEASE_UNREADABLE',
+  /** The daemon's own code changed: no new attach until it has reloaded. */
+  RELOAD_PENDING: 'RELOAD_PENDING',
 });
 
 /**

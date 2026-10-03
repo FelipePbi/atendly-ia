@@ -42,6 +42,8 @@ import net from "node:net";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { bffPathname, pickFixedResponse, validateTargetResponses } from "./lib/visual-responses.mjs";
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FRONTEND_DIR = path.join(ROOT, "apps", "frontend");
 const PROTOTYPE_DIR = path.join(ROOT, "docs", "design-reference", "claude-design", "prototype", "project");
@@ -112,7 +114,7 @@ function parseArgs(argv) {
 
 export function loadTargets() {
   const raw = JSON.parse(readFileSync(TARGETS_FILE, "utf8"));
-  return raw.targets;
+  return validateTargetResponses(raw.targets);
 }
 
 /**
@@ -545,6 +547,16 @@ async function captureApp(browser, appUrl, session, target, device, file) {
     const headers = { ...route.request().headers(), origin: session.origin };
     return route.continue({ headers });
   });
+  // Resposta fixa de GET declarada pelo alvo (`responses`); registrada depois
+  // da reescrita de origem para ter precedência. O que não casa segue para ela.
+  if (target.responses?.length) {
+    await context.route("**/api/bff/**", (route) => {
+      const request = route.request();
+      const fixed = pickFixedResponse(target, request.method(), bffPathname(request.url()));
+      if (!fixed) return route.fallback();
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fixed.json) });
+    });
+  }
   const page = await context.newPage();
   if (target.clock && session.today) {
     // Hora do quadro (ex.: a linha de "agora" da Agenda às 13:45), no dia semeado.

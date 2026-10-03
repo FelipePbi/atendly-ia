@@ -1,5 +1,5 @@
 {
-  "$comment": "Mapa de quadros do protótipo (docs/design-reference/claude-design/prototype/project) para rotas do app, usado por scripts/visual-compare.mjs. file + label identificam o quadro (data-screen-label); nas versões tablet/desktop o rótulo é '<Módulo> / <label> / Portrait|Landscape|Desktop'. steps são ações simples para levar a tela ao estado do quadro (click, clickRole, fill, press, waitFor, wait). clock fixa a hora do navegador no dia semeado. notes registra diferenças que são estado da conta de teste, não layout.",
+  "$comment": "Mapa de quadros do protótipo (docs/design-reference/claude-design/prototype/project) para rotas do app, usado por scripts/visual-compare.mjs. file + label identificam o quadro (data-screen-label); nas versões tablet/desktop o rótulo é '<Módulo> / <label> / Portrait|Landscape|Desktop'. steps são ações simples para levar a tela ao estado do quadro (click, clickRole, fill, press, waitFor, wait). clock fixa a hora do navegador no dia semeado. responses (Goal106) é uma lista de { method, path, json } que leva a tela a um estado que a conta de teste não alcança: só method GET, path exato do BFF sob /v1/ sem query, json é o corpo inteiro da resposta (envelope { data, requestId }); servida por route.fulfill só para o alvo que a declara e só no navegador da captura, nada é gravado; outro método, caminho fora de /v1/ ou campo desconhecido recusa este arquivo (scripts/lib/visual-responses.mjs). notes registra diferenças que são estado da conta de teste, não layout.",
   "targets": [
     {
       "code": "L1",
@@ -451,7 +451,23 @@
       "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
       "label": "Configurações · WhatsApp",
       "route": "/configuracoes/whatsapp",
-      "notes": "O quadro mostra WhatsApp conectado; a conta de teste não tem número. Compare a estrutura."
+      "notes": "O quadro mostra WhatsApp conectado; a conta de teste não tem número, então o estado conectado vem de resposta fixa de GET /v1/whatsapp (responses), só no navegador da captura. O resto da casca (GET /v1/status, que decide o banner e o item Notificações) continua real.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/whatsapp",
+          "json": {
+            "data": {
+              "id": "visual-compare-whatsapp",
+              "phoneNumber": "5511987654321",
+              "status": "CONNECTED",
+              "connectedAt": "2026-09-18T15:00:00.000Z",
+              "updatedAt": "2026-10-01T15:00:00.000Z"
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
     },
     {
       "code": "I1",

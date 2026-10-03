@@ -159,12 +159,16 @@ const SEEDED_CONTENT: Partial<Record<AuthenticatedRoute["name"], SeededText>> = 
  *
  * `/configuracoes/whatsapp` renders the settings page's "WhatsApp" h1 in
  * every state, and its panel holds `aria-busy` only until the first status
- * read. The rehearsal tenant's number is connected, so the gate names the
- * connected heading and refuses the consent form: without this, a failed or
- * wrong status read would be measured as if it were the connected screen.
+ * read. The rehearsal tenant's number is connected, so the gate names a
+ * control only the connected screen renders (Goal106: the "Trocar número"
+ * row, since the connected screen no longer has its own heading) and refuses
+ * the consent form: without this, a failed or wrong status read would be
+ * measured as if it were the connected screen.
  */
-const LOADED_STATE: Partial<Record<AuthenticatedRoute["name"], { heading: string; absentRole: "checkbox" }>> = {
-  "configuracoes-whatsapp": { heading: "WhatsApp conectado", absentRole: "checkbox" },
+const LOADED_STATE: Partial<
+  Record<AuthenticatedRoute["name"], { marker: string; role: "button"; absentRole: "checkbox" }>
+> = {
+  "configuracoes-whatsapp": { marker: "Trocar número", role: "button", absentRole: "checkbox" },
 };
 
 /**
@@ -652,13 +656,13 @@ async function waitForLoadedContent(page: Page, route: AuthenticatedRoute): Prom
   const state = LOADED_STATE[route.name];
   if (state) {
     await expect(
-      page.getByRole("heading", { name: state.heading, exact: true }),
-      `${route.path} did not reach the state it must be measured in ("${state.heading}") within `
-        + `${CONTENT_TIMEOUT_MS}ms. Its h1 renders in every state, so measuring now could measure another one.`,
+      page.getByRole(state.role, { name: new RegExp(`^${state.marker}`) }),
+      `${route.path} did not reach the state it must be measured in (the "${state.marker}" ${state.role}) `
+        + `within ${CONTENT_TIMEOUT_MS}ms. Its h1 renders in every state, so measuring now could measure another one.`,
     ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
     await expect(
       page.getByRole(state.absentRole),
-      `${route.path} shows a ${state.absentRole} in the "${state.heading}" state: that is the consent form, `
+      `${route.path} shows a ${state.absentRole} in the connected state: that is the consent form, `
         + "which a connected number never sees.",
     ).toHaveCount(0);
   }

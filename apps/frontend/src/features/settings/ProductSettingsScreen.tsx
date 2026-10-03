@@ -189,7 +189,12 @@ function SettingsSection({
   if (scenario === "ai")
     return <AiSettings settings={settings} onSaved={setSettings} />;
   if (scenario.startsWith("whatsapp"))
-    return <WhatsAppSettings onStatusChange={setWhatsappConnected} />;
+    return (
+      <WhatsAppSettings
+        onStatusChange={setWhatsappConnected}
+        settings={settings}
+      />
+    );
   if (scenario === "calendar" || scenario === "calendar-external")
     return <CalendarSettings settings={settings} />;
   if (scenario === "calendar-rules")

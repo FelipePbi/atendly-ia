@@ -2291,3 +2291,202 @@ button.account-danger-card {
     transition: none;
   }
 }
+
+/* Goal106 (Mais-WhatsApp:W1): WhatsApp conectado em Configurações */
+.settings-page.is-pushed:has(.wa-screen) {
+  min-height: 100dvh;
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+.settings-page.is-pushed:has(.wa-screen) > .settings-pushed-body {
+  padding-bottom: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.wa-screen {
+  padding-top: 6px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  line-height: normal;
+}
+.wa-identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.wa-avatar-wrap {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  flex: none;
+}
+.wa-avatar {
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #5f574e;
+  background: #efeae2;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 500;
+}
+.wa-avatar .icon {
+  width: 28px;
+  height: 28px;
+}
+.wa-avatar-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid #f7f4ef;
+  border-radius: 50%;
+  color: #fffdfa;
+  background: #2e7d4f;
+  box-sizing: border-box;
+}
+.wa-identity-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.wa-identity-copy strong {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.wa-identity-phone {
+  color: #5f574e;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.wa-identity-pill {
+  width: fit-content;
+  height: 26px;
+  margin-top: 2px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  color: #1f5c39;
+  background: #dfefe4;
+  font-size: 12px;
+  font-weight: 600;
+}
+.wa-identity-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2e7d4f;
+}
+.wa-ai {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid #e5ded4;
+  border-radius: 16px;
+  background: #fffdfa;
+}
+.wa-ai-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.wa-ai-link {
+  margin: -12px 0 -12px auto;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  white-space: nowrap;
+  color: #716859;
+  font-size: 14px;
+  text-decoration: none;
+}
+.wa-rows {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #e5ded4;
+  border-radius: 16px;
+  background: #fffdfa;
+}
+.wa-row {
+  width: 100%;
+  padding: 13px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  line-height: normal;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.wa-row + .wa-row {
+  border-top: 1px solid #e5ded4;
+}
+.wa-row:hover {
+  background: #f7f4ef;
+}
+.wa-row-icon {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  color: #5f574e;
+}
+.wa-row-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.wa-row-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.wa-row-detail {
+  color: #5f574e;
+  font-size: 13px;
+}
+.wa-row > .icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: #b9b1a6;
+  stroke-width: 1.75;
+}
+.wa-note {
+  margin: 0;
+  color: #5f574e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+@media (min-width: 1024px) and (max-width: 1099px) {
+  .settings-page.is-pushed:has(.wa-screen) {
+    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wa-row {
+    transition: none;
+  }
+}

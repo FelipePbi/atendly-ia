@@ -394,7 +394,12 @@ describe("4. vinculação falha: volta ao consentimento", () => {
 
 describe("5. Configurações › WhatsApp não tem fase", () => {
   test("consentimento, pergunta, escolha de modo e Conectar WhatsApp na mesma tela", async () => {
-    render(<WhatsAppSettings onStatusChange={() => {}} />);
+    render(
+      <WhatsAppSettings
+        onStatusChange={() => {}}
+        settings={settingsFixture()}
+      />,
+    );
     const connect = await screen.findByRole("button", {
       name: "Conectar WhatsApp",
     });

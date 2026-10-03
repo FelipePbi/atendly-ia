@@ -22,7 +22,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { OnboardingState } from "@/data";
+import type { OnboardingState, SettingsState } from "@/data";
 
 const push = vi.fn();
 const replace = vi.fn();
@@ -67,6 +67,33 @@ import { WhatsAppSettings } from "@/features/settings/WhatsAppSettings";
 
 const CONSENT_TEXT =
   "Entendo que as conversas deste número poderão ser processadas e armazenadas para oferecer os recursos da Atendly.";
+
+function settingsFixture(): SettingsState {
+  return {
+    ai: { enabled: false, tone: "BALANCED" },
+    availability: {
+      customerChangeMinNoticeMinutes: 0,
+      granularityMinutes: 30,
+      maxLeadDays: 90,
+      minLeadMinutes: 0,
+      rules: [],
+      timezone: "America/Sao_Paulo",
+    },
+    business: null,
+    calendar: {
+      capabilities: {
+        createAppointments: true,
+        manageAvailability: true,
+        manageCustomers: true,
+        manageServices: true,
+        migrate: true,
+      },
+      integration: null,
+      source: "ATENDLY",
+      timezone: "America/Sao_Paulo",
+    },
+  };
+}
 
 function emptyState(): OnboardingState {
   return {
@@ -255,7 +282,12 @@ describe("o mesmo consentimento nos dois caminhos do painel", () => {
 
   test("Configurações › WhatsApp abre no mesmo consentimento, com o painel real", async () => {
     const user = userEvent.setup();
-    render(<WhatsAppSettings onStatusChange={() => {}} />);
+    render(
+      <WhatsAppSettings
+        onStatusChange={() => {}}
+        settings={settingsFixture()}
+      />,
+    );
     expect(screen.getByRole("heading", { name: "WhatsApp" })).toBeVisible();
     await expectConsentGate(user);
   });

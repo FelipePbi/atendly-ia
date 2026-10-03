@@ -54,14 +54,28 @@ export type WhatsAppConsentPhase = {
   onConsentRequired: () => void;
 };
 
+/** Ponto de extensão do estado conectado (só Configurações, sem
+ * `consentPhase`): o painel segue dono da leitura, da vinculação e do diálogo
+ * de desconexão, e quem estende só desenha o que fica no lugar do cartão. */
+export type WhatsAppConnectedContext = {
+  busy: boolean;
+  connection: WhatsAppConnection;
+  // Desconecta como o diálogo de hoje; resolve `true` quando desconectou.
+  disconnect: () => Promise<boolean>;
+  error: string | null;
+  openDisconnectDialog: () => void;
+};
+
 export function WhatsAppConnectionPanel({
   consentPhase,
   onConnected,
   onStatusChange,
+  renderConnected,
 }: {
   consentPhase?: WhatsAppConsentPhase;
   onConnected?: () => void;
   onStatusChange?: (connected: boolean) => void;
+  renderConnected?: (context: WhatsAppConnectedContext) => ReactNode;
 }) {
   const [connection, setConnection] = useState<WhatsAppConnection | null>(null);
   // Sem a primeira leitura de status, o painel não sabe se o número já está
@@ -314,7 +328,7 @@ export function WhatsAppConnectionPanel({
     }
   }
 
-  async function disconnect() {
+  async function disconnect(): Promise<boolean> {
     setBusy(true);
     setError(null);
     try {
@@ -331,8 +345,13 @@ export function WhatsAppConnectionPanel({
       setDisconnectConfirmationOpen(false);
       onStatusChangeRef.current?.(false);
       consentPhaseRef.current?.onConsentRequired();
+      return true;
     } catch {
       setError("Não foi possível desconectar o número.");
+      // Com o estado conectado estendido, o alerta mora na tela e não atrás
+      // do diálogo.
+      if (renderConnected) setDisconnectConfirmationOpen(false);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -488,6 +507,60 @@ export function WhatsAppConnectionPanel({
           </p>
         )}
       </div>
+    );
+  }
+
+  const disconnectDialog = (
+    <Dialog
+      eyebrow="Interrupção do serviço"
+      onClose={() => setDisconnectConfirmationOpen(false)}
+      open={disconnectConfirmationOpen}
+      title="Desconectar WhatsApp?"
+    >
+      <p className="settings-modal-copy">
+        A Atendly deixará de responder automaticamente assim que a desconexão
+        for concluída.
+      </p>
+      <div className="modal-actions">
+        <button
+          className="btn btn-secondary"
+          disabled={busy}
+          type="button"
+          onClick={() => setDisconnectConfirmationOpen(false)}
+        >
+          Manter conectado
+        </button>
+        <button
+          className="btn btn-danger"
+          disabled={busy}
+          type="button"
+          onClick={() => void disconnect()}
+        >
+          {busy ? "Desconectando..." : "Desconectar WhatsApp"}
+        </button>
+      </div>
+    </Dialog>
+  );
+
+  if (
+    renderConnected &&
+    !consentPhase &&
+    connection?.status === "CONNECTED"
+  ) {
+    return (
+      <>
+        <ConnectedSlot
+          context={{
+            busy,
+            connection,
+            disconnect,
+            error,
+            openDisconnectDialog: () => setDisconnectConfirmationOpen(true),
+          }}
+          render={renderConnected}
+        />
+        {disconnectDialog}
+      </>
     );
   }
 
@@ -812,37 +885,19 @@ export function WhatsAppConnectionPanel({
         </section>
       )}
 
-      <Dialog
-        eyebrow="Interrupção do serviço"
-        onClose={() => setDisconnectConfirmationOpen(false)}
-        open={disconnectConfirmationOpen}
-        title="Desconectar WhatsApp?"
-      >
-        <p className="settings-modal-copy">
-          A Atendly deixará de responder automaticamente assim que a desconexão
-          for concluída.
-        </p>
-        <div className="modal-actions">
-          <button
-            className="btn btn-secondary"
-            disabled={busy}
-            type="button"
-            onClick={() => setDisconnectConfirmationOpen(false)}
-          >
-            Manter conectado
-          </button>
-          <button
-            className="btn btn-danger"
-            disabled={busy}
-            type="button"
-            onClick={() => void disconnect()}
-          >
-            {busy ? "Desconectando..." : "Desconectar WhatsApp"}
-          </button>
-        </div>
-      </Dialog>
+      {disconnectDialog}
     </div>
   );
+}
+
+function ConnectedSlot({
+  context,
+  render,
+}: {
+  context: WhatsAppConnectedContext;
+  render: (context: WhatsAppConnectedContext) => ReactNode;
+}) {
+  return <>{render(context)}</>;
 }
 
 function ControlIcon({ children }: { children: ReactNode }) {

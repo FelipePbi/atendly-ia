@@ -211,8 +211,8 @@ Além de overflow, touch target, contraste, foco e movimento, ele mede
   "45 min" na lista.
 - **Estado medido** (Goal071): quando o h1 da rota aparece em qualquer
   estado, `LOADED_STATE` nomeia o estado que precisa estar na tela antes da
-  medida. `/configuracoes/whatsapp` só é medida com "WhatsApp conectado" e
-  sem checkbox de consentimento.
+  medida. `/configuracoes/whatsapp` só é medida com a linha "Trocar número"
+  (que só o estado conectado desenha, Goal106) e sem checkbox de consentimento.
 
 O mesmo passo também mede as etapas do onboarding descritas no vault
 (Goal065, WU-05): Boas-vindas, Segmento+nome, Modalidade, Endereço, Sistema

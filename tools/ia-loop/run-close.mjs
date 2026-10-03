@@ -56,6 +56,7 @@ import {
   isAlreadyIntegrated,
   git,
 } from './lib/git-ops.mjs';
+import { cleanupAfterClosure } from './lib/worktree-cleanup.mjs';
 import {
   assertSnapshotUnchanged,
   backfillFromReviewPacket,
@@ -809,6 +810,19 @@ async function main() {
     nextGoalId: closure.nextGoalId,
   });
 
+  // ---------- Release what the closed Goal still holds --------------------
+  // Only now, with the Goal integrated and recorded closed: servers still
+  // running out of its worktree are nobody's any more (M-08), and the
+  // worktree plus the planning worktree that produced the Goal are proven on
+  // main (M-09). Best-effort — the closure is already complete — except for a
+  // link removal that took its target with it, which must stop the loop.
+  emit('Releasing the closed Goal\'s processes and worktrees…');
+  const released = await cleanupAfterClosure({
+    repoRoot: REPO_ROOT, goalId, previousGoalId: goal.previousGoalId, emit,
+  });
+  await store.appendEvent({ type: 'GOAL_RESOURCES_RELEASED', goal: goalId, ...released });
+  emit('');
+
   emit('State:');
   for (const t of machine.history) emit(`  ${t.from} -> ${t.to}`);
   emit('');
@@ -827,7 +841,9 @@ async function main() {
   emit(`State: ${machine.state}`);
   emit('');
   emit('Next Goal executed: NO');
-  emit('Worktrees preserved. No push, no merge, no PR.');
+  emit(`Worktrees removed: ${released.removed.join(', ') || 'none'}`
+    + `${released.kept.length ? ` · kept: ${released.kept.map((k) => `${k.name} (${k.verdict})`).join(', ')}` : ''}`);
+  emit('No push, no merge, no PR.');
   return 0;
 }
 

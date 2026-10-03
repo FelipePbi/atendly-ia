@@ -29,7 +29,7 @@ import {
 import { isClaimableJobStatus } from './job-store.mjs';
 import { createResourceRegistry } from './resource-registry.mjs';
 import { cleanupResourcesForAttempt, scavengeOrphans } from './resource-lifecycle.mjs';
-import { sweepOrphanProcesses } from './orphan-processes.mjs';
+import { activeWorktreesFromRuntime, sweepOrphanProcesses } from './orphan-processes.mjs';
 import { logResourceEvent } from './shutdown-hooks.mjs';
 import { colorizeLogLine, createPaint } from './relay-logger.mjs';
 
@@ -251,7 +251,7 @@ export async function runWorkerLoop({
     log('ERROR', `startup resource scavenger failed: ${error.message}`);
   }
 
-  await sweepLoopOrphans('worker start');
+  await sweepLoopOrphans('worker start', store);
 
   // Past this point the role is genuinely ours, so saying so is true.
   onStarted();
@@ -425,7 +425,7 @@ export async function runWorkerLoop({
           }
         }
         inFlightAttemptId = null;
-        await sweepLoopOrphans('attempt ended');
+        await sweepLoopOrphans('attempt ended', store);
 
         // Released only once the execution really ended, so nothing else can
         // start while this attempt might still be writing.
@@ -452,16 +452,32 @@ export async function runWorkerLoop({
  * Processes an attempt left behind in a Goal worktree (lib/orphan-processes.mjs).
  * Best-effort: a sweep that fails is logged and never fails the worker.
  */
-const WORKTREES_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '.ai-worktrees');
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const WORKTREES_ROOT = join(REPO_ROOT, '.ai-worktrees');
 
-async function sweepLoopOrphans(reason) {
+/** Pids already reported, so a long-lived unproven service is named once per worker, not after every attempt. */
+const reportedOrphanPids = new Set();
+
+async function sweepLoopOrphans(reason, store) {
   // Not under `node --test`: a worker-loop test must not scan (or kill) the
   // real process table of the machine running the suite.
   if (process.env.NODE_TEST_CONTEXT || process.env.IA_LOOP_ORPHAN_SWEEP === '0') return;
   try {
-    const killed = await sweepOrphanProcesses({ roots: [WORKTREES_ROOT] });
+    const { killed, reported, failed } = await sweepOrphanProcesses({
+      roots: [WORKTREES_ROOT], repoRoot: REPO_ROOT,
+      activeWorktrees: activeWorktreesFromRuntime(await store?.readRuntime?.().catch(() => null), REPO_ROOT),
+    });
     for (const entry of killed) {
-      log('ORPHAN PROCESS KILLED', `pid ${entry.pid} ${entry.name} ${entry.mb} MB (${reason}) — ${String(entry.cmd).slice(0, 140)}`);
+      log('ORPHAN PROCESS KILLED', `pid ${entry.pid} ${entry.name} tree ${entry.treeSize ?? 1} proc ${entry.treeMb ?? entry.mb} MB `
+        + `${entry.reason} (${reason}) — ${String(entry.cmd).slice(0, 140)}`);
+    }
+    for (const entry of failed) {
+      log('ORPHAN PROCESS NOT KILLED', `pid ${entry.pid} ${entry.name} ${entry.failure} (${reason})`);
+    }
+    for (const entry of reported) {
+      if (reportedOrphanPids.has(entry.pid)) continue;
+      reportedOrphanPids.add(entry.pid);
+      log('ORPHAN PROCESS REPORTED', `pid ${entry.pid} ${entry.name} ${entry.treeMb ?? entry.mb} MB ${entry.reason} — ${entry.detail}`);
     }
   } catch (error) {
     log('ERROR', `orphan process sweep failed: ${error.message}`);

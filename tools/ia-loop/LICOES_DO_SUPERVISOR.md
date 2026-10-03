@@ -117,6 +117,12 @@ corrigidas. Elas não são erro do supervisor, mas a regra de contorno vale até
 - **M-10 — `unrecognized_model` para `claude-sonnet-5-5`.** Uma única ocorrência (DIAG-002 do
   103, 2026-10-03 03:20, minutos antes do desligamento da máquina). Se voltar a aparecer, tratar
   como falha transitória do CLI e investigar; hoje vira `UNKNOWN_FATAL`.
+- **M-11 — A pausa "na próxima fronteira segura" só vale depois do ACCEPTED.** O run-auto consulta
+  `shouldPauseAt` só em `AFTER_DECISION` (depois de um Goal aceito, antes do fechamento) e em
+  `GOAL_BOUNDARY`. As rodadas de correção correm dentro do `run-goal` sem consultar a pausa: em
+  2026-10-03 uma pausa pedida durante a R1 do Goal 106 atravessou a revisão R1, a correção R2, a
+  revisão R2 e a correção R3. Corrigir: consultar a pausa também entre a decisão de uma rodada e o
+  despacho da correção seguinte. Até lá, contar com a pausa só no fim do Goal.
 
 ## Falhas do harness corrigidas na V36
 

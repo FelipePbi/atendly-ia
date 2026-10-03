@@ -467,6 +467,9 @@ async function main() {
   // correction round. They were `const`, which made the in-process continuation
   // after CHANGES_REQUIRED throw before it could start the next round.
   let pendingBlockers = reconciled.next.blockers ?? [];
+  // Whether the reviewer said those blockers close by documentation alone.
+  // It only shapes what the correction unit is handed (lib/gate-evidence.mjs).
+  let pendingCorrectionScope = reconciled.next.correctionScope ?? null;
   let startAsCorrection = reconciled.next.kind === DISPATCH_KINDS.CORRECTION;
 
   // The Developer profile the Tech Lead chose for this Goal when it planned it.
@@ -626,6 +629,7 @@ async function main() {
       worktree: absWorktree,
       goalPath: goal.goalPath,
       blockers: isCorrection ? pendingBlockers.map(blockerText) : [],
+      correctionScope: isCorrection ? pendingCorrectionScope : null,
       previousImplementationReport: lastDevResult?.implementationReport ?? priorGoalExecution?.lastImplementationReport ?? null,
       previousDecision: isCorrection ? 'CHANGES_REQUIRED' : undefined,
       changedFiles: lastChanges?.changedFiles ?? [],
@@ -1012,8 +1016,10 @@ async function main() {
         type: 'CORRECTION_ROUND_STARTED', goal: goal.goalId,
         fromRound: round, toRound: plan.nextRound, blockers: decision.blockers.length,
         nextDeveloperProfile: decision.nextDeveloperProfile ?? null,
+        correctionScope: decision.correctionScope ?? null,
       });
       pendingBlockers = decision.blockers;
+      pendingCorrectionScope = decision.correctionScope ?? null;
       round = plan.nextRound;
       startAsCorrection = true;
       // The machine is already in CORRECTION_QUEUED; the next iteration

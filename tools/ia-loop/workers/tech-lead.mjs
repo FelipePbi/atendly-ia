@@ -286,6 +286,14 @@ function buildClosureDocPrompt(job) {
     '',
     'Não atualize um documento só para mexer em data ou formatação: registre substância.',
     '',
+    // The harness flips the word itself before the closure commit (see
+    // lib/goal-status-transition.mjs). Saying so stops the model spending a
+    // turn on it, and keeps it from rewriting the line into a shape the
+    // deterministic flip cannot recognise.
+    'A palavra na linha "**Status: READY.**" do próprio Goal é trocada para ACCEPTED pelo harness,',
+    'de forma determinística, no commit de fechamento. Você não precisa trocá-la; se quiser',
+    'acrescentar a nota de aceite, mantenha o formato "**Status: X.**" no início da linha.',
+    '',
     'Retorne exclusivamente o JSON do contrato ClosureDocResult, listando em',
     'documentsUpdated os caminhos que você realmente alterou.',
   ].join('\n');

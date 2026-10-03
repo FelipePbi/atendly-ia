@@ -27,7 +27,7 @@ import {
   toJobRouting,
 } from './lib/model-routing.mjs';
 import { discoverGoal } from './lib/goal-discovery.mjs';
-import { ensureGoalAcceptedStatus } from './lib/goal-status-transition.mjs';
+import { ensureGoalAcceptedStatus, flipGoalStatusForClosureCommit } from './lib/goal-status-transition.mjs';
 import { ensureMigrationStatusRowAccepted, ensureMigrationStatusRowExists } from './lib/migration-status-row.mjs';
 import {
   CLOSURE_RESUME_POINTS, expectedMigrationStatusRowFor, planningDiffBaseFor, requiredGoalStatusFor,
@@ -411,6 +411,32 @@ async function main() {
   if (!closure.sourceClosureCommit) {
     machine.transitionTo(LOOP_STATES.GOAL_COMMITTING);
     emit('Committing the accepted implementation on the Goal branch…');
+
+    // The Goal document's status line goes INTO this commit, flipped by the
+    // harness rather than left to the closure documentation model. Left to
+    // the model, it was omitted often enough that every such closure was
+    // followed by its own `docs(migration): mark Goal NNN ACCEPTED` commit.
+    // Written on the worktree, so main says ACCEPTED only once this commit is
+    // integrated; re-running after a crash finds it already ACCEPTED.
+    //
+    // An unrecognised status line is not fatal here, for the same reason as
+    // the post-integration repair below: it is a repair, and that repair
+    // still runs. Any other refusal (a status that is neither READY nor
+    // ACCEPTED) fails closed now, while nothing has been integrated.
+    try {
+      await flipGoalStatusForClosureCommit({
+        worktreeRoot: absWorktree, goalId,
+        reviewDecision: runtime.decision,
+        closureDocsJobId: closure.closureDocsJobId,
+        emit,
+      });
+    } catch (error) {
+      if (error?.code !== 'GOAL_STATUS_LINE_UNRECOGNISED') throw error;
+      emit(`Goal document status not flipped in the closure commit: ${error.message}`);
+      await store.appendEvent({
+        type: 'GOAL_STATUS_LINE_UNRECOGNISED', goal: goalId, stage: 'CLOSURE_COMMIT',
+      });
+    }
 
     const changes = await collectWorktreeChanges(absWorktree, initialHead);
     const paths = changes.changedFiles.filter((f) => !f.startsWith('graphify-out/') && !f.startsWith('tools/ia-loop/'));

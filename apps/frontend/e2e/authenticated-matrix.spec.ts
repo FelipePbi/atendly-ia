@@ -1484,8 +1484,8 @@ test.describe("reached by real click", () => {
   });
 
   /**
-   * The Home bell (Goal077 §5, NT-01). On a phone it still leads to the
-   * central on its own screen. From 768px on it opens the notifications
+   * The Home bell (Goal077 §5, NT-01). Below 1024px it still leads to the
+   * central on its own screen. From 1024px on it opens the notifications
    * drawer over the Home, without navigating: measured open for overflow and
    * for the touch targets inside it (and the bell), then closed by Escape,
    * with focus back on the bell.
@@ -1500,11 +1500,11 @@ test.describe("reached by real click", () => {
 
     const where = `/inicio at ${testInfo.project.name}`;
     const width = page.viewportSize()?.width ?? 0;
-    if (width < 768) {
+    if (width < 1024) {
       await clickForReal(page.locator("a.home-bell"), `${where}: the bell`, testInfo);
       await expectPath(page, /^\/notificacoes$/u, `${where}: the bell`);
       await expect(
-        page.getByRole("heading", { level: 1, name: "Central de notificações" }),
+        page.getByRole("heading", { level: 1, name: "Notificações" }),
         `${where}: the bell did not open the central on its own screen.`,
       ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
       return;

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /**
- * Goal077 §3 (NT-01) — a central vira gaveta a partir de 768 px.
+ * Goal077 §3 (NT-01) — a central vira gaveta a partir de 1024 px (Goal096 §e,
+ * D-115 revê a largura de 768 px).
  *
  * O que este arquivo prova, pelo que a usuária encontra na tela (§6.9):
  *
@@ -10,7 +11,7 @@
  *   sem a preferência em si, que fica só na página;
  * - `Escape` fecha a gaveta e devolve o foco ao sino;
  * - o item "Notificações" da sidebar abre a mesma gaveta;
- * - na largura de celular, o sino continua link para `/notificacoes`.
+ * - abaixo de 1024 px, o sino continua link para `/notificacoes`.
  */
 
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -204,7 +205,7 @@ afterEach(() => {
 
 describe("§6.9 tablet e desktop: a gaveta", () => {
   test("o sino abre a gaveta sem navegar; Escape fecha e devolve o foco ao sino", async () => {
-    stubViewport(768);
+    stubViewport(1024);
     const user = userEvent.setup();
     const { container } = await renderHomeInShell();
 
@@ -274,7 +275,7 @@ describe("§6.9 tablet e desktop: a gaveta", () => {
 });
 
 describe("§6.9 celular: a central em tela própria", () => {
-  test("abaixo de 768 px o sino é link para /notificacoes", async () => {
+  test("abaixo de 1024 px o sino é link para /notificacoes", async () => {
     stubViewport(390);
     await renderHomeInShell();
 

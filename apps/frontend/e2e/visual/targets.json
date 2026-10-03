@@ -375,7 +375,7 @@
       "file": "Conversas-e-Chat.dc.html",
       "label": "Conversas · Comercial",
       "route": "/conversas",
-      "notes": "A conta de teste não tem conversas (sem WhatsApp); compare cabeçalho, abas e estrutura. O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+      "notes": "A conta visual não alcança este quadro: sem WhatsApp e sem conversas, /conversas mostra o C5 (sem abas), não o C1."
     },
     {
       "code": "C5",
@@ -388,8 +388,27 @@
       "code": "NT1",
       "file": "Notificacoes.dc.html",
       "label": "Notificações",
-      "route": "/notificacoes",
-      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+      "route": "/inicio",
+      "clock": "10:30",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro. Abre a Home e usa o sino: no mobile e no tablet em retrato ele é link para /notificacoes (tela empurrada); no tablet em paisagem e no desktop abre a gaveta sobre a Home.",
+      "steps": [
+        {
+          "clickRole": {
+            "name": "Notificações",
+            "role": "button"
+          },
+          "optional": true,
+          "timeout": 3000
+        },
+        {
+          "clickRole": {
+            "name": "Notificações",
+            "role": "link"
+          },
+          "optional": true,
+          "timeout": 1500
+        }
+      ]
     },
     {
       "code": "M1",

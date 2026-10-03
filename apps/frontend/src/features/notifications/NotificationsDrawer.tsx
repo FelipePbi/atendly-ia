@@ -11,15 +11,17 @@ import {
   useState,
 } from "react";
 
+import { WIDE_LAYOUT_QUERY } from "@/shared/layout/useWideLayout";
 import { Dialog } from "@/shared/ui/Dialog";
 
 import { NotificationsDrawerContent } from "./NotificationsScreen";
 
 /**
- * A partir desta largura a central abre como gaveta sobre a tela (Goal077 §3,
- * NT-01); abaixo dela o sino continua levando à central em tela própria.
+ * A partir desta largura (a mesma de lista e detalhe lado a lado) a central
+ * abre como gaveta sobre a tela; abaixo dela o sino leva à central em tela
+ * empurrada.
  */
-export const NOTIFICATIONS_DRAWER_QUERY = "(min-width: 768px)";
+export const NOTIFICATIONS_DRAWER_QUERY = WIDE_LAYOUT_QUERY;
 
 type NotificationsDrawerValue = {
   isOpen: boolean;

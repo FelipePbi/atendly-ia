@@ -67,7 +67,7 @@ beforeEach(() => {
 });
 
 describe("três níveis distintos e não lida destacada", () => {
-  test("cada nível aparece com o rótulo próprio, e só a notificação não lida traz o selo 'Não lida'", async () => {
+  test("cada nível aparece pela forma, sem selo de texto, e só a notificação não lida traz o controle 'Marcar como lida'", async () => {
     list.mockResolvedValue(
       listResult([
         notificationFixture({
@@ -99,15 +99,25 @@ describe("três níveis distintos e não lida destacada", () => {
     const { container } = renderScreen();
 
     await screen.findByText("Cliente aguardando você");
-    expect(screen.getByText("Informativa")).toBeInTheDocument();
-    expect(screen.getByText("Atenção")).toBeInTheDocument();
-    expect(screen.getByText("Crítica")).toBeInTheDocument();
+    // Goal096 (NT1): o nível é a forma do marcador, não um selo de texto; o
+    // nome acessível da linha continua nomeando o nível.
+    const levels = [
+      ["Informativa", "is-info"],
+      ["Atenção", "is-attention"],
+      ["Crítica", "is-critical"],
+    ] as const;
+    for (const [label, shape] of levels) {
+      const row = screen.getByRole("listitem", {
+        name: new RegExp(`^${label}: `),
+      });
+      expect(row.querySelector(`.notifications-level-dot.${shape}`)).not.toBeNull();
+      expect(within(row).queryByText(label)).toBeNull();
+    }
+    expect(screen.queryByText("Não lida")).toBeNull();
 
-    // Só a notificação não lida traz o selo — as outras duas já foram lidas.
-    expect(screen.getAllByText("Não lida")).toHaveLength(1);
-    expect(
-      screen.getByRole("button", { name: "Marcar como lida" }),
-    ).toBeInTheDocument();
+    // Só a notificação não lida traz o controle — as outras duas já foram lidas.
+    expect(container.querySelectorAll(".notifications-row.is-unread")).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Marcar como lida" })).toHaveLength(1);
 
     await expectNoA11yViolations(container);
   });
@@ -131,10 +141,12 @@ describe("marcar como lida reflete o que a rota devolveu", () => {
 
     await waitFor(() => expect(markRead).toHaveBeenCalledWith({ id: "notif-1" }));
     // Recarrega do zero — não soma contagem local: a tela reflete a segunda
-    // resposta de `list`, que já não tem mais o selo "Não lida".
+    // resposta de `list`, que já não tem o controle "Marcar como lida".
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
     await waitFor(() =>
-      expect(screen.queryByText("Não lida")).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole("button", { name: "Marcar como lida" }),
+      ).not.toBeInTheDocument(),
     );
   });
 
@@ -167,7 +179,9 @@ describe("marcar como lida reflete o que a rota devolveu", () => {
     await waitFor(() => expect(markRead).toHaveBeenCalledWith({ all: true }));
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
     await waitFor(() =>
-      expect(screen.queryByText("Não lida")).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole("button", { name: "Marcar como lida" }),
+      ).not.toBeInTheDocument(),
     );
     expect(
       screen.queryByRole("button", { name: "Marcar lidas" }),
@@ -176,7 +190,7 @@ describe("marcar como lida reflete o que a rota devolveu", () => {
 });
 
 describe("condição resolvida é identificada, não some da lista", () => {
-  test("uma condição com resolvedAt continua na lista, com o selo 'Resolvido'", async () => {
+  test("uma condição com resolvedAt continua na lista, marcada como resolvida e com o desfecho", async () => {
     list.mockResolvedValue(
       listResult([
         notificationFixture({
@@ -194,7 +208,12 @@ describe("condição resolvida é identificada, não some da lista", () => {
     renderScreen();
 
     await screen.findByText("WhatsApp desconectado");
-    expect(screen.getByText("Resolvido")).toBeInTheDocument();
+    // Goal096 (NT1): sem selo "Resolvido"; a linha é riscada (`is-resolved`),
+    // o nome acessível diz "(resolvido)" e o desfecho aparece com a hora.
+    const row = screen.getByRole("listitem", { name: /\(resolvido\)$/ });
+    expect(row).toHaveClass("is-resolved");
+    expect(within(row).getByText(/^Resolvido às \d{2}:\d{2} · /)).toBeInTheDocument();
+    expect(screen.queryByText("Resolvido")).toBeNull();
   });
 });
 

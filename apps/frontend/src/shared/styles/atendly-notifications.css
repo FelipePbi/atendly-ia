@@ -1,23 +1,50 @@
 /*
- * Central de notificações e alertas persistentes (Goal022/WU-07). Reaproveita
- * o sistema de `.badge` já existente (`atendly.css`) para os três níveis e o
- * estado resolvido/não lida — nunca só cor, sempre rótulo visível junto.
+ * Central de notificações (Goal022/WU-07, Goal077, Goal096 NT1). A mesma linha
+ * serve a página e a gaveta: o nível se lê pela forma do marcador (ponto,
+ * triângulo, visto) e pelo nome acessível do `<li>`, nunca só pela cor.
  */
 .notifications-page {
+  --notif-px: 20px;
   display: grid;
   gap: var(--s5);
   max-width: 720px;
 }
 
-.notifications-header p.eyebrow {
-  margin-bottom: 4px;
-}
 .notifications-header h1 {
   font-size: 26px;
 }
-.notifications-header p:last-child {
-  margin-top: 6px;
-  color: var(--muted);
+
+/* Tela empurrada abaixo de 1024 px (NT1): barra própria e lista de ponta a ponta. */
+.notifications-page.is-pushed {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: none;
+  padding: 0 0 48px;
+}
+.notifications-page.is-pushed > .notifications-panel,
+.notifications-page.is-pushed > .notifications-days {
+  margin-top: 8px;
+}
+.notifications-page.is-pushed.has-unread .pushed-bar-spacer {
+  width: 88px;
+}
+.notifications-page.is-pushed > .notifications-panel-header {
+  position: absolute;
+  top: 12px;
+  right: 20px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+}
+@media (min-width: 768px) {
+  .notifications-page.is-pushed {
+    --notif-px: 28px;
+  }
+  .notifications-page.is-pushed > .notifications-panel-header {
+    top: 28px;
+    right: 36px;
+  }
 }
 
 .notifications-panel {
@@ -32,18 +59,57 @@
 
 .notifications-panel-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  justify-content: flex-end;
 }
-.notifications-panel-header h2 {
-  font-size: 18px;
+.notifications-mark-all {
+  min-height: 24px;
+  padding: 0 8px 0 0;
+  border: 0;
+  background: transparent;
+  color: #0f5f63;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
 }
-.notifications-panel-header p {
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 14px;
+.notifications-mark-all:hover:not(:disabled) {
+  color: #0b484c;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.notifications-mark-all:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Histórico por dia: "Hoje", "Ontem" e a data curta. */
+.notifications-days {
+  display: flex;
+  flex-direction: column;
+}
+.notifications-page:not(.is-pushed) .notifications-days {
+  padding: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  overflow: hidden;
+}
+.notifications-day {
+  display: flex;
+  flex-direction: column;
+}
+.notifications-day-title {
+  margin: 0;
+  padding: 10px var(--notif-px) 4px;
+  color: #716859;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.notifications-day + .notifications-day .notifications-day-title {
+  padding-top: 16px;
 }
 
 .notifications-list {
@@ -52,117 +118,207 @@
   list-style: none;
 }
 .notifications-row {
-  min-height: 56px;
-  padding: 14px 0;
-  display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto;
-  align-items: start;
+  padding: 12px var(--notif-px);
+  display: flex;
   gap: 12px;
-  border-top: 1px solid var(--border);
+  color: #221e1a;
 }
-.notifications-row:first-child {
-  border-top: 0;
-  padding-top: 0;
+.notifications-row + .notifications-row {
+  border-top: 1px solid #e5ded4;
 }
-.notifications-row.is-unread strong {
-  font-weight: 700;
+.notifications-row.is-attention.is-unread {
+  background: #f8ecd5;
+}
+.notifications-row.is-attention.is-unread + .notifications-row.is-attention.is-unread {
+  border-top-color: #ebd7ae;
+}
+.notifications-row.is-resolved {
+  color: #716859;
 }
 
-/*
- * A forma do marcador muda por nível (Goal077 §2): círculo para
- * informativa, quadrado girado para atenção e triângulo para crítica — o
- * nível continua legível sem cor, além do rótulo e do nome acessível da linha.
- */
+.notifications-marker {
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .notifications-level-dot {
   width: 10px;
   height: 10px;
-  margin-top: 6px;
   border-radius: 50%;
-  background: var(--border-strong);
-}
-.notifications-level-dot.is-attention {
-  border-radius: 1px;
-  transform: rotate(45deg) scale(0.85);
-  background: color-mix(in oklch, var(--coral), black 24%);
-}
-.notifications-level-dot.is-critical {
-  border-radius: 0;
-  clip-path: polygon(50% 0, 100% 100%, 0 100%);
-  background: var(--danger);
 }
 .notifications-level-dot.is-info {
-  background: var(--info);
+  background: #0f5f63;
+}
+.notifications-level-dot.is-attention {
+  background: #b7791b;
+}
+.notifications-level-dot.is-critical {
+  width: 18px;
+  height: 18px;
+  border-radius: 0;
+  color: #b7791b;
+}
+.notifications-level-dot.is-resolved {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #dfefe4;
+  color: #2e7d4f;
 }
 
 .notifications-row-link {
-  display: block;
   min-width: 0;
+  flex: 1;
+  display: block;
   color: inherit;
   text-decoration: none;
 }
 .notifications-row-body {
   min-width: 0;
-  display: grid;
-  gap: 4px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 .notifications-row-top {
   display: flex;
-  align-items: center;
+  align-items: baseline;
+  justify-content: space-between;
   gap: 8px;
-  flex-wrap: wrap;
+}
+.notifications-row-title {
+  font-size: 15px;
+  font-weight: 500;
+}
+.notifications-row.is-unread .notifications-row-title {
+  font-weight: 600;
 }
 .notifications-row-time {
-  margin-left: auto;
-  color: var(--muted);
+  color: #716859;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-.notifications-row-body strong {
-  display: block;
-  font-size: 15px;
+.notifications-row.is-attention.is-unread .notifications-row-time {
+  color: #7a4e0a;
+  font-weight: 600;
 }
 .notifications-row-body p {
   margin: 0;
-  color: var(--muted);
-  font-size: 13px;
+  color: #5f574e;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
-/* Condição resolvida: título riscado, sem perder contraste nem o selo. */
+/* Condição resolvida: título riscado, hora e desfecho em verde. */
 .notifications-row.is-resolved .notifications-row-title {
-  color: var(--muted);
   text-decoration: line-through;
 }
-
-/* Histórico por dia: "Hoje", "Ontem" e a data curta. */
-.notifications-days {
-  display: grid;
-  gap: 20px;
-}
-.notifications-day {
-  display: grid;
-  gap: 8px;
-}
-.notifications-day-title {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.notifications-row.is-resolved .notifications-row-body p {
+  color: #1f5c39;
 }
 
-/* Gaveta (Goal077 §3): a mesma lista, sem a preferência. */
+/* O ponto das não lidas é o controle "Marcar como lida" (alvo de 24 px). */
+.notifications-unread-dot {
+  width: 24px;
+  height: 24px;
+  margin: -1px -8px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  cursor: pointer;
+}
+.notifications-unread-dot > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #0f5f63;
+}
+.notifications-unread-dot:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/*
+ * Gaveta (a partir de 1024 px): a mesma lista, sem a preferência. O cabeçalho
+ * do `Dialog` vira a barra do quadro (fechar, título, "Marcar lidas") e só a
+ * lista rola.
+ */
+.drawer:has(.notifications-drawer-body) {
+  position: relative;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  background: #f7f4ef;
+  box-shadow: -16px 0 48px rgba(34, 30, 26, 0.18);
+}
+.drawer:has(.notifications-drawer-body) .modal-header {
+  height: 64px;
+  margin: 0;
+  padding: 24px 28px 0;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+}
+.drawer:has(.notifications-drawer-body) .modal-header > div {
+  margin-right: 40px;
+}
+.drawer:has(.notifications-drawer-body) .modal-header h2 {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.drawer:has(.notifications-drawer-body) .icon-btn {
+  position: absolute;
+  top: 24px;
+  left: 28px;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+}
+.drawer:has(.notifications-drawer-body) .icon-btn:hover {
+  background: #efeae2;
+}
 .notifications-drawer-body {
-  display: grid;
-  gap: 16px;
+  --notif-px: 28px;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-top: 8px;
+  overflow-y: auto;
 }
 .notifications-drawer-body > .notifications-panel {
   padding: 0;
   border: 0;
   box-shadow: none;
 }
+.notifications-drawer-body > .notifications-panel-header {
+  position: absolute;
+  top: 24px;
+  right: 36px;
+  height: 40px;
+  align-items: center;
+}
 .notifications-drawer-footer {
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
+  margin-top: auto;
+  padding: 12px var(--notif-px) 0;
+  border-top: 1px solid #e5ded4;
 }
 .notifications-drawer-footer a {
   min-height: 44px;
@@ -170,9 +326,4 @@
   align-items: center;
   color: var(--accent);
   font-weight: 600;
-}
-
-.badge-unread {
-  color: var(--violet);
-  background: var(--violet-soft);
 }

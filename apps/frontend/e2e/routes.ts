@@ -101,7 +101,7 @@ export const AUTHENTICATED_ROUTES = [
     path: "/notificacoes",
     name: "notificacoes",
     sessionMarker: "notificacoes",
-    contentMarker: "Central de notificações",
+    contentMarker: "Notificações",
   },
 ] as const;
 

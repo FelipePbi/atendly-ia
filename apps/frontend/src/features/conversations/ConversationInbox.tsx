@@ -1,10 +1,12 @@
 "use client";
 
 import clsx from "clsx";
+import Link from "next/link";
 import { useRef, useState } from "react";
 
 import { Icon } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { useSystemStatus } from "@/shared/runtime/systemStatus";
 import { StatePanel } from "@/shared/ui/States";
 
 import { ConversationLoading } from "./ConversationLoading";
@@ -16,16 +18,111 @@ import {
   inboxTabs,
   lensLabels,
   useInboxConversations,
+  useNoWhatsappProbe,
 } from "./inboxLenses";
+
+/**
+ * Porta de entrada de /conversas (Goal096 §a). Sem número e sem nenhuma
+ * conversa a tela é o quadro C5; com o WhatsApp conectado, desconhecido, ou com
+ * histórico, é a inbox com abas. Enquanto o status ou a consulta carregam, nem
+ * C5 nem abas. Cada ramo declara `useShellConfig` uma vez, e só um monta.
+ */
+export function ConversationInbox() {
+  const { whatsappView } = useSystemStatus();
+  const probe = useNoWhatsappProbe(whatsappView);
+
+  if (whatsappView === "loading" || probe === "loading")
+    return <InboxPending />;
+  if (probe === "empty") return <NoWhatsappState />;
+  return <InboxWithTabs />;
+}
+
+function InboxPending() {
+  useShellConfig({
+    active: "conversas",
+    loading: true,
+    module: "conversations",
+    title: "Conversas",
+  });
+
+  return (
+    <div className="conversation-list-page">
+      <header className="conversation-page-header">
+        <div>
+          <h1>Conversas</h1>
+        </div>
+      </header>
+      <section
+        aria-busy="true"
+        aria-label="Conversas"
+        className="conversation-list-surface conversation-list-state"
+      >
+        <ConversationLoading />
+      </section>
+    </div>
+  );
+}
+
+function NoWhatsappState() {
+  useShellConfig({
+    active: "conversas",
+    attention: false,
+    module: "conversations",
+    title: "Conversas",
+    whatsappInBand: true,
+  });
+
+  return (
+    <div className="conversation-list-page conversation-no-whatsapp">
+      <header className="conversation-no-whatsapp-header">
+        <h1>Conversas</h1>
+      </header>
+      <section className="conversation-no-whatsapp-body">
+        <div aria-hidden="true" className="conversation-no-whatsapp-art">
+          <span className="conversation-no-whatsapp-bubble is-left" />
+          <span className="conversation-no-whatsapp-bubble is-right" />
+          <span className="conversation-no-whatsapp-phone">
+            <svg
+              fill="none"
+              height="16"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+              width="16"
+            >
+              <path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z" />
+            </svg>
+          </span>
+        </div>
+        <div className="conversation-no-whatsapp-copy">
+          <h2>Conecte seu WhatsApp para ver suas conversas aqui.</h2>
+          <p>
+            Elas ficam organizadas em Comercial, Não classificadas e Pessoal — e
+            a IA passa a atender seus clientes. Você continua usando o WhatsApp
+            normalmente.
+          </p>
+        </div>
+        <Link
+          className="conversation-no-whatsapp-action"
+          href="/configuracoes/whatsapp"
+        >
+          Conectar WhatsApp
+        </Link>
+      </section>
+    </div>
+  );
+}
 
 /**
  * A inbox: três abas do vault (Comercial / Não classificadas / Pessoal) mais a
  * entrada própria de ignorados, todas servidas pelo backend por `category` e
  * `ignored`, com a busca viajando por `search` junto da aba corrente.
  *
- * Este é o único ponto da árvore da lista que declara `useShellConfig`.
+ * Declara `useShellConfig` uma vez; é o único ramo de `ConversationInbox` com abas.
  */
-export function ConversationInbox() {
+function InboxWithTabs() {
   const [lens, setLens] = useState<InboxLens>("commercial");
   const [search, setSearch] = useState("");
   const { attention, conversations, error, loading, reload, searching } =

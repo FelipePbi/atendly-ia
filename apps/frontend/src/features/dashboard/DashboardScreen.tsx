@@ -544,9 +544,9 @@ function AgendaToday({
 }
 
 /**
- * O sino da Home (Goal074, Goal077 §3): a partir de 768 px abre a gaveta da
+ * O sino da Home (Goal074, Goal077 §3): a partir de 1024 px abre a gaveta da
  * central sobre a Home, sem navegar; abaixo disso — e fora da casca, onde não
- * há gaveta — é o link para a central em tela própria.
+ * há gaveta — é o link para a central em tela empurrada.
  */
 function HomeBell({ unreadCount }: { unreadCount: number }) {
   const drawer = useNotificationsDrawer();

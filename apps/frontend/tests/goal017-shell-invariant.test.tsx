@@ -22,6 +22,7 @@ import type { Conversation, Message } from "@/data";
 import { ConversationInbox } from "@/features/conversations/ConversationInbox";
 import { ConversationThread } from "@/features/conversations/ConversationThread";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
+import { SystemStatusProvider } from "@/shared/runtime/systemStatus";
 
 const push = vi.fn();
 const replace = vi.fn();
@@ -39,6 +40,8 @@ const release = vi.fn();
 const resolve = vi.fn();
 const setCategory = vi.fn();
 const generateSuggestions = vi.fn();
+const statusGet = vi.fn();
+const notificationsSummary = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
@@ -53,6 +56,8 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       setCategory,
       takeover,
     },
+    notifications: { summary: notificationsSummary },
+    status: { get: statusGet },
   }),
   useProductRuntime: () => ({
     session: {
@@ -109,14 +114,42 @@ beforeEach(() => {
     resolve,
     setCategory,
     generateSuggestions,
+    statusGet,
+    notificationsSummary,
   ]) {
     spy.mockReset();
   }
   listConversations.mockResolvedValue([]);
+  // Goal096: a inbox com abas é provada com o WhatsApp conectado; sem número e
+  // sem conversa a tela é o C5.
+  statusGet.mockResolvedValue({
+    accountDeletion: { dueAt: null, status: "NONE" },
+    ai: {
+      desiredEnabled: true,
+      effectiveEnabled: true,
+      reconciled: "NOOP",
+      state: "ACTIVE",
+    },
+    degraded: false,
+    whatsapp: {
+      checkedAt: "2026-09-14T12:00:00.000Z",
+      phoneNumber: "5511999990000",
+      status: "CONNECTED",
+    },
+  });
+  notificationsSummary.mockResolvedValue({
+    byLevel: { ATTENTION: 0, CRITICAL: 0, INFO: 0 },
+    openConditionsCount: 0,
+    unreadCount: 0,
+  });
 });
 
 function renderWithShell(node: React.ReactElement) {
-  return render(<ShellConfigProvider>{node}</ShellConfigProvider>);
+  return render(
+    <SystemStatusProvider>
+      <ShellConfigProvider>{node}</ShellConfigProvider>
+    </SystemStatusProvider>,
+  );
 }
 
 describe("ShellConfigProvider + Inbox de conversas não excede a profundidade de atualização", () => {

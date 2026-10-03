@@ -176,7 +176,9 @@ describe("§6.7 condição resolvida diz como foi resolvida", () => {
         within(resolvedRow).getByText(`Resolvido às 09:14 · ${item.outcome}`),
       ).toBeVisible();
       expect(within(resolvedRow).queryByText(item.open)).toBeNull();
-      expect(within(resolvedRow).getByText("Resolvido")).toBeVisible();
+      // Goal096 (NT1): sem selo "Resolvido"; a linha riscada leva `is-resolved`.
+      expect(resolvedRow).toHaveClass("is-resolved");
+      expect(within(resolvedRow).queryByText("Resolvido")).toBeNull();
 
       const openRow = screen
         .getAllByRole("listitem")

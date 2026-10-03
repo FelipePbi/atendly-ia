@@ -16,6 +16,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { Conversation } from "@/data";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
+import { SystemStatusProvider } from "@/shared/runtime/systemStatus";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -24,6 +25,8 @@ vi.mock("next/navigation", () => ({
 const listConversations = vi.fn();
 const getConversation = vi.fn();
 const listMessages = vi.fn();
+const statusGet = vi.fn();
+const notificationsSummary = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
@@ -32,6 +35,8 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       list: listConversations,
       listMessages,
     },
+    notifications: { summary: notificationsSummary },
+    status: { get: statusGet },
   }),
   useProductRuntime: () => ({
     session: {
@@ -70,11 +75,39 @@ beforeEach(() => {
   listConversations.mockReset();
   getConversation.mockReset();
   listMessages.mockReset();
+  statusGet.mockReset();
+  notificationsSummary.mockReset();
   listConversations.mockResolvedValue([]);
+  // Goal096: sem número e sem conversa /conversas é o C5; a inbox é alcançada
+  // com o WhatsApp conectado.
+  statusGet.mockResolvedValue({
+    accountDeletion: { dueAt: null, status: "NONE" },
+    ai: {
+      desiredEnabled: true,
+      effectiveEnabled: true,
+      reconciled: "NOOP",
+      state: "ACTIVE",
+    },
+    degraded: false,
+    whatsapp: {
+      checkedAt: "2026-09-14T12:00:00.000Z",
+      phoneNumber: "5511999990000",
+      status: "CONNECTED",
+    },
+  });
+  notificationsSummary.mockResolvedValue({
+    byLevel: { ATTENTION: 0, CRITICAL: 0, INFO: 0 },
+    openConditionsCount: 0,
+    unreadCount: 0,
+  });
 });
 
 function renderPage(page: React.ReactElement) {
-  return render(<ShellConfigProvider>{page}</ShellConfigProvider>);
+  return render(
+    <SystemStatusProvider>
+      <ShellConfigProvider>{page}</ShellConfigProvider>
+    </SystemStatusProvider>,
+  );
 }
 
 async function renderConversation(id: string) {
@@ -88,6 +121,7 @@ describe("as duas telas do Goal017 montam pela própria rota", () => {
   test("/conversas monta a inbox", async () => {
     renderPage(<ConversationsPage />);
 
+    await screen.findByRole("tab", { name: "Comercial" });
     expect(
       await screen.findByRole("heading", { level: 1, name: "Conversas" }),
     ).toBeVisible();

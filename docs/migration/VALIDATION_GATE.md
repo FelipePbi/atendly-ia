@@ -4953,3 +4953,88 @@ O critério do Goal de **255** testes do gate autenticado e 0 retentativas é su
 - **Conferência do Tech Lead na rodada 4.** Os `sha256` de `ServiceList.tsx`, `ServiceForm.tsx` e `atendly-services.css` batem com os citados nos controles do §7. `git status` tem as mesmas 17 linhas. O spec e2e difere da baseline só pelas três linhas do §6, e `targets.json` só pelos `steps` de Agenda:S1 e Servicos:S4. O `visual:compare` reexecutado deu exit 0 e os mesmos números do "Fim". O Tech Lead abriu os dezesseis `side-by-side.png`. Os controles do §7 e o vermelho da baseline foram aceitos pelo registro acima, não reexecutados pelo Tech Lead.
 - **Gates do IA Loop na rodada 4.** typecheck, lint, `goal095-servicos` 46/46, `validate:core`, `test:gate`, `validate:ui`, `validate:integration` e `git diff --check` com exit 0.
 - **Aceito sem prova completa.** A linha "Corrigir" em âmbar, só em jsdom; a piora de Agenda:S1 no mobile e no tablet em paisagem, sem causa medida. Detalhe no [review095](reviews/095-review.md).
+
+## Conversas sem WhatsApp e central de notificações iguais ao protótipo (C5 e NT1), do Goal096 (rodada 1)
+
+[D-115](DECISIONS.md), **PROPOSED**. Seção escrita na WU-11 da rodada 1, **depois da última edição de código** e da execução final, sem alterar nenhuma configuração de gate. Os números do "Fim", os controles do §7, a contagem de testes e as execuções abaixo são os da árvore final, com os hashes de `ConversationInbox.tsx` `78f4b20fd698af33f77278e04ad108ece3ba567a8359e318b1db15f256146597`, `NotificationsDrawer.tsx` `21a07628023e5ad1db0e208d85d27d918eec8c1ba0aab60755aa1a7f459941f5` e `NotificationsScreen.tsx` `bc6b9e1f780d265768ed05abd6854bf4c88018068471070b0070c3a418141d16`. Os outros arquivos da árvore final, conferidos por sha256 antes dos controles e depois deles: `inboxLenses.ts` `6b0a9eaf…`, `DashboardScreen.tsx` `2a34d7d9…`, `atendly-conversations.css` `9e528d7c…`, `atendly-notifications.css` `77cf4631…`, `e2e/routes.ts` `e1baa597…`, `e2e/authenticated-matrix.spec.ts` `8629db32…`, `e2e/visual/targets.json` `0bd786a1…` e `tests/goal096-conversas-e-notificacoes.test.tsx` `4a08548b…` (o teste foi reescrito na rodada 2; os sete arquivos de produção seguem com os hashes acima).
+
+### `visual:compare` do início e do fim
+
+Comando do fim, rodado na WU-11 sobre a árvore final (hashes acima), em 2026-10-03, 10:30 UTC: `npm run visual:compare -- --target C5,NT1,H3,CL1,Servicos:S1,N1`, código 0. O início é a mesma lista de alvos rodada nesta máquina, na mesma WU, com os sete arquivos de produção e o `targets.json` trocados pelos de `HEAD` (`b96e842`, que difere de `7393eda` só em documentos) e restaurados em seguida, com os hashes conferidos por `sha256sum -c`; no NT1 do início vale a entrada de `targets.json` da baseline, que abre `/notificacoes` nos quatro devices. Diff em % da página, na ordem mobile / tablet em retrato / tablet em paisagem / desktop.
+
+| Quadro | Início | Fim |
+| --- | --- | --- |
+| C5 | 12,4 / 8,4 / 6,1 / 5,4 | 2,6 / 0,6 / 0,5 / 0,8 |
+| NT1 | 11,3 / 5,8 / 59,2 / 68,8 | 10,4 / 4,4 / 49,2 / 60,2 |
+| H3 | 8,1 / 4,1 / 3,7 / 3,0 | 8,1 / 4,1 / 3,7 / 3,0 |
+| CL1 | 8,8 / 3,6 / 3,0 / 2,8 | 8,8 / 3,6 / 3,0 / 2,8 |
+| Servicos:S1 | 7,7 / 3,6 / 3,7 / 2,7 | 7,7 / 3,6 / 3,7 / 2,7 |
+| N1 | 8,2 / 3,8 / 5,9 / 5,1 | 8,2 / 3,8 / 5,9 / 5,1 |
+
+Os números são os do relatório de cada execução, não foram recalculados. O C5 melhorou nos quatro devices. O NT1 melhorou nos quatro, mas o paisagem e o desktop seguem altos (49,2 e 60,2) porque o fim compara a Home da conta visual atrás da gaveta com a Home do quadro (divergência 6 de D-115); o início, que comparava a página `/notificacoes` com o quadro da gaveta, não é comparável com o fim por isso. H3, CL1, Servicos:S1 e N1 têm diff **idêntico** ao do início nos quatro devices: nenhuma piora. As linhas "passo opcional não encontrado" do NT1 são esperadas: o sino é link no mobile e no tablet em retrato e botão no paisagem e no desktop, e um dos dois passos opcionais não acha o papel que não existe.
+
+### Os vinte e quatro `side-by-side.png`
+
+Todas as capturas do app refletem o estado do ambiente do `visual:compare` (orquestrador da IA desligado e WhatsApp desconectado): avisos da casca, quando a tela não os cobre, e o cartão da sidebar no desktop.
+
+- **C5, mobile, tablet em retrato, tablet em paisagem e desktop.** O app e o quadro têm o cabeçalho "Conversas", o ícone, o título "Conecte seu WhatsApp para ver suas conversas aqui.", o texto sobre Comercial, Não classificadas e Pessoal e o botão "Conectar WhatsApp", sem abas, sem busca e sem chip "Ignorados". Sobra: no mobile o título fica cerca de 16 px abaixo do do quadro e a barra de abas é mais baixa (o indicador de início do iPhone é a divergência 1, o título não foi medido além da vista); no desktop o cartão da sidebar é "WhatsApp desconectado" com "Reconectar", e o quadro tem "IA inativa" (divergência 2), e a sidebar tem o item "Notificações" com a contagem. O botão de busca do cabeçalho do quadro não existe no app (divergência 4).
+- **NT1, mobile e tablet em retrato.** O app abre a Home e o passo do sino (link) leva a `/notificacoes`, que é a tela empurrada: voltar no topo para `/inicio`, o título "Notificações", sem barra de abas, sem eyebrow, subtítulo nem "Histórico recente", como o quadro. A conta tem duas notificações: a condição resolvida "IA indisponível", riscada e com o desfecho, e a não lida "WhatsApp desconectado", em negrito com o ponto à direita; os grupos são "Ontem" e uma data (`01/10`), e não "Hoje" e "Ontem". A casca mostra o aviso "Atendimento automático parado", que o quadro não tem, e a seção "Preferências" aparece abaixo da lista (divergência 5). A faixa âmbar, o grupo "Hoje" e o negrito âmbar não aparecem, porque a conta não tem notificação de atenção (divergência 3).
+- **NT1, tablet em paisagem e desktop.** O app abre a Home e o sino (botão) abre a gaveta sobre ela, com o cabeçalho "Notificações", "Marcar lidas", as mesmas duas linhas e o rodapé "Preferências de notificação" (divergência 5). A Home atrás é a da conta visual (divergência 6), e é ela que sustenta os 49,2 e 60,2.
+- **H3, CL1, Servicos:S1 e N1, nos quatro devices.** Sem mudança em relação ao início. Em Servicos:S1 e N1 no tablet em retrato aparece a linha verde-azulada de 2 px na largura toda no pé do conteúdo, que vem da casca (observação 2 do [review095](reviews/095-review.md)); a casca não mudou e o diff é idêntico ao do início.
+
+### Mudanças do §6 no gate autenticado
+
+`git diff` contra a baseline: em `apps/frontend/e2e/routes.ts`, uma linha, o `contentMarker` de `/notificacoes` de "Central de notificações" para "Notificações"; em `apps/frontend/e2e/authenticated-matrix.spec.ts`, só no teste "inicio: the bell opens the notifications", o comentário (768 para 1024 px), o `if (width < 768)` para `if (width < 1024)` e o nome do `h1` esperado para "Notificações" (8 linhas no total, 4 inseridas e 4 removidas). O título do teste não mudou. Nenhum outro teste, helper, seletor ou constante desses arquivos mudou, e o gate autenticado tem **255** testes. `e2e/visual/targets.json` mudou só pela entrada do NT1 e pela nota do C1.
+
+### Controles negativos (§7)
+
+Rodados **na rodada 3, sobre a árvore final, depois da última edição de código e do último ajuste do teste**, em `apps/frontend`, com `npx vitest run tests/goal096-conversas-e-notificacoes.test.tsx` (**21 testes** no arquivo). Cada defeito foi injetado por edição real num dos três arquivos de produção citados no início da seção, e o arquivo foi restaurado do backup no mesmo passo; o sha256 conferido depois de cada controle é igual ao de antes. Sem nenhum defeito, a execução do arquivo deu `Tests 21 passed (21)` antes dos controles e depois deles, e a árvore tinha os mesmos hashes (`sha256sum -c` sem falha, e `git status --porcelain=v1 -uall` com as mesmas 21 linhas).
+
+| Controle | Defeito injetado | Com o defeito | Sem o defeito |
+| --- | --- | --- | --- |
+| 1 | `ConversationInbox.tsx`: `if (whatsappView === "off") return <NoWhatsappState />;` antes da linha de `probe === "empty"` | `2 failed, 19 passed (21)`: "WhatsApp off com uma conversa: as abas, sem o C5, e a casca mantém o banner" e "a consulta da regra falhando: o caminho de hoje, com as abas e sem o C5" (prova 1), com `TestingLibraryElementError: Unable to find role="tablist"` | 21/21 |
+| 2 | `ConversationInbox.tsx`: `probe === "empty" \|\| whatsappView === "unknown"` na linha que escolhe `NoWhatsappState` | `1 failed, 20 passed (21)`: "WhatsApp unknown: as abas, sem o C5 e sem a consulta da regra" (prova 1), com `Unable to find role="tablist"` | 21/21 |
+| 3 | `ConversationInbox.tsx`: `href="/onboarding/whatsapp"` no lugar de `href="/configuracoes/whatsapp"` | `1 failed, 20 passed (21)`: "WhatsApp off e nenhuma conversa: o C5, sem abas, busca nem banner da casca" (prova 1), com `expect(element).toHaveAttribute("href", "/configuracoes/whatsapp")` | 21/21 |
+| 4 | `NotificationsDrawer.tsx`: `NOTIFICATIONS_DRAWER_QUERY = "(min-width: 768px)"` | `2 failed, 19 passed (21)`: "a consulta da gaveta é a de lista e detalhe lado a lado" (`AssertionError: expected '(min-width: 768px)' to be '(min-width: 1024px)'`) e "com a consulta de largura falsa, o sino é link para /notificacoes" (`Unable to find role="link" and name /^Notificações, 2 não lidas$/`) (prova 4) | 21/21 |
+| 5 | `NotificationsScreen.tsx`: `<span className="badge">{level.label}</span>` antes do título da linha | `2 failed, 19 passed (21)`: "na página, cada nível tem a forma do quadro e nenhum selo de texto" e "a gaveta mostra as mesmas linhas" (prova 3), com `AssertionError: expected <span class="badge"></span> to be null` | 21/21 |
+| 6 | `ConversationInbox.tsx`: segunda chamada de `useShellConfig`, com a mesma configuração da real, no ramo `NoWhatsappState` | `3 failed, 18 passed (21)`: "WhatsApp off e nenhuma conversa: o C5, sem abas, busca nem banner da casca" (prova 1), com `AssertionError: expected [ { active: 'conversas', …(4) }, …(1) ] to have a length of 1 but got 2`, e "/conversas com o status pendente, com o C5 e com as abas, na faixa ≥1024" e "…na faixa <1024" (prova 5), cada um com `AssertionError: expected 2 to be 1 // Object.is equality` | 21/21 |
+
+O vermelho da baseline dos 21 testes, medido na **rodada 3** trocando os sete arquivos de produção pelos de `HEAD` (copiados antes e restaurados depois, com os hashes conferidos iguais): **14 reprovam e 7 passam** (`14 failed | 7 passed (21)`). Reprovam: seis da prova 1 (o C5 com a consulta vazia, `off` com uma conversa, a consulta falhando, o status carregando, a consulta carregando e a troca do C5 pelas abas), dois da prova 2 (a tela empurrada e a página a partir de 1024 px), dois da prova 3 (a forma sem selo, na página e na gaveta), dois da prova 4 (a consulta da gaveta e o sino link com a consulta falsa) e os dois de `/conversas` da prova 5 (uma por faixa, porque a baseline não tem o ramo do C5). Passam e são declarados: `active` e `unknown` da prova 1 (a baseline já mostra as abas), "sem notificação não lida não há 'Marcar lidas'" da prova 2, "'Marcar como lida' marca só aquela notificação" da prova 3, "com a consulta verdadeira, o sino é botão e abre o dialog sem navegar" da prova 4 e os dois de `/notificacoes` da prova 5, que guardam comportamento.
+
+### Execuções que sustentam as contagens
+
+Todas de 2026-10-03. As do loop são as da **rodada 1** (`tools/ia-loop/.state/results/work_unit/096-r1-unit-wu-NN.json`), rodadas sobre a árvore final: nenhum arquivo de produção foi editado depois delas, e os hashes de cima são os mesmos antes e depois dos controles. A suíte do frontend, o `visual:compare` e os controles são da WU-11.
+
+| Execução | Resultado |
+| --- | --- |
+| `tsc --noEmit`, rodada 1, WU-04 | código 0 em 1,6 s |
+| `npm run lint`, rodada 1, WU-05 | código 0 em 13,5 s |
+| `npx vitest run goal096-conversas-e-notificacoes`, rodada 1, WU-06 | código 0 em 2,7 s; `Tests 21 passed (21)` |
+| `validate:core`, rodada 1, WU-07 | código 0 em 97,6 s; 17 passos, **15 passaram**, 0 falharam e 2 foram pulados (`test:bff` e `test:health-worker`, por desenho do gate); a auditoria estática pulou `production_health` |
+| `test:gate`, rodada 1, WU-08 | código 0 em 1,3 s; `tests 233, pass 233, fail 0` |
+| `validate:ui`, rodada 1, WU-09 | código 0 em 46,2 s; **169 passed** e 21 skipped na saída do Playwright; "public UI gate retries: 0" |
+| `validate:integration`, rodada 1, WU-10 | código 0 em 585,0 s; **36/36** passos; gate autenticado **255 passed (7,9 min)**; "authenticated gate retries: 0" |
+| Suíte do frontend, WU-11 (`npx vitest run` em `apps/frontend`, depois dos seis controles) | código 0; **143 arquivos e 1649 testes passaram** (`Test Files 143 passed (143)`, `Tests 1649 passed (1649)`); a baseline tinha 142 arquivos e 1628 testes (contagem do Goal095), e a diferença são os 21 testes de `goal096-conversas-e-notificacoes.test.tsx` |
+| `npx vitest run tests/goal096-conversas-e-notificacoes.test.tsx` e `npx vitest run` em `apps/frontend`, rodada 3 (FIX-001), sobre a árvore final, depois dos seis controles e da restauração por sha256 | código 0; `Tests 21 passed (21)` no arquivo, e na suíte `Test Files 143 passed (143)` e `Tests 1649 passed (1649)` |
+| `visual:compare` dos seis alvos, WU-11 | código 0; a tabela do "Fim" acima |
+
+O critério do Goal de **255** testes do gate autenticado e 0 retentativas é sustentado pela execução do `validate:integration` da rodada 1. A contagem de testes do `test:frontend` dentro do `validate:core` não consta do registro do loop (a saída vem truncada); por isso a contagem do frontend citada é a da execução própria da WU-11. A saída do `validate:integration` não registra a contagem por suíte (`test:bff-integration` e as outras), e esta seção não a cita.
+
+### Estado da árvore
+
+`git status` ao fim da WU-11: 17 arquivos modificados em `apps/frontend` (os sete de produção `ConversationInbox.tsx`, `inboxLenses.ts`, `DashboardScreen.tsx`, `NotificationsDrawer.tsx`, `NotificationsScreen.tsx`, `atendly-conversations.css` e `atendly-notifications.css`; `e2e/routes.ts`, `e2e/authenticated-matrix.spec.ts` e `e2e/visual/targets.json`; e sete testes: `goal017-a11y`, `goal017-inbox-tabs`, `goal017-reachability`, `goal017-shell-invariant`, `goal022-notifications-screen`, `goal077-notifications-center` e `goal077-notifications-drawer`) e 1 novo (`apps/frontend/tests/goal096-conversas-e-notificacoes.test.tsx`), mais os três documentos desta seção. Nenhum arquivo de configuração de gate foi alterado, nem `apps/frontend/AGENTS.md`, e não há resto de controle negativo nem `e2e-results/` versionado.
+
+### Não feito
+
+- Conferência humana num aparelho real.
+- O C1 e os demais quadros de Conversas: a conta visual não tem conversa.
+- O NT1 com notificação de atenção ou crítica em captura: a conta não as tem, e a faixa âmbar, o grupo "Hoje" e o triângulo ficam provados só em jsdom.
+- A regra de (a) para um negócio que desconectou com histórico, provada só em jsdom.
+- Decisão do Tech Lead sobre [D-115](DECISIONS.md), que segue PROPOSED.
+
+**Nota de fechamento — review096, 2026-10-03.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima:
+
+- **Decisão.** D-115 ACCEPTED na rodada 3, sem blocker. O blocker da rodada 1 (a prova 5 sem o ramo do C5) e os dois da rodada 2 (o controle 6 e o vermelho da baseline não reexecutados, e os documentos com as contagens da versão antiga do teste) foram fechados. Nenhum foi de código de produção. O item "Decisão do Tech Lead sobre D-115" de "Não feito" está resolvido.
+- **Conferência do Tech Lead na rodada 3.** Os hashes de produção, de `e2e/` e de `targets.json` batem com os do início desta seção, e o teste está em `4a08548b…`. `git status --porcelain=v1 -uall` tem 21 linhas, só de arquivos autorizados; `apps/frontend/AGENTS.md` foi restaurado depois do `visual:compare` e não há `e2e-results/`. `npx vitest run tests/goal096-conversas-e-notificacoes.test.tsx` deu `21 passed (21)`, e `git diff --check` saiu limpo. O `visual:compare -- --target C5,NT1`, rodado pelo Tech Lead nas rodadas 1 e 3, deu exit 0 e os mesmos números do "Fim". O Tech Lead abriu os oito `side-by-side.png` de C5 e NT1. Os controles 1 a 5 foram aceitos pelo registro acima, não reexecutados pelo Tech Lead.
+- **Gates do IA Loop na rodada 3,** sobre a árvore aceita, todos com exit 0: typecheck, lint, `goal096-conversas-e-notificacoes` 21/21, `validate:core`, `test:gate` (`tests 233, pass 233`), `validate:ui` (**169 passed**, 0 retentativas), `validate:integration` (gate autenticado **255 passed**, 0 retentativas) e `git diff --check`. A suíte do frontend, no FIX-001 da rodada 3, deu **143** arquivos e **1649** testes.
+- **Aceito sem prova completa.** O NT1 com notificação de atenção ou crítica e a regra do C5 para quem desconectou com histórico, só em jsdom; o NT1 de paisagem e desktop comparado à vista, porque o diff mede a Home atrás da gaveta. Detalhe no [review096](reviews/096-review.md).

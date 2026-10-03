@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { Conversation, ConversationQuery } from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import type { StatusView } from "@/shared/runtime/systemStatus";
 
 import { conversationState, needsAttention } from "./conversationState";
 import { requestError } from "./format";
@@ -158,6 +159,43 @@ export function useInboxConversations(
     reload: () => setAttempt((value) => value + 1),
     searching: loading && (debounced.trim() !== "" || search.trim() !== ""),
   };
+}
+
+export type NoWhatsappProbe = "empty" | "idle" | "loading" | "present";
+
+/**
+ * Regra do estado sem WhatsApp (Goal096 §a): só com o WhatsApp `off` pergunta
+ * ao BFF se existe alguma conversa — sem `category`, `ignored` nem busca, com
+ * `limit: 1`. Lista vazia é `empty`; conversa ou falha da consulta é `present`,
+ * e a tela segue com as abas. A consulta é refeita quando `whatsappView` muda.
+ */
+export function useNoWhatsappProbe(whatsappView: StatusView): NoWhatsappProbe {
+  const [seen, setSeen] = useState(whatsappView);
+  const [outcome, setOutcome] = useState<"empty" | "present" | null>(null);
+  if (seen !== whatsappView) {
+    setSeen(whatsappView);
+    setOutcome(null);
+  }
+  const enabled = whatsappView === "off";
+
+  useEffect(() => {
+    if (!enabled) return;
+    const controller = new AbortController();
+    getProductServices()
+      .conversations.list({ limit: 1 }, controller.signal)
+      .then((items) => {
+        if (controller.signal.aborted) return;
+        setOutcome(items.length === 0 ? "empty" : "present");
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setOutcome("present");
+      });
+    return () => controller.abort();
+  }, [enabled]);
+
+  if (!enabled) return "idle";
+  return outcome ?? "loading";
 }
 
 /** Debounce da digitação: a busca é do backend, não do teclado. */

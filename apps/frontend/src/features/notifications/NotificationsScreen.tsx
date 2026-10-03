@@ -4,9 +4,10 @@ import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 import type { Notification } from "@/data";
+import { PushedBar } from "@/shared/layout/PushedBar";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
-import { Button } from "@/shared/ui/Button";
 import { Skeleton, StatePanel } from "@/shared/ui/States";
 
 import { NotificationPreferenceSection } from "./NotificationPreferenceSection";
@@ -69,17 +70,19 @@ function useNotificationList(): NotificationListState {
  */
 export function NotificationsScreen() {
   const list = useNotificationList();
+  const wide = useWideLayout();
 
   useShellConfig({
     active: "notificacoes",
     loading: !list.items && !list.error,
     module: "settings",
+    pushed: !wide,
     title: "Notificações",
   });
 
   if (!list.items && !list.error) {
     return (
-      <Page>
+      <Page pushed={!wide}>
         <NotificationsLoading />
       </Page>
     );
@@ -87,30 +90,18 @@ export function NotificationsScreen() {
 
   if (list.error || !list.items) {
     return (
-      <Page>
+      <Page pushed={!wide}>
         <NotificationsUnavailable onRetry={() => void list.reload()} />
       </Page>
     );
   }
 
   return (
-    <Page>
-      <section className="notifications-panel">
-        <NotificationHistory
-          heading={
-            <div>
-              <h2>Histórico recente</h2>
-              <p>
-                {list.total > 0
-                  ? `${list.total} nos últimos 90 dias`
-                  : "Nenhuma nos últimos 90 dias"}
-              </p>
-            </div>
-          }
-          items={list.items}
-          reload={list.reload}
-        />
-      </section>
+    <Page
+      hasUnread={list.items.some((item) => item.readAt === null)}
+      pushed={!wide}
+    >
+      <NotificationHistory items={list.items} reload={list.reload} />
       <NotificationPreferenceSection />
     </Page>
   );
@@ -170,11 +161,9 @@ function NotificationsUnavailable({ onRetry }: { onRetry: () => void }) {
 }
 
 function NotificationHistory({
-  heading,
   items,
   reload,
 }: {
-  heading?: ReactNode;
   items: Notification[];
   reload: () => Promise<void>;
 }) {
@@ -205,19 +194,17 @@ function NotificationHistory({
 
   return (
     <>
-      {(heading || hasUnread) && (
+      {hasUnread && (
         <div className="notifications-panel-header">
-          {heading}
-          {hasUnread && (
-            <Button
-              loading={markingAll}
-              onClick={() => void markAll()}
-              type="button"
-              variant="secondary"
-            >
-              Marcar lidas
-            </Button>
-          )}
+          <button
+            aria-busy={markingAll || undefined}
+            className="notifications-mark-all"
+            disabled={markingAll}
+            onClick={() => void markAll()}
+            type="button"
+          >
+            Marcar lidas
+          </button>
         </div>
       )}
       {items.length === 0 ? (
@@ -266,16 +253,11 @@ function NotificationRow({
   const body = (
     <div className="notifications-row-body">
       <div className="notifications-row-top">
-        <span className={`badge ${levelBadgeClassName(level.className)}`}>
-          {level.label}
-        </span>
-        {unread && <span className="badge badge-unread">Não lida</span>}
-        {resolved && <span className="badge badge-success">Resolvido</span>}
+        <strong className="notifications-row-title">{copy.title}</strong>
         <span className="notifications-row-time">
           {formatClock(notification.occurredAt)}
         </span>
       </div>
-      <strong className="notifications-row-title">{copy.title}</strong>
       <p>{copy.description}</p>
     </div>
   );
@@ -283,12 +265,9 @@ function NotificationRow({
   return (
     <li
       aria-label={`${level.label}: ${copy.title}${resolved ? " (resolvido)" : ""}`}
-      className={`notifications-row${unread ? " is-unread" : ""}${resolved ? " is-resolved" : ""}`}
+      className={`notifications-row ${level.className}${unread ? " is-unread" : ""}${resolved ? " is-resolved" : ""}`}
     >
-      <span
-        aria-hidden="true"
-        className={`notifications-level-dot ${level.className}`}
-      />
+      <NotificationMarker levelClassName={level.className} resolved={resolved} />
       {copy.href ? (
         <Link className="notifications-row-link" href={copy.href}>
           {body}
@@ -297,37 +276,98 @@ function NotificationRow({
         body
       )}
       {unread && (
-        <Button
-          loading={busy}
+        <button
+          aria-busy={busy || undefined}
+          aria-label="Marcar como lida"
+          className="notifications-unread-dot"
+          disabled={busy}
           onClick={onMarkRead}
           type="button"
-          variant="tertiary"
         >
-          Marcar como lida
-        </Button>
+          <span aria-hidden="true" />
+        </button>
       )}
     </li>
   );
 }
 
-/** As três cores do sistema de badge já existente (`atendly.css`). */
-function levelBadgeClassName(levelClassName: string): string {
-  if (levelClassName === "is-critical") return "badge-danger";
-  if (levelClassName === "is-attention") return "badge-attention";
-  return "badge-ai";
+/**
+ * O marcador do quadro NT1, sempre com forma própria além da cor: ponto para
+ * informativa e atenção (a atenção não lida ganha também a faixa da linha),
+ * triângulo para crítica e círculo com visto para a condição resolvida.
+ */
+function NotificationMarker({
+  levelClassName,
+  resolved,
+}: {
+  levelClassName: string;
+  resolved: boolean;
+}) {
+  const stroke = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    viewBox: "0 0 24 24",
+  } as const;
+  let mark: ReactNode;
+  if (resolved) {
+    mark = (
+      <span aria-hidden="true" className="notifications-level-dot is-resolved">
+        <svg {...stroke} height="11" strokeWidth="3" width="11">
+          <path d="M5 12.5l4.5 4.5L19 7.5" />
+        </svg>
+      </span>
+    );
+  } else if (levelClassName === "is-critical") {
+    mark = (
+      <svg
+        {...stroke}
+        aria-hidden="true"
+        className="notifications-level-dot is-critical"
+        height="18"
+        strokeWidth="1.75"
+        width="18"
+      >
+        <path d="M12 4 21 20H3z" />
+        <path d="M12 10v4M12 17v.5" />
+      </svg>
+    );
+  } else {
+    mark = (
+      <span
+        aria-hidden="true"
+        className={`notifications-level-dot ${levelClassName}`}
+      />
+    );
+  }
+  return <span className="notifications-marker">{mark}</span>;
 }
 
-function Page({ children }: { children: ReactNode }) {
+function Page({
+  children,
+  hasUnread = false,
+  pushed,
+}: {
+  children: ReactNode;
+  hasUnread?: boolean;
+  pushed: boolean;
+}) {
   return (
-    <section className="notifications-page">
-      <header className="notifications-header">
-        <p className="eyebrow">Notificações</p>
-        <h1>Central de notificações</h1>
-        <p>
-          Alertas e eventos relevantes da sua operação, com histórico
-          recente.
-        </p>
-      </header>
+    <section
+      className={`notifications-page${pushed ? " is-pushed" : ""}${hasUnread ? " has-unread" : ""}`}
+    >
+      {pushed ? (
+        <PushedBar
+          backHref="/inicio"
+          backLabel="Voltar para o início"
+          title="Notificações"
+        />
+      ) : (
+        <header className="notifications-header">
+          <h1>Notificações</h1>
+        </header>
+      )}
       {children}
     </section>
   );

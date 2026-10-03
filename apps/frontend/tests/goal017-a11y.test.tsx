@@ -24,6 +24,7 @@ import type { Conversation, Message } from "@/data";
 import { ConversationInbox } from "@/features/conversations/ConversationInbox";
 import { ConversationThread } from "@/features/conversations/ConversationThread";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
+import { SystemStatusProvider } from "@/shared/runtime/systemStatus";
 
 import { expectNoA11yViolations } from "./support/a11y";
 
@@ -44,9 +45,13 @@ const resolve = vi.fn();
 const setCategory = vi.fn();
 const generateSuggestions = vi.fn();
 const getMedia = vi.fn();
+const statusGet = vi.fn();
+const notificationsSummary = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
+    notifications: { summary: notificationsSummary },
+    status: { get: statusGet },
     conversations: {
       generateSuggestions,
       get: getConversation,
@@ -131,10 +136,33 @@ beforeEach(() => {
     setCategory,
     generateSuggestions,
     getMedia,
+    statusGet,
+    notificationsSummary,
   ]) {
     spy.mockReset();
   }
   listConversations.mockResolvedValue([]);
+  notificationsSummary.mockResolvedValue({
+    byLevel: { ATTENTION: 0, CRITICAL: 0, INFO: 0 },
+    openConditionsCount: 0,
+    unreadCount: 0,
+  });
+  // Goal096: a inbox lê o status do WhatsApp; aqui o número está conectado.
+  statusGet.mockResolvedValue({
+    accountDeletion: { dueAt: null, status: "NONE" },
+    ai: {
+      desiredEnabled: true,
+      effectiveEnabled: true,
+      reconciled: "NOOP",
+      state: "ACTIVE",
+    },
+    degraded: false,
+    whatsapp: {
+      checkedAt: "2026-09-14T12:00:00.000Z",
+      phoneNumber: "5511999990000",
+      status: "CONNECTED",
+    },
+  });
 });
 
 describe("inbox de conversas", () => {
@@ -145,9 +173,11 @@ describe("inbox de conversas", () => {
     const user = userEvent.setup();
 
     const { container } = render(
-      <ShellConfigProvider>
-        <ConversationInbox />
-      </ShellConfigProvider>,
+      <SystemStatusProvider>
+        <ShellConfigProvider>
+          <ConversationInbox />
+        </ShellConfigProvider>
+      </SystemStatusProvider>,
     );
 
     await screen.findByText("Marina Duarte");
@@ -177,9 +207,11 @@ describe("inbox de conversas", () => {
     const user = userEvent.setup();
 
     render(
-      <ShellConfigProvider>
-        <ConversationInbox />
-      </ShellConfigProvider>,
+      <SystemStatusProvider>
+        <ShellConfigProvider>
+          <ConversationInbox />
+        </ShellConfigProvider>
+      </SystemStatusProvider>,
     );
 
     const row = await screen.findByRole("link", { name: /Marina Duarte/ });

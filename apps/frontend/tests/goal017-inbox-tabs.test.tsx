@@ -31,6 +31,7 @@ import {
 } from "@/features/conversations/conversationState";
 import { ProductConversationsScreen } from "@/features/conversations/ProductConversationsScreen";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
+import { SystemStatusProvider } from "@/shared/runtime/systemStatus";
 
 const push = vi.fn();
 const replace = vi.fn();
@@ -42,6 +43,8 @@ vi.mock("next/navigation", () => ({
 const listConversations = vi.fn();
 const getConversation = vi.fn();
 const listMessages = vi.fn();
+const statusGet = vi.fn();
+const notificationsSummary = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
@@ -50,6 +53,8 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       list: listConversations,
       listMessages,
     },
+    notifications: { summary: notificationsSummary },
+    status: { get: statusGet },
   }),
   useProductRuntime: () => ({
     session: {
@@ -82,9 +87,11 @@ function conversationFixture(
 
 function renderInbox() {
   return render(
-    <ShellConfigProvider>
-      <ProductConversationsScreen />
-    </ShellConfigProvider>,
+    <SystemStatusProvider>
+      <ShellConfigProvider>
+        <ProductConversationsScreen />
+      </ShellConfigProvider>
+    </SystemStatusProvider>,
   );
 }
 
@@ -94,7 +101,31 @@ beforeEach(() => {
   listConversations.mockReset();
   getConversation.mockReset();
   listMessages.mockReset();
+  statusGet.mockReset();
+  notificationsSummary.mockReset();
   listConversations.mockResolvedValue([]);
+  // Goal096: sem número e sem conversa a tela é o C5; as abas são provadas
+  // com o WhatsApp conectado.
+  statusGet.mockResolvedValue({
+    accountDeletion: { dueAt: null, status: "NONE" },
+    ai: {
+      desiredEnabled: true,
+      effectiveEnabled: true,
+      reconciled: "NOOP",
+      state: "ACTIVE",
+    },
+    degraded: false,
+    whatsapp: {
+      checkedAt: "2026-09-14T12:00:00.000Z",
+      phoneNumber: "5511999990000",
+      status: "CONNECTED",
+    },
+  });
+  notificationsSummary.mockResolvedValue({
+    byLevel: { ATTENTION: 0, CRITICAL: 0, INFO: 0 },
+    openConditionsCount: 0,
+    unreadCount: 0,
+  });
 });
 
 describe("as três abas são servidas pelo backend", () => {
@@ -382,6 +413,7 @@ describe("o despachante separa os dois cenários", () => {
   test("sem id monta a inbox; com id monta o chat, e cada um declara o shell uma vez", async () => {
     listConversations.mockResolvedValue([conversationFixture()]);
     const { unmount } = renderInbox();
+    await screen.findByRole("tab", { name: "Comercial" });
     expect(
       await screen.findByRole("heading", { name: "Conversas", level: 1 }),
     ).toBeVisible();
@@ -390,9 +422,11 @@ describe("o despachante separa os dois cenários", () => {
     getConversation.mockResolvedValue(conversationFixture());
     listMessages.mockResolvedValue([]);
     render(
-      <ShellConfigProvider>
-        <ProductConversationsScreen conversationId="conv-1" />
-      </ShellConfigProvider>,
+      <SystemStatusProvider>
+        <ShellConfigProvider>
+          <ProductConversationsScreen conversationId="conv-1" />
+        </ShellConfigProvider>
+      </SystemStatusProvider>,
     );
 
     expect(

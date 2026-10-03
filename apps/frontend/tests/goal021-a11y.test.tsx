@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
- * Goal021 (WU-010): prova de acessibilidade do bloco de Lembretes em
- * Configurações → Agenda, no mesmo padrão de `goal018-a11y.test.tsx` e
+ * Goal021 (WU-010), revisto no Goal097 (AG1): prova de acessibilidade do
+ * bloco de Lembretes, hoje a tela `/configuracoes/agenda/lembretes`, no mesmo padrão de `goal018-a11y.test.tsx` e
  * `goal020-a11y.test.tsx` para os módulos anteriores. Cobre o estado com um
  * lembrete, com dois lembretes e sem lembrete configurado (CTA "Ativar
  * lembretes"). O que esta suíte não prova: layout real, largura de viewport,
@@ -83,7 +83,7 @@ beforeEach(() => {
 function renderScreen() {
   return render(
     <ShellConfigProvider>
-      <ProductSettingsScreen scenario="calendar" />
+      <ProductSettingsScreen scenario="calendar-reminders" />
     </ShellConfigProvider>,
   );
 }

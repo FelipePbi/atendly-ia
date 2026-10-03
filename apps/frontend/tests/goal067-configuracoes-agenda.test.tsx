@@ -4,8 +4,9 @@
  *
  * O que esta suíte prova:
  *
- * - `CalendarSettings` mostra as três regras de oferta com o valor lido
- *   selecionado, inclusive `minLeadMinutes: 0` como "Sem antecedência
+ * - `OfferRulesSettings` (Goal097: as regras de oferta moram em
+ *   `/configuracoes/agenda/regras`) mostra as três regras de oferta com o
+ *   valor lido selecionado, inclusive `minLeadMinutes: 0` como "Sem antecedência
  *   mínima", e salvar envia as `rules` de disponibilidade lidas sem mudança
  *   junto dos campos de oferta editados;
  * - `AvailabilitySettings` mostra qualquer grade — mais de um intervalo no
@@ -27,6 +28,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { SettingsState } from "@/data";
 import { AvailabilitySettings } from "@/features/settings/AvailabilitySettings";
 import { CalendarSettings } from "@/features/settings/CalendarSettings";
+import { OfferRulesSettings } from "@/features/settings/OfferRulesSettings";
 import { ProductSettingsScreen } from "@/features/settings/ProductSettingsScreen";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
@@ -106,31 +108,25 @@ beforeEach(() => {
   });
 });
 
-describe("Agenda: regras de oferta", () => {
+describe("Agenda › Antecedência e intervalos: regras de oferta", () => {
   test("as três regras aparecem com o valor lido, inclusive minLeadMinutes 0", () => {
-    render(<CalendarSettings settings={settingsFixture()} onSaved={vi.fn()} />);
+    render(<OfferRulesSettings settings={settingsFixture()} onSaved={vi.fn()} />);
 
     expect(
-      screen.getByRole("button", { name: "Sem antecedência mínima" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "90 dias" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "30 min" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+      screen.getByRole("radio", { name: "Sem antecedência mínima" }),
+    ).toBeChecked();
+    expect(screen.getByRole("radio", { name: "90 dias" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "30 min" })).toBeChecked();
   });
 
   test("gravar as regras de oferta envia as rules de disponibilidade lidas sem mudança", async () => {
     const settings = settingsFixture();
     updateAvailability.mockResolvedValue(settings.availability);
     const user = userEvent.setup();
-    render(<CalendarSettings settings={settings} onSaved={vi.fn()} />);
+    render(<OfferRulesSettings settings={settings} onSaved={vi.fn()} />);
 
-    await user.click(screen.getByRole("button", { name: "2 horas" }));
-    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    await user.click(screen.getByRole("radio", { name: "2 h" }));
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
 
     await waitFor(() =>
       expect(updateAvailability).toHaveBeenCalledWith({
@@ -158,20 +154,11 @@ describe("Agenda: regras de oferta", () => {
         minLeadMinutes: 90,
       },
     });
-    render(<CalendarSettings settings={settings} onSaved={vi.fn()} />);
+    render(<OfferRulesSettings settings={settings} onSaved={vi.fn()} />);
 
-    expect(screen.getByRole("button", { name: "90 min" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "45 dias" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "20 min" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.getByRole("radio", { name: "90 min" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "45 dias" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "20 min" })).toBeChecked();
   });
 });
 
@@ -260,13 +247,19 @@ describe("Disponibilidade por dia", () => {
 });
 
 describe("sem jargão interno de fonte/migração", () => {
-  test("CalendarSettings e AvailabilitySettings não mostram 'Fonte oficial' nem 'migração assistida'", () => {
+  test("CalendarSettings, OfferRulesSettings e AvailabilitySettings não mostram 'Fonte oficial' nem 'migração assistida'", () => {
     const settings = settingsFixture();
     const { container: calendarContainer } = render(
-      <CalendarSettings settings={settings} onSaved={vi.fn()} />,
+      <CalendarSettings settings={settings} />,
     );
     expect(calendarContainer).not.toHaveTextContent("Fonte oficial");
     expect(calendarContainer).not.toHaveTextContent("migração assistida");
+
+    const { container: rulesContainer } = render(
+      <OfferRulesSettings settings={settings} onSaved={vi.fn()} />,
+    );
+    expect(rulesContainer).not.toHaveTextContent("Fonte oficial");
+    expect(rulesContainer).not.toHaveTextContent("migração assistida");
 
     const { container: availabilityContainer } = render(
       <AvailabilitySettings settings={settings} onSaved={vi.fn()} />,

@@ -29,6 +29,7 @@ import type { KnowledgeDocument, Service, SettingsState } from "@/data";
 import { ProductSettingsScreen } from "@/features/settings/ProductSettingsScreen";
 import type { SettingsScenario } from "@/features/settings/types";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
+import type * as SystemStatusModule from "@/shared/runtime/systemStatus";
 
 const push = vi.fn();
 const replace = vi.fn();
@@ -54,6 +55,7 @@ const updateRetention = vi.fn();
 const knowledgeList = vi.fn();
 const knowledgeCreate = vi.fn();
 const serviceCatalogList = vi.fn();
+const getImportState = vi.fn();
 const changePassword = vi.fn();
 const logout = vi.fn();
 const logoutAllDevices = vi.fn();
@@ -64,6 +66,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     account: { requestDeletion: vi.fn(), cancelDeletion: vi.fn() },
     auth: { changePassword, logout, logoutAllDevices },
+    migration: { getImportState },
     knowledge: {
       list: knowledgeList,
       create: knowledgeCreate,
@@ -93,13 +96,23 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 // `AccountSettings` lê `accountDeletion` de `useSystemStatus` (Goal025/WU-08);
 // esta suíte não testa o ciclo de vida da conta, só a invariante do shell, e
 // não monta `SystemStatusProvider` — dublar aqui evita acoplar as duas coisas.
-vi.mock("@/shared/runtime/systemStatus", () => ({
-  useSystemStatus: () => ({
-    accountDeletion: { status: "NONE", dueAt: null },
-    phase: "loaded",
-    refresh: vi.fn(),
-  }),
-}));
+// Goal097: o hub do M1 também lê `aiView`/`whatsappView` e usa `aiCardView`
+// (real) no bloco de identidade; o dublê mantém o resto do módulo.
+vi.mock("@/shared/runtime/systemStatus", async (importOriginal) => {
+  const actual = await importOriginal<typeof SystemStatusModule>();
+  return {
+    ...actual,
+    useSystemStatus: () => ({
+      accountDeletion: { status: "NONE", dueAt: null },
+      ai: null,
+      aiView: "off",
+      phase: "loaded",
+      refresh: vi.fn(),
+      whatsapp: null,
+      whatsappView: "off",
+    }),
+  };
+});
 
 function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState {
   return {
@@ -210,6 +223,7 @@ beforeEach(() => {
     initialView: null,
   });
   getRetention.mockResolvedValue(retentionFixture());
+  getImportState.mockResolvedValue({ history: null, session: null });
   knowledgeList.mockResolvedValue([knowledgeDocumentFixture()]);
   serviceCatalogList.mockResolvedValue({
     editable: true,

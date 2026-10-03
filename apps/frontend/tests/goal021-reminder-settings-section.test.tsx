@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 /**
- * Goal021 (WU-010): bloco de Lembretes em Configurações → Agenda.
+ * Goal021 (WU-010), revisto no Goal097 (AG1): bloco de Lembretes em
+ * Configurações → Agenda → Lembretes. O título "Lembretes" é o da barra da
+ * tela empurrada, não mais um cabeçalho do bloco.
  *
  * O que esta suíte prova:
  *
@@ -51,8 +53,11 @@ test("reflete o lembrete configurado, com o preset de 24h marcado", async () => 
   render(<ReminderSettingsSection />);
 
   expect(
-    await screen.findByRole("heading", { name: "Lembretes" }),
-  ).toBeInTheDocument();
+    await screen.findByText("Lembrete 1 · quanto tempo antes"),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("heading", { name: "Lembretes" }),
+  ).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "24 h" })).toHaveAttribute(
     "aria-pressed",
     "true",
@@ -85,9 +90,6 @@ test("adiciona e remove o segundo lembrete sem afetar o primeiro", async () => {
   await user.click(
     await screen.findByRole("button", { name: "Adicionar segundo lembrete" }),
   );
-  expect(
-    screen.getByRole("heading", { level: 2, name: "Lembretes" }),
-  ).toBeInTheDocument();
   expect(screen.getByText("Lembrete 2 · quanto tempo antes")).toBeVisible();
 
   await user.click(

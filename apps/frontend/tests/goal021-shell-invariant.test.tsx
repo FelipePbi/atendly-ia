@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * Goal021 (WU-010): fecha a mesma invariante que goal016/goal017/goal018/
+ * Goal021 (WU-010), revisto no Goal097 (AG1): fecha a mesma invariante que goal016/goal017/goal018/
  * goal019/goal020 fecharam para os módulos anteriores — `ShellConfigProvider`
- * mais a árvore real de Configurações → Agenda precisa sobreviver a
+ * mais a árvore real de Configurações → Agenda → Lembretes precisa sobreviver a
  * montagem e interação repetida no bloco de Lembretes sem violar a regra de
  * uma chamada de `useShellConfig` por árvore. `ProductSettingsScreen` é o
  * único ponto que chama o hook; `ReminderSettingsSection` (como
@@ -76,7 +76,7 @@ function remindersFixture(
 function renderScreen() {
   return render(
     <ShellConfigProvider>
-      <ProductSettingsScreen scenario="calendar" />
+      <ProductSettingsScreen scenario="calendar-reminders" />
     </ShellConfigProvider>,
   );
 }
@@ -113,7 +113,7 @@ describe("ShellConfigProvider + bloco de Lembretes não excede a profundidade de
     }
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Agenda" }),
+      screen.getByRole("heading", { level: 1, name: "Lembretes" }),
     ).toBeInTheDocument();
     expect(updateReminders).not.toHaveBeenCalled();
   });

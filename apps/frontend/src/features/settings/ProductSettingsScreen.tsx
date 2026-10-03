@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import type { SettingsState } from "@/data";
+import { ReminderSettingsSection } from "@/features/reminders/ReminderSettingsSection";
 import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
@@ -14,8 +15,9 @@ import { AvailabilitySettings } from "./AvailabilitySettings";
 import { BusinessSettings } from "./BusinessSettings";
 import { CalendarSettings } from "./CalendarSettings";
 import { ConversationsSettings } from "./ConversationsSettings";
+import { OfferRulesSettings } from "./OfferRulesSettings";
 import { SettingsHub, SettingsHubPanel } from "./SettingsHub";
-import { SettingsMessage } from "./shared/SettingsPage";
+import { SettingsMessage, SettingsPage } from "./shared/SettingsPage";
 import type { SettingsScenario } from "./types";
 import { WhatsAppSettings } from "./WhatsAppSettings";
 
@@ -89,6 +91,8 @@ function isHubScenario(scenario: SettingsScenario): boolean {
     scenario.startsWith("whatsapp") ||
     scenario === "calendar" ||
     scenario === "calendar-external" ||
+    scenario === "calendar-reminders" ||
+    scenario === "calendar-rules" ||
     scenario === "availability" ||
     scenario === "conversations" ||
     scenario === "account"
@@ -99,9 +103,14 @@ function isHubScenario(scenario: SettingsScenario): boolean {
 function openHrefFor(scenario: SettingsScenario): string {
   if (scenario === "ai") return "/configuracoes/ia";
   if (scenario.startsWith("whatsapp")) return "/configuracoes/whatsapp";
-  if (scenario === "calendar" || scenario === "calendar-external")
+  if (
+    scenario === "calendar" ||
+    scenario === "calendar-external" ||
+    scenario === "calendar-reminders" ||
+    scenario === "calendar-rules" ||
+    scenario === "availability"
+  )
     return "/configuracoes/agenda";
-  if (scenario === "availability") return "/configuracoes/disponibilidade";
   if (scenario === "conversations") return "/configuracoes/conversas";
   if (scenario === "account") return "/configuracoes/conta";
   return "/configuracoes/negocio";
@@ -179,7 +188,20 @@ function SettingsSection({
   if (scenario.startsWith("whatsapp"))
     return <WhatsAppSettings onStatusChange={setWhatsappConnected} />;
   if (scenario === "calendar" || scenario === "calendar-external")
-    return <CalendarSettings settings={settings} onSaved={setSettings} />;
+    return <CalendarSettings settings={settings} />;
+  if (scenario === "calendar-rules")
+    return <OfferRulesSettings settings={settings} onSaved={setSettings} />;
+  if (scenario === "calendar-reminders")
+    return (
+      <SettingsPage
+        backHref="/configuracoes/agenda"
+        backLabel="Voltar para Agenda"
+        title="Lembretes"
+        description="Configure os lembretes enviados antes de cada agendamento."
+      >
+        <ReminderSettingsSection />
+      </SettingsPage>
+    );
   if (scenario === "availability")
     return <AvailabilitySettings settings={settings} onSaved={setSettings} />;
   if (scenario === "conversations") return <ConversationsSettings />;

@@ -64,6 +64,7 @@ const serviceCatalogGetAiInstruction = vi.fn();
 const settingsGet = vi.fn();
 const retentionGet = vi.fn();
 const whatsappGet = vi.fn();
+const migrationGetImportState = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
@@ -75,6 +76,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       list: customersList,
       listMemory: customersListMemory,
     },
+    migration: { getImportState: migrationGetImportState },
     notifications: { summary: notificationsSummary },
     serviceCatalog: {
       getAiInstruction: serviceCatalogGetAiInstruction,
@@ -278,6 +280,7 @@ beforeEach(() => {
     settingsGet,
     retentionGet,
     whatsappGet,
+    migrationGetImportState,
   ]) {
     mock.mockReset();
   }
@@ -327,6 +330,8 @@ beforeEach(() => {
     unclassifiedRetentionFollows: "COMMERCIAL",
   });
   whatsappGet.mockResolvedValue(null);
+  // Goal097: o hub do M1 lê o estado da importação para a linha Importação.
+  migrationGetImportState.mockResolvedValue({ history: null, session: null });
   window.history.pushState({}, "", "/");
 });
 

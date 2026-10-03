@@ -1,31 +1,63 @@
 // @vitest-environment jsdom
 /**
- * Goal024 (WU-01/WU-02): hub de Configurações — o ponto de entrada único que
- * lista Negócio, Agenda, (Disponibilidade condicional), Atendente virtual,
- * WhatsApp, Importação, Conversas e Conta.
+ * Goal024 (WU-01/WU-02), revisto no Goal097 (M1): hub de Configurações — o
+ * ponto de entrada único, em três grupos (Atendimento, Seu negócio, Dados e
+ * conta) que listam Serviços, IA, WhatsApp, Negócio, Agenda, Importação,
+ * Conversas e Conta.
  *
  * O que esta suíte prova:
  *
- * - com a fonte de agenda ATENDLY, os oito cartões existem, cada um apontando
- *   para a rota certa, na ordem do vault;
- * - "Disponibilidade" só aparece quando `calendar.source === "ATENDLY"` — sem
- *   fonte escolhida o cartão não existe, não fica só desabilitado;
- * - a copy de cada cartão reflete o estado real (nome do negócio salvo, fonte
- *   de agenda, tom da IA), não um texto fixo.
+ * - as oito linhas existem, cada uma apontando para a rota certa;
+ * - "Disponibilidade" não é linha do hub, com ou sem fonte de agenda: ela é a
+ *   linha "Dias e horários" da Agenda (AG1);
+ * - o estado de cada linha reflete o dado real (tom da IA), não um texto
+ *   inventado, e o bloco de identidade só existe com o negócio gravado.
  */
 
 import { render, screen } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import type { SettingsState } from "@/data";
 import { SettingsHub } from "@/features/settings/SettingsHub";
+import type * as SystemStatusModule from "@/shared/runtime/systemStatus";
 
-// `SettingsHub` monta dentro de `SettingsPage`, que sempre acrescenta o link
-// "Configurações" de volta ao próprio hub. Os cartões são os links restantes.
-function cardLinks() {
-  return screen
-    .getAllByRole("link")
-    .filter((link) => link.getAttribute("href") !== "/configuracoes");
+vi.mock("@/shared/runtime/ProductRuntime", () => ({
+  getProductServices: () => ({
+    migration: {
+      getImportState: vi.fn().mockResolvedValue({ history: null, session: null }),
+    },
+    retention: {
+      get: vi.fn().mockResolvedValue({
+        commercialRetentionDays: 90,
+        personalRetentionDays: 30,
+      }),
+    },
+    serviceCatalog: {
+      list: vi.fn().mockResolvedValue({ items: [] }),
+    },
+  }),
+  useProductRuntime: () => ({
+    session: { user: { email: "marina@studio.com" } },
+  }),
+}));
+
+vi.mock("@/shared/runtime/systemStatus", async (importOriginal) => {
+  const actual = await importOriginal<typeof SystemStatusModule>();
+  return {
+    ...actual,
+    useSystemStatus: () => ({
+      ai: null,
+      aiView: "active",
+      phase: "loaded",
+      whatsapp: null,
+      whatsappView: "off",
+    }),
+  };
+});
+
+// As linhas do hub são os links da página.
+function rowLinks() {
+  return screen.getAllByRole("link");
 }
 
 function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState {
@@ -59,15 +91,15 @@ function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState 
 }
 
 describe("hub com fonte de agenda Atendly", () => {
-  test("lista os oito cartões, cada um apontando para a rota certa", () => {
+  test("lista as oito linhas, cada uma apontando para a rota certa", () => {
     render(<SettingsHub settings={settingsFixture()} />);
 
     const expected: Array<[string, string]> = [
+      ["Serviços", "/servicos"],
+      ["IA", "/configuracoes/ia"],
+      ["WhatsApp", "/configuracoes/whatsapp"],
       ["Negócio", "/configuracoes/negocio"],
       ["Agenda", "/configuracoes/agenda"],
-      ["Disponibilidade", "/configuracoes/disponibilidade"],
-      ["Atendente virtual", "/configuracoes/ia"],
-      ["WhatsApp", "/configuracoes/whatsapp"],
       ["Importação", "/importacao"],
       ["Conversas", "/configuracoes/conversas"],
       ["Conta", "/configuracoes/conta"],
@@ -77,10 +109,10 @@ describe("hub com fonte de agenda Atendly", () => {
         screen.getByRole("link", { name: new RegExp(`^${title}`) }),
       ).toHaveAttribute("href", href);
     }
-    expect(cardLinks()).toHaveLength(expected.length);
+    expect(rowLinks()).toHaveLength(expected.length);
   });
 
-  test("a copy de cada cartão reflete o estado real salvo", () => {
+  test("o estado de cada linha reflete o dado real salvo", () => {
     render(
       <SettingsHub
         settings={settingsFixture({
@@ -89,27 +121,28 @@ describe("hub com fonte de agenda Atendly", () => {
       />,
     );
 
-    const businessCard = screen.getByRole("link", { name: /Negócio/ });
-    expect(businessCard).toHaveTextContent("Studio Marina");
-    const calendarCard = screen.getByRole("link", { name: /^Agenda/ });
-    expect(calendarCard).toHaveTextContent("Agenda Atendly");
-    const aiCard = screen.getByRole("link", { name: /Atendente virtual/ });
-    expect(aiCard).toHaveTextContent("Profissional");
+    const aiRow = screen.getByRole("link", { name: /^IA/ });
+    expect(aiRow).toHaveTextContent("Ativa · estilo Profissional");
+    const businessRow = screen.getByRole("link", { name: /^Negócio/ });
+    expect(businessRow).toHaveTextContent(
+      "Endereço, pagamento, informações para a IA",
+    );
+    expect(screen.getByText("Studio Marina")).toBeInTheDocument();
   });
 
-  test("Negócio sem nome salvo convida a completar o cadastro", () => {
-    render(
-      <SettingsHub settings={settingsFixture({ business: null })} />,
-    );
+  test("Negócio sem cadastro salvo não mostra o bloco de identidade", () => {
+    render(<SettingsHub settings={settingsFixture({ business: null })} />);
 
-    expect(screen.getByRole("link", { name: /Negócio/ })).toHaveTextContent(
-      "Complete seus dados",
+    expect(screen.queryByText("Studio Marina")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Negócio/ })).toHaveAttribute(
+      "href",
+      "/configuracoes/negocio",
     );
   });
 });
 
 describe("hub sem fonte de agenda escolhida", () => {
-  test("o cartão Disponibilidade não existe — não há fonte para ter horários", () => {
+  test("não existe linha Disponibilidade — ela é a linha Dias e horários da Agenda", () => {
     render(
       <SettingsHub
         settings={settingsFixture({
@@ -132,9 +165,10 @@ describe("hub sem fonte de agenda escolhida", () => {
     expect(
       screen.queryByRole("link", { name: /Disponibilidade/ }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^Agenda/ })).toHaveTextContent(
-      "Não configurada",
+    expect(screen.getByRole("link", { name: /^Agenda/ })).toHaveAttribute(
+      "href",
+      "/configuracoes/agenda",
     );
-    expect(cardLinks()).toHaveLength(7);
+    expect(rowLinks()).toHaveLength(8);
   });
 });

@@ -85,6 +85,18 @@ export const AUTHENTICATED_ROUTES = [
     contentMarker: "Agenda",
   },
   {
+    path: "/configuracoes/agenda/regras",
+    name: "configuracoes-agenda-regras",
+    sessionMarker: "configuracoes",
+    contentMarker: "Antecedência e intervalos",
+  },
+  {
+    path: "/configuracoes/agenda/lembretes",
+    name: "configuracoes-agenda-lembretes",
+    sessionMarker: "configuracoes",
+    contentMarker: "Lembretes",
+  },
+  {
     path: "/configuracoes/disponibilidade",
     name: "configuracoes-disponibilidade",
     sessionMarker: "configuracoes",

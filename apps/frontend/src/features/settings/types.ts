@@ -10,6 +10,8 @@ export type SettingsScenario =
   | "whatsapp-error"
   | "calendar"
   | "calendar-external"
+  | "calendar-reminders"
+  | "calendar-rules"
   | "availability"
   | "conversations"
   | "account"

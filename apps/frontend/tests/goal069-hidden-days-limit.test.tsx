@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /**
- * Goal069 (WU-04): "Como você vê a Agenda" nunca deixa ocultar os sete dias
+ * Goal069 (WU-04), revisto no Goal097 (AG1: "Dias visíveis" abre uma folha):
+ * "Como você vê a Agenda" nunca deixa ocultar os sete dias
  * (observação 4 do review073). Com seis já ocultos, o sétimo (o único
  * visível) fica desabilitado e mostra o motivo. Se o servidor recusar pelo
  * mesmo motivo — sete dias em `hiddenWeekdays`, `agendaHiddenWeekdaysSchema`
@@ -89,10 +90,19 @@ beforeEach(() => {
   });
 });
 
+async function openVisibleDaysSheet(user: ReturnType<typeof userEvent.setup>) {
+  // A folha copia a leitura ao abrir: só abre depois que o resumo da linha chegou.
+  await user.click(
+    await screen.findByRole("button", { name: /^Dias visíveis.+/ }),
+  );
+}
+
 describe("Seis dias ocultos: o sétimo não pode ocultar", () => {
   test("o único dia visível fica desabilitado e o motivo aparece", async () => {
-    render(<CalendarSettings settings={settingsFixture()} onSaved={vi.fn()} />);
+    const user = userEvent.setup();
+    render(<CalendarSettings settings={settingsFixture()} />);
 
+    await openVisibleDaysSheet(user);
     const sunday = await screen.findByRole("button", { name: "Domingo" });
     expect(sunday).toBeDisabled();
     expect(screen.getByText(REASON)).toBeVisible();
@@ -100,13 +110,14 @@ describe("Seis dias ocultos: o sétimo não pode ocultar", () => {
 
   test("clicar no dia desabilitado não muda a seleção nem chama o servidor", async () => {
     const user = userEvent.setup();
-    render(<CalendarSettings settings={settingsFixture()} onSaved={vi.fn()} />);
+    render(<CalendarSettings settings={settingsFixture()} />);
 
+    await openVisibleDaysSheet(user);
     const sunday = await screen.findByRole("button", { name: "Domingo" });
     await user.click(sunday);
 
     expect(sunday).toHaveAttribute("aria-pressed", "true");
-    await user.click(screen.getByRole("button", { name: "Salvar visualização" }));
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
     await waitFor(() =>
       expect(updateAgendaViewPreference).toHaveBeenCalledWith({
         hiddenWeekdays: [1, 2, 3, 4, 5, 6],
@@ -121,12 +132,13 @@ describe("Seis dias ocultos: o sétimo não pode ocultar", () => {
       hiddenWeekdays: [2, 3, 4, 5, 6],
       initialView: null,
     });
-    render(<CalendarSettings settings={settingsFixture()} onSaved={vi.fn()} />);
+    render(<CalendarSettings settings={settingsFixture()} />);
 
+    await openVisibleDaysSheet(user);
     const monday = await screen.findByRole("button", { name: "Segunda" });
     expect(monday).not.toBeDisabled();
     await user.click(monday);
-    await user.click(screen.getByRole("button", { name: "Salvar visualização" }));
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
 
     await waitFor(() =>
       expect(updateAgendaViewPreference).toHaveBeenCalledWith({
@@ -149,10 +161,11 @@ describe("Recusa do servidor pelo mesmo motivo", () => {
       }),
     );
     const user = userEvent.setup();
-    render(<CalendarSettings settings={settingsFixture()} onSaved={vi.fn()} />);
+    render(<CalendarSettings settings={settingsFixture()} />);
 
+    await openVisibleDaysSheet(user);
     await screen.findByRole("button", { name: "Domingo" });
-    const saveButton = screen.getByRole("button", { name: "Salvar visualização" });
+    const saveButton = screen.getByRole("button", { name: "Salvar" });
     await user.click(saveButton);
 
     const status = saveButton
@@ -167,10 +180,11 @@ describe("Recusa do servidor pelo mesmo motivo", () => {
   test("outra falha do servidor continua com a mensagem genérica", async () => {
     updateAgendaViewPreference.mockRejectedValue(new Error("falha de rede"));
     const user = userEvent.setup();
-    render(<CalendarSettings settings={settingsFixture()} onSaved={vi.fn()} />);
+    render(<CalendarSettings settings={settingsFixture()} />);
 
+    await openVisibleDaysSheet(user);
     await screen.findByRole("button", { name: "Domingo" });
-    await user.click(screen.getByRole("button", { name: "Salvar visualização" }));
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
 
     await waitFor(() =>
       expect(

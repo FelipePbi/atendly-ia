@@ -128,7 +128,6 @@ export function ReminderSettingsSection() {
     <section className="settings-panel">
       <div className="settings-panel-header">
         <div>
-          <h2>Lembretes</h2>
           <p>
             Até dois lembretes por agendamento, com antecedência configurável e
             confirmação de presença separada.

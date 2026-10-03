@@ -30,6 +30,7 @@ import type {
 } from "@/data";
 import { MORE_DESTINATIONS } from "@/shared/layout/navigation";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
+import type * as SystemStatusModule from "@/shared/runtime/systemStatus";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -49,6 +50,24 @@ const completeImport = vi.fn();
 const getSettings = vi.fn();
 const getReminders = vi.fn();
 const getWhatsapp = vi.fn();
+const getRetention = vi.fn();
+const serviceCatalogList = vi.fn();
+
+// Goal097: o hub do M1 lê o status da IA e do WhatsApp para as linhas e o
+// bloco de identidade; esta suíte não monta `SystemStatusProvider`.
+vi.mock("@/shared/runtime/systemStatus", async (importOriginal) => {
+  const actual = await importOriginal<typeof SystemStatusModule>();
+  return {
+    ...actual,
+    useSystemStatus: () => ({
+      ai: null,
+      aiView: "off",
+      phase: "loaded",
+      whatsapp: null,
+      whatsappView: "off",
+    }),
+  };
+});
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
@@ -65,6 +84,8 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       setImportCategorySelection,
       startImport,
     },
+    retention: { get: getRetention },
+    serviceCatalog: { list: serviceCatalogList },
     settings: { get: getSettings, getReminders },
     whatsapp: { get: getWhatsapp },
   }),
@@ -253,6 +274,8 @@ function renderPage(page: React.ReactElement) {
 beforeEach(() => {
   vi.clearAllMocks();
   getWhatsapp.mockResolvedValue(null);
+  getRetention.mockRejectedValue(new Error("fora do escopo desta suíte"));
+  serviceCatalogList.mockRejectedValue(new Error("fora do escopo desta suíte"));
   // Bloco de Lembretes (Goal021/WU-010) monta junto de CalendarSettingsPage;
   // esta suíte prova alcançabilidade da importação, não lembretes.
   getReminders.mockResolvedValue({

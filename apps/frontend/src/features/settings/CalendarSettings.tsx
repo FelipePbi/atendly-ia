@@ -1,25 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import {
   type AgendaInitialView,
-  type AvailabilitySettingsInput,
   BffHttpError,
+  type ReminderSettings,
   type SettingsState,
 } from "@/data";
-import { ReminderSettingsSection } from "@/features/reminders/ReminderSettingsSection";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { Dialog } from "@/shared/ui/Dialog";
 
+import {
+  availabilityGridSummary,
+  changePolicySummary,
+  INITIAL_VIEW_OPTIONS,
+  initialViewSummary,
+  offerRulesSummary,
+  remindersSummary,
+  visibleDaysSummary,
+  WEEK_ORDER,
+} from "./agendaSummaries";
 import { SaveActions } from "./shared/fields";
 import { weekdayLabels } from "./shared/labels";
 import { SettingsPage } from "./shared/SettingsPage";
-
-// Mesma ordem Segunda…Domingo de `AvailabilitySettings` (o valor gravado de
-// `dayOfWeek` continua 0=domingo…6=sábado).
-const weekOrder = [1, 2, 3, 4, 5, 6, 0];
 
 const HIDDEN_WEEKDAYS_LIMIT_REASON =
   "Pelo menos um dia precisa aparecer na Agenda.";
@@ -41,151 +47,79 @@ function hiddenWeekdaysLimitReason(error: unknown): string | null {
     : null;
 }
 
-const MIN_LEAD_OPTIONS: Array<{ value: number; label: string }> = [
-  { value: 0, label: "Sem antecedência mínima" },
-  { value: 60, label: "1 hora" },
-  { value: 120, label: "2 horas" },
-  { value: 240, label: "4 horas" },
-  { value: 1_440, label: "1 dia" },
-];
+type ViewSheet = "days" | "view";
 
-const MAX_LEAD_DAYS_OPTIONS: Array<{ value: number; label: string }> = [
-  { value: 30, label: "30 dias" },
-  { value: 60, label: "60 dias" },
-  { value: 90, label: "90 dias" },
-];
-
-const GRANULARITY_OPTIONS: Array<{ value: number; label: string }> = [
-  { value: 15, label: "15 min" },
-  { value: 30, label: "30 min" },
-  { value: 60, label: "1 h" },
-];
-
-const CUSTOMER_CHANGE_POLICY_OPTIONS: Array<{ value: number; label: string }> = [
-  { value: 0, label: "Sem restrição" },
-  { value: 720, label: "Até 12 h antes" },
-  { value: 1_440, label: "Até 24 h antes" },
-  { value: 2_880, label: "Até 48 h antes" },
-];
-
-const INITIAL_VIEW_OPTIONS: Array<{
-  value: AgendaInitialView | null;
-  label: string;
-}> = [
-  { value: null, label: "Automática" },
-  { value: "DAY", label: "Dia" },
-  { value: "WEEK", label: "Semana" },
-  { value: "MONTH", label: "Mês" },
-];
-
-function ChoiceGroup<T>({
-  label,
-  onChange,
-  options,
-  value,
-  formatCustomLabel,
+function AgendaRow({
+  detail,
+  href,
+  onClick,
+  title,
 }: {
-  label: string;
-  onChange: (value: T) => void;
-  options: Array<{ value: T; label: string }>;
-  value: T;
-  formatCustomLabel?: (value: T) => string;
+  detail: string | null;
+  href?: string;
+  onClick?: () => void;
+  title: string;
 }) {
-  const isKnownValue = options.some((option) => option.value === value);
-  const displayOptions =
-    isKnownValue || !formatCustomLabel
-      ? options
-      : [...options, { value, label: formatCustomLabel(value) }];
+  const content = (
+    <>
+      <span className="agenda-row-copy">
+        <strong>{title}</strong>
+        {detail && <span>{detail}</span>}
+      </span>
+      <Icon className="agenda-row-chevron" name="chevron-right" />
+    </>
+  );
+  return href ? (
+    <Link className="agenda-row" href={href}>
+      {content}
+    </Link>
+  ) : (
+    <button className="agenda-row" type="button" onClick={onClick}>
+      {content}
+    </button>
+  );
+}
 
+function AgendaGroup({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title: string;
+}) {
   return (
-    <div className="field is-wide">
-      <span className="label">{label}</span>
-      <div className="chip-row">
-        {displayOptions.map((option) => (
-          <button
-            aria-pressed={value === option.value}
-            className={`chip${value === option.value ? " is-active" : ""}`}
-            key={String(option.value)}
-            type="button"
-            onClick={() => onChange(option.value)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </div>
+    <section className="agenda-group">
+      <h2 className="agenda-group-title">{title}</h2>
+      {children}
+    </section>
   );
 }
 
-function formatMinLeadLabel(minutes: number): string {
-  if (minutes <= 0) return "Sem antecedência mínima";
-  if (minutes % 1_440 === 0) {
-    const days = minutes / 1_440;
-    return days === 1 ? "1 dia" : `${days} dias`;
-  }
-  if (minutes % 60 === 0) {
-    const hours = minutes / 60;
-    return hours === 1 ? "1 hora" : `${hours} horas`;
-  }
-  return `${minutes} min`;
-}
-
-function formatMaxLeadDaysLabel(days: number): string {
-  return days === 1 ? "1 dia" : `${days} dias`;
-}
-
-function formatGranularityLabel(minutes: number): string {
-  if (minutes % 60 === 0) {
-    const hours = minutes / 60;
-    return hours === 1 ? "1 h" : `${hours} h`;
-  }
-  return `${minutes} min`;
-}
-
-function formatCustomerChangePolicyLabel(minutes: number): string {
-  if (minutes <= 0) return "Sem restrição";
-  if (minutes % 60 === 0) {
-    const hours = minutes / 60;
-    return `Até ${hours} h antes`;
-  }
-  return `Até ${minutes} min antes`;
-}
-
-export function CalendarSettings({
-  settings,
-  onSaved,
-}: {
-  settings: SettingsState;
-  onSaved: (state: SettingsState) => void;
-}) {
+export function CalendarSettings({ settings }: { settings: SettingsState }) {
   const availability = settings.availability;
-  const [minLeadMinutes, setMinLeadMinutes] = useState(
-    availability?.minLeadMinutes ?? 0,
-  );
-  const [maxLeadDays, setMaxLeadDays] = useState(
-    availability?.maxLeadDays ?? 90,
-  );
-  const [granularityMinutes, setGranularityMinutes] = useState(
-    availability?.granularityMinutes ?? 30,
-  );
-  const [customerChangeMinNoticeMinutes, setCustomerChangeMinNoticeMinutes] =
-    useState(availability?.customerChangeMinNoticeMinutes ?? 0);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [policyBusy, setPolicyBusy] = useState(false);
-  const [policyMessage, setPolicyMessage] = useState<string | null>(null);
+  const availabilityRoute = settings.calendar.source === "ATENDLY";
 
   const [hiddenDays, setHiddenDays] = useState<Set<number>>(new Set());
   const [initialView, setInitialView] = useState<AgendaInitialView | null>(null);
   const [viewReading, setViewReading] = useState(true);
   const [viewReadError, setViewReadError] = useState(false);
+  const [reminders, setReminders] = useState<ReminderSettings | null>(null);
+
+  const [sheet, setSheet] = useState<ViewSheet | null>(null);
+  const [draftHiddenDays, setDraftHiddenDays] = useState<Set<number>>(
+    new Set(),
+  );
+  const [draftInitialView, setDraftInitialView] =
+    useState<AgendaInitialView | null>(null);
   const [viewBusy, setViewBusy] = useState(false);
-  const [viewMessage, setViewMessage] = useState<string | null>(null);
+  const [sheetMessage, setSheetMessage] = useState<string | null>(null);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    getProductServices()
-      .settings.getAgendaViewPreference(controller.signal)
+    const services = getProductServices();
+    services.settings
+      .getAgendaViewPreference(controller.signal)
       .then((preference) => {
         setHiddenDays(new Set(preference.hiddenWeekdays));
         setInitialView(preference.initialView);
@@ -196,71 +130,30 @@ export function CalendarSettings({
         setViewReadError(true);
         setViewReading(false);
       });
+    services.settings
+      .getReminders(controller.signal)
+      .then(setReminders)
+      .catch(() => undefined);
     return () => controller.abort();
   }, []);
 
-  /**
-   * Os dois painéis gravam pelo mesmo `PATCH /v1/settings/availability`, mas
-   * cada um envia só o campo que edita: o resto sai do que está gravado
-   * (`settings.availability`, atualizado a cada gravação), nunca do estado
-   * não salvo do outro painel.
-   */
-  function persistedAvailabilityInput(): AvailabilitySettingsInput {
-    return {
-      customerChangeMinNoticeMinutes:
-        availability?.customerChangeMinNoticeMinutes ?? 0,
-      granularityMinutes: availability?.granularityMinutes ?? 30,
-      maxLeadDays: availability?.maxLeadDays ?? 90,
-      minLeadMinutes: availability?.minLeadMinutes ?? 0,
-      timezone:
-        availability?.timezone ?? settings.business?.timezone ?? "America/Sao_Paulo",
-      rules: (availability?.rules ?? []).map((rule) => ({
-        active: rule.active,
-        dayOfWeek: rule.dayOfWeek,
-        endTime: rule.endTime,
-        startTime: rule.startTime,
-      })),
-    };
+  const viewReady = !viewReading && !viewReadError;
+
+  function openSheet(next: ViewSheet) {
+    setDraftHiddenDays(new Set(hiddenDays));
+    setDraftInitialView(initialView);
+    setSheetMessage(null);
+    setSavedMessage(null);
+    setSheet(next);
   }
 
-  async function saveOfferRules() {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const updated = await getProductServices().settings.updateAvailability({
-        ...persistedAvailabilityInput(),
-        granularityMinutes,
-        maxLeadDays,
-        minLeadMinutes,
-      });
-      onSaved({ ...settings, availability: updated });
-      setMessage("Regras de oferta salvas.");
-    } catch {
-      setMessage("Não foi possível salvar as regras de oferta.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function savePolicy() {
-    setPolicyBusy(true);
-    setPolicyMessage(null);
-    try {
-      const updated = await getProductServices().settings.updateAvailability({
-        ...persistedAvailabilityInput(),
-        customerChangeMinNoticeMinutes,
-      });
-      onSaved({ ...settings, availability: updated });
-      setPolicyMessage("Política salva.");
-    } catch {
-      setPolicyMessage("Não foi possível salvar a política.");
-    } finally {
-      setPolicyBusy(false);
-    }
+  function closeSheet() {
+    if (viewBusy) return;
+    setSheet(null);
   }
 
   function toggleHiddenDay(day: number) {
-    setHiddenDays((current) => {
+    setDraftHiddenDays((current) => {
       if (!current.has(day) && current.size >= 6) return current;
       const next = new Set(current);
       if (next.has(day)) {
@@ -273,19 +166,23 @@ export function CalendarSettings({
   }
 
   async function saveAgendaView() {
-    if (viewReading || viewReadError) return;
+    if (!viewReady || !sheet) return;
     setViewBusy(true);
-    setViewMessage(null);
+    setSheetMessage(null);
     try {
       const preference = await getProductServices().settings.updateAgendaViewPreference({
-        hiddenWeekdays: [...hiddenDays].sort((a, b) => a - b),
-        initialView,
+        hiddenWeekdays:
+          sheet === "days"
+            ? [...draftHiddenDays].sort((a, b) => a - b)
+            : [...hiddenDays].sort((a, b) => a - b),
+        initialView: sheet === "view" ? draftInitialView : initialView,
       });
       setHiddenDays(new Set(preference.hiddenWeekdays));
       setInitialView(preference.initialView);
-      setViewMessage("Preferências da Agenda salvas.");
+      setSavedMessage("Preferências da Agenda salvas.");
+      setSheet(null);
     } catch (error) {
-      setViewMessage(
+      setSheetMessage(
         hiddenWeekdaysLimitReason(error) ??
           "Não foi possível salvar as preferências da Agenda.",
       );
@@ -299,145 +196,132 @@ export function CalendarSettings({
       title="Agenda"
       description="Defina como a IA oferece horários e configure lembretes."
     >
-      <div className="settings-stack">
-        <section className="settings-panel">
-          <div className="settings-panel-header">
-            <div>
-              <h2>Como a IA oferece horários</h2>
-              <p>Antecedência, limite futuro e intervalo entre os horários oferecidos.</p>
-            </div>
-          </div>
-          <div className="settings-stack">
-            <ChoiceGroup
-              label="Com quanta antecedência a IA pode marcar"
-              options={MIN_LEAD_OPTIONS}
-              value={minLeadMinutes}
-              onChange={setMinLeadMinutes}
-              formatCustomLabel={formatMinLeadLabel}
+      <div className="agenda-list">
+        {availabilityRoute && (
+          <AgendaGroup title="Quando você atende">
+            <AgendaRow
+              detail={availability ? availabilityGridSummary(availability.rules) : null}
+              href="/configuracoes/disponibilidade"
+              title="Dias e horários"
             />
-            <ChoiceGroup
-              label="Até quando no futuro"
-              options={MAX_LEAD_DAYS_OPTIONS}
-              value={maxLeadDays}
-              onChange={setMaxLeadDays}
-              formatCustomLabel={formatMaxLeadDaysLabel}
-            />
-            <ChoiceGroup
-              label="Intervalo entre horários oferecidos"
-              options={GRANULARITY_OPTIONS}
-              value={granularityMinutes}
-              onChange={setGranularityMinutes}
-              formatCustomLabel={formatGranularityLabel}
-            />
-          </div>
-          <SaveActions
-            busy={busy}
-            disabled={policyBusy}
-            message={message}
-            onClick={() => void saveOfferRules()}
+          </AgendaGroup>
+        )}
+        <AgendaGroup title="Como a IA oferece horários">
+          <AgendaRow
+            detail={availability ? offerRulesSummary(availability) : null}
+            href="/configuracoes/agenda/regras"
+            title="Antecedência e intervalos"
           />
-        </section>
-        <section className="settings-panel">
-          <div className="settings-panel-header">
-            <div>
-              <h2>Cancelar ou remarcar pelo WhatsApp</h2>
-              <p>Prazo mínimo para a cliente cancelar ou remarcar pela IA.</p>
-            </div>
-          </div>
-          <div className="settings-stack">
-            <ChoiceGroup
-              label="Prazo mínimo"
-              options={CUSTOMER_CHANGE_POLICY_OPTIONS}
-              value={customerChangeMinNoticeMinutes}
-              onChange={setCustomerChangeMinNoticeMinutes}
-              formatCustomLabel={formatCustomerChangePolicyLabel}
-            />
-            <p className="field-help">
-              Com restrição, fora do prazo a IA explica a regra e oferece falar
-              com você. Pela Agenda, você sempre pode cancelar ou remarcar.
-            </p>
-          </div>
-          <SaveActions
-            busy={policyBusy}
-            disabled={busy}
-            label="Salvar política"
-            message={policyMessage}
-            onClick={() => void savePolicy()}
+          <AgendaRow
+            detail={
+              availability
+                ? changePolicySummary(availability.customerChangeMinNoticeMinutes)
+                : null
+            }
+            href="/configuracoes/agenda/regras"
+            title="Cancelamento e remarcação"
           />
-        </section>
-        <section className="settings-panel">
-          <div className="settings-panel-header">
-            <div>
-              <h2>Como você vê a Agenda</h2>
-              <p>Escolha os dias visíveis e a visualização inicial da Agenda.</p>
-            </div>
-          </div>
-          {viewReadError && (
-            <p className="field-help" role="alert">
-              Não foi possível carregar as preferências da Agenda agora.
-              Atualize a página e tente de novo.
-            </p>
-          )}
-          <div className="settings-stack">
-            <div className="field is-wide">
-              <span className="label">Dias visíveis</span>
-              <div className="chip-row">
-                {weekOrder.map((day) => {
-                  const visible = !hiddenDays.has(day);
-                  const isLastVisibleDay = visible && hiddenDays.size >= 6;
-                  return (
-                    <button
-                      aria-pressed={visible}
-                      className={`chip${visible ? " is-active" : ""}`}
-                      disabled={isLastVisibleDay}
-                      key={day}
-                      type="button"
-                      onClick={() => toggleHiddenDay(day)}
-                    >
-                      {weekdayLabels[day]}
-                    </button>
-                  );
-                })}
-              </div>
-              {hiddenDays.size >= 6 && (
-                <p className="field-help">{HIDDEN_WEEKDAYS_LIMIT_REASON}</p>
-              )}
-            </div>
-            <ChoiceGroup
-              label="Visualização inicial"
-              options={INITIAL_VIEW_OPTIONS}
-              value={initialView}
-              onChange={setInitialView}
-            />
-            <p className="field-help">
+          <AgendaRow
+            detail={reminders ? remindersSummary(reminders) : null}
+            href="/configuracoes/agenda/lembretes"
+            title="Lembretes"
+          />
+        </AgendaGroup>
+        <AgendaGroup title="Como você vê a Agenda">
+          <AgendaRow
+            detail={viewReady ? visibleDaysSummary(hiddenDays) : null}
+            title="Dias visíveis"
+            onClick={() => openSheet("days")}
+          />
+          <AgendaRow
+            detail={viewReady ? initialViewSummary(initialView) : null}
+            title="Visualização inicial"
+            onClick={() => openSheet("view")}
+          />
+          <p className="agenda-note">
+            <Icon name="info" />
+            <span>
               Ocultar um dia só muda o que você vê. Para não atender em um dia,
               ajuste em{" "}
-              <Link href="/configuracoes/disponibilidade">
-                Dias e horários
-              </Link>
+              {availabilityRoute ? (
+                <Link href="/configuracoes/disponibilidade">Dias e horários</Link>
+              ) : (
+                <strong>Dias e horários</strong>
+              )}
               .
+            </span>
+          </p>
+          {savedMessage && (
+            <p className="field-help" role="status">
+              {savedMessage}
             </p>
-          </div>
-          <SaveActions
-            busy={viewBusy}
-            disabled={viewReading || viewReadError}
-            label="Salvar visualização"
-            message={viewMessage}
-            onClick={() => void saveAgendaView()}
-          />
-        </section>
-        <Link className="settings-hub-card" href="/configuracoes/disponibilidade">
-          <span className="settings-hub-icon">
-            <Icon name="clock" />
-          </span>
-          <span className="settings-hub-copy">
-            <strong>Disponibilidade</strong>
-            <span>Dias e horários de atendimento</span>
-          </span>
-          <Icon name="chevron-right" />
-        </Link>
-        <ReminderSettingsSection />
+          )}
+        </AgendaGroup>
       </div>
+      <Dialog
+        onClose={closeSheet}
+        open={sheet !== null}
+        title={sheet === "days" ? "Dias visíveis" : "Visualização inicial"}
+        variant="sheet"
+      >
+        {viewReadError && (
+          <p className="field-help" role="alert">
+            Não foi possível carregar as preferências da Agenda agora.
+            Atualize a página e tente de novo.
+          </p>
+        )}
+        {sheet === "days" && (
+          <div className="field is-wide">
+            <span className="label">Dias visíveis</span>
+            <div className="chip-row">
+              {WEEK_ORDER.map((day) => {
+                const visible = !draftHiddenDays.has(day);
+                const isLastVisibleDay = visible && draftHiddenDays.size >= 6;
+                return (
+                  <button
+                    aria-pressed={visible}
+                    className={`chip${visible ? " is-active" : ""}`}
+                    disabled={isLastVisibleDay}
+                    key={day}
+                    type="button"
+                    onClick={() => toggleHiddenDay(day)}
+                  >
+                    {weekdayLabels[day]}
+                  </button>
+                );
+              })}
+            </div>
+            {draftHiddenDays.size >= 6 && (
+              <p className="field-help">{HIDDEN_WEEKDAYS_LIMIT_REASON}</p>
+            )}
+          </div>
+        )}
+        {sheet === "view" && (
+          <div className="field is-wide">
+            <span className="label">Visualização inicial</span>
+            <div className="chip-row">
+              {INITIAL_VIEW_OPTIONS.map((option) => (
+                <button
+                  aria-pressed={draftInitialView === option.value}
+                  className={`chip${draftInitialView === option.value ? " is-active" : ""}`}
+                  key={String(option.value)}
+                  type="button"
+                  onClick={() => setDraftInitialView(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <SaveActions
+          busy={viewBusy}
+          disabled={!viewReady}
+          label="Salvar"
+          message={sheetMessage}
+          onClick={() => void saveAgendaView()}
+        />
+      </Dialog>
     </SettingsPage>
   );
 }

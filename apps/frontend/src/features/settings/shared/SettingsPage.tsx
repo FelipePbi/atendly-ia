@@ -11,11 +11,15 @@ import { PushedBar } from "@/shared/layout/PushedBar";
  * diante a lista de Configurações fica ao lado e o voltar some.
  */
 export function SettingsPage({
+  backHref = "/configuracoes",
+  backLabel = "Voltar para configurações",
   children,
   description,
   root = false,
   title,
 }: {
+  backHref?: string;
+  backLabel?: string;
   children: ReactNode;
   description: string;
   root?: boolean;
@@ -25,8 +29,8 @@ export function SettingsPage({
     return (
       <section className="settings-page is-pushed">
         <PushedBar
-          backHref="/configuracoes"
-          backLabel="Voltar para configurações"
+          backHref={backHref}
+          backLabel={backLabel}
           hideBackWide
           title={title}
         />

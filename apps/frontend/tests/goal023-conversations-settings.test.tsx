@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Goal023 (§8, critério 42): a retenção é a seção **Conversas** de
+ * Goal023 (§8, critério 42), revisto no Goal097 (M1): a retenção é a seção **Conversas** de
  * Configurações, e não um bloco escondido dentro de Conta.
  *
  * O que esta suíte prova pelo que a usuária encontra:
@@ -20,6 +20,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import type { RetentionSettings, SettingsState } from "@/data";
 import { ProductSettingsScreen } from "@/features/settings/ProductSettingsScreen";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
+import type * as SystemStatusModule from "@/shared/runtime/systemStatus";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -34,7 +35,11 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     account: { requestDeletion: vi.fn(), cancelDeletion: vi.fn() },
     auth: { changePassword: vi.fn(), logout: vi.fn() },
+    migration: {
+      getImportState: vi.fn().mockResolvedValue({ history: null, session: null }),
+    },
     retention: { get: getRetention, update: updateRetention },
+    serviceCatalog: { list: vi.fn().mockResolvedValue({ items: [] }) },
     settings: { get: getSettings },
     whatsapp: { get: getWhatsapp },
   }),
@@ -47,14 +52,23 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 
 // `AccountSettings` lê `accountDeletion` de `useSystemStatus` (Goal025/WU-08);
 // esta suíte é sobre Conversas hospedar a retenção, não sobre o ciclo de vida
-// da conta, e não monta `SystemStatusProvider`.
-vi.mock("@/shared/runtime/systemStatus", () => ({
-  useSystemStatus: () => ({
-    accountDeletion: { status: "NONE", dueAt: null },
-    phase: "loaded",
-    refresh: vi.fn(),
-  }),
-}));
+// da conta, e não monta `SystemStatusProvider`. O hub também lê o estado da IA
+// e do WhatsApp para as próprias linhas (M1).
+vi.mock("@/shared/runtime/systemStatus", async (importOriginal) => {
+  const actual = await importOriginal<typeof SystemStatusModule>();
+  return {
+    ...actual,
+    useSystemStatus: () => ({
+      accountDeletion: { status: "NONE", dueAt: null },
+      ai: null,
+      aiView: "off",
+      phase: "loaded",
+      refresh: vi.fn(),
+      whatsapp: null,
+      whatsappView: "off",
+    }),
+  };
+});
 
 function settingsFixture(): SettingsState {
   return {

@@ -2,108 +2,306 @@
 
 import clsx from "clsx";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
-import type { SettingsState } from "@/data";
+import type { RetentionSettings, SettingsState } from "@/data";
 import { Icon, type IconName } from "@/shared/icons/Icon";
+import { formatBrazilianPhone } from "@/shared/phone";
+import { getProductServices, useProductRuntime } from "@/shared/runtime/ProductRuntime";
+import {
+  aiCardView,
+  useSystemStatus,
+  type UseSystemStatusResult,
+} from "@/shared/runtime/systemStatus";
 
-import { sourceLabel, toneLabel } from "./shared/labels";
-import { SettingsPage } from "./shared/SettingsPage";
+import type { ImportState } from "../imports/types";
+import {
+  importDetail,
+  retentionDetail,
+  servicesDetail,
+  toneLabel,
+} from "./shared/labels";
 
-type HubCard = {
-  copy: string;
+type HubRow = {
+  detail: string | null;
+  detailTone?: "review";
   href: string;
-  icon: IconName;
+  icon: IconName | "ia";
+  iaActive?: boolean;
+  /** Linha que a barra lateral da casca já oferece: some junto com ela. */
+  shellDuplicate?: boolean;
   title: string;
 };
 
+type HubGroup = { rows: HubRow[]; title: string };
+
+type HubReadings = {
+  importState: ImportState | null;
+  retention: RetentionSettings | null;
+  services: { active: boolean; needsReview: boolean }[] | null;
+};
+
 /**
- * Hub de Configurações (Goal024/WU-01): entradas na ordem do vault —
- * Negócio, Agenda (com Disponibilidade só quando a fonte é Atendly), IA,
- * WhatsApp, Importação, Conversas, Conta. Importação é entrada própria
- * apontando direto para `/importacao`; `ImportSettingsSection` (Goal020, o
- * bloco que vivia dentro de Agenda) saiu do repositório junto desta troca,
- * porque perdeu o único consumidor que tinha.
+ * Cada leitura é independente e opcional: uma que falha ou ainda carrega deixa
+ * a linha sem segunda linha. O hub nunca espera por elas nem exibe um valor
+ * que não veio do BFF.
  */
-function hubCards(settings: SettingsState): HubCard[] {
-  const cards: HubCard[] = [
+function useHubReadings(): HubReadings {
+  const [readings, setReadings] = useState<HubReadings>({
+    importState: null,
+    retention: null,
+    services: null,
+  });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const services = getProductServices();
+    const keep = <K extends keyof HubReadings>(key: K) =>
+      (value: HubReadings[K]) =>
+        setReadings((current) => ({ ...current, [key]: value }));
+    const ignore = () => undefined;
+
+    services.serviceCatalog
+      .list(controller.signal)
+      .then((result) => keep("services")(result.items))
+      .catch(ignore);
+    services.migration
+      .getImportState(controller.signal)
+      .then(keep("importState"))
+      .catch(ignore);
+    services.retention
+      .get(controller.signal)
+      .then(keep("retention"))
+      .catch(ignore);
+    return () => controller.abort();
+  }, []);
+
+  return readings;
+}
+
+function aiDetail(
+  status: UseSystemStatusResult,
+  tone: SettingsState["ai"]["tone"],
+): string | null {
+  const state =
+    status.aiView === "active"
+      ? "Ativa"
+      : status.aiView === "pending"
+        ? "Em ativação"
+        : status.aiView === "off"
+          ? "Desligada"
+          : null;
+  if (!state) return null;
+  return tone ? `${state} · estilo ${toneLabel(tone)}` : state;
+}
+
+function whatsappDetail(status: UseSystemStatusResult): string | null {
+  if (status.whatsappView === "off") return "Desconectado";
+  if (status.whatsappView !== "active") return null;
+  const phone = status.whatsapp?.phoneNumber
+    ? formatBrazilianPhone(status.whatsapp.phoneNumber, "plus")
+    : null;
+  return phone ? `${phone} · conectado` : "Conectado";
+}
+
+function hubGroups(
+  settings: SettingsState,
+  status: UseSystemStatusResult,
+  readings: HubReadings,
+  email: string | null,
+): HubGroup[] {
+  const services = readings.services ? servicesDetail(readings.services) : null;
+  const timeZone = settings.business?.timezone ?? "America/Sao_Paulo";
+  return [
     {
-      href: "/configuracoes/negocio",
-      icon: "briefcase",
-      title: "Negócio",
-      copy: settings.business?.name ?? "Complete seus dados",
+      title: "Atendimento",
+      rows: [
+        {
+          detail: services?.text ?? null,
+          detailTone: services?.review ? "review" : undefined,
+          href: "/servicos",
+          icon: "nav-list",
+          shellDuplicate: true,
+          title: "Serviços",
+        },
+        {
+          detail: aiDetail(status, settings.ai.tone),
+          href: "/configuracoes/ia",
+          iaActive: status.aiView === "active",
+          icon: "ia",
+          title: "IA",
+        },
+        {
+          detail: whatsappDetail(status),
+          href: "/configuracoes/whatsapp",
+          icon: "phone",
+          title: "WhatsApp",
+        },
+      ],
     },
     {
-      href: "/configuracoes/agenda",
-      icon: "calendar",
-      title: "Agenda",
-      copy: sourceLabel(settings.calendar.source),
+      title: "Seu negócio",
+      rows: [
+        {
+          detail: "Endereço, pagamento, informações para a IA",
+          href: "/configuracoes/negocio",
+          icon: "map-pin",
+          title: "Negócio",
+        },
+        {
+          detail: "Horários, lembretes, regras de agendamento",
+          href: "/configuracoes/agenda",
+          icon: "nav-calendar",
+          title: "Agenda",
+        },
+      ],
+    },
+    {
+      title: "Dados e conta",
+      rows: [
+        {
+          detail: readings.importState
+            ? importDetail(readings.importState, timeZone)
+            : null,
+          href: "/importacao",
+          icon: "import",
+          title: "Importação",
+        },
+        {
+          detail: readings.retention ? retentionDetail(readings.retention) : null,
+          href: "/configuracoes/conversas",
+          icon: "nav-chat",
+          title: "Conversas",
+        },
+        {
+          detail: email,
+          href: "/configuracoes/conta",
+          icon: "nav-user",
+          title: "Conta",
+        },
+      ],
     },
   ];
-  if (settings.calendar.source === "ATENDLY")
-    cards.push({
-      href: "/configuracoes/disponibilidade",
-      icon: "clock",
-      title: "Disponibilidade",
-      copy: "Dias e horários habituais",
-    });
-  cards.push(
-    {
-      href: "/configuracoes/ia",
-      icon: "spark",
-      title: "Atendente virtual",
-      copy: toneLabel(settings.ai.tone),
-    },
-    {
-      href: "/configuracoes/whatsapp",
-      icon: "chat",
-      title: "WhatsApp",
-      copy: "Conexão e recuperação da sessão",
-    },
-    {
-      href: "/importacao",
-      icon: "refresh",
-      title: "Importação",
-      copy: "Traga dados do Minha Agenda",
-    },
-    {
-      href: "/configuracoes/conversas",
-      icon: "chat",
-      title: "Conversas",
-      copy: "Prazo de retenção das mensagens",
-    },
-    {
-      href: "/configuracoes/conta",
-      icon: "user",
-      title: "Conta",
-      copy: "Senha e acesso",
-    },
+}
+
+function initials(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+function HubIdentity({
+  settings,
+  status,
+}: {
+  settings: SettingsState;
+  status: UseSystemStatusResult;
+}) {
+  const business = settings.business;
+  if (!business) return null;
+  const pill = aiCardView(status.aiView, status.whatsappView);
+  const subtitle = [business.category, business.address]
+    .filter((part): part is string => Boolean(part))
+    .join(" · ");
+  return (
+    <div className="hub-identity">
+      <span aria-hidden="true" className="hub-identity-avatar">
+        {initials(business.name)}
+      </span>
+      <div className="hub-identity-copy">
+        <strong>{business.name}</strong>
+        {subtitle && <span>{subtitle}</span>}
+      </div>
+      <span className={clsx("hub-identity-pill", `is-${pill.tone}`)}>
+        <span aria-hidden="true" className="hub-identity-pill-dot" />
+        {pill.title}
+      </span>
+    </div>
   );
-  return cards;
+}
+
+function HubBody({
+  openHref,
+  settings,
+}: {
+  openHref?: string;
+  settings: SettingsState;
+}) {
+  const status = useSystemStatus();
+  const { session } = useProductRuntime();
+  const readings = useHubReadings();
+  const groups = hubGroups(
+    settings,
+    status,
+    readings,
+    session?.user.email ?? null,
+  );
+  return (
+    <>
+      <HubIdentity settings={settings} status={status} />
+      <div className="hub-groups">
+        {groups.map((group) => (
+          <section className="hub-group" key={group.title}>
+            <h2 className="hub-group-title">{group.title}</h2>
+            <div className="hub-group-card">
+              {group.rows.map((row) => (
+                <Link
+                  aria-current={row.href === openHref ? "page" : undefined}
+                  className={clsx(
+                    "hub-row",
+                    row.href === openHref && "is-open",
+                    row.shellDuplicate && "hub-row-shell-duplicate",
+                  )}
+                  href={row.href}
+                  key={row.href}
+                >
+                  {row.icon === "ia" ? (
+                    <span aria-hidden="true" className="hub-row-ia">
+                      <span
+                        className={clsx(
+                          "hub-row-ia-ring",
+                          row.iaActive && "is-breathing",
+                        )}
+                      />
+                      <span className="hub-row-ia-dot" />
+                    </span>
+                  ) : (
+                    <Icon className="hub-row-icon" name={row.icon} />
+                  )}
+                  <span className="hub-row-copy">
+                    <strong>{row.title}</strong>
+                    {row.detail && (
+                      <span
+                        className={clsx(
+                          "hub-row-detail",
+                          row.detailTone === "review" && "is-review",
+                          row.href === "/configuracoes/whatsapp" && "is-numeric",
+                        )}
+                      >
+                        {row.detail}
+                      </span>
+                    )}
+                  </span>
+                  <Icon className="hub-row-chevron" name="chevron-right" />
+                </Link>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </>
+  );
 }
 
 export function SettingsHub({ settings }: { settings: SettingsState }) {
-  const cards = hubCards(settings);
   return (
-    <SettingsPage
-      root
-      title="Configurações"
-      description="Gerencie os dados e conexões usados pela operação."
-    >
-      <div className="settings-hub-grid">
-        {cards.map((card) => (
-          <Link className="settings-hub-card" href={card.href} key={card.href}>
-            <span className="settings-hub-icon">
-              <Icon name={card.icon} />
-            </span>
-            <span className="settings-hub-copy">
-              <strong>{card.title}</strong>
-              <span>{card.copy}</span>
-            </span>
-            <Icon name="chevron-right" />
-          </Link>
-        ))}
-      </div>
-    </SettingsPage>
+    <div className="hub">
+      <h1 className="hub-title">Configurações</h1>
+      <HubBody settings={settings} />
+    </div>
   );
 }
 
@@ -121,32 +319,9 @@ export function SettingsHubPanel({
   settings: SettingsState;
 }) {
   return (
-    <div className="settings-hub-panel">
-      <div className="settings-hub-panel-header">
-        <Heading>Configurações</Heading>
-      </div>
-      <div className="settings-hub-grid">
-        {hubCards(settings).map((card) => {
-          const open = card.href === openHref;
-          return (
-            <Link
-              aria-current={open ? "page" : undefined}
-              className={clsx("settings-hub-card", open && "is-open")}
-              href={card.href}
-              key={card.href}
-            >
-              <span className="settings-hub-icon">
-                <Icon name={card.icon} />
-              </span>
-              <span className="settings-hub-copy">
-                <strong>{card.title}</strong>
-                <span>{card.copy}</span>
-              </span>
-              <Icon name="chevron-right" />
-            </Link>
-          );
-        })}
-      </div>
+    <div className="hub hub-panel">
+      <Heading className="hub-title">Configurações</Heading>
+      <HubBody openHref={openHref} settings={settings} />
     </div>
   );
 }

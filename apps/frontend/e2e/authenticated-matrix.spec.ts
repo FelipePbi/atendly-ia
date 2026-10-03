@@ -1412,13 +1412,13 @@ test.describe("reached by real click", () => {
     await name.fill("Serviço que o gate não grava");
 
     await clickForReal(
-      page.getByRole("button", { name: "Criar serviço" }),
-      "/servicos/novo: Criar serviço",
+      page.getByRole("button", { name: "Salvar serviço" }),
+      "/servicos/novo: Salvar serviço",
       testInfo,
     );
     await expect(
       page.getByRole("alert").filter({ hasText: "Informe o valor" }),
-      `/servicos/novo at ${testInfo.project.name}: "Criar serviço" was clicked and the form did not `
+      `/servicos/novo at ${testInfo.project.name}: "Salvar serviço" was clicked and the form did not `
         + "answer: the submit never ran.",
     ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
     expect(

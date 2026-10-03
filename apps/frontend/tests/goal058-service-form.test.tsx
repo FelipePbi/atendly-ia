@@ -345,7 +345,10 @@ describe("intervalos antes/depois do atendimento não mudam", () => {
       </ShellConfigProvider>,
     );
 
-    await screen.findByLabelText("Nome do serviço");
+    await screen.findByLabelText("Nome");
+    await userEvent.setup().click(
+      screen.getByRole("button", { name: /Intervalo antes e depois/ }),
+    );
 
     const before = screen.getByLabelText(
       "Intervalo antes do atendimento (minutos)",

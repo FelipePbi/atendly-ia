@@ -4850,3 +4850,106 @@ A conferência humana num aparelho real; o `visual:compare` (o CL6 e o A1 não m
 - **Gates do IA Loop na rodada 2.** typecheck, `validate:core` e `git diff --check` passaram. A WU-07 nativa da rodada 2 deu `validate:integration` exit 0, `255 passed (7.9m)` e `authenticated gate retries: 0`, além da execução do FIX-001 registrada em "Execuções".
 - **Controle 4.** Aceito na forma registrada: a execução literal fica verde e a variante com a cópia em `toAppointment` fica vermelha. Isso cobre o critério 2.
 - **Falha de contraste da rodada 1.** Sem causa medida. Fica como proposta de Goal futuro, com a hipótese da DIAG-001 (o axe mede o fade-in `rise` da demonstração do onboarding). Detalhe no [review103](reviews/103-review.md).
+
+## Serviços iguais ao protótipo (Servicos:S1, S3, Servicos:S4 e Agenda:S1), do Goal095 (rodadas 1 a 4)
+
+[D-114](DECISIONS.md), **PROPOSED**. Seção escrita na rodada 1 e **atualizada na rodada 4 sobre a árvore final** (a das rodadas 2 e 3), sem alterar nenhuma configuração de gate nem código. Os números do "Fim", os controles do §7, a contagem de testes e as execuções abaixo são os da árvore final, com os hashes de `ServiceList.tsx` `c249ac47…`, `ServiceForm.tsx` `505ebab7…` e `atendly-services.css` `d9a55fc7…`; os da rodada 1 foram substituídos.
+
+### `visual:compare` do início e do fim
+
+Comando do fim, rodado na rodada 4 sobre a árvore final (hashes acima; os três arquivos de produção não mudaram desde a rodada 3): `npm run visual:compare -- --target Servicos:S1,S3,Servicos:S4,Agenda:S1,CL1,CL6,M1,N1,A1,A10,H3`. O início é a execução da WU-01 sobre a baseline `a4cf1f6`, nesta mesma máquina; por isso ele difere um pouco dos números que o Goal cita (Goal088 e Goal094), e a comparação válida é entre as duas execuções desta máquina. Diff em % da página, na ordem mobile / tablet em retrato / tablet em paisagem / desktop.
+
+| Quadro | Início | Fim |
+| --- | --- | --- |
+| Servicos:S1 | 9,4 / 5,8 / 4,4 / 3,4 | 8,5 / 4,5 / 4,2 / 3,2 |
+| Servicos:S3 | 7,1 / 7,8 / 13,4 / 8,0 | 6,8 / 3,5 / 13,4 / 4,8 |
+| Servicos:S4 | 9,7 / 9,1 / 14,4 / 8,9 | 9,5 / 5,9 / 13,7 / 5,0 |
+| Agenda:S1 | 9,7 / 9,1 / 14,5 / 8,8 | 12,2 / 6,2 / 15,3 / 6,4 |
+| CL1 | 9,5 / 4,2 / 3,6 / 3,2 | 9,5 / 4,2 / 3,6 / 3,2 |
+| CL6 | 9,0 / 3,8 / 6,0 / 5,1 | 9,1 / 3,8 / 6,0 / 5,1 |
+| M1 | 8,6 / 3,7 / 6,2 / 5,2 | 8,6 / 3,7 / 6,2 / 5,2 |
+| N1 | 8,8 / 4,4 / 6,2 / 5,2 | 8,8 / 4,4 / 6,2 / 5,2 |
+| A1 | 10,8 / 5,3 / 5,8 / 4,9 | 10,8 / 5,3 / 5,8 / 4,9 |
+| A10 | 17,7 / 5,7 / 6,4 / 5,3 | 17,7 / 5,7 / 6,4 / 5,3 |
+| H3 | 14,4 / 8,8 / 9,6 / 7,9 | 14,4 / 8,8 / 9,6 / 7,9 |
+
+Os números são os do relatório de cada execução, não foram recalculados. Servicos:S1 melhorou em todos os devices (em S1 o mobile é 8,5, não os 8,4 da rodada 1). Servicos:S3 melhorou em todos, e no tablet em paisagem ficou igual ao início (13,4). Servicos:S4 melhorou em todos os devices (mobile 9,7 para 9,5, tablet em retrato 9,1 para 5,9, tablet em paisagem 14,4 para 13,7, desktop 8,9 para 5,0). Agenda:S1 melhorou no tablet em retrato (9,1 para 6,2) e no desktop (8,8 para 6,4), e **piorou no mobile (9,7 para 12,2) e no tablet em paisagem (14,5 para 15,3)**. A causa dessas duas pioras **não foi medida**: o início rodou sem os `steps` e o fim abre a linha "Cor na agenda", com a escolha de cores e a prévia, que o início não tinha na tela, mas isso é só a diferença de condição, não uma causa provada. A conclusão da rodada 1 de que Servicos:S4 piorava no mobile **não vale mais** para a árvore final. Dos quadros do §2, só CL6 no mobile se moveu (0,1 ponto), e é a mudança de cor do traço de (g), esperada; os outros quadros do §2 têm diff idêntico em todos os devices. A mudança de cor do traço em A1, A10 e CL6 é a esperada.
+
+### Os dezesseis `side-by-side.png` do §1
+
+Todas as capturas do app trazem os avisos "Atendimento automático parado" e "IA indisponível", o cartão "WhatsApp desconectado" e o item "Notificações" da sidebar: estado do ambiente (orquestrador da IA desligado), divergência 2 de D-114.
+
+- **Servicos:S1, lista.**
+  - *Mobile:* o quadro tem a barra "‹ Mais", o título "Serviços", "6 ativos · 1 precisa de revisão · 1 inativo", as linhas com traço de cor e seta, uma linha âmbar com "Corrigir", o grupo "INATIVOS" e o "+" flutuante. O app tem os dois avisos no alto, "Serviços", "5 ativos · 1 inativo", o campo "Buscar serviço" e as linhas com traço (Lavanda, Ardósia, Terracota, Oliva, na paleta nova) e seta, **sem botão "Desativar"** em nenhuma. A ordem é alfabética em pt-BR (Coloração primeiro). A barra "‹ Mais" não existe; a barra de abas e o "+" vêm da casca.
+  - *Tablet em retrato:* a mesma estrutura de linha, com o grupo "INATIVOS" e "Progressiva · a IA não oferece". O app acrescenta os avisos, o campo de busca e a barra de abas, e não tem a linha "Corrigir" (a conta não tem serviço pendente).
+  - *Tablet em paisagem e desktop:* a lista numa coluna de 380 px ao lado de um painel vazio ("Selecione um serviço" nos dois, depois da rodada 2); o "+" redondo verde-azulado no cabeçalho nos dois. O app tem a busca e os avisos, e a lista aparece cortada pela altura da captura.
+- **Servicos:S3, novo serviço.**
+  - O quadro vem preenchido (Manicure, 40 min, "Fixo", R$ 55,00, "A IA responde: …") e o app vem vazio ("Ex.: 45 min", "R$ 0,00", sem a frase da IA). Nos dois: "Nome", "Duração" (− e +, atalhos 30/60/90), o preço segmentado "Fixo | A partir de | Sob consulta | Sem preço", o título "MAIS OPÇÕES" com as cinco linhas fechadas e seus valores (Cor na agenda · Sem cor, Descrição · Opcional, Recorrência · Não, Intervalo antes e depois · Nenhum, Instruções para a IA · Nenhuma) e o CTA "Salvar serviço".
+  - *Mobile:* uma coluna; no app as linhas ficam abaixo da dobra, sob os avisos.
+  - *Tablet em retrato em diante:* duas colunas (campos à esquerda, "Mais opções" à direita) nos dois.
+  - *Tablet em paisagem e desktop:* a lista ao lado do formulário; o CTA do app fica logo abaixo do conteúdo ou acima da barra de abas, e o do quadro fica fixo no pé do painel.
+- **Servicos:S4, editar, opções.**
+  - O app edita "Corte feminino" e o quadro "Coloração". As capturas ficam cortadas pelo rodapé. A linha-resumo do topo aparece aberta (divergência 6). O app mostra também as linhas "Cor na agenda" e "Descrição", que o quadro S4 não mostra (medida, não declarada).
+  - "Recorrência" (aberta, "Não"), "Intervalo antes e depois" (aberta, com os passos de "Antes" e "Depois") e "Instruções para a IA" (aberta, "Nenhuma"), como no quadro. "Serviço ativo" fica abaixo das linhas (cortado pelo rodapé em tablet e desktop). "Onde é feito" não existe (divergência 5), nem "alterações não salvas" e o "•••" na barra (divergência 10). O CTA é "Salvar alterações".
+  - *Correções da rodada 3, vistas nos `side-by-side.png` finais:* em tablet em paisagem e desktop, a linha aberta da lista (a do serviço em edição, "Corte feminino") vai de borda a borda do painel da lista, com o fundo `--accent-soft` e a barra de 3 px à esquerda, como a linha aberta "Coloração" do quadro, e não mais recuada pelo padding do painel (a lista só aparece ao lado do formulário a partir de 1024 px). O CTA "Salvar alterações" fica fixo no pé da tela com `padding-bottom` de **28 px** de 768 a 1099 px (tablet em retrato e em paisagem) e de **24 px** a partir de 1100 px (desktop de 1366), no lugar dos 46 px do mobile.
+- **Agenda:S1, cor na agenda.**
+  - A escolha de cor mostra "sem cor" e as seis cores como círculos com a marca de escolhido (no app, Lavanda, que é o token `VIOLET` do serviço semeado; no quadro, Ameixa), sem o "+" (divergência 4), e o texto "Seis cores sugeridas.". A prévia "ASSIM NA AGENDA", "15:30 Cliente" e "Corte feminino · 45 min · R$ 90" (no quadro, "Ana Paula", divergência 9). O CTA é "Salvar alterações" no app e "Salvar" no quadro (divergência 7).
+  - Corrigido na rodada 2: na edição, "Duração" e "Preço" ficam lado a lado, com "Fixo · R$ 90,00" num campo só e a linha de cores espalhada pela largura, como no quadro. Sobra, por decisão: o rótulo "Fixo ·" abre o controle segmentado abaixo do campo (o quadro não tem segmentado) para a troca de tipo continuar possível.
+  - *Correções da rodada 3, vistas nos `side-by-side.png` finais:* no tablet em retrato o CTA "Salvar alterações" tem `padding-bottom` de 28 px e fica fixo no pé da tela, como o "Salvar" do quadro; em tablet em paisagem a linha aberta da lista ("Corte feminino") vai de borda a borda do painel, e no desktop o CTA tem 24 px. O app tem a linha "Cor na agenda" aberta com "sem cor" e as seis cores, e a captura em paisagem fica cortada na altura do formulário pelos dois avisos no alto e pela barra de abas, que o quadro não tem.
+  - Em tablet em paisagem e desktop, a lista do Agenda:S1 do quadro é uma variante antiga ("Revisar" e "Inativo" como selos, nota "A cor é só um acento…") e difere do S1 atual e da lista do app.
+- **A1 (desktop).** Os traços usam a paleta nova (Terracota, Oliva, Ardósia e Lavanda em Escova, Hidratação, Corte masculino e Corte feminino). O dia é 3 de outubro, no quadro 18 de setembro. A mudança de cor do traço é a esperada.
+- **A10.** Diff numericamente idêntico ao início nos quatro devices; a cor do traço dos serviços muda como em A1, é esperada e é a única mudança.
+- **CL6 (desktop).** Os traços usam a paleta nova (esperado). A conta tem 2 atendimentos, "valor não registrado · registrar" e o rodapé "Valor registrado: R$ 0 / 2 atendimentos sem valor", no quadro 9 atendimentos e R$ 640 (dados, divergência 3).
+- **CL1, M1, N1, H3.** Diff idêntico ao início nos quatro devices; sem mudança.
+
+### Controles negativos (§7)
+
+Rodados na **rodada 4**, **depois da última edição de código** (a da rodada 3, no `atendly-services.css`; a rodada 4 só mexe em documentos), em `apps/frontend`, com `npx vitest run tests/goal095-servicos.test.tsx` (**46 testes** no arquivo). Cada defeito foi injetado por edição real num dos três arquivos de produção e o arquivo foi restaurado do backup no mesmo passo; o sha256 conferido depois de cada controle é igual ao de antes (`sha256 identico` na saída do script): `ServiceList.tsx` `c249ac474f9661ab1f04037773731a4a9c8dc28646b000557024b60f10edb2ee`, `ServiceForm.tsx` `505ebab715d348bf8db762f2a9f9b2ea58d2171980567709c91e01cc86c18fae` e `atendly-services.css` `d9a55fc74c9ae74f71e5a12728d3bb00950772159247b9da8d2f0e323d5cded9`. Sem nenhum defeito, a execução do arquivo deu `46 passed (46)` antes dos controles, e a árvore tinha os mesmos três hashes depois deles (`git status --porcelain=v1 -uall` com as mesmas 17 linhas antes e depois, sem `.ctlbak` restante).
+
+| Controle | Defeito injetado | Com o defeito | Sem o defeito |
+| --- | --- | --- | --- |
+| 1 | `ServiceList.tsx`: um botão "Desativar" volta à linha, antes de `service-row-body` | `1 failed, 45 passed (46)`: "nenhuma linha tem botão 'Desativar' ou 'Ativar'" (prova 1) | 46/46 |
+| 2 | `ServiceForm.tsx`: "Sem preço" grava `ON_REQUEST` (`{ value: "ON_REQUEST", label: "Sem preço" }`) | `3 failed, 43 passed (46)`: "o preço tem quatro opções com estado, 'Fixo' marcado", "'Sob consulta' grava ON_REQUEST no pedido de criação, com active: true", "'Sem preço' grava NOT_INFORMED no pedido de criação, com active: true" (prova 2) | 46/46 |
+| 3 | `ServiceForm.tsx`: a opção "recorrência" nasce aberta (`new Set<OptionKey>(["recurrence"])`) | `4 failed, 42 passed (46)`: "as cinco linhas de opção nascem fechadas e mostram o valor atual", "tocar a linha abre o editor dela, sem fechar as outras" (prova 2), "as linhas nascem fechadas e mostram o valor atual do serviço" e "a recorrência aberta mostra o valor como botão que revela o campo" (prova 3) | 46/46 |
+| 4 | `atendly-services.css`: `[data-color="SKY"]` com `#5b8fb0` no lugar de `#8e5a86` | `1 failed, 45 passed (46)`: "[data-color=SKY] usa #8e5a86 (Ameixa)" (prova 4) | 46/46 |
+| 5 | `ServiceForm.tsx`: segunda chamada de `useShellConfig`, igual à real, antes de `const barTitle` | `2 failed, 44 passed (46)`: "nas três rotas, na faixa ≥1024" e "nas três rotas, na faixa <1024" (prova 5) | 46/46 |
+
+O vermelho da baseline dos 46 testes, medido na rodada 4 trocando os três arquivos de produção pelos de `HEAD` (copiados antes e restaurados depois, com os três hashes conferidos iguais): **39 reprovam e 7 passam** (`39 failed | 7 passed (46)`). Os 7 que passam já estavam cumpridos pela baseline e são declarados em [D-114](DECISIONS.md): na prova 1, "o resumo fica no cabeçalho", "a linha mostra o nome e 'duração · preço'", "o traço usa a cor do serviço", "o link 'Editar <nome>' e a classe directory-row continuam" e "sem edição a lista é só leitura, sem link nem 'Corrigir'"; e, na prova 5, "nas três rotas, na faixa ≥1024" e "nas três rotas, na faixa <1024", que guardam comportamento. Os testes que a rodada 1 tinha (42) davam 35 reprovados e os mesmos 7 aprovados; os 4 acrescentados nas rodadas 2 e 3 também reprovam na baseline (35 + 4 = 39), de modo que **nenhum teste do arquivo ficou sem vermelho medido**, salvo os 7 declarados.
+
+### Execuções que sustentam as contagens
+
+Todas de 2026-10-03. As do loop são as da **rodada 3** (`tools/ia-loop/.state/results/work_unit/095-r3-unit-wu-NN.json`), rodadas sobre a árvore final, que a rodada 4 não alterou em código. A suíte do frontend e o `visual:compare` são da rodada 4.
+
+| Execução | Resultado |
+| --- | --- |
+| `tsc --noEmit`, rodada 3, WU-04 | código 0 em 1,7 s |
+| `npm run lint`, rodada 3, WU-05 | código 0 em 13,7 s |
+| `npx vitest run goal095-servicos`, rodada 3, WU-06 | código 0 em 8,8 s; `Tests 46 passed (46)` |
+| `validate:core`, rodada 3, WU-07 | código 0 em 86,9 s; 17 passos, **15 passaram**, 0 falharam e 2 foram pulados (`test:bff` e `test:health-worker`, por desenho do gate); auditoria estática com 34 verificações, 33 passaram e 1 foi pulada (`production_health`) |
+| `test:gate`, rodada 3, WU-08 | código 0 em 1,4 s; `tests 233, pass 233` |
+| `validate:ui`, rodada 3, WU-09 | código 0 em 45,4 s; **169 passed**; "public UI gate retries: 0" |
+| `validate:integration`, rodada 3, WU-10 | código 0 em 583,5 s; **36/36** passos; gate autenticado **255 passed (7,9 min)**; "authenticated gate retries: 0" |
+| `git diff --check`, rodada 3, WU-12 | código 0 |
+| Suíte do frontend, rodada 4 (`npx vitest run` em `apps/frontend`, depois dos cinco controles) | código 0; **142 arquivos e 1628 testes passaram** (`Test Files 142 passed (142)`, `Tests 1628 passed (1628)`); a rodada 1 tinha 1624, e a diferença são os 4 testes acrescentados em `goal095-servicos.test.tsx` nas rodadas 2 e 3 |
+| `visual:compare` dos onze alvos, rodada 4 | código 0; a tabela do "Fim" acima |
+
+O critério do Goal de **255** testes do gate autenticado e 0 retentativas é sustentado pela execução do `validate:integration` da rodada 3. A contagem de testes do `test:frontend` dentro do `validate:core` não consta do registro do loop (a saída vem truncada); por isso a contagem do frontend citada é a da execução própria da rodada 4. As execuções da rodada 1 (a primeira de `validate:core`, que falhou em `tests/goal084-price-input.test.tsx:238` por causa do rótulo antigo "Nome do serviço", a reexecução de 91,8 s, `validate:integration` de 585,9 s) descrevem a árvore da rodada 1 e **não** sustentam mais nenhuma contagem aqui.
+
+### Estado da árvore
+
+`git status` ao fim da rodada 4: 13 arquivos modificados em `apps/frontend` (os três de produção, `e2e/visual/targets.json`, `e2e/authenticated-matrix.spec.ts` e oito testes: `goal015-services`, `goal015-shell-invariant`, `goal058-service-form`, `goal076-service-form`, `goal076-service-list`, `goal078-service-instruction-form`, `goal084-price-input` e `goal088-list-detail`) e 1 novo (`apps/frontend/tests/goal095-servicos.test.tsx`), mais os três documentos desta seção. Nenhum arquivo de configuração de gate foi alterado; `targets.json` mudou só pelos `steps` de duas entradas e `authenticated-matrix.spec.ts` só pelas três linhas que o §6 autoriza. A rodada 1 contava 12 arquivos modificados; o décimo terceiro é `goal088-list-detail.test.tsx`, que uma rodada posterior mudou em uma linha (ver D-114).
+
+### Não feito
+
+- Conferência humana num aparelho real.
+- Captura da linha "Corrigir" em âmbar: a conta de teste não tem serviço pendente, e o markup está provado só em jsdom.
+- Medida da causa do aumento do diff em Agenda:S1 no mobile (9,7 para 12,2) e no tablet em paisagem (14,5 para 15,3). Servicos:S4 **não** piorou em nenhum device na árvore final.
+- Os quadros S2, S5 a S9 e S1b.
+- Decisão do Tech Lead sobre [D-114](DECISIONS.md), que segue PROPOSED.
+
+**Nota de fechamento — review095, 2026-10-03.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima:
+
+- **Decisão.** D-114 ACCEPTED na rodada 4, sem blocker. Os blockers das rodadas 1 a 3 (7, 2 e 2) foram fechados: sete de fidelidade visual, dois de CSS e dois de evidência e documento. O item "Decisão do Tech Lead sobre D-114" de "Não feito" está resolvido.
+- **Conferência do Tech Lead na rodada 4.** Os `sha256` de `ServiceList.tsx`, `ServiceForm.tsx` e `atendly-services.css` batem com os citados nos controles do §7. `git status` tem as mesmas 17 linhas. O spec e2e difere da baseline só pelas três linhas do §6, e `targets.json` só pelos `steps` de Agenda:S1 e Servicos:S4. O `visual:compare` reexecutado deu exit 0 e os mesmos números do "Fim". O Tech Lead abriu os dezesseis `side-by-side.png`. Os controles do §7 e o vermelho da baseline foram aceitos pelo registro acima, não reexecutados pelo Tech Lead.
+- **Gates do IA Loop na rodada 4.** typecheck, lint, `goal095-servicos` 46/46, `validate:core`, `test:gate`, `validate:ui`, `validate:integration` e `git diff --check` com exit 0.
+- **Aceito sem prova completa.** A linha "Corrigir" em âmbar, só em jsdom; a piora de Agenda:S1 no mobile e no tablet em paisagem, sem causa medida. Detalhe no [review095](reviews/095-review.md).

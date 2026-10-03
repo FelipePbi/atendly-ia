@@ -212,8 +212,8 @@ describe("ShellConfigProvider + tela real de Serviços não excede a profundidad
     await screen.findByRole("heading", { name: "Novo serviço" });
     await user.click(screen.getByRole("radio", { name: "Sob consulta" }));
     await user.click(screen.getByRole("radio", { name: "A partir de" }));
-    await user.click(screen.getByRole("radio", { name: "Preço fixo" }));
-    expect(screen.getByRole("radio", { name: "Preço fixo" })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: "Fixo" }));
+    expect(screen.getByRole("radio", { name: "Fixo" })).toBeChecked();
   });
 
   test("formulário de edição carrega o serviço existente", async () => {

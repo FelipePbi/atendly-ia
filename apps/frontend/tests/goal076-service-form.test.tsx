@@ -39,8 +39,8 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 }));
 
 const priceTypeLabel: Record<Service["priceType"], string> = {
-  FIXED: "Preço fixo",
-  NOT_INFORMED: "Não informado",
+  FIXED: "Fixo",
+  NOT_INFORMED: "Sem preço",
   ON_REQUEST: "Sob consulta",
   STARTING_AT: "A partir de",
 };
@@ -84,7 +84,7 @@ async function renderNewForm() {
       <ProductServicesScreen scenario="new" />
     </ShellConfigProvider>,
   );
-  return screen.findByLabelText<HTMLInputElement>("Nome do serviço");
+  return screen.findByLabelText<HTMLInputElement>("Nome");
 }
 
 function getDurationInput() {
@@ -178,9 +178,8 @@ describe("§4.6 a frase 'A IA responde' por tipo de preço", () => {
     await typePrice(user, "55");
 
     expect(
-      screen.getByText("“Manicure custa R$ 55 e leva 40 min.”"),
+      screen.getByText("A IA responde: “Manicure custa R$ 55 e leva 40 min.”"),
     ).toBeVisible();
-    expect(screen.getByText("Prévia · como a IA responde")).toBeVisible();
   });
 
   test("STARTING_AT: 'Escova custa a partir de R$ 60 e leva 40 min.'", async () => {
@@ -193,7 +192,7 @@ describe("§4.6 a frase 'A IA responde' por tipo de preço", () => {
     await typePrice(user, "60");
 
     expect(
-      screen.getByText("“Escova custa a partir de R$ 60 e leva 40 min.”"),
+      screen.getByText("A IA responde: “Escova custa a partir de R$ 60 e leva 40 min.”"),
     ).toBeVisible();
   });
 
@@ -207,7 +206,7 @@ describe("§4.6 a frase 'A IA responde' por tipo de preço", () => {
 
     expect(
       screen.getByText(
-        "“O valor de Coloração é combinado no atendimento, que leva 1 h 30.”",
+        "A IA responde: “O valor de Coloração é combinado no atendimento, que leva 1 h 30.”",
       ),
     ).toBeVisible();
   });
@@ -222,7 +221,7 @@ describe("§4.6 a frase 'A IA responde' por tipo de preço", () => {
 
     expect(
       screen.getByText(
-        "“Hidratação leva 30 min; o valor você confirma com a cliente.”",
+        "A IA responde: “Hidratação leva 30 min; o valor você confirma com a cliente.”",
       ),
     ).toBeVisible();
   });
@@ -235,7 +234,7 @@ describe("§4.6 a frase 'A IA responde' por tipo de preço", () => {
     await typePrice(user, "55");
 
     expect(screen.queryByText(/custa R\$/)).toBeNull();
-    expect(screen.queryByText("Prévia · como a IA responde")).toBeNull();
+    expect(screen.queryByText(/A IA responde/)).toBeNull();
   });
 
   test("perde a parte da duração quando não há duração", async () => {
@@ -245,7 +244,7 @@ describe("§4.6 a frase 'A IA responde' por tipo de preço", () => {
     await user.type(name, "Manicure");
     await typePrice(user, "55");
 
-    expect(screen.getByText("“Manicure custa R$ 55.”")).toBeVisible();
+    expect(screen.getByText("A IA responde: “Manicure custa R$ 55.”")).toBeVisible();
   });
 
   test("com preço fixo sem valor, a frase não aparece", async () => {
@@ -255,7 +254,7 @@ describe("§4.6 a frase 'A IA responde' por tipo de preço", () => {
     await user.type(name, "Manicure");
     fireEvent.change(getDurationInput(), { target: { value: "40" } });
 
-    expect(screen.queryByText(/Manicure/)).toBeNull();
+    expect(screen.queryByText(/A IA responde/)).toBeNull();
   });
 
   test("acompanha a mudança de tipo e de valor", async () => {
@@ -266,18 +265,18 @@ describe("§4.6 a frase 'A IA responde' por tipo de preço", () => {
     fireEvent.change(getDurationInput(), { target: { value: "40" } });
     await typePrice(user, "55");
     expect(
-      screen.getByText("“Manicure custa R$ 55 e leva 40 min.”"),
+      screen.getByText("A IA responde: “Manicure custa R$ 55 e leva 40 min.”"),
     ).toBeVisible();
 
     await user.click(screen.getByLabelText(priceTypeLabel.STARTING_AT));
     expect(
-      screen.getByText("“Manicure custa a partir de R$ 55 e leva 40 min.”"),
+      screen.getByText("A IA responde: “Manicure custa a partir de R$ 55 e leva 40 min.”"),
     ).toBeVisible();
 
     await typePrice(user, "0");
     expect(
       screen.getByText(
-        "“Manicure custa a partir de R$ 550 e leva 40 min.”",
+        "A IA responde: “Manicure custa a partir de R$ 550 e leva 40 min.”",
       ),
     ).toBeVisible();
   });
@@ -306,7 +305,7 @@ describe("§4.7 (formulário) sem copy técnica", () => {
         <ProductServicesScreen scenario="edit" serviceId="s1" />
       </ShellConfigProvider>,
     );
-    await screen.findByLabelText("Nome do serviço");
+    await screen.findByLabelText("Nome");
 
     expect(screen.queryByText(/Gerenciado pela/)).toBeNull();
     expect(screen.queryByText(/Controle completo/)).toBeNull();

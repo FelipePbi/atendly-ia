@@ -235,7 +235,7 @@ const LIST_ROUTES: Array<Route & { empty?: string }> = [
     screen: () => <ProductCustomersScreen scenario="list" />,
   },
   {
-    empty: "Selecione um serviço para editar",
+    empty: "Selecione um serviço",
     loaded: "Corte",
     name: "/servicos",
     screen: () => <ProductServicesScreen scenario="list" />,

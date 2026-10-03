@@ -112,16 +112,21 @@ describe("pendência de revisão", () => {
       editable: true,
       items: [
         serviceFixture({
-          durationMinutes: null,
           id: "s1",
           name: "Corte importado",
           needsReview: true,
           reviewOrigin: "IMPORT",
         }),
         serviceFixture({
-          durationMinutes: null,
           id: "s2",
           name: "Corte manual",
+          needsReview: true,
+          reviewOrigin: "MANUAL",
+        }),
+        serviceFixture({
+          durationMinutes: null,
+          id: "s3",
+          name: "Corte sem duração",
           needsReview: true,
           reviewOrigin: "MANUAL",
         }),
@@ -135,9 +140,15 @@ describe("pendência de revisão", () => {
       </ShellConfigProvider>,
     );
 
-    expect(await screen.findByText("Revisar · importado")).toBeVisible();
-    expect(screen.getByText("Revisar · cadastro manual")).toBeVisible();
-    expect(screen.getAllByText("sem duração · R$ 80")).toHaveLength(2);
+    expect(
+      await screen.findByText("Precisa de revisão · importado"),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Precisa de revisão · cadastro manual"),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Precisa de revisão · sem duração"),
+    ).toBeVisible();
   });
 });
 
@@ -151,13 +162,13 @@ describe("recusa de salvar um serviço FIXED sem valor", () => {
       </ShellConfigProvider>,
     );
 
-    await user.type(await screen.findByLabelText("Nome do serviço"), "Corte");
-    expect(screen.getByRole("radio", { name: "Preço fixo" })).toBeChecked();
-    await user.click(screen.getByRole("button", { name: "Criar serviço" }));
+    await user.type(await screen.findByLabelText("Nome"), "Corte");
+    expect(screen.getByRole("radio", { name: "Fixo" })).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     expect(
       await screen.findByText(
-        "Informe o valor ou escolha sob consulta / não informado.",
+        "Informe o valor ou escolha sob consulta / sem preço.",
       ),
     ).toBeVisible();
     expect(serviceCatalogCreate).not.toHaveBeenCalled();
@@ -197,7 +208,7 @@ describe("acessibilidade das telas novas de Serviços", () => {
         <ProductServicesScreen scenario="new" />
       </ShellConfigProvider>,
     );
-    await screen.findByLabelText("Nome do serviço");
+    await screen.findByLabelText("Nome");
     await expectNoA11yViolations(container);
   });
 });

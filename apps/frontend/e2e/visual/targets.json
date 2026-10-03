@@ -268,7 +268,15 @@
       "file": "Agenda.dc.html",
       "label": "Serviço · editar",
       "route": "/servicos/editar?id={serviceId}",
-      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro.",
+      "steps": [
+        {
+          "clickRole": {
+            "name": "Cor na agenda",
+            "role": "button"
+          }
+        }
+      ]
     },
     {
       "code": "CL1",
@@ -340,7 +348,27 @@
       "file": "Servicos.dc.html",
       "label": "Editar serviço · opções",
       "route": "/servicos/editar?id={serviceId}",
-      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro.",
+      "steps": [
+        {
+          "clickRole": {
+            "name": "Recorrência",
+            "role": "button"
+          }
+        },
+        {
+          "clickRole": {
+            "name": "Intervalo antes e depois",
+            "role": "button"
+          }
+        },
+        {
+          "clickRole": {
+            "name": "Instruções para a IA",
+            "role": "button"
+          }
+        }
+      ]
     },
     {
       "code": "C1",

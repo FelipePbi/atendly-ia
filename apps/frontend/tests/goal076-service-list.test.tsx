@@ -25,11 +25,13 @@ vi.mock("next/navigation", () => ({
 const serviceCatalogList = vi.fn();
 const serviceCatalogCreate = vi.fn();
 const serviceCatalogUpdate = vi.fn();
+const serviceCatalogGetAiInstruction = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     serviceCatalog: {
       create: serviceCatalogCreate,
+      getAiInstruction: serviceCatalogGetAiInstruction,
       list: serviceCatalogList,
       update: serviceCatalogUpdate,
     },
@@ -61,6 +63,7 @@ beforeEach(() => {
   serviceCatalogList.mockReset();
   serviceCatalogCreate.mockReset();
   serviceCatalogUpdate.mockReset();
+  serviceCatalogGetAiInstruction.mockReset().mockResolvedValue({ content: "" });
 });
 
 async function renderList(items: Service[], editable = true) {
@@ -230,24 +233,33 @@ describe("§4.3 nome acessível, filete e somente leitura", () => {
 });
 
 describe("§4.4 ativar e desativar", () => {
-  test("abrem a confirmação e chamam o PATCH com active trocado", async () => {
+  test("a caixa Serviço ativo da edição chama o PATCH com active trocado", async () => {
     const user = userEvent.setup();
     const service = serviceFixture({ active: true, id: "s1", name: "Corte" });
+    serviceCatalogList.mockResolvedValue({
+      editable: true,
+      items: [service],
+      source: "ATENDLY",
+    });
     serviceCatalogUpdate.mockResolvedValue({ ...service, active: false });
-    await renderList([service]);
-
-    await user.click(screen.getByRole("button", { name: "Desativar" }));
-    expect(
-      await screen.findByText("Desativar serviço?"),
-    ).toBeVisible();
-
-    await user.click(
-      screen.getByRole("button", { name: "Desativar serviço" }),
+    render(
+      <ShellConfigProvider>
+        <ProductServicesScreen scenario="edit" serviceId="s1" />
+      </ShellConfigProvider>,
     );
 
-    expect(serviceCatalogUpdate).toHaveBeenCalledWith(
-      "s1",
-      { active: false },
+    const active = await screen.findByRole("checkbox", {
+      name: /Serviço ativo/,
+    });
+    expect(active).toBeChecked();
+    await user.click(active);
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    await waitFor(() =>
+      expect(serviceCatalogUpdate).toHaveBeenCalledWith(
+        "s1",
+        expect.objectContaining({ active: false }),
+      ),
     );
   });
 });

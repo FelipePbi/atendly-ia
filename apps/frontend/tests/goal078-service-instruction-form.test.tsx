@@ -79,11 +79,11 @@ async function renderEditForm() {
       <ProductServicesScreen scenario="edit" serviceId="s1" />
     </ShellConfigProvider>,
   );
-  await screen.findByLabelText("Nome do serviço");
-  return screen.findByLabelText<HTMLTextAreaElement>(
-    "Instruções para a IA · só ela lê",
-    { exact: false },
-  );
+  await screen.findByLabelText("Nome");
+  await userEvent
+    .setup()
+    .click(screen.getByRole("button", { name: /^Instruções para a IA/ }));
+  return screen.findByLabelText<HTMLTextAreaElement>("Instruções para a IA");
 }
 
 async function renderNewForm() {
@@ -97,11 +97,11 @@ async function renderNewForm() {
       <ProductServicesScreen scenario="new" />
     </ShellConfigProvider>,
   );
-  await screen.findByLabelText("Nome do serviço");
-  return screen.getByLabelText<HTMLTextAreaElement>(
-    "Instruções para a IA · só ela lê",
-    { exact: false },
-  );
+  await screen.findByLabelText("Nome");
+  await userEvent
+    .setup()
+    .click(screen.getByRole("button", { name: /^Instruções para a IA/ }));
+  return screen.getByLabelText<HTMLTextAreaElement>("Instruções para a IA");
 }
 
 describe("§6.12 edição: leitura, mudança e apagar", () => {
@@ -196,7 +196,7 @@ describe("§6.14 serviço novo", () => {
     });
 
     const textarea = await renderNewForm();
-    await user.type(screen.getByLabelText("Nome do serviço"), "Manicure");
+    await user.type(screen.getByLabelText("Nome"), "Manicure");
     const duration = screen.getByLabelText<HTMLInputElement>(
       "Duração (minutos)",
       { exact: false },
@@ -207,7 +207,7 @@ describe("§6.14 serviço novo", () => {
       "55",
     );
     await user.type(textarea, "Regra nova.");
-    await user.click(screen.getByRole("button", { name: "Criar serviço" }));
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     await waitFor(() =>
       expect(serviceCatalogUpdateAiInstruction).toHaveBeenCalledWith(
@@ -227,7 +227,7 @@ describe("§6.14 serviço novo", () => {
     serviceCatalogCreate.mockResolvedValue(serviceFixture({ id: "new-id" }));
 
     await renderNewForm();
-    await user.type(screen.getByLabelText("Nome do serviço"), "Manicure");
+    await user.type(screen.getByLabelText("Nome"), "Manicure");
     const duration = screen.getByLabelText<HTMLInputElement>(
       "Duração (minutos)",
       { exact: false },
@@ -237,7 +237,7 @@ describe("§6.14 serviço novo", () => {
       await screen.findByPlaceholderText("R$ 0,00"),
       "55",
     );
-    await user.click(screen.getByRole("button", { name: "Criar serviço" }));
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     await waitFor(() => expect(serviceCatalogCreate).toHaveBeenCalledTimes(1));
     expect(serviceCatalogUpdateAiInstruction).not.toHaveBeenCalled();
@@ -322,7 +322,7 @@ describe("correção rodada 2, blocker 1: PUT falhando no serviço novo não rep
       .mockResolvedValueOnce({ content: "Regra nova." });
 
     const textarea = await renderNewForm();
-    await user.type(screen.getByLabelText("Nome do serviço"), "Manicure");
+    await user.type(screen.getByLabelText("Nome"), "Manicure");
     const duration = screen.getByLabelText<HTMLInputElement>(
       "Duração (minutos)",
       { exact: false },
@@ -330,7 +330,7 @@ describe("correção rodada 2, blocker 1: PUT falhando no serviço novo não rep
     await user.type(duration, "40");
     await user.type(await screen.findByPlaceholderText("R$ 0,00"), "55");
     await user.type(textarea, "Regra nova.");
-    await user.click(screen.getByRole("button", { name: "Criar serviço" }));
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     expect(
       await screen.findByText(
@@ -339,7 +339,7 @@ describe("correção rodada 2, blocker 1: PUT falhando no serviço novo não rep
     ).toBeVisible();
     expect(serviceCatalogCreate).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole("button", { name: "Criar serviço" }));
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     await waitFor(() =>
       expect(serviceCatalogUpdateAiInstruction).toHaveBeenCalledTimes(2),

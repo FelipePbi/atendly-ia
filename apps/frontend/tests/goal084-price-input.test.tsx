@@ -235,7 +235,7 @@ describe("2. serviço novo", () => {
       </ShellConfigProvider>,
     );
 
-    await user.type(await screen.findByLabelText("Nome do serviço"), "Corte");
+    await user.type(await screen.findByLabelText("Nome"), "Corte");
     await user.type(
       screen.getByLabelText<HTMLInputElement>("Duração (minutos)", {
         exact: false,
@@ -243,7 +243,7 @@ describe("2. serviço novo", () => {
       "45",
     );
     await user.type(screen.getByPlaceholderText("R$ 0,00"), "60");
-    await user.click(screen.getByRole("button", { name: "Criar serviço" }));
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     await waitFor(() =>
       expect(serviceCatalogCreate).toHaveBeenCalledWith(

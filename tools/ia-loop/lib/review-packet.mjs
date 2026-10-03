@@ -267,6 +267,8 @@ export function renderReviewPrompt(packet) {
     ...(packet.goalGates?.length
       ? packet.goalGates.map((g) => `  - ${g.id} ${g.action}${g.scope ? ` @ ${g.scope}` : ''}: ${g.outcome}`
         + (g.round ? ` (rodada ${g.round}${g.roundsStale > 0 ? `, ${g.roundsStale} rodada(s) atrás` : ''})` : '')
+        + (g.reusedFromRound ? ` — reaproveitado da execução da rodada ${g.reusedFromRound}: nenhum arquivo `
+          + 'fora de docs/**/*.md mudou desde então, provado por impressão de conteúdo; o comando não rodou de novo' : '')
         + (g.outcome === 'FAILED' && g.exitCode !== null ? ` exit ${g.exitCode}` : ''))
       : []),
     '',
@@ -313,5 +315,16 @@ export function renderReviewPrompt(packet) {
     '- OPUS_HIGH: segurança, auth/sessão, isolamento de tenant, dado crítico, race condition,',
     '  consistência distribuída, mudança arquitetural, alto custo de erro.',
     'Omita o campo para manter o perfil vigente. nextDeveloperProfileReason: no máximo uma frase curta.',
+    '',
+    // Shapes what the next round is HANDED, never what it must prove: whether
+    // a gate may be reused is decided by the code fingerprint, not by this.
+    'Em CHANGES_REQUIRED, defina também correctionScope:',
+    '- DOCUMENTATION_ONLY: TODOS os blockers se resolvem editando apenas docs/**/*.md, sem rodar',
+    '  nada novo (nenhum gate, teste ou controle negativo a refazer) — p.ex. contagem de testes',
+    '  desatualizada, hash antigo, frase falsa em CURRENT_STATE/VALIDATION_GATE. A próxima rodada',
+    '  recebe a saída exata dos gates para copiar;',
+    '- CODE_OR_EVIDENCE: qualquer blocker exige mudar código, teste ou configuração, ou rodar algo',
+    '  de novo (inclusive controles feitos antes da última mudança de código).',
+    'Na dúvida, use CODE_OR_EVIDENCE.',
   ].join('\n');
 }

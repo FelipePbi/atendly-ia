@@ -34,6 +34,11 @@ import {
   unitTypeForProfile,
 } from '../lib/execution-plan-store.mjs';
 import { executeWorkUnitPlan } from '../lib/work-unit-executor.mjs';
+import {
+  collectGateEvidence,
+  createGateEvidenceReuse,
+  renderDocumentationRoundBrief,
+} from '../lib/gate-evidence.mjs';
 import { workUnitConfig } from '../lib/work-unit-config.mjs';
 import { GOAL_SUMMARY_CHARS } from '../lib/work-unit-context.mjs';
 import { SESSION_STRATEGY } from '../lib/worker-registry.mjs';
@@ -341,6 +346,30 @@ async function resolveRoundPlan(job) {
  * runs INSIDE the attempt the worker loop already claimed, which is what keeps
  * one worktree per Goal, one lease per round, and one review at the end.
  */
+/**
+ * The brief for a correction the reviewer classified as documentation-only:
+ * the exact count lines every gate printed, and the round each is from.
+ *
+ * Absent for any other correction. A failure to assemble it costs the brief,
+ * never the round: the unit still has the blockers, as it always did.
+ */
+async function documentationRoundBrief(job) {
+  if (job.correctionScope !== 'DOCUMENTATION_ONLY') return null;
+  try {
+    const gates = await collectGateEvidence({ store, goal: job.goal, beforeRound: job.round });
+    await store.appendEvent({
+      type: 'DOCUMENTATION_ROUND_BRIEF_ATTACHED',
+      goal: job.goal, round: job.round, jobId: job.jobId,
+      gates: gates.map((gate) => ({ id: gate.unitId, round: gate.round, numbers: gate.numbers.length })),
+    });
+    log('BRIEF', `documentation-only correction: ${gates.length} gate result(s) handed to the unit verbatim`);
+    return renderDocumentationRoundBrief({ round: job.round, gates });
+  } catch (error) {
+    log('BRIEF', `documentation brief unavailable (${error.message}); the unit runs on the blockers alone`);
+    return null;
+  }
+}
+
 async function handleWorkUnitJob(job, { profile, isCorrection }) {
   // Round-level idempotency, checked here because the capacity runner — which
   // normally does it — is now called once per unit rather than once per round.
@@ -375,6 +404,7 @@ async function handleWorkUnitJob(job, { profile, isCorrection }) {
   });
 
   const executable = resolveClaudeExecutable();
+  const executionBase = job.worktreeInitialHead ?? job.executionBase;
 
   const outcome = await executeWorkUnitPlan({
     store,
@@ -383,12 +413,23 @@ async function handleWorkUnitJob(job, { profile, isCorrection }) {
     goal: job.goal,
     round: job.round,
     worktree: job.worktree,
-    executionBase: job.worktreeInitialHead ?? job.executionBase,
+    executionBase,
     goalPath: job.goalPath,
     goalSummary,
     config: WORK_UNIT_CONFIG,
     resumeFrom: isCorrection ? LOOP_STATES.CORRECTION_RUNNING : LOOP_STATES.DEVELOPER_RUNNING,
     emit: (line) => log('DAG', line),
+    // Every round records the code its gates observed; a later round reuses a
+    // green gate only over byte-identical code. See lib/gate-evidence.mjs.
+    gateEvidence: createGateEvidenceReuse({
+      store,
+      goal: job.goal,
+      round: job.round,
+      worktree: job.worktree,
+      baseSha: executionBase,
+      enabled: WORK_UNIT_CONFIG.gateEvidenceReuse,
+    }),
+    correctionBrief: isCorrection ? await documentationRoundBrief(job) : null,
 
     /**
      * One unit, one inference.

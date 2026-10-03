@@ -49,6 +49,11 @@ import { SpikeError } from './claude-process.mjs';
 
 /** Lines of the Goal document used to build the summary handed to a unit. */
 export const GOAL_SUMMARY_CHARS = 1200;
+/**
+ * Room for one line per gate plus its count lines. Bounded like everything
+ * else in the packet; a dozen gates with their summaries fit well inside it.
+ */
+export const CORRECTION_BRIEF_CHARS = 6000;
 
 /** Upper bound on how many file pointers one packet carries. */
 export const MAX_RELEVANT_FILES = 40;
@@ -161,6 +166,12 @@ export function buildWorkUnitContextPacket({
    * unit that does not touch the frontend.
    */
   prototypeFrames = [],
+  /**
+   * Set only on a documentation-only correction (see lib/gate-evidence.mjs):
+   * the exact lines the gates printed, so the documents quote evidence
+   * instead of a number remembered from an earlier round.
+   */
+  correctionBrief = null,
 }) {
   if (!goal) fail('INVALID_ARGS', 'goal is required');
   if (!unit?.id) fail('INVALID_ARGS', 'a Work Unit is required');
@@ -228,6 +239,10 @@ export function buildWorkUnitContextPacket({
       : null,
 
     prototypeFrames: Object.freeze([...prototypeFrames]),
+
+    correctionBrief: typeof correctionBrief === 'string' && correctionBrief.trim() !== ''
+      ? correctionBrief.slice(0, CORRECTION_BRIEF_CHARS)
+      : null,
 
     worktree,
     constraints: WORK_UNIT_CONSTRAINTS,
@@ -311,6 +326,13 @@ export function buildWorkUnitPrompt(context, job) {
     '',
     ...(context.prototypeFrames?.length
       ? [...developerVisualInstructions(context.prototypeFrames), '']
+      : []),
+    ...(context.correctionBrief
+      ? [
+        'RODADA SÓ DE DOCUMENTAÇÃO — leia correctionBrief no contexto acima antes de qualquer coisa.',
+        'Os números que ele traz são a saída exata dos gates; copie-os, não os recalcule de memória.',
+        '',
+      ]
       : []),
     'Ao terminar, retorne exclusivamente o JSON do contrato WorkUnitResult, com:',
     '- protocolVersion: 2;',

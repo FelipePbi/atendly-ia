@@ -46,6 +46,13 @@ export const GATE_OUTCOMES = Object.freeze({
 
 const EXECUTED = 'WORK_UNIT_DETERMINISTIC_EXECUTED';
 const ON_INCOMPLETE_TREE = 'WORK_UNIT_VERIFICATION_ON_INCOMPLETE_TREE';
+/**
+ * A previous green result carried into a round over byte-identical code (see
+ * lib/gate-evidence.mjs). It is PASSED — the code it answered about is the
+ * code under review — and it says where the answer came from.
+ */
+const REUSED = 'WORK_UNIT_GATE_EVIDENCE_REUSED';
+const ANSWERS = new Set([EXECUTED, REUSED]);
 
 const keyOf = (event) => `${event.round}:${event.workUnitId}`;
 
@@ -59,7 +66,7 @@ const keyOf = (event) => `${event.round}:${event.workUnitId}`;
  * answer.
  */
 export function deriveGoalGateStatus({ declaredGates = [], events = [], currentRound = 1 } = {}) {
-  const forGoal = events.filter((event) => event?.type === EXECUTED || event?.type === ON_INCOMPLETE_TREE);
+  const forGoal = events.filter((event) => ANSWERS.has(event?.type) || event?.type === ON_INCOMPLETE_TREE);
 
   // A gate run over an incomplete tree emits BOTH events — it really did run,
   // and it really is not a verdict. The second is what downgrades it.
@@ -70,7 +77,7 @@ export function deriveGoalGateStatus({ declaredGates = [], events = [], currentR
   // app's green answer for another app that never ran.
   const latest = new Map();
   for (const event of forGoal) {
-    if (event.type !== EXECUTED) continue;
+    if (!ANSWERS.has(event.type)) continue;
     const unitId = event.workUnitId;
     if (!unitId) continue;
     const previous = latest.get(unitId);
@@ -94,6 +101,7 @@ export function deriveGoalGateStatus({ declaredGates = [], events = [], currentR
     if (!event) {
       return Object.freeze({
         id, action, scope, outcome: GATE_OUTCOMES.NEVER_RAN, round: null, exitCode: null, roundsStale: null,
+        reusedFromRound: null,
       });
     }
 
@@ -115,6 +123,9 @@ export function deriveGoalGateStatus({ declaredGates = [], events = [], currentR
       // means it answered about the tree under review; anything above zero
       // means the tree moved after it did.
       roundsStale: Number.isInteger(round) ? Math.max(0, currentRound - round) : null,
+      // The round whose execution produced this answer, when this round only
+      // carried it over. Null when the gate really ran in `round`.
+      reusedFromRound: event.type === REUSED ? (event.originRound ?? event.reusedFromRound ?? null) : null,
     });
   });
 }
@@ -136,9 +147,15 @@ export function summarizeGoalGateStatus(rows = []) {
   const observed = count(GATE_OUTCOMES.OBSERVED);
   const passed = count(GATE_OUTCOMES.PASSED);
   const stale = rows.filter((row) => row.outcome === GATE_OUTCOMES.PASSED && row.roundsStale > 0).length;
+  const reused = rows.filter((row) => row.outcome === GATE_OUTCOMES.PASSED && row.reusedFromRound !== null
+    && row.reusedFromRound !== undefined).length;
 
   const parts = [`${rows.length} gate(s) declarado(s) neste Goal:`];
-  parts.push(`${passed} passou(ram)${stale > 0 ? ` (${stale} sobre árvore de rodada anterior)` : ''}`);
+  const notes = [
+    stale > 0 ? `${stale} sobre árvore de rodada anterior` : null,
+    reused > 0 ? `${reused} reaproveitado(s) de rodada anterior sobre código idêntico — só documentação mudou` : null,
+  ].filter(Boolean);
+  parts.push(`${passed} passou(ram)${notes.length > 0 ? ` (${notes.join('; ')})` : ''}`);
   if (failed > 0) parts.push(`${failed} falhou(ram)`);
   if (observed > 0) parts.push(`${observed} apenas observado(s) sobre árvore incompleta`);
   if (skipped > 0) parts.push(`${skipped} com pré-condição ausente`);

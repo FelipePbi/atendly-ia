@@ -33,6 +33,28 @@ export const REVIEW_LEVELS = Object.freeze(['STANDARD', 'DEEP']);
 export const DEVELOPER_STATUSES_V2 = Object.freeze(['REVIEW_REQUIRED', 'BLOCKED', 'ESCALATION_REQUIRED']);
 export const REVIEW_DECISIONS_V2 = Object.freeze(['ACCEPTED', 'CHANGES_REQUIRED', 'HUMAN_REQUIRED']);
 
+/**
+ * What a CHANGES_REQUIRED asks the next round to touch.
+ *
+ * DOCUMENTATION_ONLY: every blocker closes by editing docs/**\/*.md alone,
+ * with nothing new to run. It changes what the Developer is HANDED (the exact
+ * gate output, see lib/gate-evidence.mjs) and nothing about what is accepted:
+ * gate reuse is decided by the code fingerprint, never by this label.
+ */
+export const CORRECTION_SCOPES = Object.freeze(['DOCUMENTATION_ONLY', 'CODE_OR_EVIDENCE']);
+
+function assertCorrectionScope(value, { decisionOrType, allowedFor }) {
+  if (value === undefined || value === null) return null;
+  if (!CORRECTION_SCOPES.includes(value)) {
+    fail('CONTRACT_FIELD_INVALID',
+      `correctionScope must be one of ${CORRECTION_SCOPES.join(', ')}, got ${JSON.stringify(value)}`);
+  }
+  if (decisionOrType !== allowedFor) {
+    fail('CONTRACT_FIELD_INVALID', `correctionScope only applies to ${allowedFor}, got "${decisionOrType}"`);
+  }
+  return value;
+}
+
 /** Reasons a Developer may give for asking to be escalated. Closed on purpose. */
 export const DEVELOPER_ESCALATION_REASONS = Object.freeze([
   'REPEATED_EXECUTION_FAILURE',
@@ -157,8 +179,13 @@ export function validateDeveloperJob(payload) {
   const developerProfile = payload.developerProfile ?? DEFAULT_DEVELOPER_PROFILE;
   resolveDeveloperProfile(developerProfile);
 
+  const correctionScope = assertCorrectionScope(payload.correctionScope, {
+    decisionOrType: payload.type, allowedFor: 'CORRECTION',
+  });
+
   return Object.freeze({
     ...payload,
+    correctionScope,
     developerProfile,
     developerProfileReason: payload.developerProfileReason ?? null,
     routing: assertJobRouting(payload.routing, 'developer'),
@@ -390,8 +417,13 @@ export function validateReviewDecision(payload, { jobId, goal, round }) {
     );
   }
 
+  const correctionScope = assertCorrectionScope(payload.correctionScope, {
+    decisionOrType: payload.decision, allowedFor: 'CHANGES_REQUIRED',
+  });
+
   return Object.freeze({
     ...payload,
+    correctionScope,
     nextDeveloperProfile: payload.nextDeveloperProfile ?? null,
     nextDeveloperProfileReason: payload.nextDeveloperProfileReason ?? null,
     escalationRequest,
@@ -462,6 +494,9 @@ export const REVIEW_DECISION_SCHEMA = Object.freeze({
     // Kept short deliberately: this must not grow the output in any
     // meaningful way.
     nextDeveloperProfileReason: { type: 'string', maxLength: 200 },
+    // Optional, only with CHANGES_REQUIRED: whether every blocker closes by
+    // editing documentation alone. Decides what the next round is handed.
+    correctionScope: { type: 'string', enum: [...CORRECTION_SCOPES] },
     // Only with HUMAN_REQUIRED: "I could not conclude this safely" is a request
     // for a stronger reviewer, considered before a person is asked.
     escalationRequest: {

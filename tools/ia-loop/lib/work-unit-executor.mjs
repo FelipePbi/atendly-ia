@@ -32,6 +32,7 @@ import { readPrototypeFrames, touchesFrontend } from './visual-fidelity.mjs';
 import { SpikeError } from './claude-process.mjs';
 import { git } from './git-ops.mjs';
 import { WORK_UNIT_NAMESPACE } from './job-store.mjs';
+import { GATE_EVIDENCE_REUSED, gateIdentity } from './gate-evidence.mjs';
 import { PROTOCOL_VERSION_V2 } from './contracts-v2.mjs';
 import {
   ROUTING_STAGES,
@@ -219,12 +220,26 @@ export async function executeWorkUnitPlan({
   mode = resolveRoutingMode(),
   resumeFrom,
   emit = () => {},
+  /**
+   * The gate-evidence reuse policy (lib/gate-evidence.mjs), or null for none.
+   * With it, every gate result records the code fingerprint it observed, and
+   * a gate whose code is provably unchanged since its last green run is
+   * carried over instead of re-run. Null keeps the old behaviour exactly.
+   */
+  gateEvidence = null,
+  /**
+   * Text for the units this round's plan DECLARED (never a dynamic fix unit,
+   * whose job is a failing gate, not the reviewer's blockers). Used for the
+   * documentation-only correction brief.
+   */
+  correctionBrief = null,
 }) {
   if (!store) throw new SpikeError('INVALID_ARGS', 'store is required');
   if (!plan) throw new SpikeError('INVALID_ARGS', 'an execution plan is required');
   if (typeof invokeUnit !== 'function') throw new SpikeError('INVALID_ARGS', 'invokeUnit must be a function');
 
   const unitsById = new Map(plan.workUnits.map((unit) => [unit.id, unit]));
+  const declaredIds = new Set(unitsById.keys());
   const usedIds = new Set(unitsById.keys());
   const records = new Map();
   const queue = [...plan.order];
@@ -293,11 +308,12 @@ export async function executeWorkUnitPlan({
 
     const record = unit.type === 'DETERMINISTIC'
       ? await executeDeterministicUnit({
-        store, unit, unitJobId, goal, round, worktree, runAction, emit,
+        store, unit, unitJobId, goal, round, worktree, runAction, emit, gateEvidence,
       })
       : await executeModelUnit({
         store, plan, unit, unitJobId, job, goal, round, worktree, executionBase, goalPath,
         goalSummary, invokeUnit, changedFilesSnapshot, config, mode, resumeFrom, emit, records, findings,
+        correctionBrief: declaredIds.has(unitId) ? correctionBrief : null,
       });
 
     // OBSERVED, never COMPLETED — and that is the whole safety of running it.
@@ -475,11 +491,34 @@ async function runActionWithDatabases({ store, unit, worktree, attemptId, goal, 
   }
 }
 
-async function executeDeterministicUnit({ store, unit, unitJobId, goal, round, worktree, runAction, emit }) {
+async function executeDeterministicUnit({
+  store, unit, unitJobId, goal, round, worktree, runAction, emit, gateEvidence = null,
+}) {
   if (await store.hasCompletedResult(WORK_UNIT_NAMESPACE, unitJobId)) {
     const existing = await store.readResult(WORK_UNIT_NAMESPACE, unitJobId);
     emit(`  ${unit.id} (${unit.action}) — resultado já em disco; o comando NÃO é executado de novo.`);
     return fromPersisted(unit, existing?.result?.result ?? existing?.result, { reused: true });
+  }
+
+  // Taken BEFORE the command runs: it describes the code the gate is about
+  // to observe, not whatever the gate itself may leave behind. A failure to
+  // compute it only costs the reuse — the gate then runs, as it always did.
+  let codeFingerprint = null;
+  if (gateEvidence?.enabled) {
+    try {
+      codeFingerprint = await gateEvidence.fingerprint();
+    } catch (error) {
+      emit(`    impressão do código indisponível (${error.message}); o gate roda normalmente.`);
+    }
+  }
+
+  if (codeFingerprint) {
+    const prior = await gateEvidence.findReusable({ unit, codeFingerprint }).catch(() => null);
+    if (prior) {
+      return reuseGateEvidence({
+        store, unit, unitJobId, goal, round, worktree, prior, codeFingerprint, emit,
+      });
+    }
   }
 
   await store.dispatchJob(WORK_UNIT_NAMESPACE, unitJobDocument({ unit, unitJobId, goal, round, worktree, routing: null }));
@@ -496,7 +535,12 @@ async function executeDeterministicUnit({ store, unit, unitJobId, goal, round, w
   const outcome = await runActionWithDatabases({
     store, unit, worktree, attemptId, goal, round, unitJobId, runAction, emit,
   });
-  const result = toDeterministicResult({ unit, outcome, goal, round, jobId: unitJobId });
+  const result = {
+    ...toDeterministicResult({ unit, outcome, goal, round, jobId: unitJobId }),
+    // What a later round needs to prove it may stand in for a re-run.
+    codeFingerprint,
+    gate: gateIdentity(unit),
+  };
 
   // A skipped gate is not a failed job: leaving it FAILED would make a
   // resume treat an unmet precondition as work that could be retried.
@@ -516,6 +560,57 @@ async function executeDeterministicUnit({ store, unit, unitJobId, goal, round, w
   emit(`    ${outcome.skipped ? 'SKIP' : (outcome.ok ? 'PASS' : 'FAIL')}`
     + ` — ${outcome.skipped ? `faltam ${(outcome.missingEnv ?? []).join(', ')}` : `exit ${outcome.exitCode ?? 'n/a'}`}`
     + ` (${outcome.durationMs}ms)`);
+
+  return fromPersisted(unit, result, { reused: false });
+}
+
+/**
+ * Carries a gate's previous green result into this round, in the open.
+ *
+ * Still a dispatched unit job with its own published result, so a restart
+ * finds it on disk like any other gate and the round's store stays complete.
+ * The result is the earlier one with `reusedFrom` added and the summary saying
+ * so; the event is its own type, so nothing counting executions counts this
+ * as one.
+ */
+async function reuseGateEvidence({ store, unit, unitJobId, goal, round, worktree, prior, codeFingerprint, emit }) {
+  await store.dispatchJob(WORK_UNIT_NAMESPACE, unitJobDocument({ unit, unitJobId, goal, round, worktree, routing: null }));
+  const attemptId = (await store.readAttemptState(WORK_UNIT_NAMESPACE, unitJobId))?.attemptId ?? null;
+
+  const originRound = prior.result.reusedFrom?.originRound ?? prior.round;
+  const reusedFrom = Object.freeze({
+    round: prior.round,
+    jobId: prior.jobId,
+    originRound,
+    codeFingerprint,
+  });
+  const note = `Reaproveitado da rodada ${prior.round}`
+    + `${originRound !== prior.round ? ` (executado na rodada ${originRound})` : ''}: `
+    + 'nenhum arquivo fora de docs/**/*.md mudou desde aquela execução.';
+  const result = {
+    ...prior.result,
+    jobId: unitJobId,
+    round,
+    durationMs: 0,
+    summary: `${note} ${prior.result.summary ?? ''}`.trim(),
+    report: `${note}\n\n${prior.result.report ?? ''}`,
+    codeFingerprint,
+    gate: gateIdentity(unit),
+    reusedFrom,
+  };
+
+  await store.publishResult(WORK_UNIT_NAMESPACE, unitJobId, { ok: true, result }, { attemptId });
+  await store.setJobStatus(WORK_UNIT_NAMESPACE, unitJobId, 'COMPLETED');
+  await store.appendEvent({
+    type: GATE_EVIDENCE_REUSED,
+    goal, round, workUnitId: unit.id, jobId: unitJobId,
+    action: unit.action, ok: true, exitCode: prior.result.exitCode ?? 0,
+    reusedFromRound: prior.round, reusedFromJobId: prior.jobId, originRound,
+    codeFingerprint,
+    modelCalls: 0,
+  });
+  emit(`  ${unit.id} DETERMINISTIC (${unit.action}${unit.scope ? ` @ ${unit.scope}` : ''}) — REAPROVEITADO da rodada `
+    + `${prior.round}: código idêntico (só documentação mudou); o comando NÃO roda de novo.`);
 
   return fromPersisted(unit, result, { reused: false });
 }
@@ -544,6 +639,9 @@ function fromPersisted(unit, result, { reused }) {
     failurePaths: [...(result?.failurePaths ?? [])],
     missingEnv: [...(result?.missingEnv ?? [])],
     reused,
+    // Gate evidence carried from an earlier round over identical code. Not
+    // the same thing as `reused` (this round's own result found on disk).
+    reusedFrom: result?.reusedFrom ?? null,
   };
 }
 
@@ -580,6 +678,7 @@ function unitJobDocument({ unit, unitJobId, goal, round, worktree, routing, pare
 async function executeModelUnit({
   store, plan, unit, unitJobId, job, goal, round, worktree, executionBase, goalPath,
   goalSummary, invokeUnit, changedFilesSnapshot, config, mode, resumeFrom, emit, records, findings,
+  correctionBrief = null,
 }) {
   if (await store.hasCompletedResult(WORK_UNIT_NAMESPACE, unitJobId)) {
     const existing = await store.readResult(WORK_UNIT_NAMESPACE, unitJobId);
@@ -772,6 +871,7 @@ async function executeModelUnit({
         // packet already lists would spend the budget saying nothing.
         findingsLedger: findings?.forPacket({ exclude: packetRelevantFiles(unit, records) }) ?? [],
         prototypeFrames: await prototypeFramesForUnit(unit, goalPath),
+        correctionBrief,
       });
       lastPacket = packet;
 
@@ -924,6 +1024,7 @@ export function summarise({ plan, records, goal, round, jobId, unitsById }) {
         ? record.exitCode === 0
         : record.state === 'COMPLETED',
       detail: `${record.id}: exit ${record.exitCode ?? 'n/a'} (${record.durationMs}ms)`
+        + (record.reusedFrom ? ` — reaproveitado da rodada ${record.reusedFrom.round}, código idêntico` : '')
         + (record.incompleteTree ? ' — observado, não é veredito' : ''),
     }));
 
@@ -947,6 +1048,7 @@ export function summarise({ plan, records, goal, round, jobId, unitsById }) {
     contextExpansions: ordered.reduce((total, record) => total + (record.contextExpansions ?? 0), 0),
     attempts: ordered.reduce((total, record) => total + (record.attempts ?? 0), 0),
     reusedResults: ordered.filter((record) => record.reused).length,
+    reusedGateEvidence: ordered.filter((record) => record.reusedFrom).map((record) => record.id),
     // Averaged over the units that actually built a packet, so deterministic
     // units — which have no context at all — do not flatter the number.
     averageContextChars: averageContext(ordered),
@@ -977,6 +1079,10 @@ export function summarise({ plan, records, goal, round, jobId, unitsById }) {
     `- haiku: ${routing.haiku} · sonnet: ${routing.sonnet} · opus: ${routing.opus}`,
     `- escalations: ${telemetry.escalations} · context expansions: ${telemetry.contextExpansions}`,
     `- tentativas totais: ${telemetry.attempts} · resultados reaproveitados de disco: ${telemetry.reusedResults}`,
+    telemetry.reusedGateEvidence.length > 0
+      ? '- gates reaproveitados de rodada anterior (código idêntico, só documentação mudou): '
+        + telemetry.reusedGateEvidence.join(', ')
+      : null,
     failed.length > 0 ? '' : null,
     failed.length > 0 ? '## Não concluído' : null,
     failed.length > 0
@@ -1034,6 +1140,7 @@ function renderUnit(record, unit) {
   const head = `### ${record.id} — ${record.state}`;
   const how = record.executor === 'native'
     ? `executor: native (${record.action}), exit ${record.exitCode ?? 'n/a'}`
+      + (record.reusedFrom ? ` · REAPROVEITADO da rodada ${record.reusedFrom.round} (código idêntico)` : '')
     : `executor: ${record.model ?? 'model'}${record.effort ? ` (${record.effort})` : ''}, tier ${record.tier}`;
 
   const acceptance = (record.acceptance ?? []).length > 0

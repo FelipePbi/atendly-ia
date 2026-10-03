@@ -111,5 +111,15 @@ export function workUnitConfig(env = process.env) {
      * does.
      */
     allowCompatibilityFallback: envFlag('IA_LOOP_WU_ALLOW_FALLBACK', true, env),
+
+    /**
+     * Whether a gate may carry its previous green result into a round in
+     * which no file outside docs/**\/*.md changed (lib/gate-evidence.mjs).
+     *
+     * On by default because the reuse is proven by content, not assumed, and
+     * is shown to the reviewer as reuse. Off re-runs every gate every round,
+     * which is the behaviour before this existed.
+     */
+    gateEvidenceReuse: envFlag('IA_LOOP_GATE_EVIDENCE_REUSE', true, env),
   });
 }

@@ -98,6 +98,15 @@ export function applyAcceptedStatusTransition(goalText, {
     );
   }
 
+  return rewriteStatusWord(goalText, { from, to });
+}
+
+/**
+ * The line rewrite itself, shared by both transitions in this file. Evidence is the
+ * caller's job; this only refuses a line it cannot recognise or a starting
+ * status other than the one authorised.
+ */
+function rewriteStatusWord(goalText, { from, to }) {
   const match = STATUS_LINE.exec(goalText);
   if (!match) {
     throw new SpikeError(
@@ -118,6 +127,73 @@ export function applyAcceptedStatusTransition(goalText, {
   const rewritten = `${match[1]}${to}${match[3]}`;
   const text = goalText.slice(0, match.index) + rewritten + goalText.slice(match.index + match[0].length);
   return { text, changed: true };
+}
+
+/**
+ * The same flip, decided BEFORE the closure commit instead of after
+ * integration — so it rides inside `feat(migration): complete goal NNN`.
+ *
+ * Why this exists: the closure documentation job is a model, and whether it
+ * touches the Goal's own status line is luck. Goal104's job did; Goal097's
+ * and Goal103's did not, and forty closures were followed by a separate
+ * `docs(migration): mark Goal NNN ACCEPTED (closure documentation omitted
+ * it)` commit — one extra commit on main per Goal, for a fact the harness
+ * knew all along.
+ *
+ * Two of the four pieces of evidence `applyAcceptedStatusTransition` wants do
+ * not exist yet at this point (the integrated commit and the new baseline are
+ * produced BY integrating the commit this text goes into). They are not
+ * waived, they are entailed: this rewrite reaches main only as part of that
+ * very commit, so main reads ACCEPTED exactly when — and only when — the
+ * integration that proves it has happened. If the commit is never
+ * integrated, the flip never leaves the Goal worktree.
+ *
+ * What remains checkable now is checked: the final review is ACCEPTED and
+ * closure documentation is recorded as done. The post-integration repair in
+ * run-close.mjs stays as the safety net that the document ENDS ACCEPTED on
+ * main; when this fired, that call is a no-op.
+ */
+export function applyClosureCommitStatusTransition(goalText, {
+  reviewDecision,
+  closureDocsJobId,
+  from = 'READY',
+  to = 'ACCEPTED',
+} = {}) {
+  if (reviewDecision !== 'ACCEPTED') {
+    throw new SpikeError(
+      'STATUS_TRANSITION_REFUSED',
+      `Refusing to mark the Goal document ${to} in the closure commit: the final review decision is `
+      + `${reviewDecision ?? 'unknown'}, not ACCEPTED.`,
+    );
+  }
+  if (!closureDocsJobId) {
+    throw new SpikeError(
+      'STATUS_TRANSITION_REFUSED',
+      `Refusing to mark the Goal document ${to} in the closure commit: no closure documentation job is recorded as done.`,
+    );
+  }
+  return rewriteStatusWord(goalText, { from, to });
+}
+
+/**
+ * I/O wrapper for the pre-commit flip. Works on the Goal WORKTREE (never on
+ * the main checkout, which must stay untouched until integration) and writes
+ * only when the line actually changed.
+ *
+ * @returns { changed, path }
+ */
+export async function flipGoalStatusForClosureCommit({
+  worktreeRoot, goalId, reviewDecision, closureDocsJobId, emit = () => {},
+}) {
+  const goalPath = await findGoalFile(join(worktreeRoot, 'docs', 'migration', 'goals'), goalId);
+  const goalText = await readFile(goalPath, 'utf8');
+
+  const { text, changed } = applyClosureCommitStatusTransition(goalText, { reviewDecision, closureDocsJobId });
+  if (changed) {
+    await writeFile(goalPath, text, 'utf8');
+    emit('Goal document status READY -> ACCEPTED written into the closure commit, deterministically, no model call.');
+  }
+  return { changed, path: goalPath };
 }
 
 /**

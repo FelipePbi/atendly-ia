@@ -371,6 +371,24 @@ export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
         throw new SpikeError('LEASE_IO_FAILED', `Cannot list job leases: ${error.message}`);
       }
     },
+
+    /**
+     * Live worktree leases. Only `*.lock` files are holders: `.superseded`
+     * copies are history and `.takeover` files are recovery markers. A file
+     * released between the listing and the read reads as null and is dropped.
+     */
+    async listWorktreeLeases() {
+      try {
+        const entries = await readdir(worktreesDir);
+        const leases = await Promise.all(entries.filter((e) => e.endsWith('.lock'))
+          .map((e) => read('worktree', e.replace(/\.lock$/, ''))));
+        return leases.filter(Boolean);
+      } catch (error) {
+        if (error.code === 'ENOENT') return [];
+        if (error instanceof SpikeError) throw error;
+        throw new SpikeError('LEASE_IO_FAILED', `Cannot list worktree leases: ${error.message}`);
+      }
+    },
   };
 }
 

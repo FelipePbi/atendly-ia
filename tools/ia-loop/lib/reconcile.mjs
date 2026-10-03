@@ -303,6 +303,9 @@ export function decideNextDispatch({ ledger, goal, maxRounds = 3 }) {
           // whatever profile the Goal happened to be on.
           nextDeveloperProfile: review.result?.nextDeveloperProfile ?? null,
           nextDeveloperProfileReason: review.result?.nextDeveloperProfileReason ?? null,
+          // And the reviewer's classification of the blockers, for the same
+          // reason: a cold resume must hand the round the same brief.
+          correctionScope: review.result?.correctionScope ?? null,
           fromReviewJobId: review.completedBy,
           resumeAttempt: reusableAttempt(nextCorrection)?.jobId ?? null,
           resumeAttemptStatus: reusableAttempt(nextCorrection)?.attemptStatus ?? null,

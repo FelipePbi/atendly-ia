@@ -148,7 +148,7 @@ describe("§6.7 separadores por letra em ordem pt-BR", () => {
     const separators = within(list)
       .getAllByText(/^(A|B|Sem nome)$/)
       .map((node) => node.textContent);
-    expect(separators).toEqual(["A", "B", "Sem nome"]);
+    expect(separators).toEqual(["A", "B"]);
 
     const names = within(list)
       .getAllByRole("link")

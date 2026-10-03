@@ -10,7 +10,7 @@
  * derrubando o teste — não há necessidade de capturá-la explicitamente.
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -133,9 +133,9 @@ describe("ShellConfigProvider + tela real de Clientes não excede a profundidade
       </ShellConfigProvider>,
     );
 
-    expect(await screen.findByText("2 clientes")).toBeVisible();
+    expect((await screen.findByText("clientes")).closest(".customer-panel-count")).toHaveTextContent("2 clientes");
     await user.type(screen.getByLabelText("Buscar cliente"), "Bruno");
-    expect(await screen.findByText("1 cliente")).toBeVisible();
+    await waitFor(() => expect(within(screen.getByRole("list", { name: "Clientes" })).getAllByRole("link")).toHaveLength(1));
   });
 
   test("formulário de novo cliente responde a digitação contínua", async () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useId, useState } from "react";
 
 import { BffHttpError, type CalendarState, type Customer } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
@@ -9,7 +9,7 @@ import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { PushedBar } from "@/shared/layout/PushedBar";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
-import { displayPhone } from "@/shared/phone";
+import { displayPhone, maskPhoneInput, phoneInputDigits } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Field } from "@/shared/ui/Field";
 import { ListItem } from "@/shared/ui/ListItem";
@@ -30,6 +30,10 @@ export function CustomerForm() {
   const [message, setMessage] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Customer[] | null>(null);
   const [pending, setPending] = useState<PendingInput | null>(null);
+  const [phoneInput, setPhoneInput] = useState("");
+  const [guardianHint, setGuardianHint] = useState(false);
+  const phoneId = useId();
+  const phoneHelpId = useId();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -67,7 +71,7 @@ export function CustomerForm() {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const name = formText(data, "name");
-    const phone = formText(data, "phone");
+    const phone = phoneInputDigits(phoneInput);
     setMessage(null);
     if (!name && !phone) {
       setMessage("Informe ao menos o nome ou o telefone do cliente.");
@@ -194,24 +198,59 @@ export function CustomerForm() {
             <Field
               autoComplete="name"
               defaultValue={pending?.name}
-              help="Use o nome que ajuda você a reconhecer este cliente."
               label="Nome"
               maxLength={200}
               name="name"
             />
-            <Field
-              autoComplete="tel"
-              defaultValue={pending?.phone}
-              help="O telefone identifica o cliente apenas neste negócio. Pode ficar em branco."
-              inputMode="tel"
-              label="Telefone"
-              maxLength={32}
-              minLength={6}
-              name="phone"
-              placeholder="(00) 00000-0000"
-              type="tel"
-            />
+            <div className="field">
+              <label className="label" htmlFor={phoneId}>
+                Telefone <span className="customer-form-optional">(opcional)</span>
+              </label>
+              <div className="input-wrap">
+                <input
+                  aria-describedby={phoneHelpId}
+                  autoComplete="tel"
+                  className="input"
+                  id={phoneId}
+                  inputMode="tel"
+                  maxLength={32}
+                  minLength={6}
+                  name="phone"
+                  onChange={(event) =>
+                    setPhoneInput(maskPhoneInput(event.target.value))
+                  }
+                  type="tel"
+                  value={phoneInput}
+                />
+              </div>
+              <p className="field-help" id={phoneHelpId}>
+                Com o telefone, a IA reconhece a pessoa quando ela escrever no
+                WhatsApp. Sem telefone serve para crianças ou para quem é
+                agendado por outra pessoa.
+              </p>
+            </div>
           </div>
+          <button
+            className="customer-form-guardian"
+            onClick={() => setGuardianHint(true)}
+            type="button"
+          >
+            <span className="customer-form-guardian-copy">
+              <span className="customer-form-guardian-title">
+                Alguém agenda por esta pessoa?
+              </span>
+              <span className="customer-form-guardian-sub">
+                Vincule um responsável, como mãe ou pai
+              </span>
+            </span>
+            <Icon name="chevron-right" />
+          </button>
+          {guardianHint && (
+            <p className="customer-form-guardian-hint" role="status">
+              O vínculo com o responsável é feito no perfil, depois de salvar o
+              cliente.
+            </p>
+          )}
           {message && (
             <div className="customer-inline-error" role="alert">
               {message}
@@ -224,7 +263,7 @@ export function CustomerForm() {
               disabled={checking || busy}
               type="submit"
             >
-              {checking ? "Verificando..." : busy ? "Criando..." : "Criar cliente"}
+              {checking ? "Verificando..." : busy ? "Criando..." : "Salvar cliente"}
             </button>
           </div>
         </form>

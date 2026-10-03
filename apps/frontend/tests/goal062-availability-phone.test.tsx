@@ -192,7 +192,7 @@ describe("telefone brasileiro reconhecido aparece formatado", () => {
       </ShellConfigProvider>,
     );
 
-    expect(await screen.findByText("(11) 99888-7766")).toBeVisible();
+    expect(await screen.findByText("+55 11 99888-7766")).toBeVisible();
     expect(screen.queryByText("5511998887766")).not.toBeInTheDocument();
   });
 
@@ -207,7 +207,7 @@ describe("telefone brasileiro reconhecido aparece formatado", () => {
       </ShellConfigProvider>,
     );
 
-    expect(await screen.findByText("(11) 99888-7766")).toBeVisible();
+    expect(await screen.findByText("+55 11 99888-7766")).toBeVisible();
     expect(screen.queryByText("5511998887766")).not.toBeInTheDocument();
   });
 

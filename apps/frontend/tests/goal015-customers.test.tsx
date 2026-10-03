@@ -10,7 +10,7 @@
  * exige escolha explícita entre um cadastro existente ou uma pessoa nova.
  */
 
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -200,7 +200,8 @@ describe("autorização de uso pela IA nasce negada e só muda por ação explí
     );
     await user.click(screen.getByRole("button", { name: "Salvar observação" }));
 
-    expect(await screen.findByText("IA não autorizada a usar")).toBeVisible();
+    const noteBox = await screen.findByRole("checkbox", { name: "A IA pode usar esta informação" });
+    expect(noteBox).not.toBeChecked();
     expect(customersCreateNote).toHaveBeenCalledWith(
       "c1",
       expect.objectContaining({ body: "Prefere atendimento à tarde" }),
@@ -216,10 +217,8 @@ describe("autorização de uso pela IA nasce negada e só muda por ação explí
       id: "note-1",
       updatedAt: "2026-09-01T10:05:00Z",
     });
-    await user.click(
-      screen.getByRole("button", { name: "Autorizar uso pela IA" }),
-    );
-    expect(await screen.findByText("IA autorizada a usar")).toBeVisible();
+    await user.click(noteBox);
+    await waitFor(() => expect(noteBox).toBeChecked());
     expect(customersSetNoteAuthorization).toHaveBeenCalledWith("c1", "note-1", true);
   });
 
@@ -237,11 +236,13 @@ describe("autorização de uso pela IA nasce negada e só muda por ação explí
     const user = userEvent.setup();
     render(<TagsHarness />);
 
-    await user.click(screen.getByRole("button", { name: "Nova tag" }));
+    await user.click(screen.getByRole("button", { name: "Adicionar tag" }));
     await user.type(screen.getByLabelText("Tag"), "prefere horário da manhã");
     await user.click(screen.getByRole("button", { name: "Criar tag" }));
 
-    expect(await screen.findByText("IA não autorizada a usar")).toBeVisible();
+    const tagBox = await screen.findByRole("checkbox", { name: "IA pode usar a tag prefere horário da manhã" });
+    expect(tagBox).not.toBeChecked();
+    expect(screen.getByText("só você")).toBeVisible();
     expect(customersCreateTag).toHaveBeenCalledWith(
       "c1",
       expect.objectContaining({ label: "prefere horário da manhã" }),
@@ -257,10 +258,9 @@ describe("autorização de uso pela IA nasce negada e só muda por ação explí
       label: "prefere horário da manhã",
       updatedAt: "2026-09-01T10:05:00Z",
     });
-    await user.click(
-      screen.getByRole("button", { name: "Autorizar uso pela IA" }),
-    );
-    expect(await screen.findByText("IA autorizada a usar")).toBeVisible();
+    await user.click(tagBox);
+    await waitFor(() => expect(tagBox).toBeChecked());
+    expect(screen.getByText("IA pode usar")).toBeVisible();
     expect(customersSetTagAuthorization).toHaveBeenCalledWith("c1", "tag-1", true);
   });
 
@@ -415,8 +415,8 @@ describe("número compartilhado no cadastro exige escolha explícita", () => {
     );
 
     await user.type(await screen.findByLabelText("Nome"), "Cliente Novo");
-    await user.type(screen.getByLabelText("Telefone"), "11999990000");
-    await user.click(screen.getByRole("button", { name: "Criar cliente" }));
+    await user.type(screen.getByLabelText("Telefone (opcional)"), "11999990000");
+    await user.click(screen.getByRole("button", { name: "Salvar cliente" }));
 
     expect(
       await screen.findByText(/Encontramos 2 cadastros com o telefone/),
@@ -456,14 +456,14 @@ describe("número compartilhado no cadastro exige escolha explícita", () => {
     );
 
     await user.type(await screen.findByLabelText("Nome"), "Cliente Novo");
-    await user.type(screen.getByLabelText("Telefone"), "11999990000");
-    await user.click(screen.getByRole("button", { name: "Criar cliente" }));
+    await user.type(screen.getByLabelText("Telefone (opcional)"), "11999990000");
+    await user.click(screen.getByRole("button", { name: "Salvar cliente" }));
 
     await screen.findByText(/Encontramos 1 cadastro com o telefone/);
     await user.click(screen.getByRole("button", { name: "Revisar dados" }));
 
     expect(screen.getByLabelText("Nome")).toHaveValue("Cliente Novo");
-    expect(screen.getByLabelText("Telefone")).toHaveValue("11999990000");
+    expect(screen.getByLabelText("Telefone (opcional)")).toHaveValue("+55 (11) 99999-0000");
   });
 });
 
@@ -482,7 +482,7 @@ describe("acessibilidade das telas novas de Clientes", () => {
         <ProductCustomersScreen scenario="list" />
       </ShellConfigProvider>,
     );
-    await screen.findByText("2 clientes");
+    await screen.findByText("Marina Duarte");
     await expectNoA11yViolations(container);
   });
 

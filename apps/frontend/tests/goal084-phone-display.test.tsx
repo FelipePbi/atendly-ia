@@ -181,7 +181,7 @@ describe("prova 6 — telefone nacional formatado em toda tela", () => {
       </ShellConfigProvider>,
     );
 
-    expect(await screen.findByText(FORMATTED)).toBeVisible();
+    expect(await screen.findByText("+55 55 99191-9817")).toBeVisible();
     expect(screen.queryByText(RAW)).not.toBeInTheDocument();
   });
 
@@ -193,7 +193,7 @@ describe("prova 6 — telefone nacional formatado em toda tela", () => {
       </ShellConfigProvider>,
     );
 
-    expect(await screen.findByText(FORMATTED)).toBeVisible();
+    expect(await screen.findByText("+55 55 99191-9817")).toBeVisible();
     expect(screen.queryByText(RAW)).not.toBeInTheDocument();
   });
 
@@ -265,8 +265,8 @@ describe("prova 6 — telefone nacional formatado em toda tela", () => {
     );
     const user = userEvent.setup();
 
-    await user.type(await screen.findByLabelText("Telefone"), RAW);
-    await user.click(screen.getByRole("button", { name: "Criar cliente" }));
+    await user.type(await screen.findByLabelText("Telefone (opcional)"), RAW);
+    await user.click(screen.getByRole("button", { name: "Salvar cliente" }));
 
     const status = await screen.findByRole("status");
     expect(status).toHaveTextContent(`com o telefone ${FORMATTED}.`);

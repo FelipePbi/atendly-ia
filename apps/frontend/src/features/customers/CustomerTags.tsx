@@ -81,26 +81,8 @@ export function CustomerTags({
   }
 
   return (
-    <section aria-label="Tags" className="directory-section">
-      <div className="directory-section-header">
-        <div>
-          <h2>Tags</h2>
-          <p>
-            Marcações internas. A IA só considera uma tag na conversa quando ela
-            está autorizada.
-          </p>
-        </div>
-        {!creating && (
-          <button
-            className="btn btn-secondary"
-            onClick={() => setCreating(true)}
-            type="button"
-          >
-            <Icon name="plus" />
-            Nova tag
-          </button>
-        )}
-      </div>
+    <section aria-label="Tags" className="customer-tags">
+      <h2 className="customer-field-label">Tags</h2>
 
       {error && (
         <div className="customer-inline-error" role="alert">
@@ -108,62 +90,77 @@ export function CustomerTags({
         </div>
       )}
 
-      {creating && (
-        <form
-          className="customer-record-form"
-          onSubmit={(event) => void createTag(event)}
-        >
-          <Field
-            label="Tag"
-            maxLength={60}
-            name="label"
-            placeholder="Ex.: prefere horário da manhã"
-            required
-          />
-          <div className="customer-form-footer">
+      <div className="customer-tag-card">
+        {tags.map((tag) => (
+          <div className="customer-tag-row" key={tag.id}>
+            <span className="customer-tag-label">{tag.label}</span>
+            <AuthorizationControl
+              authorized={tag.aiAuthorized}
+              busy={busyId === tag.id}
+              onToggle={() => void toggleAuthorization(tag)}
+              subject={tag.label}
+              variant="tag"
+            />
             <button
-              className="btn btn-secondary"
-              disabled={busyId === "new"}
-              onClick={() => setCreating(false)}
+              aria-label={`Remover tag ${tag.label}`}
+              className="customer-tag-remove"
+              disabled={busyId === tag.id}
+              onClick={() => void removeTag(tag)}
               type="button"
             >
-              Cancelar
-            </button>
-            <button
-              className="btn btn-primary"
-              disabled={busyId === "new"}
-              type="submit"
-            >
-              {busyId === "new" ? "Criando..." : "Criar tag"}
+              <Icon name="x" />
             </button>
           </div>
-        </form>
-      )}
+        ))}
 
-      {tags.length === 0 && !creating ? (
-        <p className="muted small">Nenhuma tag cadastrada.</p>
-      ) : (
-        <ul className="customer-tag-list">
-          {tags.map((tag) => (
-            <li className="customer-tag-chip" key={tag.id}>
-              <span className="customer-tag-label">{tag.label}</span>
-              <AuthorizationControl
-                authorized={tag.aiAuthorized}
-                busy={busyId === tag.id}
-                onToggle={() => void toggleAuthorization(tag)}
-              />
+        {creating ? (
+          <form
+            className="customer-tag-form"
+            onSubmit={(event) => void createTag(event)}
+          >
+            <Field
+              label="Tag"
+              maxLength={60}
+              name="label"
+              placeholder="Ex.: prefere horário da manhã"
+              required
+            />
+            <div className="customer-form-footer">
               <button
-                className="btn btn-tertiary"
-                disabled={busyId === tag.id}
-                onClick={() => void removeTag(tag)}
+                className="btn btn-secondary"
+                disabled={busyId === "new"}
+                onClick={() => setCreating(false)}
                 type="button"
               >
-                <Icon name="x" />
-                Remover
+                Cancelar
               </button>
-            </li>
-          ))}
-        </ul>
+              <button
+                className="btn btn-primary"
+                disabled={busyId === "new"}
+                type="submit"
+              >
+                {busyId === "new" ? "Criando..." : "Criar tag"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button
+            aria-label="Adicionar tag"
+            className="customer-tag-add"
+            onClick={() => setCreating(true)}
+            type="button"
+          >
+            <Icon name="plus" />
+            <span>Adicionar tag</span>
+            <span aria-hidden="true" className="customer-tag-add-hint">
+              ex.: Noiva, Gestante, Fiel
+            </span>
+          </button>
+        )}
+      </div>
+
+      {tags.length === 0 && !creating && (
+        <p className="muted small">Nenhuma tag cadastrada.</p>
       )}
     </section>
   );

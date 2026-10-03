@@ -14,10 +14,9 @@ import { Icon } from "@/shared/icons/Icon";
 import { ListDetailEmpty, ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
-import { displayPhone } from "@/shared/phone";
+import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Field } from "@/shared/ui/Field";
-import { ListItem } from "@/shared/ui/ListItem";
 import { Skeleton, StatePanel } from "@/shared/ui/States";
 
 type CustomerListData = {
@@ -94,12 +93,13 @@ export function useCustomerListData(enabled = true): CustomerListData {
 export function CustomerList() {
   const wide = useWideLayout();
   const data = useCustomerListData();
-  const { canCreate, customers, error, filtered, groups, loading, today } = data;
+  const { canCreate, loading } = data;
 
   useShellConfig({
-    action: canCreate
-      ? { href: "/clientes/novo", icon: "plus", label: "Novo cliente" }
-      : undefined,
+    action:
+      canCreate && !wide
+        ? { href: "/clientes/novo", icon: "plus", label: "Novo cliente" }
+        : undefined,
     active: "clientes",
     loading,
     module: "directory",
@@ -110,7 +110,9 @@ export function CustomerList() {
     return (
       <ListDetailLayout
         detail={
-          <ListDetailEmpty>Selecione um cliente para ver o perfil</ListDetailEmpty>
+          <ListDetailEmpty>
+            Selecione um cliente para ver o perfil
+          </ListDetailEmpty>
         }
         list={<CustomerListPanelView data={data} />}
         listLabel="Clientes"
@@ -119,99 +121,8 @@ export function CustomerList() {
   }
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <div>
-          <h1>Clientes</h1>
-          <p>
-            Encontre quem você já atende e cadastre quem chega agora, sem
-            depender de telefone.
-          </p>
-        </div>
-        {canCreate && (
-          <Link className="btn btn-primary" href="/clientes/novo">
-            <Icon name="plus" />
-            <span>Novo cliente</span>
-          </Link>
-        )}
-      </div>
-
-      {error ? (
-        <StatePanel
-          actionLabel="Tentar novamente"
-          description={error}
-          icon="alert"
-          onAction={data.retry}
-          title="Não foi possível carregar clientes"
-          tone="error"
-        />
-      ) : loading ? (
-        <CustomerListSkeleton />
-      ) : customers.length === 0 ? (
-        <StatePanel
-          actionHref={canCreate ? "/clientes/novo" : undefined}
-          actionLabel={canCreate ? "Cadastrar cliente" : undefined}
-          description="Depois do primeiro cadastro ou agendamento, os clientes aparecerão aqui."
-          icon="users"
-          title="Seus clientes aparecerão aqui"
-        />
-      ) : (
-        <>
-          <Field
-            className="customer-search"
-            icon="search"
-            label="Buscar cliente"
-            onChange={(event) => data.setQuery(event.target.value)}
-            placeholder="Nome ou telefone"
-            type="search"
-            value={data.query}
-          />
-          <div className="customer-list-meta">
-            <strong>Clientes cadastrados</strong>
-            <span>
-              {filtered.length}{" "}
-              {filtered.length === 1 ? "cliente" : "clientes"}
-            </span>
-          </div>
-          {filtered.length === 0 ? (
-            <p className="customer-no-results" role="status">
-              Nenhum cliente corresponde à busca.
-            </p>
-          ) : (
-            <div aria-label="Clientes" className="list" role="list">
-              {groups.map((group) => (
-                <div className="list-group" key={group.letter}>
-                  <p className="list-separator">{group.letter}</p>
-                  {group.customers.map((customer) => (
-                    <ListItem
-                      copy={displayPhone(
-                        customer.phone,
-                        "Telefone não informado",
-                      )}
-                      href={`/clientes/detalhes?id=${encodeURIComponent(customer.id)}`}
-                      key={customer.id}
-                      leading={
-                        <span className="avatar" aria-hidden="true">
-                          {initials(customer.name)}
-                        </span>
-                      }
-                      title={customer.name || "Cliente sem nome"}
-                      trailing={
-                        <>
-                          <span className="list-item-meta">
-                            {appointmentText(customer, today)}
-                          </span>
-                          <Icon name="chevron-right" />
-                        </>
-                      }
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
+    <div className="customer-list-screen">
+      <CustomerListPanelView data={data} showAdd={false} />
     </div>
   );
 }
@@ -229,12 +140,15 @@ function CustomerListPanelView({
   data,
   heading: Heading = "h1",
   openId,
+  showAdd = true,
 }: {
   data: CustomerListData;
   heading?: "h1" | "h2";
   openId?: string;
+  showAdd?: boolean;
 }) {
-  const { canCreate, customers, error, filtered, groups, loading, today } = data;
+  const { canCreate, customers, error, filtered, groups, loading, today } =
+    data;
   return (
     <div className="customer-panel">
       <div className="customer-panel-header">
@@ -248,7 +162,7 @@ function CustomerListPanelView({
               </span>
             </span>
           )}
-          {canCreate && (
+          {canCreate && showAdd && (
             <Link
               aria-label="Novo cliente"
               className="customer-panel-add"
@@ -286,7 +200,7 @@ function CustomerListPanelView({
             icon="search"
             label="Buscar cliente"
             onChange={(event) => data.setQuery(event.target.value)}
-            placeholder="Nome ou telefone"
+            placeholder="Buscar por nome ou telefone"
             type="search"
             value={data.query}
           />
@@ -295,62 +209,107 @@ function CustomerListPanelView({
               Nenhum cliente corresponde à busca.
             </p>
           ) : (
-            <div aria-label="Clientes" className="customer-panel-list" role="list">
+            <div
+              aria-label="Clientes"
+              className="customer-panel-list"
+              role="list"
+            >
               {groups.map((group) => (
                 <div className="customer-panel-group" key={group.letter}>
-                  <p className="customer-panel-letter">{group.letter}</p>
-                  {group.customers.map((customer) => {
-                    const open = customer.id === openId;
-                    const meta = appointmentParts(customer, today);
-                    return (
-                      <div
-                        className="customer-panel-row"
-                        key={customer.id}
-                        role="listitem"
-                      >
-                        <Link
-                          aria-current={open ? "page" : undefined}
-                          className={clsx("customer-panel-item", open && "is-open")}
-                          href={`/clientes/detalhes?id=${encodeURIComponent(customer.id)}`}
-                        >
-                          <span className="customer-panel-avatar" aria-hidden="true">
-                            {initials(customer.name)}
-                          </span>
-                          <span className="customer-panel-main">
-                            <span className="customer-panel-name list-item-title">
-                              {customer.name || "Cliente sem nome"}
-                            </span>
-                            <span className="customer-panel-phone">
-                              {displayPhone(customer.phone, "Telefone não informado")}
-                            </span>
-                          </span>
-                          <span className="customer-panel-meta">
-                            {meta.eyebrow && (
-                              <>
-                                <span className="customer-panel-eyebrow">
-                                  {meta.eyebrow}
-                                </span>{" "}
-                              </>
-                            )}
-                            <span
-                              className={clsx(
-                                "customer-panel-when",
-                                `is-${meta.tone}`,
-                              )}
-                            >
-                              {meta.value}
-                            </span>
-                          </span>
-                        </Link>
-                      </div>
-                    );
-                  })}
+                  {group.letter !== NO_NAME_LABEL && (
+                    <p className="customer-panel-letter">{group.letter}</p>
+                  )}
+                  {group.customers.map((customer) => (
+                    <CustomerRow
+                      customer={customer}
+                      key={customer.id}
+                      open={customer.id === openId}
+                      today={today}
+                    />
+                  ))}
                 </div>
               ))}
             </div>
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function CustomerRow({
+  customer,
+  open,
+  today,
+}: {
+  customer: Customer;
+  open: boolean;
+  today: Date;
+}) {
+  const named = Boolean(customer.name?.trim());
+  const meta = appointmentParts(customer, today);
+  const phone = customer.phone
+    ? (formatBrazilianPhone(customer.phone, "plus") ?? customer.phone)
+    : null;
+  return (
+    <div className="customer-panel-row" role="listitem">
+      <Link
+        aria-current={open ? "page" : undefined}
+        className={clsx(
+          "customer-panel-item",
+          open && "is-open",
+          !named && "is-unnamed",
+        )}
+        href={`/clientes/detalhes?id=${encodeURIComponent(customer.id)}`}
+      >
+        {named ? (
+          <>
+            <span className="customer-panel-avatar" aria-hidden="true">
+              {initials(customer.name)}
+            </span>
+            <span className="customer-panel-main">
+              <span className="customer-panel-name list-item-title">
+                {customer.name}
+              </span>
+              <span className="customer-panel-phone">
+                {phone ?? "Telefone não informado"}
+              </span>
+            </span>
+            <span className="customer-panel-meta">
+              {meta.eyebrow && (
+                <>
+                  <span className="customer-panel-eyebrow">
+                    {meta.eyebrow}
+                  </span>{" "}
+                </>
+              )}
+              <span className={clsx("customer-panel-when", `is-${meta.tone}`)}>
+                {meta.value}
+              </span>
+            </span>
+          </>
+        ) : (
+          <>
+            <span
+              className="customer-panel-avatar is-unnamed"
+              aria-hidden="true"
+            >
+              <Icon name="nav-user" />
+            </span>
+            <span className="customer-panel-main">
+              <span className="customer-panel-name list-item-title customer-panel-phone-title">
+                {phone ?? "Cliente sem nome"}
+              </span>
+              <span className="customer-panel-imported">
+                {phone
+                  ? "Cadastro sem nome · importado"
+                  : "Telefone não informado"}
+              </span>
+            </span>
+            <span className="customer-panel-name-action">Nomear</span>
+          </>
+        )}
+      </Link>
     </div>
   );
 }
@@ -528,22 +487,13 @@ function lastAppointmentText(
   return `último ${prefix}${ago}`;
 }
 
-/** Texto à direita da linha (Goal075 CL-01): próximo, último ou "sem atendimentos". */
-function appointmentText(customer: Customer, today: Date): string {
-  if (customer.nextAppointment)
-    return nextAppointmentText(customer.nextAppointment, today);
-  if (customer.lastAppointment)
-    return lastAppointmentText(customer.lastAppointment, today);
-  return "sem atendimentos";
-}
-
 type AppointmentParts = {
   eyebrow?: string;
   tone: "empty" | "last" | "missed" | "next";
   value: string;
 };
 
-/** Mesmo texto de `appointmentText`, separado em rótulo e valor para a linha do painel. */
+/** Informação à direita da linha (Goal075 CL-01): próximo, último ou "sem atendimentos", em rótulo e valor. */
 function appointmentParts(customer: Customer, today: Date): AppointmentParts {
   if (customer.nextAppointment) {
     return {

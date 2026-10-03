@@ -85,26 +85,10 @@ export function CustomerNotes({
   }
 
   return (
-    <section aria-label="Observações" className="directory-section">
-      <div className="directory-section-header">
-        <div>
-          <h2>Observações</h2>
-          <p>
-            Registros internos. Por padrão a IA não pode usá-los; autorize um
-            por um quando fizer sentido.
-          </p>
-        </div>
-        {!creating && (
-          <button
-            className="btn btn-secondary"
-            onClick={() => setCreating(true)}
-            type="button"
-          >
-            <Icon name="plus" />
-            Nova observação
-          </button>
-        )}
-      </div>
+    <section aria-label="Observações" className="customer-notes">
+      <h2 className="customer-field-label">
+        Observações <span>· só você vê</span>
+      </h2>
 
       {error && (
         <div className="customer-inline-error" role="alert">
@@ -112,7 +96,34 @@ export function CustomerNotes({
         </div>
       )}
 
-      {creating && (
+      {notes.length === 0 && !creating && (
+        <p className="muted small">Nenhuma observação registrada.</p>
+      )}
+
+      {notes.map((note) => (
+        <article className="customer-note" key={note.id}>
+          <p className="customer-note-body">{note.body}</p>
+          <AuthorizationControl
+            authorized={note.aiAuthorized}
+            busy={busyId === note.id}
+            onToggle={() => void toggleAuthorization(note)}
+            variant="note"
+          />
+          <div className="customer-note-foot">
+            <span>Registrada em {formatDateTime(note.createdAt)}</span>
+            <button
+              className="customer-note-remove"
+              disabled={busyId === note.id}
+              onClick={() => void removeNote(note)}
+              type="button"
+            >
+              Remover
+            </button>
+          </div>
+        </article>
+      ))}
+
+      {creating ? (
         <form
           className="customer-record-form"
           onSubmit={(event) => void createNote(event)}
@@ -148,38 +159,21 @@ export function CustomerNotes({
             </button>
           </div>
         </form>
+      ) : (
+        <button
+          className="customer-add-row"
+          onClick={() => setCreating(true)}
+          type="button"
+        >
+          <Icon name="plus" />
+          <span>Nova observação</span>
+        </button>
       )}
 
-      {notes.length === 0 && !creating ? (
-        <p className="muted small">Nenhuma observação registrada.</p>
-      ) : (
-        <div className="customer-record-list">
-          {notes.map((note) => (
-            <article className="customer-record" key={note.id}>
-              <p className="customer-record-body">{note.body}</p>
-              <p className="customer-record-meta">
-                Registrada em {formatDateTime(note.createdAt)}
-              </p>
-              <AuthorizationControl
-                authorized={note.aiAuthorized}
-                busy={busyId === note.id}
-                onToggle={() => void toggleAuthorization(note)}
-              />
-              <div className="customer-form-footer">
-                <button
-                  className="btn btn-tertiary"
-                  disabled={busyId === note.id}
-                  onClick={() => void removeNote(note)}
-                  type="button"
-                >
-                  <Icon name="x" />
-                  Remover
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
+      <p className="customer-privacy-hint">
+        Evite registrar informações pessoais que não sejam necessárias para o
+        atendimento.
+      </p>
     </section>
   );
 }

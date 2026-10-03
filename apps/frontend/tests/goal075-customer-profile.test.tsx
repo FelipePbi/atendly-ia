@@ -401,7 +401,7 @@ describe("§6.10 — três abas: clique, seta e endereço direto", () => {
     // Notas: observação e tag.
     await user.click(screen.getByRole("tab", { name: "Notas" }));
     expect(screen.getByRole("button", { name: "Nova observação" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Nova tag" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Adicionar tag" })).toBeVisible();
   });
 
   test("o perfil não acusa violação de axe", async () => {

@@ -298,8 +298,10 @@
       "route": "/clientes/detalhes?id={customerId}",
       "steps": [
         {
-          "click": "Atendimentos",
-          "optional": true
+          "clickRole": {
+            "name": "Atendimentos",
+            "role": "tab"
+          }
         }
       ],
       "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
@@ -311,8 +313,10 @@
       "route": "/clientes/detalhes?id={customerId}",
       "steps": [
         {
-          "click": "Notas",
-          "optional": true
+          "clickRole": {
+            "name": "Notas",
+            "role": "tab"
+          }
         }
       ],
       "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."

@@ -11,7 +11,7 @@ import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { PushedBar } from "@/shared/layout/PushedBar";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
-import { displayPhone } from "@/shared/phone";
+import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Field } from "@/shared/ui/Field";
 import { StatePanel } from "@/shared/ui/States";
@@ -49,6 +49,8 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
   const [formError, setFormError] = useState<string | null>(null);
   const [tab, setTab] = useState<ProfileTab>(() => initialTabFromLocation());
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [savedNotice, setSavedNotice] = useState(false);
+  const notesPanelRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const tabsId = useId();
 
@@ -140,8 +142,22 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
     title: "Detalhes do cliente",
   });
 
+  // Criar observação e tag segue por item, com os mesmos pedidos; "Salvar"
+  // envia os rascunhos abertos. Sem rascunho, o que já mudou está salvo.
+  function saveNotesTab() {
+    const drafts =
+      notesPanelRef.current?.querySelectorAll<HTMLFormElement>("form") ?? [];
+    if (drafts.length === 0) {
+      setSavedNotice(true);
+      return;
+    }
+    setSavedNotice(false);
+    drafts.forEach((form) => form.requestSubmit());
+  }
+
   function selectTab(next: ProfileTab) {
     setTab(next);
+    setSavedNotice(false);
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     url.searchParams.set("aba", next);
@@ -154,7 +170,12 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
       : undefined;
 
   const profile = (
-    <section className="directory-page customer-profile">
+    <section
+      className={clsx(
+        "directory-page customer-profile",
+        customer && tab !== "resumo" && "is-fill",
+      )}
+    >
       <PushedBar
         backHref="/clientes"
         backLabel="Voltar para clientes"
@@ -182,7 +203,12 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
         />
       ) : (
         <>
-          <section className="directory-detail-hero">
+          <section
+            className={clsx(
+              "directory-detail-hero",
+              tab !== "resumo" && "is-compact",
+            )}
+          >
             <div className="directory-detail-identity">
               <span className="avatar" aria-hidden="true">
                 {initials(customer.name)}
@@ -190,14 +216,19 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
               <div>
                 <h1>{customer.name || "Cliente sem nome"}</h1>
                 <p className="directory-detail-phone">
-                  {[
-                    displayPhone(customer.phone, "Telefone não informado"),
-                    sinceLabel(customer),
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
+                  {tab === "resumo"
+                    ? [
+                        customer.phone
+                          ? (formatBrazilianPhone(customer.phone, "plus") ??
+                            customer.phone)
+                          : "Telefone não informado",
+                        sinceLabel(customer),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
+                    : compactSubtitle(customer)}
                 </p>
-                {customer.tags.length > 0 && (
+                {tab === "resumo" && customer.tags.length > 0 && (
                   <ul
                     aria-label="Tags do cliente"
                     className="customer-header-tags"
@@ -211,7 +242,7 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
                 )}
               </div>
             </div>
-            <div className="directory-detail-actions">
+            <div className="directory-detail-actions" hidden={tab !== "resumo"}>
               {conversationId && (
                 <Link
                   className="btn btn-secondary"
@@ -339,7 +370,9 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
                   stats={customer.appointmentStats}
                 />
                 <div className="resume-side">
-                  <CustomerNextAppointment appointment={customer.nextAppointment} />
+                  <CustomerNextAppointment
+                    appointment={customer.nextAppointment}
+                  />
                   <CustomerMemory customerId={customer.id} />
                 </div>
               </div>
@@ -355,6 +388,7 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
           {tab === "atendimentos" && (
             <div
               aria-labelledby={`${tabsId}-tab-atendimentos`}
+              className="customer-appts-panel"
               id={`${tabsId}-panel-atendimentos`}
               role="tabpanel"
               tabIndex={0}
@@ -369,7 +403,9 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
           {tab === "notas" && (
             <div
               aria-labelledby={`${tabsId}-tab-notas`}
+              className="customer-notes-panel"
               id={`${tabsId}-panel-notas`}
+              ref={notesPanelRef}
               role="tabpanel"
               tabIndex={0}
             >
@@ -383,6 +419,20 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
                 onChange={applyTags}
                 tags={customer.tags}
               />
+              <div className="customer-save-bar">
+                <button
+                  className="btn btn-primary"
+                  onClick={saveNotesTab}
+                  type="button"
+                >
+                  Salvar
+                </button>
+                {savedNotice && (
+                  <p className="customer-save-notice" role="status">
+                    Tudo salvo. Autorizações e remoções valem na hora.
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </>
@@ -434,20 +484,36 @@ function initialTabFromLocation(): ProfileTab {
     : "resumo";
 }
 
-function sinceLabel(customer: CustomerDetail): string | null {
+function sinceMonth(customer: CustomerDetail): string | null {
   const firstAppointment = customer.appointmentStats?.firstAppointmentDate;
   const source = firstAppointment ?? customer.createdAt ?? null;
   if (!source) return null;
   const isDateOnly = source.length === 10;
   const date = new Date(isDateOnly ? `${source}T12:00:00Z` : source);
-  const formatted = new Intl.DateTimeFormat("pt-BR", {
+  const parts = new Intl.DateTimeFormat("pt-BR", {
     month: "short",
     timeZone: isDateOnly ? "UTC" : undefined,
     year: "numeric",
-  })
-    .format(date)
-    .replace(".", "");
-  return `cliente desde ${formatted}`;
+  }).formatToParts(date);
+  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const year = parts.find((part) => part.type === "year")?.value ?? "";
+  return `${month.replace(".", "")} ${year}`.trim();
+}
+
+function sinceLabel(customer: CustomerDetail): string | null {
+  const month = sinceMonth(customer);
+  return month ? `cliente desde ${month}` : null;
+}
+
+function compactSubtitle(customer: CustomerDetail): string {
+  const completed = customer.appointmentStats?.completed ?? 0;
+  const month = sinceMonth(customer);
+  return [
+    `${completed} ${completed === 1 ? "atendimento" : "atendimentos"}`,
+    month ? `desde ${month}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function requestError(error: unknown, fallback: string): string {

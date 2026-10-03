@@ -10,6 +10,13 @@ import {
   BffHttpError,
   isActiveAppointmentStatus,
 } from "@/data";
+import { totalPriceLabel } from "@/features/agenda/AppointmentDetail";
+import {
+  appointmentServiceColors,
+  type ServiceColorMap,
+  serviceColorMap,
+} from "@/features/agenda/occupancy";
+import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Skeleton, StatePanel } from "@/shared/ui/States";
 
@@ -25,6 +32,9 @@ type CustomerAgendaProps = {
  */
 export function CustomerAgenda({ customerId, timezone }: CustomerAgendaProps) {
   const [appointments, setAppointments] = useState<Appointment[] | null>(null);
+  const [serviceColors, setServiceColors] = useState<ServiceColorMap>(
+    () => new Map(),
+  );
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
 
@@ -50,6 +60,19 @@ export function CustomerAgenda({ customerId, timezone }: CustomerAgendaProps) {
     return () => controller.abort();
   }, [customerId, timezone, reload]);
 
+  // A cor do traço vem do catálogo; sem leitura, o traço fica neutro e a
+  // lista continua (mesma regra da Agenda).
+  useEffect(() => {
+    const controller = new AbortController();
+    const catalog = getProductServices().serviceCatalog;
+    if (!catalog || typeof catalog.list !== "function") return;
+    Promise.resolve()
+      .then(() => catalog.list(controller.signal))
+      .then((result) => setServiceColors(serviceColorMap(result?.items)))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+
   if (error) {
     return (
       <StatePanel
@@ -72,77 +95,175 @@ export function CustomerAgenda({ customerId, timezone }: CustomerAgendaProps) {
 
   const today = todayIso(timezone);
   const upcoming = appointments
-    .filter((item) => isActiveAppointmentStatus(item.status) && item.date >= today)
+    .filter(
+      (item) =>
+        isActiveAppointmentStatus(item.status) &&
+        item.status.toUpperCase() !== "COMPLETED" &&
+        item.date >= today,
+    )
     .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
   const upcomingIds = new Set(upcoming.map((item) => item.id));
   const history = appointments
     .filter((item) => !upcomingIds.has(item.id))
     .sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime));
+  const footer = recordedValueFooter(appointments);
 
   return (
-    <>
-      <section className="directory-section">
-        <div className="directory-section-header">
-          <div>
-            <h2>Próximos atendimentos</h2>
-            <p>Compromissos futuros deste cliente na Agenda Atendly.</p>
-          </div>
-        </div>
+    <div className="customer-appts">
+      <section aria-labelledby="customer-appts-upcoming">
+        <h2 className="customer-appts-heading" id="customer-appts-upcoming">
+          Próximo
+        </h2>
         {upcoming.length === 0 ? (
           <p className="muted small">Nenhum agendamento futuro.</p>
         ) : (
           upcoming.map((appointment) => (
-            <AgendaRow appointment={appointment} key={appointment.id} />
+            <AgendaRow
+              appointment={appointment}
+              key={appointment.id}
+              serviceColors={serviceColors}
+            />
           ))
         )}
       </section>
-      <section className="directory-section">
-        <div className="directory-section-header">
-          <div>
-            <h2>Histórico</h2>
-            <p>Atendimentos anteriores deste cliente.</p>
-          </div>
-        </div>
+      <section aria-labelledby="customer-appts-history">
+        <h2 className="customer-appts-heading" id="customer-appts-history">
+          Anteriores
+        </h2>
         {history.length === 0 ? (
           <p className="muted small">Nenhum atendimento anterior.</p>
         ) : (
           history.map((appointment) => (
-            <AgendaRow appointment={appointment} key={appointment.id} />
+            <AgendaRow
+              appointment={appointment}
+              key={appointment.id}
+              serviceColors={serviceColors}
+            />
           ))
         )}
       </section>
-    </>
+      {footer && (
+        <div className="customer-appts-footer">
+          <span>
+            Valor registrado: <strong>{money(footer.recorded)}</strong>
+          </span>
+          {footer.withoutValue > 0 && (
+            <span>
+              {footer.withoutValue === 1
+                ? "1 atendimento sem valor"
+                : `${footer.withoutValue} atendimentos sem valor`}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
-function AgendaRow({ appointment }: { appointment: Appointment }) {
+/**
+ * Soma só o valor final de fato registrado dos atendimentos concluídos: o
+ * preço previsto nunca entra, e cancelados e faltas não contam. Sem nenhum
+ * concluído não há rodapé.
+ */
+function recordedValueFooter(
+  appointments: Appointment[],
+): { recorded: number; withoutValue: number } | null {
+  const completed = appointments.filter(
+    (item) => item.status.toUpperCase() === "COMPLETED",
+  );
+  if (completed.length === 0) return null;
+  let recorded = 0;
+  let withoutValue = 0;
+  for (const item of completed) {
+    if (item.finalValue === null) withoutValue += 1;
+    else recorded += item.finalValue;
+  }
+  return { recorded, withoutValue };
+}
+
+function AgendaRow({
+  appointment,
+  serviceColors,
+}: {
+  appointment: Appointment;
+  serviceColors: ServiceColorMap;
+}) {
+  const status = appointment.status.toUpperCase();
+  const cancelled = status === "CANCELLED";
+  const completed = status === "COMPLETED";
+  const active = !completed && isActiveAppointmentStatus(appointment.status);
+  const colors = appointmentServiceColors(appointment, serviceColors);
+  const stripe = colors.length > 0 ? colors : [null];
+  const name =
+    appointment.services.map((item) => item.name).join(" + ") ||
+    "Serviço não informado";
+
   return (
     <Link
-      className="directory-appointment"
+      className={clsx(
+        "customer-appt",
+        active ? "is-active" : "is-past",
+        cancelled && "is-cancelled",
+      )}
       href={`/agenda/agendamento?id=${encodeURIComponent(appointment.id)}`}
     >
-      <time>
+      <span className="customer-appt-when">
         {formatShortDate(appointment.date)}
         <br />
-        {appointment.startTime}
-      </time>
-      <span className="directory-appointment-copy">
-        <strong>
-          {appointment.services.map((item) => item.name).join(", ") ||
-            "Serviço não informado"}
-        </strong>
-        <span>{appointment.durationMinutes} min</span>
+        <span>{appointment.startTime}</span>
       </span>
-      <span
-        className={clsx(
-          "badge",
-          isActiveAppointmentStatus(appointment.status) && "badge-success",
-        )}
-      >
-        {appointmentStatusLabel(appointment.status)}
+      <span aria-hidden="true" className="customer-appt-stripe">
+        {stripe.map((color, index) => (
+          <span
+            className="customer-appt-stripe-part"
+            data-color={cancelled ? undefined : (color ?? undefined)}
+            key={index}
+          />
+        ))}
+      </span>
+      <span className="customer-appt-body">
+        <span className="customer-appt-main">
+          <strong className="customer-appt-name">{name}</strong>
+          <span className="customer-appt-meta">{rowDetail(appointment)}</span>
+        </span>
+        <span
+          className={clsx(
+            "customer-appt-status",
+            status === "NO_SHOW" && "is-no-show",
+            completed && "is-completed",
+            cancelled && "is-cancelled",
+          )}
+        >
+          {completed ? (
+            <Icon name="check" />
+          ) : active ? (
+            <span aria-hidden="true" className="customer-appt-status-dot" />
+          ) : null}
+          {appointmentStatusLabel(appointment.status)}
+        </span>
       </span>
     </Link>
   );
+}
+
+function rowDetail(appointment: Appointment) {
+  const status = appointment.status.toUpperCase();
+  if (status === "COMPLETED") {
+    return appointment.finalValue === null ? (
+      <>
+        valor não registrado ·{" "}
+        <span className="customer-appt-register">registrar</span>
+      </>
+    ) : (
+      `${money(appointment.finalValue)} registrado`
+    );
+  }
+  if (status === "CANCELLED" || status === "NO_SHOW") {
+    return `${appointment.durationMinutes} min`;
+  }
+  return [`${appointment.durationMinutes} min`, totalPriceLabel(appointment)]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function AgendaLoading() {
@@ -177,14 +298,22 @@ function requestError(error: unknown, fallback: string): string {
   return `${message} Referência: ${error.requestId}`;
 }
 
+function money(value: number): string {
+  const digits = Number.isInteger(value) ? 0 : 2;
+  return new Intl.NumberFormat("pt-BR", {
+    currency: "BRL",
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits,
+    style: "currency",
+  }).format(value);
+}
+
 function formatShortDate(value: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
-    month: "short",
+    month: "2-digit",
     timeZone: "UTC",
-  })
-    .format(new Date(`${value}T12:00:00Z`))
-    .toLocaleUpperCase("pt-BR");
+  }).format(new Date(`${value}T12:00:00Z`));
 }
 
 function todayIso(timeZone: string): string {

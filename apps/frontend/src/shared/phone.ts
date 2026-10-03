@@ -99,3 +99,34 @@ export function displayPhone(
   if (!value) return fallback;
   return formatBrazilianPhone(value, "parens") ?? value;
 }
+
+const MAX_NATIONAL_DIGITS = 11;
+
+/**
+ * Dígitos nacionais (DDD + assinante) do que a pessoa digitou no campo de
+ * telefone. O "+55" da máscara é prefixo de exibição e nunca entra nos dígitos.
+ */
+export function phoneInputDigits(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  const national =
+    (value.trimStart().startsWith("+") && digits.startsWith("55")) ||
+    (digits.length > MAX_NATIONAL_DIGITS && digits.startsWith("55"))
+      ? digits.slice(2)
+      : digits;
+  return national.slice(0, MAX_NATIONAL_DIGITS);
+}
+
+/** Máscara só de exibição do campo: "+55 (11) 99123-4567" conforme a pessoa digita. */
+export function maskPhoneInput(value: string): string {
+  const digits = phoneInputDigits(value);
+  if (!digits) return "";
+  const ddd = digits.slice(0, 2);
+  if (digits.length <= 2) return `+55 (${ddd}`;
+  const subscriber = digits.slice(2);
+  const split = subscriber.startsWith("9") ? 5 : 4;
+  const local =
+    subscriber.length > split
+      ? `${subscriber.slice(0, split)}-${subscriber.slice(split)}`
+      : subscriber;
+  return `+55 (${ddd}) ${local}`;
+}

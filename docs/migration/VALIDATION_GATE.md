@@ -4633,3 +4633,115 @@ Registro do FIX-001 da rodada 3, escrito depois da última edição de código e
 - **Gates do IA Loop sobre a árvore aceita.** Na rodada 4, os oito gates do Goal passaram: typecheck (WU-04), lint (WU-05), `goal101-novo-agendamento.test.tsx` **15**/**15** (WU-06), `validate:core` exit 0 (WU-07), `test:gate` **233**/**233** (WU-08), `validate:ui` com a configuração padrão **169** `passed`, **21** `skipped` e `retries: 0 — every test passed on its first attempt` (WU-09), `validate:integration` exit 0 com o gate autenticado em **255** `passed` e `retries: 0` (WU-10) e `git diff --check` (WU-12). A WU-09 da rodada 3, na mesma árvore de código, também deu **169** `passed` e **0** retentativas, e a WU-10 da rodada 3, **255** `passed` e **0** retentativas. As **2** retentativas de E3a acima continuam medidas como descritas; as execuções do IA Loop com a configuração padrão não as repetiram.
 - **Rodada 4.** Só documentação mudou: o título `### Retentativas e falhas por recurso do host` da seção aceita do Goal093 voltou ao texto de `68a8344`, depois de renomeado na rodada 3. O diff deste documento contra `68a8344` é só acréscimo.
 - **Conferência do Tech Lead.** `visual:compare -- --target A6`, exit 0, nas quatro rodadas, sempre com **16,0 / 9,0 / 12,4 / 10,3**, e os quatro `side-by-side.png` abertos em cada uma: sobram só as divergências de D-111 e o estado da conta de teste. Reexecutou as suítes dirigidas na rodada 1 (`goal101`, `goal083`, três de `goal016`, `goal093`, `goal092` e `goal069`: **114**/**114**) e na rodada 3 (`goal101`, `goal083`, três de `goal016`, `goal093`, `goal075` e `goal072`: **111**/**111**). Os `sha256` de "Árvore avaliada" conferem com a árvore aceita. O critério 5 foi aceito pela cláusula de retentativa medida e reportada; a leitura nova de `settings.get` no formulário, pela passagem de G-8 sem falha de limite de taxa.
+
+## Clientes iguais ao protótipo (CL1, CL4, CL5, CL6, CL7), do Goal094 (rodada 4)
+
+Registro da execução final e dos controles do Goal 094 ([D-112](DECISIONS.md), PROPOSED), refeito no FIX-001 da rodada 4 sobre a árvore final, depois da última edição de código (a correção da cor da linha concluída em `CustomerAgenda.tsx`). Tudo abaixo foi rodado em 2026-10-02. Nenhum arquivo de configuração de gate foi alterado (`vitest.config.*`, `playwright.config.*`, `playwright.authenticated.config.ts`, `next.config.ts`), nem `scripts/`, `e2e/routes.ts` ou `e2e/authenticated-matrix.spec.ts`. **`e2e/visual/targets.json` foi alterado**: os alvos CL6 e CL7 passaram a abrir a aba por `clickRole` com `role: "tab"` (antes, `click` com `optional`), porque em paisagem e em desktop o toque não chegava à aba e a captura mostrava o Resumo de Aline Santos; o Goal permite mudar o mapa quando um alvo está errado, e o efeito é só no mapa de capturas. Os controles negativos e o vermelho contra a baseline mexeram nos arquivos de produção só dentro de cada passo, e o `sha256` voltou ao de antes. Texto ainda não aceito: o Tech Lead decide.
+
+### Árvore avaliada
+
+`sha256` dos 17 arquivos de código e teste alterados, conferidos iguais antes e depois da sequência de execução e depois dos controles:
+
+| Arquivo (em `apps/frontend/`) | `sha256` |
+| --- | --- |
+| `e2e/visual/targets.json` | `db19cd9fac6a4c43246f56f43c19d88d3bd9ded3c866dbb12152e5efe3920ea2` |
+| `src/features/customers/AuthorizationControl.tsx` | `e0b1dc7fae8a777ced5f4d45c72d515f3fa69c4be59b14e2f99659c52f818d13` |
+| `src/features/customers/CustomerAgenda.tsx` | `62e7046c3678ed5aa8cb4bc85118df02e4f51df49f725f88ee3075da42a23e02` |
+| `src/features/customers/CustomerForm.tsx` | `c76594936be084c48d80f0d4887b6da4f022021a9ca87178074d12b7b81561c0` |
+| `src/features/customers/CustomerList.tsx` | `1d6050f5a4442a4265c335207a343bd9607b601c548d87ef300dd42af517d663` |
+| `src/features/customers/CustomerNotes.tsx` | `268610332aeefd3bb5c6233775ab6fdbb8b37291b906ba246255380f1448f81c` |
+| `src/features/customers/CustomerProfile.tsx` | `ed89e3ae006b1025cdcc20656a32bc3e2eeb6aeeb679625e356c94c5efad2d26` |
+| `src/features/customers/CustomerTags.tsx` | `11a5f11b91c5fd0790375becb05b3d4ca6b7acbc50e4ffd2ccda043fc2d2a54f` |
+| `src/shared/phone.ts` | `6a7e3254d246fe3b7b3e5cde8d0b93ba27210ad3809f58429b1d1c547a59985c` |
+| `src/shared/styles/atendly-customers.css` | `422ff4b1e810ddb55cc98f1da5c810c96d514e90db6865447648fd967512b0af` |
+| `tests/goal015-customers.test.tsx` | `3530e0583740c806e0e3f12cc08c570d53b5f6510f39eef655948d92133e5c0e` |
+| `tests/goal015-shell-invariant.test.tsx` | `7e9e1c032de3496030658f11fa64f6d32455a0084d3931baf611961dbfc8b1e6` |
+| `tests/goal062-availability-phone.test.tsx` | `063c8367f53499e7ae46b63c98303715d80792a32c3784d29dfeef5e9756fd09` |
+| `tests/goal075-customer-list.test.tsx` | `1114ccb6626b2f83a3204ed2753a4daedb33eeeb93e7f4ce81f1f0a136b7e5e2` |
+| `tests/goal075-customer-profile.test.tsx` | `f88938a5bccace9b9a4114d1e17a5606adf7d1949c8ce64196af28417fbffe86` |
+| `tests/goal084-phone-display.test.tsx` | `2a1aaad285cd5b134f953beac59dace5d2e63ba847359655ee6b5c21dac2136a` |
+| `tests/goal094-clientes.test.tsx` | `08cae00e3ca216ab5637ccc6a91972aba4abbbf1b6c0ee11ae2f7b79635d160a` |
+
+### Ambiente
+
+PostgreSQL 18 descartável, só local, na porta 55494 (usuário `pgtest`, autenticação `trust`), com o banco `atendly_bff_test` para `validate:integration` e os bancos `vis094_sched`, `vis094_ai` e `vis094_bff` para o BFF descartável do `visual:compare`. Esse BFF sobe os três serviços (Scheduling, IA e BFF) com tokens sintéticos, o BFF em `http://localhost:3002`, e o `visual:compare` roda com `VISUAL_BFF_ORIGIN=http://localhost:3001`. Nada disso é do repositório.
+
+### Execuções
+
+| Passo | Resultado |
+| --- | --- |
+| `visual:compare` (doze alvos) | exit 0; números na tabela abaixo. |
+| `validate:core` | exit 0. `test:frontend`: 141 arquivos e 1582 testes passaram. `test:gate`: 233/233. |
+| `validate:ui` (configuração padrão) | exit 0. 169 `passed`, 21 `skipped`, `retries: 0`. |
+| `validate:integration` | exit 0, 36/36 passos, contra `127.0.0.1:55494/atendly_bff_test` (`BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55494/atendly_bff_test`). Gate autenticado: 255 `passed`, `retries: 0`. Não foi pulado. |
+| `tsc --noEmit` e `eslint src tests --max-warnings=0` em `apps/frontend` | exit 0, sem erro e sem aviso. |
+| `tests/goal094-clientes.test.tsx` | 18/18. |
+
+O gate autenticado teve **0 retentativas** e o `validate:ui` teve **0 retentativas**.
+
+### Execução descartada
+
+Uma primeira tentativa de `visual:compare`, `validate:core`, `validate:ui` e `validate:integration` desta rodada foi lançada por duas sequências ao mesmo tempo, que gravaram nos mesmos logs; nessa tentativa o `visual:compare` deu `locator.click: Timeout 8000ms exceeded` no CL6 e no CL7 e números diferentes no CL4 e no CL5; a causa não foi isolada, e a concorrência entre as duas sequências é a explicação provável. Foi **descartada por inteiro**: nenhum número dela está neste documento. As quatro execuções foram refeitas em uma sequência só, com a árvore conferida, e são as da tabela acima. Nenhuma configuração foi editada para contornar.
+
+### `visual:compare`
+
+Rodado da raiz com `npm run visual:compare -- --target CL1,CL4,CL5,CL6,CL7,Servicos:S1,Servicos:S4,M1,N1,A1,A5,H3`, contra o BFF descartável, com a conta `visual-prototipo-v2@example.invalid`. Porcentagem de diferença em mobile / tablet em retrato / tablet em paisagem / desktop. "Início" é a baseline `c809444`; "fim" é a árvore final.
+
+| Alvo | Início | Fim |
+| --- | --- | --- |
+| CL1 | 10,9 / 5,0 / 3,4 / 2,7 | 8,8 / 3,6 / 3,0 / 2,7 |
+| CL4 | 5,8 / 2,6 / 6,4 / 5,0 | 6,2 / 2,7 / 6,6 / 4,1 |
+| CL5 | 10,0 / 4,5 / 6,0 / 5,3 | 10,0 / 4,5 / 6,0 / 5,3 |
+| CL6 | 8,3 / 3,5 / 5,8 / 5,2 | 7,1 / 2,9 / 5,1 / 4,3 |
+| CL7 | 14,4 / 8,5 / 9,6 / 8,4 | 8,0 / 3,3 / 6,0 / 5,2 |
+| S1 | 8,8 / 5,3 / 3,9 / 2,9 | igual |
+| S4 | 9,7 / 8,7 / 14,2 / 8,7 | igual |
+| M1 | 7,6 / 3,1 / 5,9 / 5,1 | igual |
+| N1 | 8,2 / 3,8 / 5,9 / 5,1 | igual |
+| A1 | 10,4 / 4,8 / 5,4 / 4,3 | igual |
+| A5 | 7,8 / 3,2 / 7,7 / 6,1 | igual |
+| H3 | 8,1 / 4,1 / 3,7 / 3,0 | igual |
+
+**Melhorou:** CL1 em mobile, retrato e paisagem; CL4 em desktop; CL6 nos quatro devices; CL7 nos quatro devices. **Piorou, e fica declarado:** CL4 em mobile, retrato e paisagem (0,4, 0,1 e 0,2 ponto), com causa **não isolada por medida**. **Igual:** CL1 em desktop e CL5 nos quatro devices. Nenhum outro alvo mudou de número. Os "iguais" de S1 a H3 são os da execução anterior e foram medidos de novo nesta rodada (as mesmas porcentagens).
+
+**`side-by-side.png` lidos no fim, por quadro:**
+
+- **CL1, CL4 e CL5.** Os números acima são os medidos; os `side-by-side.png` desses três quadros **não foram descritos** nesta unidade e a causa do que sobra não foi isolada. Pelas decisões de D-112, a lista não mostra "Agenda por ele" (a resposta da lista não traz o responsável) e o CL4 não vincula o responsável na criação (contrato).
+- **CL6.** Com o `targets.json` corrigido, a captura é da aba Atendimentos de Ana Paula nos quatro devices (lidas as de paisagem e desktop; em mobile e retrato, a leitura é da rodada anterior e o CSS não mudou). A conta de teste não tem concluídos nem rodapé de valor: aparecem "Próximo" com uma linha e "Anteriores" com "Nenhum atendimento anterior.". A data é "dd/mm", o traço tem a cor do serviço e o status é texto. "Corte feminino" aparece sublinhado: é o hover residual do clique que abre a aba (`.customer-appt:hover .customer-appt-name`, divergência 10 de D-112), e em repouso nenhum texto é sublinhado. A linha concluída (que a conta não tem) só é provada pelo jsdom: `is-past`, sem `is-active` e sem ponto de status.
+- **CL7.** Aba Notas de Ana Paula nos quatro devices (lida a de desktop): "Nenhuma observação registrada." e "Nenhuma tag cadastrada." onde o quadro tem texto e tags; a barra "Salvar" é fixa no rodapé da janela, como no quadro. A caixa de autorização, a explicação fixa da nota e "IA pode usar"/"só você" na tag só são provadas pelo jsdom, porque a conta não tem nota nem tag.
+
+### Controles negativos
+
+Rodados sobre a árvore final com `npx vitest run tests/goal094-clientes.test.tsx`, por um script que aplica cada defeito por substituição de texto, roda a suíte e restaura os bytes no mesmo passo. O `sha256` antes e depois foi **IGUAL** nos cinco, e é o da tabela "Árvore avaliada".
+
+1. **Soma o preço previsto quando `finalValue` é nulo** (prova 3). `CustomerAgenda.tsx`: `if (item.finalValue === null) withoutValue += 1;` trocado por `if (item.finalValue === null) { withoutValue += 1; recorded += item.totalPrice ?? 0; }`. `Tests  1 failed | 17 passed (18)`: `expected 'Valor registrado: R$ 2101 atendimento…' to contain 'Valor registrado: R$ 90'`.
+2. **A nota nasce marcada** (prova 4). `CustomerNotes.tsx`: `authorized={note.aiAuthorized}` trocado por `authorized={true}`. `Tests  2 failed | 16 passed (18)`, com `expect(element).not.toBeChecked()`.
+3. **O pedido de criação leva o telefone mascarado** (prova 2). `CustomerForm.tsx`: `const phone = phoneInputDigits(phoneInput);` trocado por `const phone = phoneInput;`. `Tests  1 failed | 17 passed (18)`: `expected "vi.fn()" to be called with arguments: [ '11991234567' ]`.
+4. **Uma segunda chamada de `useShellConfig` no perfil** (prova 5). `CustomerProfile.tsx`: a chamada completa (`active: "clientes"`, `loading: !customer && !error`, `module: "directory"`, `pushed: true`, `title: "Detalhes do cliente"`) duplicada. `Tests  2 failed | 16 passed (18)`: `/clientes/detalhes: expected 2 to be 1`.
+5. **A linha concluída volta a ser `is-active`** (prova 3). `CustomerAgenda.tsx`: `const active = !completed && isActiveAppointmentStatus(appointment.status);` trocado por `const active = isActiveAppointmentStatus(appointment.status);`. `Tests  1 failed | 17 passed (18)`: `expect(element).toHaveClass("is-past")`.
+
+Com os arquivos restaurados, o mesmo arquivo deu `Tests  18 passed (18)`.
+
+### Vermelho contra a baseline
+
+Os nove arquivos de produção (`apps/frontend/src/features/customers/` com sete arquivos, `shared/phone.ts` e `shared/styles/atendly-customers.css`) trocados pelos de `HEAD` (`c809444`, por `git show HEAD:<arquivo>`), com as cópias finais guardadas fora do repositório e `tests/goal094-clientes.test.tsx` mantido: `Tests  18 failed (18)`. As cópias finais foram restauradas por cópia e o `sha256` dos nove arquivos conferido igual ao da tabela "Árvore avaliada". A prova 5 reprova por esperar o CTA "Salvar cliente".
+
+### Asserções existentes mudadas (D-112)
+
+Nenhum teste removido nem pulado. `goal015-customers`, `goal015-shell-invariant`, `goal062-availability-phone`, `goal075-customer-list`, `goal075-customer-profile` e `goal084-phone-display` tiveram asserções atualizadas para o texto e a estrutura dos quadros (CTA "Salvar cliente", telefone "+55 11 99123-4567" no cabeçalho, uma só informação à direita na lista, autorização como `checkbox`); cada uma está listada em D-112.
+
+### Estado da árvore
+
+`git status --porcelain=v1 -uall` lista só os arquivos autorizados: o `targets.json`, nove arquivos de `apps/frontend/src` (`AuthorizationControl.tsx`, `CustomerAgenda.tsx`, `CustomerForm.tsx`, `CustomerList.tsx`, `CustomerNotes.tsx`, `CustomerProfile.tsx`, `CustomerTags.tsx`, `shared/phone.ts`, `atendly-customers.css`), seis testes existentes, o novo `goal094-clientes.test.tsx` e os três documentos (`DECISIONS.md`, `CURRENT_STATE.md`, este). Nenhum artefato de `e2e-results/` e nenhum resto de controle.
+
+### Não feito
+
+A conferência humana num aparelho real; o CL6 com concluídos e o rodapé de valor e o CL7 com observação e tags por captura (a conta de teste não os tem); a causa isolada da piora do CL4 e do que sobra de diferença no CL6 e no CL7; remover o sublinhado de hover da linha de atendimento (decisão do Tech Lead, divergência 10 de D-112); "Agenda por ele" na lista e o vínculo do responsável na criação (dependem de contrato). O critério de fidelidade visual do Goal **não** está provado em todos os pares quadro × device.
+
+**Nota de fechamento — review094, 2026-10-03.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima:
+
+- **Gates do IA Loop na rodada 4.** typecheck, lint, `goal094-clientes.test.tsx` **18**/**18**, `validate:core`, `test:gate`, `validate:ui` e `git diff --check` passaram. A WU-10 (`validate:integration`) ficou `SKIPPED` por falta das URLs de banco de teste.
+- **Conferência do Tech Lead na rodada 4.** Com BFF e Scheduling locais, `visual:compare -- --target CL1,CL4,CL5,CL6,CL7,Servicos:S1,Servicos:S4,M1,N1,A1,A5,H3` deu exit 0, e os 20 `side-by-side.png` de CL1 a CL7 foram lidos. Os números (mobile / retrato / paisagem / desktop) foram: CL1 **9,5 / 4,2 / 3,6 / 3,2**, CL4 **7,4 / 3,5 / 7,3 / 4,6**, CL5 **10,0 / 6,2 / 6,5 / 5,8**, CL6 **9,0 / 3,8 / 6,0 / 5,1** e CL7 **9,0 / 4,0 / 6,6 / 5,7**. Ficaram iguais aos da rodada 3 dentro de 0,2 ponto, e S1 a H3 não pioraram de forma visível. Esses números diferem dos da tabela acima, porque a conta e o ambiente das duas medidas são diferentes. O CL6 foi capturado com linhas concluídas: "✓ Concluído" aparece na cor esmaecida do quadro, e o verde rgb(31,92,57) aparece só no ponto de "Confirmado" da linha "Próximo", medido por pixel nos quatro devices. Isso responde à parte de "Não feito" sobre o CL6 com concluídos. Os `side-by-side.png` de CL1, CL4 e CL5, que a unidade do Developer não descreveu, foram lidos: só sobram divergências declaradas em D-112. O CL5 mostrou "Preferências indisponíveis" porque o AI Orchestrator não estava de pé, o que é estado de ambiente.
+- **Reexecução do Tech Lead na árvore final.** `validate:core` exit 0 (`test:frontend` **141** arquivos e **1582** testes; `test:gate` **233**/**233**). `validate:ui` exit 0 (**169** `passed`, **21** `skipped`, **0** retentativas). `validate:integration` exit 0 contra um PostgreSQL descartável, com o gate autenticado em **255** `passed` e **0** retentativas, inclusive G-4 e G-5. Essa execução cobre o critério 5. Os `sha256` de "Árvore avaliada" conferem com a árvore aceita. O vermelho e os cinco controles negativos foram conferidos por registro e `sha256`, não reexecutados.
+- **Sublinhado no hover.** Aceito como divergência 10 de D-112: o critério de QA R-08 vale para o estado em repouso.
+- **Limite conhecido: `finalValue` não vem na listagem.** A primeira tentativa do review da rodada 4 mediu no BFF descartável: com `finalValue` 90,00 e 150,00 gravados em dois concluídos, a resposta JSON da listagem veio sem o campo. `CalendarAppointment` do Scheduling não tem `finalValue`, e o schema público o preenche com `null`. Com dados reais, o CL6 mostra "valor não registrado · registrar" em todo concluído e "Valor registrado: R$ 0" no rodapé. As provas jsdom passam porque o mock traz o campo. Detalhe e decisão pendente no [review094](reviews/094-review.md) e em [GAP_ANALYSIS](GAP_ANALYSIS.md).

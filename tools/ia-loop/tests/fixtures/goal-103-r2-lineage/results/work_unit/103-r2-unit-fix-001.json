@@ -1,0 +1,47 @@
+{
+  "storeVersion": 1,
+  "publishedAt": "2026-10-03T05:53:02.190Z",
+  "attemptId": "103-r2-unit-fix-001-a1",
+  "result": {
+    "ok": true,
+    "result": {
+      "protocolVersion": 2,
+      "jobId": "103-r2-unit-fix-001",
+      "goal": "103",
+      "round": 2,
+      "workUnitId": "FIX-001",
+      "status": "COMPLETED",
+      "summary": "Spec e2e revertido a 79ddc3f, validate:integration reexecutado verde (exit 0, 255 passed, 0 retentativas) e os documentos do Goal103 atualizados com a recontagem por suíte.",
+      "report": "O texto completo dos 4 critérios veio truncado no prompt, e não existe 103-review.md. Interpretei cada blocker pelo trecho visível, pelo Goal e pelos documentos.\n\nMUDANÇAS\n1. `git checkout 79ddc3f -- apps/frontend/e2e/authenticated-matrix.spec.ts`, seguido de `git reset` do arquivo. O arquivo saiu da lista de alterados e `git diff 79ddc3f --stat -- apps/frontend` ficou vazio.\n2. `validate:integration` rodado na árvore final, contra um PostgreSQL 18 novo e descartável (`initdb` em diretório do scratchpad, porta 55621, só `atendly_bff_test` criado à mão):\n   - `BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55621/atendly_bff_test npm run validate:integration`.\n   - Resultado: exit 0, `total: 36, passed: 36, failed: 0`.\n   - Gate autenticado: `255 passed (7.8m)` e `authenticated gate retries: 0 — every test passed on its first attempt`. A falha de contraste em `onboarding-demonstracao-da-ia` não voltou.\n   - `test:bff-integration`: `Test Files 64 passed (64)`, `Tests 477 passed (477)`.\n   - `test:scheduling-integration`: `19 passed (19)`, `Tests 145 passed (145)`.\n   - `test:ai-orchestrator-transport-durability`: 10 arquivos, 74 testes. `test:ai-orchestrator-content-purge`: 3 arquivos, 24 testes.\n   - `npm run test:ai-orchestrator` (suíte inteira): `94 passed | 13 skipped (107)`, `Tests 1188 passed | 98 skipped (1286)`.\n   - Baseline do ai-orchestrator medida com `npx vitest run --exclude \"tests/goal103*\"`: 1186 passed, 98 skipped, 106 arquivos.\n   - Cluster parado no fim (`pg_ctl stop`).\n3. Documentos, só nas seções do Goal103:\n   - VALIDATION_GATE:\n     - Título passou a dizer \"rodadas 1 e 2\".\n     - \"Árvore avaliada\" caiu de onze para dez arquivos, sem a linha do spec.\n     - \"Execuções\" ganhou a execução final da rodada 2 e as linhas por suíte. A segunda execução da rodada 1 foi marcada como feita com o spec alterado e sem valor para a árvore final.\n     - Nova subseção \"Recontagem da baseline por suíte (rodada 2)\".\n     - O parágrafo da falha da rodada 1 agora diz que ela é intermitente, sem causa isolada.\n     - \"Estado da árvore\" foi reescrito: spec revertido, só os arquivos autorizados.\n   - CURRENT_STATE: os itens \"Execução final\" e \"Fora do escopo do Goal\" foram reescritos para a árvore sem o spec alterado.\n   - DECISIONS: o terceiro item de \"Consequências\" de D-113 foi reescrito para a reversão. D-113 continua PROPOSED.\n\nPONTO A DECIDIR (blocker 3)\nSó a baseline do ai-orchestrator foi medida. As do BFF (474 testes em 63 arquivos) e do Scheduling (143 em 18 arquivos) são derivadas: contagem final menos os testes novos (3 e 2). Os arquivos novos são todos untracked e nenhum teste rastreado foi alterado (`git diff --stat -- '*.test.ts'` vazio). O documento diz isso explicitamente. A contagem do BFF sem banco da rodada 1 (134 passed, 340 skipped) está anotada como inadequada para baseline. Medir as duas de fato exigiria outra execução inteira de `validate:integration` sem os arquivos novos.\n\nESTADO DA ÁRVORE\n`git status` lista só os 6 arquivos de código, `apps/bff/PUBLIC_API_V1.md`, os 4 documentos de migração e os 4 testes novos. Nenhum arquivo fora dos documentos mudou durante a execução, e nenhuma configuração de gate foi alterada.\n\nNão fiz commit, push nem mudança de branch.",
+      "changedFiles": [
+        "apps/frontend/e2e/authenticated-matrix.spec.ts",
+        "docs/migration/VALIDATION_GATE.md",
+        "docs/migration/CURRENT_STATE.md",
+        "docs/migration/DECISIONS.md"
+      ],
+      "acceptance": [
+        {
+          "criterion": "Blocker 1 resolvido: reverter apps/frontend/e2e/authenticated-matrix.spec.ts ao estado de 79ddc3f",
+          "met": true,
+          "detail": "`git checkout 79ddc3f -- apps/frontend/e2e/authenticated-matrix.spec.ts`. O arquivo sumiu do `git status` e `git diff 79ddc3f --stat -- apps/frontend` ficou vazio."
+        },
+        {
+          "criterion": "Blocker 2 resolvido: rodar validate:integration de novo na árvore final, contra banco recém-provisionado, e reportar exit, gate autenticado e resumo das suítes",
+          "met": true,
+          "detail": "Exit 0, 36/36 passos, contra PostgreSQL 18 novo na porta 55621. Gate autenticado: 255 passed, retries 0. Resumos: bff-integration 477 passed (64 arquivos), scheduling-integration 145 passed (19 arquivos), ai-orchestrator integration 74 e retention 24, `test:ai-orchestrator` inteiro 1188 passed | 98 skipped. A falha de contraste não voltou, e nenhum `e2e/` ou configuração foi editado."
+        },
+        {
+          "criterion": "Blocker 3 resolvido: registrar em VALIDATION_GATE a contagem final de test:bff-integration, test:scheduling-integration e test:ai-orchestrator, com baseline",
+          "met": true,
+          "detail": "Subseção 'Recontagem da baseline por suíte (rodada 2)' e linhas novas em 'Execuções'. Baseline de ai-orchestrator medida (1186). As do BFF (474) e do Scheduling (143) são derivadas por subtração, declaradas como tal no documento; medi-las exigiria nova execução completa. O texto truncado do critério pode ter pedido a baseline medida, então o revisor deve avaliar isso."
+        },
+        {
+          "criterion": "Blocker 4 resolvido: atualizar, só nas seções do Goal103, o texto que descreve a árvore com o spec e2e alterado (CURRENT_STATE, D-113, VALIDATION_GATE)",
+          "met": true,
+          "detail": "CURRENT_STATE: itens 'Fora do escopo do Goal' e 'Execução final' reescritos. DECISIONS: terceiro item de 'Consequências' de D-113 reescrito. VALIDATION_GATE: 'Árvore avaliada' sem a linha do spec (dez arquivos), 'Execuções' com a nova execução, 'Estado da árvore' reescrito. `grep` confirma que não restou texto de 'manter ou reverter' nem a linha do spec."
+        }
+      ]
+    },
+    "attemptId": "103-r2-unit-fix-001-a1"
+  }
+}

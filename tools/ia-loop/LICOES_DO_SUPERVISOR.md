@@ -63,6 +63,10 @@ sem o daemon, e o daemon é a implementação delas: mudar uma regra é mudar o 
    no meio de um job.
 9. **Ler o resultado do job antes de atribuir a causa.** Conferir em `results/` o código e a
    hora da falha antes de dizer que um job morreu por desligamento, reinício ou falta de memória.
+10. **Corrigir o harness fora do checkout principal.** Mudança no harness com o loop rodando é
+   feita numa worktree fora do repositório (por exemplo `E:/Projetos/ia-loop-NNN`, branch
+   `harness/...`, `node_modules` por junction), com a suíte verde e revisão independente. Ela
+   chega ao main só por fast-forward, dentro de uma pausa confirmada por `pause --wait`.
 
 ## Erros cometidos
 

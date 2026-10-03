@@ -15,7 +15,10 @@ import { createResourceRegistry, RESOURCE_STATUS } from '../lib/resource-registr
 import { LIVENESS } from '../lib/process-inspector.mjs';
 import { startTemporaryPostgres, stopTemporaryPostgres, TEMP_POSTGRES_CONFIG } from '../lib/temporary-postgres.mjs';
 import { buildResourceReport, renderResourceReport } from '../run-resources.mjs';
-import { planCleanup, renderPlan } from '../run-resources-cleanup.mjs';
+import {
+  keepSetFromRuntime, planCleanup, renderPlan, renderProcessPlan, renderWorktreePlan,
+} from '../run-resources-cleanup.mjs';
+import { CLEANUP_VERDICTS } from '../lib/worktree-cleanup.mjs';
 
 async function withDir(run) {
   const dir = await mkdtemp(join(tmpdir(), 'ia-loop-resources-cli-'));
@@ -156,3 +159,42 @@ test('45/46. --apply cleans the CONFIRMED resource and leaves the UNKNOWN one un
   assert.equal(unknownAfter.status, RESOURCE_STATUS.ACTIVE); // untouched
   assert.equal(driver.running.size, 1); // only the unknown one still runs
 }));
+
+// --worktrees / --processes (M-08, M-09)
+
+test('the running Goal and the planning worktrees in use are never offered for removal', () => {
+  assert.equal(keepSetFromRuntime(null), null, 'unreadable runtime: the caller must refuse --apply');
+  assert.deepEqual(keepSetFromRuntime({ goal: '106', closure: { goal: '105' } }).sort(),
+    ['goal-106', 'plan-after-goal-105', 'plan-after-goal-106']);
+  // Once closed, the Goal's own worktree is fair game; its planning worktree is the live one.
+  assert.deepEqual(keepSetFromRuntime({ goal: '106', goalClosed: true, closure: { goal: '106' } }), ['plan-after-goal-106']);
+  assert.deepEqual(keepSetFromRuntime({}), []);
+});
+
+test('the worktree plan says what would go and why every other directory stays', () => {
+  const items = [
+    { name: 'goal-001', branch: 'ai-loop/goal-001', head: 'aaaaaaaaaaaa', closureCommit: 'bbbbbbbbbbbb',
+      verdict: CLEANUP_VERDICTS.ELIGIBLE, eligible: true },
+    { name: 'goal-002', verdict: CLEANUP_VERDICTS.UNCOMMITTED_CHANGES, eligible: false,
+      dirtyFiles: [' M tools/ia-loop/a.mjs', '?? notes.txt'] },
+    { name: 'goal-106', verdict: CLEANUP_VERDICTS.CURRENT_GOAL, eligible: false },
+  ];
+  const dry = renderWorktreePlan(items, { apply: false });
+  assert.match(dry, /Would remove \(1\):\n {2}goal-001 {2}branch ai-loop\/goal-001/);
+  assert.match(dry, /goal-002: UNCOMMITTED_CHANGES — 2 file\(s\)/);
+  assert.match(dry, /goal-106: CURRENT_GOAL/);
+  assert.match(dry, /ELIGIBLE: 1/);
+  assert.match(renderWorktreePlan(items, { apply: true }), /Removing \(1\):/);
+});
+
+test('the process plan separates what is killed from what is only reported', () => {
+  const text = renderProcessPlan({
+    kill: [{ pid: 10, name: 'bash.exe', treeSize: 6, treeMb: 900, reason: 'ORPHAN_TREE_CITES_WORKTREE',
+      cmd: 'bash -c npm run dev', evidence: { pid: 12, cmd: 'node E:/r/.ai-worktrees/goal-095/apps/bff/src/server.ts' } }],
+    report: [{ pid: 20, name: 'node.exe', mb: 300, reason: 'MAIN_CHECKOUT_PROCESS_UNPROVEN',
+      cmd: 'node E:/r/apps/bff/src/server.ts' }],
+  }, { apply: false });
+  assert.match(text, /Would kill \(1 tree\(s\)\):\n {2}pid 10 bash\.exe \(6 proc, 900 MB\) ORPHAN_TREE_CITES_WORKTREE/);
+  assert.match(text, /evidence: pid 12 /);
+  assert.match(text, /Reported only, never killed \(1\):\n {2}pid 20 node\.exe \(1 proc, 300 MB\) MAIN_CHECKOUT_PROCESS_UNPROVEN/);
+});

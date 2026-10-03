@@ -123,6 +123,8 @@ corrigidas. Elas não são erro do supervisor, mas a regra de contorno vale até
   2026-10-03 uma pausa pedida durante a R1 do Goal 106 atravessou a revisão R1, a correção R2, a
   revisão R2 e a correção R3. Corrigir: consultar a pausa também entre a decisão de uma rodada e o
   despacho da correção seguinte. Até lá, contar com a pausa só no fim do Goal.
+  **Corrigido** em `harness/fix-a`: fronteira `BEFORE_CORRECTION` (ver o item M-11 da seção V36
+  do `README.md`). O texto acima é o registro original da falha.
 
 ## Falhas do harness corrigidas na V36
 

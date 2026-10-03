@@ -30,6 +30,24 @@ export const RUN_STATUS = Object.freeze({
   COMPLETED: 'COMPLETED',
 });
 
+/**
+ * The safe boundaries a requested pause may stop at, in the order a Goal
+ * reaches them. Named once, here, so the process that detects a pause and the
+ * one that records it can never disagree about what a boundary is called.
+ *
+ *   BEFORE_CORRECTION  a review asked for changes, the decision and everything
+ *                      it carries (blockers, profile escalation, correction
+ *                      scope) is on disk, and no correction job exists yet.
+ *                      Detected inside run-goal, recorded by run-auto.
+ *   AFTER_DECISION     a Goal was ACCEPTED, before closure.
+ *   GOAL_BOUNDARY      the Goal is closed and the next one is READY.
+ */
+export const PAUSE_BOUNDARIES = Object.freeze({
+  BEFORE_CORRECTION: 'BEFORE_CORRECTION',
+  AFTER_DECISION: 'AFTER_DECISION',
+  GOAL_BOUNDARY: 'GOAL_BOUNDARY',
+});
+
 /** The orchestrator lease is a single, well-known key. */
 export const LOOP_LEASE_KEY = 'migration-loop';
 
@@ -342,11 +360,69 @@ export function shouldPauseAt(run, { boundary }) {
   if (run.pauseAfterGoal) {
     // Wait for the whole Goal to finish, which is what makes the tree
     // inspectable when the loop stops.
-    if (boundary === 'GOAL_BOUNDARY') {
+    if (boundary === PAUSE_BOUNDARIES.GOAL_BOUNDARY) {
       return { pause: true, reason: 'PAUSE_REQUESTED_AFTER_GOAL' };
     }
     return { pause: false };
   }
 
   return { pause: true, reason: 'PAUSE_REQUESTED' };
+}
+
+/**
+ * The BEFORE_CORRECTION boundary, judged from inside run-goal.
+ *
+ * Correction rounds run inside run-goal, a child process run-auto only hears
+ * from when the whole Goal is over. Consulting the pause in run-auto alone is
+ * why a pause requested during R1 of Goal 106 crossed review R1, correction R2,
+ * review R2 and correction R3 without stopping. The check has to happen where
+ * the rounds are, and it happens before a correction job exists, so nothing is
+ * in flight and nothing is published twice on resume.
+ *
+ * Only an autonomous run is consulted: a supervised `ia-loop:goal` has no run
+ * to pause, and a leftover request from one must not stop it.
+ *
+ * Detecting is not recording. This writes a marker into the Goal's runtime and
+ * lets run-goal exit cleanly; run-auto marks the run PAUSED, through the same
+ * `markPaused` and AUTONOMOUS_RUN_PAUSED as the other boundaries.
+ */
+export async function pauseBeforeCorrection({ auto, store, goal, round, state, autonomous }) {
+  if (!autonomous) return { pause: false };
+  const verdict = shouldPauseAt(await auto.read(), { boundary: PAUSE_BOUNDARIES.BEFORE_CORRECTION });
+  if (!verdict.pause) return verdict;
+
+  const marker = {
+    boundary: PAUSE_BOUNDARIES.BEFORE_CORRECTION,
+    reason: verdict.reason,
+    goal,
+    // The correction round that will start on resume.
+    round,
+    at: new Date().toISOString(),
+  };
+  await store.writeRuntime({
+    ...(await store.readRuntime()),
+    ...(state ? { state } : {}),
+    pausedAtBoundary: marker,
+  });
+  return { pause: true, ...marker };
+}
+
+/**
+ * The run-auto half: a Goal phase that stopped at a pause boundary is recorded
+ * as a pause, never read as a Goal that failed to reach ACCEPTED.
+ *
+ * Only a marker written for THIS Goal counts — the same rule run-auto applies
+ * to a decision. run-goal clears the marker every time it starts, so one left
+ * by an earlier phase cannot pause a later one.
+ */
+export async function recordGoalPhasePause({ auto, store, runtime, goalId, autonomousRunId }) {
+  const marker = runtime?.goal === goalId ? (runtime.pausedAtBoundary ?? null) : null;
+  if (!marker || marker.goal !== goalId) return { paused: false };
+
+  await auto.markPaused(marker.reason);
+  await store.appendEvent({
+    type: 'AUTONOMOUS_RUN_PAUSED', autonomousRunId,
+    boundary: marker.boundary, goal: goalId, round: marker.round ?? null,
+  });
+  return { paused: true, ...marker };
 }

@@ -293,6 +293,9 @@ export const PER_GOAL_RUNTIME_FIELDS = Object.freeze([
   // asked the NEXT correction round to run on. Both belong to one Goal: a
   // promotion decided for Goal 006 must never be inherited by Goal 007.
   'developerProfile', 'nextDeveloperProfile',
+  // Where this Goal's phase stopped for a requested pause. A marker carried
+  // into the next Goal would read as that Goal pausing before it started.
+  'pausedAtBoundary',
 ]);
 
 /** Returns the runtime with every per-Goal field dropped. */

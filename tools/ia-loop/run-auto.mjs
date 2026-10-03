@@ -29,9 +29,11 @@ import { evaluateGoalBoundary } from './lib/goal-boundary.mjs';
 import { createGitProbe } from './lib/git-ops.mjs';
 import { readWorkerHealth, WORKER_HEALTH } from './lib/worker-registry.mjs';
 import {
+  PAUSE_BOUNDARIES,
   RUN_STATUS,
   createAutonomousStore,
   isCapacityWait,
+  recordGoalPhasePause,
   requiresHuman,
   shouldPauseAt,
 } from './lib/autonomous-state.mjs';
@@ -455,6 +457,23 @@ async function main() {
       // it did not do.
       const decision = runtimeAfterGoal?.goal === goalId ? (runtimeAfterGoal.decision ?? null) : null;
 
+      // Safe boundary inside the Goal: run-goal stopped before dispatching a
+      // correction round because a pause was requested. Its decision reads
+      // CHANGES_REQUIRED, which is the truth about the review and must not be
+      // read as the Goal failing. On resume this same Goal runs again and
+      // run-goal reconciles straight into the queued correction round.
+      if (goalPhase.code === 0) {
+        const phasePause = await recordGoalPhasePause({
+          auto, store, runtime: runtimeAfterGoal, goalId, autonomousRunId: run.autonomousRunId,
+        });
+        if (phasePause.paused) {
+          emit('');
+          emit(`Paused at a safe boundary in Goal ${goalId}, before correction round ${phasePause.round}.`);
+          emit('Resume with npm run ia-loop:auto; the round starts from the persisted review decision.');
+          return 0;
+        }
+      }
+
       if (goalPhase.code !== 0 || decision !== 'ACCEPTED') {
         const reason = runtimeAfterGoal?.escalationReason ?? decision ?? 'UNKNOWN_FATAL';
 
@@ -481,10 +500,10 @@ async function main() {
       emit(`Goal ${goalId}: ACCEPTED`);
 
       // Safe boundary: after a decision, before any further inference.
-      const pauseAfterDecision = shouldPauseAt(await auto.read(), { boundary: 'AFTER_DECISION' });
+      const pauseAfterDecision = shouldPauseAt(await auto.read(), { boundary: PAUSE_BOUNDARIES.AFTER_DECISION });
       if (pauseAfterDecision.pause) {
         await auto.markPaused(pauseAfterDecision.reason);
-        await store.appendEvent({ type: 'AUTONOMOUS_RUN_PAUSED', autonomousRunId: run.autonomousRunId, boundary: 'AFTER_DECISION' });
+        await store.appendEvent({ type: 'AUTONOMOUS_RUN_PAUSED', autonomousRunId: run.autonomousRunId, boundary: PAUSE_BOUNDARIES.AFTER_DECISION });
         emit('Paused at a safe boundary, after the review decision.');
         return 0;
       }
@@ -538,11 +557,11 @@ async function main() {
       }
 
       // Safe boundary: the whole Goal is finished and the tree is inspectable.
-      const pauseAfterGoal = shouldPauseAt(await auto.read(), { boundary: 'GOAL_BOUNDARY' });
+      const pauseAfterGoal = shouldPauseAt(await auto.read(), { boundary: PAUSE_BOUNDARIES.GOAL_BOUNDARY });
       if (pauseAfterGoal.pause) {
         run = await auto.setCurrentGoal(nextGoalId);
         await auto.markPaused(pauseAfterGoal.reason);
-        await store.appendEvent({ type: 'AUTONOMOUS_RUN_PAUSED', autonomousRunId: run.autonomousRunId, boundary: 'GOAL_BOUNDARY' });
+        await store.appendEvent({ type: 'AUTONOMOUS_RUN_PAUSED', autonomousRunId: run.autonomousRunId, boundary: PAUSE_BOUNDARIES.GOAL_BOUNDARY });
         emit(`Paused after Goal ${goalId}. The next Goal (${nextGoalId}) is READY and will start on resume.`);
         return 0;
       }

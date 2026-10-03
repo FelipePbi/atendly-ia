@@ -65,6 +65,7 @@ import { waitForResult } from './lib/result-waiter.mjs';
 import { assertGoalEligibleForClosure } from './lib/closure-eligibility.mjs';
 import { recordOrchestratorFault } from './lib/orchestrator-fault.mjs';
 import { createPaint, createRelayLogger } from './lib/relay-logger.mjs';
+import { createAutonomousStore, pauseBeforeCorrection } from './lib/autonomous-state.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..');
@@ -331,6 +332,9 @@ async function main() {
     migrationAcceptedBaseline: goal.migrationAcceptedBaseline, executionBase,
     worktreePath: worktree.path, worktreeInitialHead: worktree.worktreeInitialHead,
     reviewLevel: REVIEW_LEVEL, goalExecuted: false,
+    // A pause marker describes the phase that stopped, and this phase is a new
+    // one: left in place, run-auto would read it as this phase pausing too.
+    pausedAtBoundary: null,
   };
   // Continuing THIS Goal keeps its own execution state; starting a Goal builds
   // a new one explicitly. The difference matters more than it looks: a spread
@@ -531,6 +535,33 @@ async function main() {
     const isCorrection = startAsCorrection || round > 1;
     const phaseQueued = isCorrection ? LOOP_STATES.CORRECTION_QUEUED : LOOP_STATES.DEVELOPER_QUEUED;
     const phaseRunning = isCorrection ? LOOP_STATES.CORRECTION_RUNNING : LOOP_STATES.DEVELOPER_RUNNING;
+
+    // --- Safe boundary: before a correction round is dispatched -------------
+    //
+    // Reached both by the in-process continuation after CHANGES_REQUIRED and
+    // by a cold start into a queued correction round. Either way the review's
+    // decision, blockers, profile escalation and correction scope are already
+    // on disk, and the ledger says no attempt of this correction exists — so
+    // nothing is in flight, and a resume picks this exact round up again
+    // through reconciliation, without re-running the review or re-publishing
+    // anything. A correction already dispatched is never paused here: its
+    // attempt would keep running without anyone watching it.
+    if (isCorrection && !resolveStageJobId({
+      ledger: reconciled.ledger, goal: goal.goalId, round, stage: STAGES.CORRECTION,
+    }).jobId) {
+      const pause = await pauseBeforeCorrection({
+        auto: createAutonomousStore(STATE_DIR), store, goal: goal.goalId, round,
+        state: phaseQueued, autonomous: process.env.IA_LOOP_AUTONOMOUS === '1',
+      });
+      if (pause.pause) {
+        if (machine.state !== phaseQueued) machine.transitionTo(phaseQueued);
+        logger.blank();
+        logger.warning(`Pause requested: stopping before correction round ${round} of Goal ${goal.goalId}.`);
+        logger.info('No correction job was published. The review decision, blockers and profile are on disk.');
+        logger.info('Resume with:  npm run ia-loop:auto');
+        return 0;
+      }
+    }
 
     logger.workunit({ round, phase: isCorrection ? 'correction' : 'implementation' });
 

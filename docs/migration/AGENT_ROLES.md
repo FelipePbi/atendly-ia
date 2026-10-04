@@ -13,7 +13,7 @@ Vigência: a partir do **Goal003**. Ver [D-018](DECISIONS.md).
 (`claude-opus-5`); `HIGH`/`CRITICAL` → Claude Fable 5.1 (`claude-fable-5-1`),
 com fallback para Opus quando a cota do especialista fecha. A classificação é
 determinística e não custa inferência. Tabela canônica em
-`tools/ia-loop/lib/model-routing.mjs`.
+`lib/model-routing.mjs` do harness (repositório `relay-loop-ia`).
 
 Responsabilidades:
 
@@ -43,8 +43,8 @@ por Goal.
   (`claude-sonnet-5`) como padrão, Claude Opus 5 (`claude-opus-5`) por escalada
   com evidência.
 
-Tabela canônica em `tools/ia-loop/lib/model-routing.mjs`; a arquitetura está em
-[tools/ia-loop/README.md](../../tools/ia-loop/README.md), seção V18.
+Tabela canônica em `lib/model-routing.mjs` do harness (repositório `relay-loop-ia`); a
+arquitetura está em `docs/ENGINEERING_LOG.md` do mesmo repositório, seção V18.
 
 Responsabilidades:
 
@@ -55,11 +55,13 @@ Responsabilidades:
 
 **Sessão:** stateless por inferência. Cada tarefa usa uma sessão nova e recebe o
 contexto reinjetado explicitamente pelo IA Loop. Isso é deliberado, não
-limitação a contornar — ver [tools/ia-loop/README.md](../../tools/ia-loop/README.md).
+limitação a contornar — ver o `README.md` do repositório `relay-loop-ia`.
 
 ## Orchestrator
 
-**IA Loop** (`tools/ia-loop/`)
+**IA Loop**, harness externo no repositório `relay-loop-ia` (`E:/Projetos/relay-loop-ia`), apontado para
+este repositório pelo `relay.config.json` dele. Até 2026-10-03 vivia em `tools/ia-loop/`;
+os comandos `npm run ia-loop:*` rodam na pasta do relay, não aqui.
 
 Responsabilidades:
 

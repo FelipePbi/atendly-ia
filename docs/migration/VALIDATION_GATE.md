@@ -364,11 +364,12 @@ pode ter ficado para trás sem que ninguém tenha rodado o descarte acima.
 Confira com:
 
 ```bash
+cd E:/Projetos/relay-loop-ia                    # o harness vive fora deste repositório
 npm run ia-loop:resources                      # lista o que ainda está vivo
 npm run ia-loop:resources:cleanup -- --dry-run  # plano de limpeza, sem mutação
 ```
 
-Ver `tools/ia-loop/README.md` (seção "Temporary Resource Lifecycle") para o
+Ver `docs/ENGINEERING_LOG.md` do `relay-loop-ia` (seção "V15 — Temporary Resource Lifecycle") para o
 porquê disso existir — um cluster efêmero criado por esta receita antes
 daquela etapa não tem registro e não aparece nesses comandos; um criado
 depois, sim.

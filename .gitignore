@@ -69,5 +69,5 @@ docs/product-vault/.obsidian/plugins/
 docs/product-vault/.obsidian/themes/
 docs/product-vault/.trash/
 
-# IA Loop worktrees (criadas por tools/ia-loop; nunca versionadas)
+# IA Loop worktrees (criadas pelo harness relay-loop-ia; nunca versionadas)
 .ai-worktrees/

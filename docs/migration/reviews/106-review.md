@@ -9,7 +9,7 @@
 - Baseline aceita vigente: `b31575aec9ffb4d536b8a2c6b4b015ce13eeebf4` (Goal104). Base imediata da implementação: `72b12eb8f4d0992991b7179a9d2418ba8ca6d86f`, HEAD da worktree `.ai-worktrees/goal-106`, sem commit na worktree.
 - Snapshot aceito, calculado pelo IA Loop: **19 arquivos**, hash do diff `fcccf1feb53b3b8e36e330b46760a02d075f4ff541a14802f67e155653b09850`. Mudança posterior nesses arquivos exige avaliar o novo diff.
 - Arquivos, por `git status --porcelain=v1 -uall` no snapshot aceito:
-  - Produção, em `apps/frontend/src/`: `features/settings/WhatsAppSettings.tsx` (`sha256` `153fe61c…`), `ProductSettingsScreen.tsx` (`0bc27785…`, só passar `settings`), `features/whatsapp/WhatsAppConnectionPanel.tsx` (`3a9a6294…`, só o ponto de extensão), `features/onboarding/blocks/whatsapp.tsx` (`92ac497a…`, só tirar o componente movido e importá-lo) e `shared/styles/atendly-settings.css` (`0edc3439…`); os novos `features/settings/WhatsAppConnectedSettings.tsx` (`abdbf513…`) e `features/whatsapp/IgnoredContactsPanel.tsx` (`e6cc793a…`).
+  - Produção, em `apps/frontend/src/`: `features/settings/WhatsAppSettings.tsx` (`sha256` `153fe61c…`), `ProductSettingsScreen.tsx` (`0bc27785…`, só passar `settings`), `features/whatsapp/WhatsAppConnectionPanel.tsx` (`3a9a6294…`, só o ponto de extensão), `features/onboarding/blocks/whatsapp.tsx` (`92ac497a…`, só tirar o componente movido e importá-lo) e `shared/styles/avenly-settings.css` (`0edc3439…`); os novos `features/settings/WhatsAppConnectedSettings.tsx` (`abdbf513…`) e `features/whatsapp/IgnoredContactsPanel.tsx` (`e6cc793a…`).
   - Instrumento: `scripts/visual-compare.mjs` (só o import e o serviço de `responses`), `apps/frontend/e2e/visual/targets.json` (`$comment` e a entrada do W1) e os novos `scripts/lib/visual-responses.mjs` (`f7fdb4fc…`) e `scripts/tests/visual-responses.test.mjs` (`a9aec83e…`, 9 testes).
   - Gate, por autorização do Tech Lead na rodada 1: `apps/frontend/e2e/authenticated-matrix.spec.ts` (`2e712734…`, só o marcador de `LOADED_STATE` de `/configuracoes/whatsapp`) e `apps/frontend/AGENTS.md` (`da13f610…`, a linha do marcador).
   - Teste novo: `apps/frontend/tests/goal106-whatsapp.test.tsx` (**30** testes, cinco provas, `sha256` `5ad6ff23…`).
@@ -47,7 +47,7 @@ Números em [VALIDATION_GATE](../VALIDATION_GATE.md) (seção do Goal106 e sua n
 
 ## Observações registradas, sem mudar a decisão
 
-1. **A evidência 10 do Goal estava errada.** A conta do gate autenticado está conectada, e o gate renderizado mede o W1 conectado, com a IA desligada. Isso expôs o alvo de toque de "Ver em IA" (60×18 px), corrigido em `atendly-settings.css`.
+1. **A evidência 10 do Goal estava errada.** A conta do gate autenticado está conectada, e o gate renderizado mede o W1 conectado, com a IA desligada. Isso expôs o alvo de toque de "Ver em IA" (60×18 px), corrigido em `avenly-settings.css`.
 2. **O controle 5 do §6, como escrito, não tem efeito.** A guarda `!consentPhase` exigida por (c) faz o painel ignorar a prop no onboarding. Vale a variante, que remove `consentPhase` e passa `renderConnected`.
 3. **A frase "sem reexecução na rodada 3"** do VALIDATION_GATE descreve a execução do Developer. O IA Loop rodou a `validate:integration` na rodada 3, com o resultado acima; está registrado na nota de fechamento do VALIDATION_GATE.
 4. **O review 106 não estava em disco durante as rodadas.** Os blockers foram escritos autocontidos.

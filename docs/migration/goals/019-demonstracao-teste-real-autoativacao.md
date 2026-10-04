@@ -38,7 +38,7 @@ Baseline arquitetural: [TARGET_ARCHITECTURE](../TARGET_ARCHITECTURE.md) (o BFF �
 
 ### Fatos já confirmados na baseline, sem precisar redescobrir
 
-- **O número da plataforma não existe em camada nenhuma, e não pode virar mais uma linha de tenant.** `ChannelConnection` é `@@unique([tenantId, provider])` e `@@unique([provider, externalInstanceId])`; `WhatsAppInstance` no BFF é única por `userId` e por `tenantId`. Nenhum `.env.example` declara número, instância ou token de plataforma. A instância da Atendly é **configuração do serviço**, não vínculo de negócio.
+- **O número da plataforma não existe em camada nenhuma, e não pode virar mais uma linha de tenant.** `ChannelConnection` é `@@unique([tenantId, provider])` e `@@unique([provider, externalInstanceId])`; `WhatsAppInstance` no BFF é única por `userId` e por `tenantId`. Nenhum `.env.example` declara número, instância ou token de plataforma. A instância da Avenly é **configuração do serviço**, não vínculo de negócio.
 - **O envio já é uma porta.** `apps/ai-orchestrator/src/modules/channel/ports/WhatsAppProvider.ts` declara `sendText` e `downloadMedia`; `adapters/evolution/EvolutionProvider.ts` é o adapter vigente, e os testes já usam dublês dessa porta. O remetente da plataforma é mais um uso dessa porta, não um caminho de transporte novo.
 - **O `EvolutionClient` do BFF só sabe QR, pareamento e status** (`getQr`, `pairInstance`, `getStatus`); quem envia mensagem é a IA, com a projeção cifrada da credencial do vínculo (`ChannelConnection.credentialCipher`). Isso não muda aqui.
 - **A agenda já tem as duas operações de que o teste precisa.** `apps/ai-orchestrator/src/modules/scheduling-service/client.ts` expõe `createAppointment` e `cancelAppointment`, e as tools `create_appointment`/`cancel_appointment` já existem em `modules/tools/assistant-tools.ts`. `AppointmentSource` tem `AI`, `USER` e `INTEGRATION`.
@@ -58,7 +58,7 @@ Baseline arquitetural: [TARGET_ARCHITECTURE](../TARGET_ARCHITECTURE.md) (o BFF �
 
 ### 1. O número da plataforma é configuração e porta, nunca um tenant
 
-A instância oficial da Atendly entra como **configuração do serviço** (instância, credencial e número, em `.env.example` com valor de exemplo e sem segredo real), lida por um resolvedor próprio. Invariantes, todas com teste:
+A instância oficial da Avenly entra como **configuração do serviço** (instância, credencial e número, em `.env.example` com valor de exemplo e sem segredo real), lida por um resolvedor próprio. Invariantes, todas com teste:
 
 - a credencial da plataforma **nunca** é alcançável pelo caminho que resolve credencial de negócio, e o caminho de negócio nunca cai na credencial da plataforma quando o vínculo do tenant falta — ausência de vínculo continua sendo recusa, não fallback;
 - a instância da plataforma **não** cria linha em `ChannelConnection`, `WhatsAppInstance` ou equivalente por tenant, e não aparece em nenhuma listagem de conexões de negócio;
@@ -87,7 +87,7 @@ Etapa **opcional**, oferecida depois da conexão e antes do teste, exatamente co
 A execução do teste é **entidade persistida na IA** (`ActivationTestRun` ou nome equivalente), por tenant, com migration aditiva. Ela guarda, no mínimo: estado, instante de cada passo alcançado, IDs do que criou, motivo da falha e número de tentativas.
 
 - **Estados terminais e não terminais são distintos e explícitos.** Uma execução em andamento, uma pausada por interferência, uma que falhou e uma que teve sucesso não podem ser o mesmo valor com interpretações diferentes na tela.
-- **O caminho feliz é o do vault, na ordem do vault:** aviso separado ("Esta é uma conversa de teste da Atendly."), depois o cliente simulado pergunta preço de um serviço apto, pede o próximo horário, a IA consulta a agenda, o cliente aceita, a IA confirma, o agendamento é criado **de verdade**, o teste valida e os dados de teste são removidos.
+- **O caminho feliz é o do vault, na ordem do vault:** aviso separado ("Esta é uma conversa de teste da Avenly."), depois o cliente simulado pergunta preço de um serviço apto, pede o próximo horário, a IA consulta a agenda, o cliente aceita, a IA confirma, o agendamento é criado **de verdade**, o teste valida e os dados de teste são removidos.
 - **O serviço é escolhido pelo sistema**, preferindo um que permita agendamento normal. **Sem disponibilidade válida o teste não inicia** — recusa com código próprio e copy que manda corrigir a agenda, nunca um teste que começa para falhar depois.
 - **Progresso é derivado de fato observado** — mensagem gravada, tool call registrada, agendamento criado —, nunca de temporizador, animação ou texto fixo. Os seis marcos do vault (mensagem enviada, serviço identificado, preço informado, agenda consultada, horário selecionado, agendamento confirmado) são legíveis um a um. Marco sem fonte não é exibido como concluído. É a mesma regra que o Goal018 aplicou ao remover a tela `validacao`.
 - **A execução não depende da tela.** Fechar o navegador não cancela nem invalida a execução; reabrir mostra o estado corrente lido do servidor.

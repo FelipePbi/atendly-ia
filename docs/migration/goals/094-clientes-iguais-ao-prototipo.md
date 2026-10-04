@@ -115,10 +115,10 @@ Aplique cada controle e reverta-o no mesmo passo, com a restauração conferida 
 ## Pontos de implementação
 
 - `apps/frontend/src/features/customers/`: `CustomerList.tsx` (linha e painel da lista), `CustomerForm.tsx`, `CustomerProfile.tsx`, `CustomerSummary.tsx`, `CustomerAgenda.tsx`, `CustomerNotes.tsx`, `CustomerTags.tsx` e `AuthorizationControl.tsx`. `CustomerMemory.tsx` e `PrimaryGuardianPanel.tsx` só se o estilo exigir, sem mudar o comportamento.
-- O CSS de Clientes, onde ele está hoje (`apps/frontend/src/shared/styles/`). `atendly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
+- O CSS de Clientes, onde ele está hoje (`apps/frontend/src/shared/styles/`). `avenly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
 - `apps/frontend/src/features/agenda/occupancy.ts`: só importar `serviceColorMap` e `appointmentServiceColors`, sem mudar a função.
 - `apps/frontend/src/shared/phone.ts`: só por acréscimo, se a máscara do campo exigir uma função nova; as funções existentes não mudam.
-- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/atendly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
+- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/avenly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
 - `apps/frontend/tests/`: a prova nova e as asserções do §5.
 
 ## Fora do escopo

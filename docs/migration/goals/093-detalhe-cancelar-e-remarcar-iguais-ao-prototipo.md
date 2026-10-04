@@ -121,8 +121,8 @@ Aplique cada controle e reverta-o no mesmo passo, com a restauração conferida 
 - `apps/frontend/src/features/agenda/AppointmentDetail.tsx`, `CancelFlow.tsx`, `RescheduleFlow.tsx`, `LifecycleActions.tsx`, `AppointmentHistory.tsx` e `AppointmentFlowShell.tsx`: o corpo dos três fluxos, o menu "•••" e a composição com `ListDetail` e `PushedBar`.
 - Um componente novo da coluna da Agenda em `features/agenda/` (por exemplo, `AgendaDayColumn.tsx`). Ele reaproveita `DayView.tsx` e `occupancy.ts` sem mudar a tela de `/agenda`. Mexa em `AgendaBoard.tsx` só no que a coluna precisar exportar.
 - `apps/frontend/src/shared/layout/ListDetail.tsx`, `PushedBar.tsx` e `useWideLayout.ts`, só por acréscimo compatível. Clientes, Serviços e Configurações não podem mudar.
-- `apps/frontend/src/shared/styles/atendly-agenda.css`. `atendly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
-- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/atendly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
+- `apps/frontend/src/shared/styles/avenly-agenda.css`. `avenly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
+- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/avenly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
 - `apps/frontend/e2e/authenticated-matrix.spec.ts`, só o acréscimo de G-7.
 - `apps/frontend/tests/`: a prova nova e as asserções do §6.
 

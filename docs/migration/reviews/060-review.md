@@ -30,14 +30,14 @@ O backend estava correto e bem provado desde a rodada 1, e não mudou depois del
 
 Os quatro blockers:
 
-1. **§5, textos de erro fora do especificado** em `ConnectSourceScreen.tsx`. (a) `MINHA_AGENDA_PROFESSIONAL_NOT_FOUND` e `MINHA_AGENDA_MULTIPLE_PROFESSIONALS` tinham o mesmo texto. (b) O texto de origem indisponível não dizia que nada foi salvo. (c) O texto de falha nossa era quase igual ao genérico de IM-02 e não dizia que a falha é da Atendly.
+1. **§5, textos de erro fora do especificado** em `ConnectSourceScreen.tsx`. (a) `MINHA_AGENDA_PROFESSIONAL_NOT_FOUND` e `MINHA_AGENDA_MULTIPLE_PROFESSIONALS` tinham o mesmo texto. (b) O texto de origem indisponível não dizia que nada foi salvo. (c) O texto de falha nossa era quase igual ao genérico de IM-02 e não dizia que a falha é da Avenly.
 2. **§5, rótulo** `Senha` no lugar de `Senha do Minha Agenda`.
 3. **§7.7, termos proibidos.** O teste jsdom não verificava "endereço", "API", "HTTP" como palavra solta nem código cru (`MINHA_AGENDA_`, `INTEGRATION_CONFIGURATION_INVALID`, `UPSTREAM_ERROR`) nos 9 `upstreamCode`.
 4. **Afirmação falsa em `PUBLIC_API_V1.md`.** O documento dizia que um novo `connect` depois da conclusão é recusado pelo direito já consumido. A rota de `connect` não consulta esse direito e grava a credencial de novo. Só `POST /v1/calendar/imports` recusa. Pedido: corrigir a frase e declarar o resíduo como limite em D-077 e FINAL_AUDIT §38, sem mudar a rota.
 
 ## Rodada 2 — CHANGES_REQUIRED (3 blockers)
 
-Corrigidos: 1(a), com textos distintos e o de MULTIPLE dizendo que a Atendly importa um profissional só; o blocker 2, com o rótulo e as buscas por rótulo nos três testes; o blocker 3, com o regex ampliado nos 9 códigos; e a frase de `PUBLIC_API_V1.md`. Continuavam abertos:
+Corrigidos: 1(a), com textos distintos e o de MULTIPLE dizendo que a Avenly importa um profissional só; o blocker 2, com o rótulo e as buscas por rótulo nos três testes; o blocker 3, com o regex ampliado nos 9 códigos; e a frase de `PUBLIC_API_V1.md`. Continuavam abertos:
 
 1. 1(b): o texto de origem indisponível ainda não dizia que nada foi salvo.
 2. 1(c): o texto de falha nossa ainda era o genérico. Pedido também: rodar de novo o controle negativo 2 do §9 e colar a saída nova.
@@ -45,7 +45,7 @@ Corrigidos: 1(a), com textos distintos e o de MULTIPLE dizendo que a Atendly imp
 
 ## Rodada 3 — CHANGES_REQUIRED (3 blockers)
 
-O código ficou correto: `ConnectSourceScreen.tsx:68-75` diz que a Minha Agenda não respondeu, que nada foi salvo e que vale tentar de novo; e diz que a falha nossa é da Atendly, não dos dados informados. O teste compara o texto exato por caso. Continuavam abertos três itens de documentação:
+O código ficou correto: `ConnectSourceScreen.tsx:68-75` diz que a Minha Agenda não respondeu, que nada foi salvo e que vale tentar de novo; e diz que a falha nossa é da Avenly, não dos dados informados. O teste compara o texto exato por caso. Continuavam abertos três itens de documentação:
 
 1. A frase falsa das Consequências da D-077 contradizia o limite declarado na própria decisão.
 2. FINAL_AUDIT §38 não registrava o limite de reconexão.

@@ -1,7 +1,7 @@
 ---
 title: Landing Page — Copy
-aliases: [Copy da Landing Page, Copy LP Atendly]
-tags: [atendly, go-to-market, landing-page, copy]
+aliases: [Copy da Landing Page, Copy LP Avenly]
+tags: [avenly, go-to-market, landing-page, copy]
 status: direcao
 ---
 
@@ -14,13 +14,13 @@ Convenções:
 - `[entre colchetes]` = placeholder ou pendência; **não publicar** sem resolver (ver "Pendências").
 - Tom: claro, direto, próximo, profissional; sem jargão e sem tom de guru ([[03-UX-UI/06-Copy-e-Linguagem]]).
 - Tratamento **feminino nas cenas** ([[05-Go-to-Market/01-Publico-Alvo-e-Posicionamento]]).
-- A marca é tratada no feminino: "a Atendly".
+- A marca é tratada no feminino: "a Avenly".
 
 ---
 
 ## Bloco 1 — Header
 
-- Logo: Atendly
+- Logo: Avenly
 - Links: Como funciona · Preços · Dúvidas
 - CTA: **Começar grátis**
 
@@ -30,7 +30,7 @@ Convenções:
 > Nenhuma cliente esperando resposta. Mesmo com as suas mãos ocupadas.
 
 **Subheadline**
-> A IA da Atendly responde suas clientes no seu WhatsApp, encontra o horário livre na sua agenda e confirma o agendamento. Você continua atendendo e assume a conversa quando quiser.
+> A IA da Avenly responde suas clientes no seu WhatsApp, encontra o horário livre na sua agenda e confirma o agendamento. Você continua atendendo e assume a conversa quando quiser.
 
 **CTA:** Começar grátis
 
@@ -73,7 +73,7 @@ Tempos e regras da animação: [[05-Go-to-Market/03-Landing-Page]].
 > Não é falta de cliente. É falta de tempo pra responder.
 
 **Transição**
-> Com a Atendly, quem responde primeiro é você.
+> Com a Avenly, quem responde primeiro é você.
 
 ## Bloco 5 — Como funciona
 
@@ -166,7 +166,7 @@ Mesma confirmação nos três estilos (lado a lado ou alternando, com controle d
 > Nasceu dentro de um estúdio de beleza.
 
 **Texto**
-> A Atendly não foi pensada numa sala de reunião. Ela nasceu observando a rotina de uma lash designer: cliente na maca, celular vibrando, mensagem sem resposta, horário perdido.
+> A Avenly não foi pensada numa sala de reunião. Ela nasceu observando a rotina de uma lash designer: cliente na maca, celular vibrando, mensagem sem resposta, horário perdido.
 >
 > [Foi construída a partir dessa rotina e testada nela, com clientes reais.]
 
@@ -208,7 +208,7 @@ Regras da oferta: [[05-Go-to-Market/02-Oferta-e-Planos]].
 > O plano Pro custa [R$ XX] por mês. Se não quiser assinar, você continua no plano Grátis com sua agenda.
 
 **Preciso trocar de número?**
-> Não. A Atendly funciona no seu número atual, pessoal ou comercial.
+> Não. A Avenly funciona no seu número atual, pessoal ou comercial.
 
 **Minhas clientes vão saber que é uma IA?**
 > Ela conversa de forma natural e não fica anunciando que é robô. Se alguém perguntar diretamente, ela responde com transparência que é a assistente virtual do seu negócio.
@@ -247,13 +247,13 @@ Regras da oferta: [[05-Go-to-Market/02-Oferta-e-Planos]].
 ## Bloco 15 — Rodapé e SEO
 
 **Rodapé**
-> Atendly · Termos de Uso · Política de Privacidade · Contato
+> Avenly · Termos de Uso · Política de Privacidade · Contato
 >
-> WhatsApp é marca registrada da Meta Platforms, Inc. A Atendly não é afiliada à Meta.
+> WhatsApp é marca registrada da Meta Platforms, Inc. A Avenly não é afiliada à Meta.
 
 **SEO / compartilhamento**
 
-- `title`: Atendly · IA que atende suas clientes no WhatsApp
+- `title`: Avenly · IA que atende suas clientes no WhatsApp
 - `meta description`: Sua IA responde clientes no seu WhatsApp, encontra horário na agenda e confirma o agendamento. Teste 14 dias grátis, sem cartão.
 - `og:title`: Nenhuma cliente esperando resposta.
 

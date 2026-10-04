@@ -1,7 +1,7 @@
 ---
 title: Temas Adiados
-aliases: [Backlog Conceitual Atendly]
-tags: [atendly, futuro, backlog]
+aliases: [Backlog Conceitual Avenly]
+tags: [avenly, futuro, backlog]
 status: referencia
 ---
 

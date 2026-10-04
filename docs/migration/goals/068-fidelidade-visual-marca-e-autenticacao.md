@@ -38,19 +38,19 @@ Achados da [revisão local](../QA_LOCAL_REVIEW.md) que este Goal fecha: **G-01�
 
 Conferido no código da baseline `2995be5`:
 
-1. **O símbolo é um desenho de CSS que não é um A.** `apps/frontend/src/shared/ui/Brand.tsx` renderiza `<span className="brand-mark">`, e `apps/frontend/src/shared/styles/atendly.css:164-192` desenha um quadrado de 28 px com raio 9 px, fundo `--navy`, dois pontos e uma barra em `--accent-vivid` (G-01, G-02, G-03). O painel de entrada troca as cores (`atendly.css:3389-3398`): caixa papel e pontos petróleo. O cabeçalho do celular (`.mobile-title .brand-mark`, `atendly.css:1944`), a sidebar de referência (`atendly.css:1793`) e o onboarding (`.onboarding-topbar .brand-mark`, `atendly.css:3264`) têm regras próprias.
-2. **O wordmark usa a fonte do corpo.** `.brand` (`atendly.css:155-163`) tem `font-weight: 700` e herda `--font-body`. Literata já é servida pelo próprio app (`public/fonts/literata/`, `--at-font-display` em `tokens.css:99`) (G-04).
+1. **O símbolo é um desenho de CSS que não é um A.** `apps/frontend/src/shared/ui/Brand.tsx` renderiza `<span className="brand-mark">`, e `apps/frontend/src/shared/styles/avenly.css:164-192` desenha um quadrado de 28 px com raio 9 px, fundo `--navy`, dois pontos e uma barra em `--accent-vivid` (G-01, G-02, G-03). O painel de entrada troca as cores (`avenly.css:3389-3398`): caixa papel e pontos petróleo. O cabeçalho do celular (`.mobile-title .brand-mark`, `avenly.css:1944`), a sidebar de referência (`avenly.css:1793`) e o onboarding (`.onboarding-topbar .brand-mark`, `avenly.css:3264`) têm regras próprias.
+2. **O wordmark usa a fonte do corpo.** `.brand` (`avenly.css:155-163`) tem `font-weight: 700` e herda `--font-body`. Literata já é servida pelo próprio app (`public/fonts/literata/`, `--at-font-display` em `tokens.css:99`) (G-04).
 3. **O símbolo v4 existe pronto na referência.** `Marca.dc.html` traz o SVG em grade 64: `M6 56L28 9L40.85 36.5`, `M44.7 44.8L50 56` e `M25.5 38L32 44.5L58 21`, traço 6, pontas e junções arredondadas, uma cor só. A animação de desenho usa os mesmos três traços com `pathLength="100"`: 460 ms a partir de 0, 380 ms a partir de 340 ms e 220 ms a partir de 600 ms, somando os 820 ms de G-07.
 4. **O favicon é o logo antigo.** `apps/frontend/src/app/layout.tsx:11` aponta para `/brand/atendly-favicon-32x32.png`, o A dentro de balão com gradiente (G-05). `public/brand/atendly-favicon-512x512.png`, `atendly-logo-horizontal.png` e `atendly-logo-icon.png` não são referenciados em lugar nenhum de `src/`, `e2e/`, `tests/` ou `scripts/` (G-06). Os SVGs de exemplo do Next em `public/` (`file.svg`, `globe.svg`, `next.svg`, `vercel.svg`, `window.svg`) também não são referenciados.
-5. **O painel de entrada é Tinta, e o celular não tem painel.** `.auth-brand-panel` usa `background: var(--navy)`, que é `--at-color-ink` (C-08). Abaixo de 768 px, a regra de `atendly.css:3663-3680` reduz o painel a uma barra de 104 px e esconde a frase (C-07). Não há composição de tablet: de 768 px para cima vale o mesmo split do desktop (C-09). O painel mostra `story[scenario]` e um motivo de linhas (`auth-flow`), sem o mock de conversa do protótipo (C-10, L-08). Petróleo já é token: `--at-color-primary: #0f5f63` (`tokens.css:77`), exposto como `--accent`.
+5. **O painel de entrada é Tinta, e o celular não tem painel.** `.auth-brand-panel` usa `background: var(--navy)`, que é `--at-color-ink` (C-08). Abaixo de 768 px, a regra de `avenly.css:3663-3680` reduz o painel a uma barra de 104 px e esconde a frase (C-07). Não há composição de tablet: de 768 px para cima vale o mesmo split do desktop (C-09). O painel mostra `story[scenario]` e um motivo de linhas (`auth-flow`), sem o mock de conversa do protótipo (C-10, L-08). Petróleo já é token: `--at-color-primary: #0f5f63` (`tokens.css:77`), exposto como `--accent`.
 6. **Os textos de entrada não são os do protótipo.** `AuthScreen.tsx:398-420`: o cadastro diz "Use seus dados de acesso. Informações do negócio vêm na próxima etapa." (C-05) e o botão diz "Criar conta", sem seta (C-06); o login diz "Boas-vindas de volta · Entre para acompanhar conversas e agendamentos." (L-07).
 7. **L-06 mudou de forma desde a revisão local.** O checkbox que dividia a linha com "Esqueci minha senha" saiu no Goal064 (QA L-05), e `.auth-row:has(> :only-child)` já alinha o link à direita. Falta só conferir, nas cinco larguras, que o link fica sozinho, à direita e abaixo da senha.
 8. **A Home não cabe aqui.** O protótipo (`Home.dc.html` e `Home-Desktop.dc.html`) fecha com "Esta semana: agendamentos, marcados pela IA, conversas que você assumiu". `dashboardSchema` em `packages/public-api-contract/src/schemas.ts:847-879` só tem números de **hoje** (`appointmentsToday`, `aiAppointmentsToday`, `automatedConversationsToday`), e nenhum serviço conta a semana. Cumprir a Home pede contrato, BFF e orquestrador, com outro perfil de risco. Ela vai para o novo **074**.
 
 ## Escolhas de desenho desta passada
 
-- **A marca é um componente SVG, não CSS.** `Brand` desenha os três traços do `Marca.dc.html` com `stroke="currentColor"`, e a cor vem do contexto: Tinta no papel, Papel no Petróleo. Nenhum contexto pinta o check de outra cor. O componente aceita tamanho, mantém o nome acessível atual ("Atendly — Início", ou o destino que o chamador passa) e esconde o SVG do leitor (`aria-hidden`).
-- **Favicon em SVG.** `public/brand/atendly-icon.svg`: quadrado Petróleo com o A v4 em Papel, conforme o ícone do app em `Marca.dc.html`. `layout.tsx` passa a apontar para ele. PNG só entra se for gerado a partir desse SVG por comando registrado no relatório; caso contrário, fica só o SVG.
+- **A marca é um componente SVG, não CSS.** `Brand` desenha os três traços do `Marca.dc.html` com `stroke="currentColor"`, e a cor vem do contexto: Tinta no papel, Papel no Petróleo. Nenhum contexto pinta o check de outra cor. O componente aceita tamanho, mantém o nome acessível atual ("Avenly — Início", ou o destino que o chamador passa) e esconde o SVG do leitor (`aria-hidden`).
+- **Favicon em SVG.** `public/brand/avenly-icon.svg`: quadrado Petróleo com o A v4 em Papel, conforme o ícone do app em `Marca.dc.html`. `layout.tsx` passa a apontar para ele. PNG só entra se for gerado a partir desse SVG por comando registrado no relatório; caso contrário, fica só o SVG.
 - **A assinatura toca uma vez por sessão do navegador.** A marca registra em `sessionStorage` que já desenhou; recarregar a página na mesma aba não repete. Com `prefers-reduced-motion: reduce`, o símbolo aparece completo e parado, sem transição. Sem `sessionStorage` disponível, o símbolo aparece parado.
 - **A saudação do login fica neutra.** O protótipo diz "Bem-vinda de volta.", no feminino. O título passa a ser "Entrar", como no protótipo, e o apoio passa a ser "Boas-vindas de volta. Sua agenda continua de onde parou.". A divergência é declarada em D-087 e fica para a conferência humana do §8.
 - **O mock de conversa é ilustração.** Mensagens fixas do protótipo, marcadas `aria-hidden`, sem dado real e sem rede. O texto dele continua sujeito à medida de contraste do gate.
@@ -69,7 +69,7 @@ Conferido no código da baseline `2995be5`:
 - Goal067 ACCEPTED e Goal073 ACCEPTED (baseline acima). O Goal064 refez os formulários de entrada, e o Goal058 pôs a casca e a sidebar no gate autenticado.
 - Arquivos de partida:
   - `apps/frontend/src/shared/ui/Brand.tsx` e os cinco usos: `features/auth/AuthScreen.tsx`, `features/onboarding/OnboardingShell.tsx`, `features/system/SystemScreen.tsx`, `components/legal/LegalDocumentLayout.tsx` e `shared/layout/AppShell.tsx`;
-  - `apps/frontend/src/shared/styles/atendly.css` (regras de `.brand`, `.brand-mark` e `.auth-*`) e `tokens.css`;
+  - `apps/frontend/src/shared/styles/avenly.css` (regras de `.brand`, `.brand-mark` e `.auth-*`) e `tokens.css`;
   - `apps/frontend/src/app/layout.tsx` e `apps/frontend/public/`.
 - Gates: `validate:ui` mede as rotas de `PUBLIC_ROUTES` (`apps/frontend/e2e/routes.ts`) nas cinco larguras. O gate autenticado, dentro de `validate:integration`, mede a casca com a sidebar e as rotas de onboarding.
 
@@ -77,9 +77,9 @@ Conferido no código da baseline `2995be5`:
 
 | Parte | Onde |
 | --- | --- |
-| Marca | `shared/ui/Brand.tsx`, `shared/styles/atendly.css`, `app/layout.tsx`, `public/brand/`, `public/*.svg` |
-| Assinatura animada | `shared/ui/Brand.tsx` (ou módulo irmão em `shared/ui/`), `shared/styles/atendly.css` |
-| Telas de entrada | `features/auth/AuthScreen.tsx`, `shared/styles/atendly.css` |
+| Marca | `shared/ui/Brand.tsx`, `shared/styles/avenly.css`, `app/layout.tsx`, `public/brand/`, `public/*.svg` |
+| Assinatura animada | `shared/ui/Brand.tsx` (ou módulo irmão em `shared/ui/`), `shared/styles/avenly.css` |
+| Telas de entrada | `features/auth/AuthScreen.tsx`, `shared/styles/avenly.css` |
 | Testes | `apps/frontend/tests/goal068-*.test.tsx` |
 
 ## Escopo obrigatório
@@ -88,7 +88,7 @@ Conferido no código da baseline `2995be5`:
 
 - `Brand` renderiza o SVG de três traços do `Marca.dc.html`, grade 64, traço 6, pontas arredondadas, `stroke="currentColor"` e `fill="none"`. Nenhum pseudo-elemento, caixa ou segunda cor (G-01, G-02, G-03).
 - O wordmark usa `--font-display`, peso 600 e tracking −2% (G-04).
-- Nos cinco usos, a marca aparece solta. As regras de `.brand-mark` que pintam caixa ou pontos saem de `atendly.css`.
+- Nos cinco usos, a marca aparece solta. As regras de `.brand-mark` que pintam caixa ou pontos saem de `avenly.css`.
 - Favicon conforme as escolhas de desenho (G-05). `atendly-favicon-32x32.png`, `atendly-favicon-512x512.png`, `atendly-logo-horizontal.png`, `atendly-logo-icon.png` e os cinco SVGs de exemplo do Next saem de `public/` (G-06), depois de conferir de novo que nada os referencia.
 
 ### 2. Assinatura animada (G-07)
@@ -123,7 +123,7 @@ Conferido no código da baseline `2995be5`:
 Cada teste novo é rodado primeiro contra o código da baseline, e **a saída do vermelho vai colada no relatório**, com o SHA `2995be5`. Testes jsdom em `apps/frontend/tests/goal068-*.test.tsx`:
 
 1. `Brand` renderiza um `svg` com os três `path` do `Marca.dc.html`, `stroke="currentColor"`, nenhum outro atributo de cor e nenhum elemento `.brand-mark` com pseudo-caixa; o link mantém o nome acessível.
-2. `layout.tsx` declara o ícone `/brand/atendly-icon.svg`; o arquivo existe; os quatro PNGs antigos não existem.
+2. `layout.tsx` declara o ícone `/brand/avenly-icon.svg`; o arquivo existe; os quatro PNGs antigos não existem.
 3. A assinatura toca na primeira montagem da sessão e não toca na segunda; com `matchMedia('(prefers-reduced-motion: reduce)')` verdadeiro, não toca; sem `sessionStorage`, o símbolo aparece parado.
 4. Cadastro mostra o apoio de C-05 e um botão cujo nome acessível é exatamente "Criar conta"; login mostra o título "Entrar" e o apoio de L-07; o painel do desktop contém o mock de conversa marcado `aria-hidden`.
 5. Nenhum texto antigo do painel (`story`) aparece em `/login` nem em `/cadastro`.
@@ -193,7 +193,7 @@ O relatório e os documentos dizem que essa conferência **não foi feita** por 
 
 Cada critério é verificável no diff ou na execução.
 
-1. A marca é o SVG de três traços, de uma cor, sem caixa, com wordmark em Literata 600, nos cinco usos. Provado por execução jsdom do §5.1 e pelo diff de `atendly.css`.
+1. A marca é o SVG de três traços, de uma cor, sem caixa, com wordmark em Literata 600, nos cinco usos. Provado por execução jsdom do §5.1 e pelo diff de `avenly.css`.
 2. O favicon é o SVG novo, e os assets mortos saíram. Provado por execução do §5.2 e pelo diff de `public/`.
 3. A assinatura toca uma vez por sessão, respeita movimento reduzido e nunca deixa o símbolo incompleto. Provado por execução jsdom do §5.3; o movimento reduzido nas telas renderizadas é decidido por `validate:ui` e pelo gate autenticado.
 4. Os textos de C-05, C-06 e L-07 estão nas telas, e os textos antigos do painel saíram. Provado por execução jsdom do §5.4 e §5.5.

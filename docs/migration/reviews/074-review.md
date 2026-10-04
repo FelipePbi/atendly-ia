@@ -13,7 +13,7 @@ O Goal corrige **QA H-01**, **H-06**, **H-07**, **H-08** e **H-10** da [revisão
   - `apps/ai-orchestrator/tests/` ajustados: `assistant/assistant.service.test.ts` (+4/−4, 207 para 208 arquivos varridos, pelo client Prisma gerado com o modelo novo), `internal/dashboard-ai-appointments.routes.test.ts` (+4/−0), `retention/tenant-purge.test.ts` (+16/−4) e `session/support/fake-prisma.ts` (+12/−0).
   - `apps/scheduling-service/src/modules/internal-api/routes.ts` (+19/−0, `appointmentsThisWeek` filtrado por `date` da semana).
   - `packages/public-api-contract/src/schemas.ts` (+7/−0). `apps/bff/`: `src/clients/ai-orchestrator/index.ts` (+4/−0), `src/clients/scheduling/index.ts` (+3/−0), `PUBLIC_API_V1.md` (+14/−0) e `tests/goal059-whatsapp-status.integration.test.ts` (+3/−0, campos de fixture).
-  - `apps/frontend/`, produto: `features/dashboard/DashboardScreen.tsx` (+424/−416) e `shared/styles/atendly.css` (+57/−154).
+  - `apps/frontend/`, produto: `features/dashboard/DashboardScreen.tsx` (+424/−416) e `shared/styles/avenly.css` (+57/−154).
   - `apps/frontend/tests/` ajustados: `goal018-dashboard-status` (+4/−0), `goal059-whatsapp-status-view` (+3/−0), `goal063-home-checklist` (+39/−4), `goal064-greeting-and-account` (+3/−0) e `goal068-assinatura` (+1/−1, só o título, observação 3 do review068).
   - `scripts/validate-integration.mjs` (+12/−0, passo `rehearse:goal074-human-takeover-migration`) e `scripts/tests/validate-integration.test.mjs` (+1/−0). É o **desvio declarado** do §11 (ver rodada 1).
   - Os cinco documentos de `docs/migration/`, só por acréscimo no snapshot aceito: `CURRENT_STATE.md` (+142), `DATA_MIGRATION.md` (+20, §22), `DECISIONS.md` (+42, D-088), `FINAL_AUDIT.md` (+113, §49) e `VALIDATION_GATE.md` (+186).

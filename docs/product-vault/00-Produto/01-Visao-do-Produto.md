@@ -1,7 +1,7 @@
 ---
 title: Visão do Produto
-aliases: [Visão Atendly]
-tags: [atendly, produto, visao]
+aliases: [Visão Avenly]
+tags: [avenly, produto, visao]
 status: vigente
 ---
 
@@ -9,13 +9,13 @@ status: vigente
 
 ## O que é
 
-A Atendly é uma plataforma de atendimento por IA para profissionais autônomos de serviços. A IA atende clientes pelo WhatsApp, entende o que eles precisam, consulta a agenda real do profissional e executa agendamentos e rotinas relacionadas ao atendimento.
+A Avenly é uma plataforma de atendimento por IA para profissionais autônomos de serviços. A IA atende clientes pelo WhatsApp, entende o que eles precisam, consulta a agenda real do profissional e executa agendamentos e rotinas relacionadas ao atendimento.
 
 A proposta central é:
 
-> **A IA atende seus clientes pelo WhatsApp e controla os agendamentos diretamente na Agenda Atendly.**
+> **A IA atende seus clientes pelo WhatsApp e controla os agendamentos diretamente na Agenda Avenly.**
 
-A Atendly não é uma camada de IA conectada a uma agenda externa. A agenda faz parte do próprio produto e é a fonte oficial da operação.
+A Avenly não é uma camada de IA conectada a uma agenda externa. A agenda faz parte do próprio produto e é a fonte oficial da operação.
 
 ## Por que existe
 
@@ -27,7 +27,7 @@ Profissionais autônomos frequentemente precisam executar simultaneamente três 
 
 O problema não é apenas “ter uma agenda”. O problema é o trabalho manual entre **conversa → entendimento → disponibilidade → confirmação → registro**.
 
-A Atendly busca eliminar esse trabalho repetitivo sem retirar do profissional a possibilidade de continuar usando o WhatsApp normalmente e assumir qualquer conversa quando quiser.
+A Avenly busca eliminar esse trabalho repetitivo sem retirar do profissional a possibilidade de continuar usando o WhatsApp normalmente e assumir qualquer conversa quando quiser.
 
 ## Proposta de valor principal
 
@@ -35,7 +35,7 @@ A experiência que deve ficar evidente ao usuário é:
 
 > **“Posso continuar trabalhando e usando meu WhatsApp normalmente. A IA cuida dos atendimentos e dos agendamentos e sai de cena quando eu quiser assumir.”**
 
-A Agenda Atendly é a infraestrutura que torna essa promessa confiável.
+A Agenda Avenly é a infraestrutura que torna essa promessa confiável.
 
 ## Posicionamento do MVP
 
@@ -51,7 +51,7 @@ E não:
 
 ## Fonte oficial da agenda
 
-A Agenda Atendly é a única agenda operacional do negócio.
+A Agenda Avenly é a única agenda operacional do negócio.
 
 No MVP e como direção de produto definida:
 

@@ -125,8 +125,8 @@ Aplique cada controle e reverta-o no mesmo passo, com a restauração conferida 
 - `apps/frontend/src/features/agenda/AgendaBoard.tsx`: barra, botão de criar, menu, saída do cartão e da leitura de 60 dias, leitura do catálogo, painel.
 - `apps/frontend/src/features/agenda/DayView.tsx`: a lista, o resumo e a faixa da semana.
 - `apps/frontend/src/features/agenda/occupancy.ts` e um arquivo novo de cor de serviço em `features/agenda/`, se preciso. `timeGrid.ts`, `WeekView.tsx` e `MonthView.tsx` não mudam, salvo o que a barra comum exigir.
-- `apps/frontend/src/shared/styles/atendly-agenda.css`; `atendly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
-- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/atendly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
+- `apps/frontend/src/shared/styles/avenly-agenda.css`; `avenly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
+- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/avenly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
 - `apps/frontend/e2e/routes.ts`, só se um `contentMarker` depender de texto trocado, com o motivo no relatório.
 - `apps/frontend/tests/`: a prova nova e as asserções do §5.
 

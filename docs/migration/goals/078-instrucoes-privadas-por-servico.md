@@ -101,7 +101,7 @@ Conferido no código da baseline `011de8f`:
 - Goal076 ACCEPTED (baseline acima). O Goal012 fez o conhecimento e a precedência por serviço em foco; o Goal067, o documento de `source` fixa com rota própria (D-085); o Goal076, a lista e o formulário de Serviços (D-091).
 - Arquivos de partida no orquestrador: `modules/knowledge/knowledge-document-service.ts`, `pgvector-knowledge-store.ts`, `modules/prompts/knowledge.ts`, `system.ts`, `customer-memory.ts`, `modules/graph/message-graph.ts`, `graph-state.ts`, `graph-runtime.ts`, `modules/assistant/assistant.service.ts`, `modules/channel/InboundMessageProcessor.ts`, `inbound-processor-factory.ts`, `modules/internal/routes.ts`.
 - No BFF: `modules/services/routes.ts`, `modules/knowledge/routes.ts`, `clients/ai-orchestrator/index.ts`, `clients/scheduling/index.ts`, `PUBLIC_API_V1.md`. No contrato: `packages/public-api-contract/src/schemas.ts`, `routes.ts`.
-- No frontend: `features/services/ServiceForm.tsx`, `ServiceList.tsx`, `data/services/BffServiceCatalogService.ts`, `shared/styles/atendly-services.css`.
+- No frontend: `features/services/ServiceForm.tsx`, `ServiceList.tsx`, `data/services/BffServiceCatalogService.ts`, `shared/styles/avenly-services.css`.
 - Testes de partida: `apps/ai-orchestrator/tests/knowledge/knowledge-document-service.test.ts`, `knowledge-retrieval-focus.test.ts` (montagem do `InboundMessageProcessor` com dublês), `pgvector-knowledge-store.test.ts` (SQL capturado), `tests/internal/knowledge.routes.test.ts`, `tests/prompts/system.test.ts`, `tests/evals/knowledge-precedence-and-unknown.eval.test.ts`; `apps/bff/tests/goal012-knowledge-memory-suggestions.integration.test.ts`; `apps/frontend/tests/goal076-service-form.test.tsx`, `goal058-service-form.test.tsx`.
 
 ## Pontos de implementação
@@ -114,7 +114,7 @@ Conferido no código da baseline `011de8f`:
 | Passo do grafo e dependência | `modules/graph/message-graph.ts`, `graph-state.ts`, `modules/channel/InboundMessageProcessor.ts`, `inbound-processor-factory.ts` |
 | Seção do prompt e versão | `modules/prompts/` (arquivo novo), `system.ts`, `modules/assistant/assistant.service.ts` |
 | Rotas públicas, cliente e contrato | `apps/bff/src/modules/services/routes.ts`, `clients/ai-orchestrator/index.ts`, `packages/public-api-contract/src/`, `apps/bff/PUBLIC_API_V1.md` |
-| Campo do formulário e remoção de `DirectorySourceStrip` | `apps/frontend/src/features/services/`, `data/services/BffServiceCatalogService.ts`, `shared/styles/atendly-services.css` |
+| Campo do formulário e remoção de `DirectorySourceStrip` | `apps/frontend/src/features/services/`, `data/services/BffServiceCatalogService.ts`, `shared/styles/avenly-services.css` |
 | Testes | `apps/ai-orchestrator/tests/goal078-*.test.ts`, `apps/bff/tests/goal078-*.test.ts`, `apps/frontend/tests/goal078-*.test.tsx` |
 
 ## Escopo obrigatório

@@ -1,7 +1,7 @@
 ---
 title: Handoff e Atendimento Humano
 aliases: [Fluxo de Handoff]
-tags: [atendly, handoff, atendimento]
+tags: [avenly, handoff, atendimento]
 status: vigente
 ---
 
@@ -42,14 +42,14 @@ Somente quando o profissional envia uma mensagem:
 
 Profissional pode responder:
 
-- pela Atendly;
+- pela Avenly;
 - pelo próprio WhatsApp.
 
 Qualquer mensagem manual detectada pausa a IA.
 
 ## Sugestões da IA
 
-Quando o humano está atendendo dentro da Atendly, a IA pode sugerir resposta acima do campo de texto.
+Quando o humano está atendendo dentro da Avenly, a IA pode sugerir resposta acima do campo de texto.
 
 O profissional pode:
 

@@ -9,7 +9,7 @@ O Goal corrige dois achados do [re-teste local de 2026-09-30](../QA_LOCAL_REVIEW
 - Baseline aceita vigente: `df620394401ea9391697288cd67aefa0a6d9fbc8` (Goal087). Base imediata da implementação: `05c92fc17a5311d024bf69033e5c6eaa696a1490`, HEAD da worktree `.ai-worktrees/goal-085`, inalterado nas duas rodadas. Entre `df62039` e `05c92fc` há só documentação: o fechamento do Goal087 e o registro do pente-fino visual.
 - Snapshot aceito, calculado pelo IA Loop: **19 arquivos**, hash do diff `7e19b878196d7b6e2d087493a561018b9a5d50e74add3fbb6d714b0beb357fb0`. Mudança posterior nesses arquivos exige avaliar o novo diff.
 - Os 19 arquivos, por `git diff --numstat 05c92fc` no snapshot aceito:
-  - Frontend de produção: `src/shared/styles/atendly.css` (+94/−5), `src/shared/runtime/systemStatus.tsx` (+47), `src/features/dashboard/DashboardScreen.tsx` (+43/−3), `src/shared/layout/AppShell.tsx` (+34/−34), `src/shared/layout/ShellConfig.tsx` (+3/−2), `src/app/(platform)/layout.tsx` (+1/−1), `src/features/conversations/ConversationThread.tsx` (−1), `src/shared/icons/Icon.tsx` (+1) e `public/icons/atendly-icons.svg` (+1).
+  - Frontend de produção: `src/shared/styles/avenly.css` (+94/−5), `src/shared/runtime/systemStatus.tsx` (+47), `src/features/dashboard/DashboardScreen.tsx` (+43/−3), `src/shared/layout/AppShell.tsx` (+34/−34), `src/shared/layout/ShellConfig.tsx` (+3/−2), `src/app/(platform)/layout.tsx` (+1/−1), `src/features/conversations/ConversationThread.tsx` (−1), `src/shared/icons/Icon.tsx` (+1) e `public/icons/avenly-icons.svg` (+1).
   - Gate autenticado, só por acréscimo: `e2e/authenticated-matrix.spec.ts` (+62, G-3) e `e2e/measure.ts` (+30, `measureSidebarSpan`).
   - Testes: `tests/goal085-shell-states.test.tsx` (arquivo novo, +326, **27** testes, provas 1 a 3), `tests/goal085-shell-css.test.ts` (arquivo novo, +131, **4** testes, provas 4 e 5) e asserções ajustadas em `goal022-notifications-chrome` (+8/−2) e `goal087-shell-navigation` (+3/−1).
   - Documentos: `docs/migration/CURRENT_STATE.md`, `DECISIONS.md` (D-102), `FINAL_AUDIT.md` (§62) e `VALIDATION_GATE.md`.
@@ -21,7 +21,7 @@ O Goal corrige dois achados do [re-teste local de 2026-09-30](../QA_LOCAL_REVIEW
    1. O diff não tocava nenhum documento de `docs/migration/`: faltavam D-102, FINAL_AUDIT §62, CURRENT_STATE e VALIDATION_GATE.
    2. Os quatro controles negativos do §6 não tinham rodado. A WU-11 ficou bloqueada atrás da WU-10, que falhou por ambiente: `validate:integration` sem os quatro `*_TEST_DATABASE_URL`.
    3. A comparação visual estava incompleta. O relatório tinha perdido os percentuais da baseline e, nas telas irmãs, citava só o desktop.
-2. **Rodada 2 — `ACCEPTED`, 0 blocker.** O delta da rodada 1 para a 2 é só os quatro documentos. Os patches das duas rodadas trazem os mesmos blobs em cada arquivo rastreado de código e de teste, e o hash dos dois arquivos de teste novos não mudou. A última edição de código continua a de `atendly.css` às `2026-10-01T08:38:14Z`. Nesta rodada, o Developer rodou depois dela:
+2. **Rodada 2 — `ACCEPTED`, 0 blocker.** O delta da rodada 1 para a 2 é só os quatro documentos. Os patches das duas rodadas trazem os mesmos blobs em cada arquivo rastreado de código e de teste, e o hash dos dois arquivos de teste novos não mudou. A última edição de código continua a de `avenly.css` às `2026-10-01T08:38:14Z`. Nesta rodada, o Developer rodou depois dela:
    - a execução final;
    - o `visual:compare` contra a baseline `05c92fc`, numa cópia temporária fora da worktree, e sobre a árvore final;
    - os quatro controles negativos.
@@ -40,8 +40,8 @@ O Goal corrige dois achados do [re-teste local de 2026-09-30](../QA_LOCAL_REVIEW
   - `html` mantém o fundo `var(--bg)`. O `z-index` 40 da sidebar fica abaixo de dialog, toast e overlays.
   - `showMobileHeader` não aparece mais em `src/`.
 - Proveniência, em disco:
-  - `sha256` de `systemStatus.tsx`, `AppShell.tsx` e `atendly.css`: iguais aos de VALIDATION_GATE.
-  - `mtime` de `atendly.css`: `2026-10-01T08:38:14Z`.
+  - `sha256` de `systemStatus.tsx`, `AppShell.tsx` e `avenly.css`: iguais aos de VALIDATION_GATE.
+  - `mtime` de `avenly.css`: `2026-10-01T08:38:14Z`.
   - `e2e-results/authenticated/results.json`: `startTime` `2026-10-01T08:57:34.803Z`, **205** `expected`, **0** `unexpected`, **0** `flaky`, **10** testes G-3 e **0** retentativas.
   - Uma corrida de `validate:ui` posterior: **169** `passed`, **21** `skipped`, **0** `unexpected`.
 - Os quatro arquivos de teste tocados passam: **60**/**60**.

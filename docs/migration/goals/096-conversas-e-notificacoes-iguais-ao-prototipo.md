@@ -140,9 +140,9 @@ Aplique cada controle e reverta-o no mesmo passo, com a restauração conferida 
 
 - `apps/frontend/src/features/conversations/`: `ConversationInbox.tsx` e, se ajudar, um componente novo para o C5 na mesma pasta. A consulta da regra de (a) pode morar em `inboxLenses.ts`, por acréscimo. `ProductConversationsScreen.tsx` só se a composição exigir.
 - `apps/frontend/src/features/notifications/`: `NotificationsScreen.tsx`, `NotificationsDrawer.tsx` e `notificationViews.ts` (só por acréscimo, se a linha exigir uma função nova; as funções existentes não mudam de saída).
-- `apps/frontend/src/shared/styles/atendly-conversations.css` e `atendly-notifications.css`. `atendly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
+- `apps/frontend/src/shared/styles/avenly-conversations.css` e `avenly-notifications.css`. `avenly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
 - `apps/frontend/src/features/dashboard/DashboardScreen.tsx` e `src/shared/layout/AppShell.tsx` só se a troca da largura da gaveta exigir. Eles já leem o mesmo hook e a mesma constante.
-- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/atendly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
+- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/avenly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
 - `apps/frontend/e2e/visual/targets.json`: só o que (g) autoriza.
 - `apps/frontend/e2e/routes.ts` e `apps/frontend/e2e/authenticated-matrix.spec.ts`: só o que o §6 autoriza.
 - `apps/frontend/tests/`: a prova nova e as asserções do §5.

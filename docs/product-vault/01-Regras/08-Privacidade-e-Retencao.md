@@ -1,7 +1,7 @@
 ---
 title: Privacidade e Retenção
-aliases: [Privacidade Atendly]
-tags: [atendly, privacidade, conversas]
+aliases: [Privacidade Avenly]
+tags: [avenly, privacidade, conversas]
 status: vigente
 ---
 
@@ -14,11 +14,11 @@ status: vigente
 
 Termos e Política de Privacidade devem ser aceitos através de checkbox obrigatório não marcado por padrão.
 
-Os links abrem páginas próprias da Atendly.
+Os links abrem páginas próprias da Avenly.
 
 ## Conexão do WhatsApp
 
-Antes de conectar, deve existir confirmação explícita de que as conversas do número poderão ser processadas e armazenadas para fornecer os recursos da Atendly.
+Antes de conectar, deve existir confirmação explícita de que as conversas do número poderão ser processadas e armazenadas para fornecer os recursos da Avenly.
 
 Também perguntar se o número é usado para conversas pessoais.
 

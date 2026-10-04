@@ -1,4 +1,4 @@
-# Plano de alinhamento da implementação — Atendly
+# Plano de alinhamento da implementação — Avenly
 
 ## Objetivo
 
@@ -23,7 +23,7 @@ Este arquivo delimita trabalho futuro real. Ele não é uma especificação téc
 
 ### 3. Alinhar agenda e importação
 
-- tornar a Agenda Atendly a única operação normal;
+- tornar a Agenda Avenly a única operação normal;
 - limitar Minha Agenda ao fluxo de importação única;
 - remover da experiência troca de fonte, operação externa e migração reversa;
 - preservar histórico e segurança transacional.

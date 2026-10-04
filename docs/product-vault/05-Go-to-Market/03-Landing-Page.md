@@ -1,7 +1,7 @@
 ---
 title: Landing Page
-aliases: [LP Atendly, Landing Page Atendly]
-tags: [atendly, go-to-market, landing-page]
+aliases: [LP Avenly, Landing Page Avenly]
+tags: [avenly, go-to-market, landing-page]
 status: direcao
 ---
 
@@ -57,7 +57,7 @@ Regras de conteúdo:
 - eventos de sistema reproduzem a demonstração do onboarding: serviço reconhecido, agenda consultada ([[02-Fluxos/01-Onboarding]]);
 - IA não menciona preço (padrão do lembrete) e não se anuncia como robô;
 - o lembrete citado ("na quinta") respeita o lembrete de 24 h ([[01-Regras/07-Lembretes-Notificacoes-e-Instabilidade]]);
-- encerramento: card de agenda confirmado com o **check da marca se desenhando** — o símbolo da Atendly (A com check) vira a prova do produto.
+- encerramento: card de agenda confirmado com o **check da marca se desenhando** — o símbolo da Avenly (A com check) vira a prova do produto.
 
 Roteiro:
 
@@ -91,7 +91,7 @@ Com movimento reduzido, exibir o quadro final estático.
 - **escala**: headlines Literata grandes;
 - **acento** único e pontual permitido para destaques (ex.: plano Pro, "horário marcado");
 - gradiente apenas como brilho sutil de fundo, nunca no símbolo da marca;
-- verde do WhatsApp somente dentro dos balões da simulação, nunca como cor da Atendly;
+- verde do WhatsApp somente dentro dos balões da simulação, nunca como cor da Avenly;
 - familiaridade gera confiança: balões no padrão do WhatsApp, agenda do dia, cenas reais.
 
 ## Restrições legais de comunicação

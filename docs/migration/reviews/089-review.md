@@ -12,8 +12,8 @@ O Goal porta uma vez a moldura do onboarding do protótipo para todas as etapas:
   - `apps/frontend/src/features/onboarding/OnboardingShell.tsx` (+133/−96): moldura única para `OnboardingShell` e `OnboardingFrame`, com topo, sidebar, stepper e "Sair".
   - `blocks.ts` (+54/−11): `chapterFraction(scenario)` e `fill` por capítulo em `chapterProgress`.
   - `OnboardingScreen.tsx` (+14/−5), `blocks/business.tsx` (+29/−30) e `blocks/shared.tsx` (+21/−3): nota da Boas-vindas, cena e cartões de ação com ícone do 2.1.
-  - `src/shared/styles/atendly.css` (+747/−292): regras `.onboarding-*` e `.step-*`. Não há folha nova.
-  - `src/shared/ui/Brand.tsx` (+1/−1, `BrandMark` exportado), `src/shared/icons/Icon.tsx` (+1) e `public/icons/atendly-icons.svg` (+1): ícone `import`.
+  - `src/shared/styles/avenly.css` (+747/−292): regras `.onboarding-*` e `.step-*`. Não há folha nova.
+  - `src/shared/ui/Brand.tsx` (+1/−1, `BrandMark` exportado), `src/shared/icons/Icon.tsx` (+1) e `public/icons/avenly-icons.svg` (+1): ícone `import`.
   - Testes: `tests/goal089-onboarding-shell.test.tsx` (novo, **15** testes) e asserções ajustadas em `goal018` (+10/−7), `goal065` (+6/−1), `goal066` (+5/−4), `goal072` (+2/−2) e `goal079` (+1/−1).
   - Gate autenticado: G-6 em `e2e/authenticated-matrix.spec.ts`, só por acréscimo (+236/−0).
   - Documentos: `docs/migration/DECISIONS.md` (D-104), `CURRENT_STATE.md` e `VALIDATION_GATE.md`.
@@ -40,7 +40,7 @@ Os números estão em [VALIDATION_GATE](../VALIDATION_GATE.md) (seção do Goal0
 - **Etapas do §2.** Dos 64 pares quadro e largura do Developer, 62 não pioram. As duas pioras são mobile, com causa medida: 1.3 (CTA ancorado longe da posição do quadro com o teclado aberto) e 4.6 (conteúdo do Goal090).
 - **Gate autenticado, conferido em disco pelo Tech Lead.** Execução da WU-10 do IA Loop, `startTime` `17:35:04Z`, depois da última edição de código: **245** `expected` (**235** da base mais **10** de G-6), **0** `unexpected`, **0** `flaky`, **0** retentativas. A execução do Developer (`17:17:20Z`) deu a mesma contagem.
 - **Execução final do Developer**, depois da última edição: `validate:core` exit 0 (**17** passos, **15** `passed`, **2** `skipped`); `test:frontend` **133** arquivos e **1430** testes, contra **132** e **1415** da baseline; `test:gate` **233**/**233**; `validate:ui` com `CI=1`, **169** `passed`, **21** `skipped`, **0** retentativas; `validate:integration` **36**/**36**.
-- **Controles negativos.** Cinco (1, 2a, 2b, 3 e 4), feitos depois da última edição, com saída real e `sha256` em VALIDATION_GATE. Os `sha256` atuais de `OnboardingShell.tsx`, `blocks.ts` e `atendly.css` batem com os registrados.
+- **Controles negativos.** Cinco (1, 2a, 2b, 3 e 4), feitos depois da última edição, com saída real e `sha256` em VALIDATION_GATE. Os `sha256` atuais de `OnboardingShell.tsx`, `blocks.ts` e `avenly.css` batem com os registrados.
 - **Escopo.** `git status` lista só os arquivos autorizados. `apps/frontend/AGENTS.md` aparecia modificado durante o `next dev` do `visual:compare` e voltou ao normal depois. `e2e-results/` é ignorado pelo git. Asserções de testes existentes mudaram só nos casos que o §5 autoriza; a de `goal066` (de "sem `svg`" para "sem `use` de `#i-check`") preserva a intenção do teste, nenhum ✓ no cartão, e foi aceita.
 
 ## Aceito sem prova completa
@@ -54,7 +54,7 @@ Os números estão em [VALIDATION_GATE](../VALIDATION_GATE.md) (seção do Goal0
 
 1. **Frases de exemplo do 3.2.** A diferença para o quadro não é só dado da conta, como a proposta dizia: vem do template de `demo.ts` (D-095, item 3), anterior a este Goal e fora do escopo dele. A divergência 3 de D-104 foi reescrita no fechamento.
 2. **Estado do "Continuar" em 1.1 e 3.2.** Na corrida do Developer saiu desabilitado; na do Tech Lead, habilitado nos dois. Depende do que a conta do `visual:compare` já escolheu. Texto corrigido em D-104, CURRENT_STATE e VALIDATION_GATE.
-3. **Regras mortas.** Sobram regras `.onboarding-main` no media query `max-width: 767px` de `atendly.css`. A classe ainda é usada por estados de carregamento; conferir antes de remover.
+3. **Regras mortas.** Sobram regras `.onboarding-main` no media query `max-width: 767px` de `avenly.css`. A classe ainda é usada por estados de carregamento; conferir antes de remover.
 4. **1.3 no mobile piora** (8,5 para 16,7 %) porque o CTA ancorado fica no rodapé, e o quadro mostra o teclado aberto com o CTA logo acima dele. Só a conferência do §7 decide se o comportamento num aparelho real está certo.
 
 ## O que o aceite não prova

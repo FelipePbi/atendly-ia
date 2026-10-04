@@ -9,7 +9,7 @@ O Goal aplica **U-08** e corrige **QA IM-06** (ALTA), **QA IM-09** (ALTA), **QA 
 - Baseline aceita vigente: `c86ca2ecdd38fbe9e0daa60206e6a038db4c8f3f` (fechamento do Goal061). Base imediata da implementação: `a070c540214bbbc69529cade6872c876593ee1fb`, HEAD da worktree `.ai-worktrees/goal-062`, inalterado nas duas rodadas. O commit `a070c54` é só documental (fechamento do 061 e preparação deste Goal).
 - Snapshot aceito, calculado pelo IA Loop: **37 arquivos**, hash do diff `93c6a18b6b83a952a59e8dae55ab199cb58208a694c4ccb47c1d834fae8c67af`. Mudança posterior nesses arquivos exige avaliar o novo diff.
 - **Vinte e seis arquivos rastreados**, por `git diff --numstat a070c54`:
-  - `apps/scheduling-service/`: `prisma/schema.prisma` (+7/−0), `src/modules/customers/atendly-customer-service.ts` (+15/−7), `src/modules/integrations/minha-agenda/client.ts` (+16/−0), `import-source-reader.ts` (+92/−23), `types.ts` (+1/−0), `src/modules/internal-api/routes.ts` (+130/−50), `src/modules/migrations/import-execution-service.ts` (+126/−28), `import-preview-service.ts` (+169/−6) e `src/shared/phone/phone.ts` (+103/−3).
+  - `apps/scheduling-service/`: `prisma/schema.prisma` (+7/−0), `src/modules/customers/avenly-customer-service.ts` (+15/−7), `src/modules/integrations/minha-agenda/client.ts` (+16/−0), `import-source-reader.ts` (+92/−23), `types.ts` (+1/−0), `src/modules/internal-api/routes.ts` (+130/−50), `src/modules/migrations/import-execution-service.ts` (+126/−28), `import-preview-service.ts` (+169/−6) e `src/shared/phone/phone.ts` (+103/−3).
   - `packages/public-api-contract/src/schemas.ts` (+21/−0).
   - `apps/bff/`: `PUBLIC_API_V1.md` (+23/−0) e `src/clients/scheduling/index.ts` (+13/−0).
   - `apps/frontend/src/`: `features/agenda/AppointmentDetail.tsx` (+2/−1), `features/customers/CustomerList.tsx` (+2/−1), `CustomerProfile.tsx` (+2/−1), `PrimaryGuardianPanel.tsx` (+5/−2), `features/imports/ImportConflictsScreen.tsx` (+105/−11), `labels.ts` (+54/−1), `types.ts` (+2/−0), `features/settings/AvailabilitySettings.tsx` (+111/−6) e `shared/phone.ts` (+12/−0).
@@ -40,7 +40,7 @@ Faltava prova e registro. Os seis blockers:
 3. **Documentação do §10 ausente do diff**: D-079, a nota de aplicação em U-08, FINAL_AUDIT §40, CURRENT_STATE, VALIDATION_GATE e a revisão de DATA_MIGRATION.
 4. **Códigos novos sem texto leigo.** `FAILED_REASON_LABELS` não tinha `AVAILABILITY_CHANGED_SINCE_ANALYSIS` nem `AVAILABILITY_SOURCE_OVERLAP`, e a tela caía em "Este item não foi importado." sem pedir nova análise; `SERVICE_PRICE_NOT_INFORMED` não tinha texto em nenhum mapa.
 5. **O teste de DDDs não comparava as duas listas.** Usava cópia literal e só testava o Scheduling; mudança em `apps/bff/src/lib/phone.ts` passaria em silêncio.
-6. **Provas do §7 incompletas.** O §7.1 de telefone chamava `AtendlyCustomerService` direto, com DDD 11 e criação manual, em vez da rota `GET /internal/customers?phone=` com cliente de DDD 55 criado pela importação; o vermelho da baseline `a070c54` só foi colado por uma Work Unit.
+6. **Provas do §7 incompletas.** O §7.1 de telefone chamava `AvenlyCustomerService` direto, com DDD 11 e criação manual, em vez da rota `GET /internal/customers?phone=` com cliente de DDD 55 criado pela importação; o vermelho da baseline `a070c54` só foi colado por uma Work Unit.
 
 ## Rodada 2 — ACCEPTED (0 blockers)
 

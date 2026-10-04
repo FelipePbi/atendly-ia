@@ -13,7 +13,7 @@ O Goal cria a casca comum de lista e detalhe (casca 2 do [pente-fino visual de 2
   - Clientes: `CustomerList.tsx` (+227/−11), `CustomerSummary.tsx` (+87/−65), `CustomerProfile.tsx` (+39/−24), `CustomerForm.tsx` (+26/−17) e `CustomerMemory.tsx` (+23/−23).
   - Serviços: `ServiceForm.tsx` (+286/−157) e `ServiceList.tsx` (+216/−92).
   - Configurações: `BusinessSettings.tsx` (+314/−139), `ProductSettingsScreen.tsx` (+87/−4), `SettingsHub.tsx` (+51/−1) e `shared/SettingsPage.tsx` (+22).
-  - Estilos: `atendly-customers.css` (+583), `atendly-services.css` (+324/−64), `atendly-settings.css` (+122) e `atendly.css` (+113).
+  - Estilos: `avenly-customers.css` (+583), `avenly-services.css` (+324/−64), `avenly-settings.css` (+122) e `avenly.css` (+113).
   - Gate autenticado, só por acréscimo: `e2e/authenticated-matrix.spec.ts` (+299/−0, G-4 e G-5).
   - Testes: `tests/goal088-list-detail.test.tsx` (novo, **25** testes, provas 1 a 5) e asserções ajustadas em `goal018-a11y` (+6), `goal018-business-block` (+2), `goal024-settings-shell-invariant` (+10/−4), `goal058-service-form` (−3), `goal075-customer-profile` (+15/−6) e `goal078-service-instruction-form` (−6).
   - Documentos: `docs/migration/CURRENT_STATE.md`, `DECISIONS.md` (D-103) e `VALIDATION_GATE.md`.
@@ -41,7 +41,7 @@ O Goal cria a casca comum de lista e detalhe (casca 2 do [pente-fino visual de 2
   - **S4** 9,7 / 8,7 / 14,2 / 8,7 %. Barra com × e título, CTA fixo, também acima da barra de abas entre 1024 e 1099 px. As linhas Recorrência, Intervalo (steppers de 52/32 px), Instruções (78 px, raio 14) e Serviço ativo (24 px, raio 7) conferidas no JSX e no CSS contra os valores inline do quadro.
 - Telas irmãs: CL4, AG1 e W1 rodadas. Tela empurrada no mobile, com o CTA fixo no CL4, e lado a lado no desktop, com a Agenda marcada.
 - Oito arquivos de Vitest: `goal088-list-detail` (25), `goal015`, `goal024`, `goal058`, `goal078`, `goal075` e os dois `goal018`. Resultado **95**/**95**.
-- Gate autenticado em disco: `startTime` `2026-10-01T11:47:02Z`, depois da última edição de código (`atendly-services.css`, `11:39:47Z`). **235** `expected`, **0** `unexpected`, **0** `flaky`, **0** retentativas, **15** testes G-4 e **15** G-5. "a 45-minute service saves through the form" verde nas cinco larguras.
+- Gate autenticado em disco: `startTime` `2026-10-01T11:47:02Z`, depois da última edição de código (`avenly-services.css`, `11:39:47Z`). **235** `expected`, **0** `unexpected`, **0** `flaky`, **0** retentativas, **15** testes G-4 e **15** G-5. "a 45-minute service saves through the form" verde nas cinco larguras.
 - A spec do gate mudou só por acréscimo (+299/−0).
 - As asserções mudadas em `goal058`, `goal078` e `goal075` (clique no disclosure que deixou de existir; "Editar dados" movido para o `⋯`) estão justificadas pelo §5 do Goal.
 

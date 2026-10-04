@@ -36,8 +36,8 @@ O vault só diz que a Home do celular tem "status IA/WhatsApp; pendências; pró
 
 Conferido no código da baseline `7d62f4f`:
 
-1. **A Home tem seções que o protótipo não tem.** `apps/frontend/src/features/dashboard/DashboardScreen.tsx` renderiza "Agenda de hoje" (linha 498), "Próximo atendimento" (567), "O que a Atendly fez hoje" com receita estimada (594 e 627), "Precisam de atenção" (639) e "Ações rápidas" (702), cada uma num `card`. O estado vem em duas peças: `StatusStrip` ("Status honesto", linhas 246-279, com duas pílulas) e os alertas empilhados acima dela (H-01, H-06).
-2. **A copy técnica continua na tela.** "Agenda Atendly · fonte oficial" (linha 376), "Confirmados somente após persistência na fonte oficial" (608), "A fonte oficial permanece ativa, mas a consulta está indisponível." (455) e "O que a Atendly fez hoje" (594), que deveria falar da IA (H-08).
+1. **A Home tem seções que o protótipo não tem.** `apps/frontend/src/features/dashboard/DashboardScreen.tsx` renderiza "Agenda de hoje" (linha 498), "Próximo atendimento" (567), "O que a Avenly fez hoje" com receita estimada (594 e 627), "Precisam de atenção" (639) e "Ações rápidas" (702), cada uma num `card`. O estado vem em duas peças: `StatusStrip` ("Status honesto", linhas 246-279, com duas pílulas) e os alertas empilhados acima dela (H-01, H-06).
+2. **A copy técnica continua na tela.** "Agenda Avenly · fonte oficial" (linha 376), "Confirmados somente após persistência na fonte oficial" (608), "A fonte oficial permanece ativa, mas a consulta está indisponível." (455) e "O que a Avenly fez hoje" (594), que deveria falar da IA (H-08).
 3. **A data do próximo atendimento é crua.** `DashboardScreen.tsx:587` mostra `nextAppointment.date` no formato ISO (H-10).
 4. **"Conversas que você assumiu" não tem registro durável.** Toda tomada de controle humano passa por `SessionService.assumeHumanControl` (`apps/ai-orchestrator/src/modules/session/SessionService.ts:261`), chamado por mensagem manual no WhatsApp (`message-graph.ts:603`, fonte `WHATSAPP`), por envio pelo painel (`internal/routes.ts:711`) e pelo botão de assumir (`internal/routes.ts:831`, fonte `ATENDLY`). Ele só grava `humanHandling`, `humanHandlingSince` e `humanHandlingSource` na sessão, e `releaseToAi` (`SessionService.ts:482-500`) zera os três. Uma nova tomada sobrescreve `humanHandlingSince`. O `Handoff` com `reason: "OWNER_TAKEOVER"` só nasce no botão de assumir, não na mensagem pelo WhatsApp. Não há, portanto, como contar tomadas da semana a partir do que existe.
 5. **Os outros dois números têm fonte, mas não janela de semana.** O orquestrador conta confirmações da IA de hoje em `/internal/dashboard` (`internal/routes.ts:1158-1224`): `create_appointment` com `action: "confirm"` e `confirm_recurring_appointments` pelo número de ocorrências confirmadas, com `completedAt` desde o início do dia no fuso do negócio (`startOfTodayInTimeZone`, `src/lib/dates.ts:31`). O Scheduling conta agendamentos de hoje em `/internal/dashboard` (`apps/scheduling-service/src/modules/internal-api/routes.ts:1821-1850`): não cancelados, com `date` igual a hoje no fuso do calendário, sobre uma leitura de hoje a hoje + 30 dias, que não alcança os dias da semana anteriores a hoje.
@@ -80,7 +80,7 @@ Conferido no código da baseline `7d62f4f`:
   - orquestrador: `prisma/schema.prisma`, `prisma/migrations/`, `src/modules/session/SessionService.ts`, `src/modules/internal/routes.ts` (`/internal/dashboard`) e `src/lib/dates.ts`;
   - Scheduling: `src/modules/internal-api/routes.ts` (`/internal/dashboard`);
   - contrato e BFF: `packages/public-api-contract/src/schemas.ts`, `apps/bff/src/clients/ai-orchestrator/index.ts`, `apps/bff/src/clients/scheduling/index.ts`, `apps/bff/src/modules/dashboard/routes.ts` e `apps/bff/PUBLIC_API_V1.md`;
-  - frontend: `features/dashboard/DashboardScreen.tsx`, `shared/styles/atendly.css` e os testes existentes da Home (`goal018-dashboard-status`, `goal059-whatsapp-status-view`, `goal063-home-checklist`, `goal064-greeting-and-account` e outros que montem `/inicio`).
+  - frontend: `features/dashboard/DashboardScreen.tsx`, `shared/styles/avenly.css` e os testes existentes da Home (`goal018-dashboard-status`, `goal059-whatsapp-status-view`, `goal063-home-checklist`, `goal064-greeting-and-account` e outros que montem `/inicio`).
 - Testes de partida: `apps/ai-orchestrator/tests/internal/dashboard-ai-appointments.routes.test.ts` (padrão de teste da contagem) e `apps/ai-orchestrator/tests/integration/human-control-graph.test.ts` e `session-durability.test.ts` (padrão de teste com banco).
 
 ## Pontos de implementação
@@ -90,7 +90,7 @@ Conferido no código da baseline `7d62f4f`:
 | Registro de tomada e números da IA | `apps/ai-orchestrator/prisma/`, `src/modules/session/SessionService.ts`, `src/modules/internal/routes.ts`, `src/lib/dates.ts` |
 | Agendamentos da semana | `apps/scheduling-service/src/modules/internal-api/routes.ts` |
 | Contrato e BFF | `packages/public-api-contract/src/schemas.ts`, `apps/bff/src/clients/`, `apps/bff/src/modules/dashboard/`, `apps/bff/PUBLIC_API_V1.md` |
-| Home e sino | `apps/frontend/src/features/dashboard/`, `shared/styles/atendly.css` |
+| Home e sino | `apps/frontend/src/features/dashboard/`, `shared/styles/avenly.css` |
 | Testes | arquivos com `goal074` no nome, em cada serviço tocado |
 
 ## Escopo obrigatório
@@ -116,8 +116,8 @@ Conferido no código da baseline `7d62f4f`:
 
 - Ordem e composição conforme o protótipo: faixa de estado única → "Precisa da sua atenção" → "Hoje" → "Esta semana". No desktop, "Hoje" na coluna principal e pendências e semana na lateral, como `Home-Desktop.dc.html`. Nenhum card dentro de card (H-06).
 - Uma faixa de estado só, com os estados das escolhas de desenho. `StatusStrip` ("Status honesto") e os alertas empilhados saem (H-01). Nenhum estado se contradiz na mesma tela (H-02 continua fechado).
-- Saem "Próximo atendimento", "O que a Atendly fez hoje", a receita estimada e "Ações rápidas". O checklist de ativação do Goal063 fica, sem itens em card, e continua levando a cada módulo (H-03 e H-04 continuam fechados).
-- Nenhuma destas copies aparece em `/inicio`: "fonte oficial", "persistência", "O que a Atendly fez hoje", "Status honesto" (H-08).
+- Saem "Próximo atendimento", "O que a Avenly fez hoje", a receita estimada e "Ações rápidas". O checklist de ativação do Goal063 fica, sem itens em card, e continua levando a cada módulo (H-03 e H-04 continuam fechados).
+- Nenhuma destas copies aparece em `/inicio`: "fonte oficial", "persistência", "O que a Avenly fez hoje", "Status honesto" (H-08).
 - Nenhuma data ISO aparece em `/inicio`. Toda data mostrada é formatada em português no fuso do negócio (H-10).
 - "Esta semana" mostra os três números, com os rótulos do protótipo: "agendamentos", "marcados pela IA" e "conversas que você assumiu". Dependência indisponível mostra "—".
 - O sino, conforme as escolhas de desenho (H-07).

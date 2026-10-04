@@ -1,6 +1,6 @@
-# Migração do Atendly
+# Migração do Avenly
 
-Esta pasta contém a auditoria independente, a arquitetura alvo e o plano incremental para o único MVP do Atendly. Goal0 analisa e planeja; não implementa produto. Baseline histórica do Goal0: `5fb5d51abc1de58cb24718e7349d7a68ccaa7356`, auditada em 2026-09-05 — fotografia daquele momento, não a baseline operacional dos Goals seguintes. A **baseline aceita vigente** é o SHA do commit de fechamento do último Goal ACCEPTED e fica em [MIGRATION_STATUS](MIGRATION_STATUS.md).
+Esta pasta contém a auditoria independente, a arquitetura alvo e o plano incremental para o único MVP do Avenly. Goal0 analisa e planeja; não implementa produto. Baseline histórica do Goal0: `5fb5d51abc1de58cb24718e7349d7a68ccaa7356`, auditada em 2026-09-05 — fotografia daquele momento, não a baseline operacional dos Goals seguintes. A **baseline aceita vigente** é o SHA do commit de fechamento do último Goal ACCEPTED e fica em [MIGRATION_STATUS](MIGRATION_STATUS.md).
 
 **Tech Lead Agent:** Tech Lead / Architect / Reviewer; confronta evidências, decide direção técnica dentro do escopo, mantém plano e inspeciona implementações. **Developer Agent:** Developer / Executor; implementa o Goal vigente, migrations/contratos/testes e entrega diff/resultados para review. **IA Loop:** orchestrator; transporta, persiste estado e executa mecanicamente as transições já autorizadas, sem decidir aceite. Relatório do executor não substitui inspeção real. Os modelos que exercem cada papel estão em [AGENT_ROLES](AGENT_ROLES.md).
 

@@ -1,7 +1,7 @@
 ---
 title: Agenda e Agendamentos
 aliases: [Regras de Agenda]
-tags: [atendly, agenda, agendamento]
+tags: [avenly, agenda, agendamento]
 status: vigente
 ---
 
@@ -9,7 +9,7 @@ status: vigente
 
 ## Agenda oficial
 
-A agenda utilizada pela IA e pelo profissional é sempre a Agenda Atendly.
+A agenda utilizada pela IA e pelo profissional é sempre a Agenda Avenly.
 
 ## Visualizações da Agenda
 

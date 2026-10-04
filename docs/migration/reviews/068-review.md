@@ -9,10 +9,10 @@ O Goal corrige **G-01…G-07**, **C-05…C-10** e **L-06…L-08** da [revisão l
 - Baseline aceita vigente: `2995be57e34d74cf1ca4e62d70f541856bb118a7` (Goal073). Base imediata da implementação: `5216cfe01aa4a29fbc83cfd24b32e13aef176eb0`, HEAD da worktree `.ai-worktrees/goal-068`, inalterado nas cinco rodadas. O commit `5216cfe` é só documental (fechamento do Goal073 e preparação deste Goal).
 - Snapshot aceito, calculado pelo IA Loop: **22 arquivos**, hash do diff `72202a7e7eb3c2c611bf0fbeb51e617532d36e115c81c32c3ac1199c432f1fbe`. Mudança posterior nesses arquivos exige avaliar o novo diff.
 - **Dezoito entradas rastreadas**, por `git diff --numstat 5216cfe`:
-  - `apps/frontend/src/`: `shared/ui/Brand.tsx` (+109/−1), `shared/styles/atendly.css` (+300/−43), `features/auth/AuthScreen.tsx` (+43/−70), `app/layout.tsx` (+1/−1, ícone para o SVG novo) e `shared/layout/AppShell.tsx` (+1/−1, `signature="check"` só no `Brand` da sidebar, linha 155).
+  - `apps/frontend/src/`: `shared/ui/Brand.tsx` (+109/−1), `shared/styles/avenly.css` (+300/−43), `features/auth/AuthScreen.tsx` (+43/−70), `app/layout.tsx` (+1/−1, ícone para o SVG novo) e `shared/layout/AppShell.tsx` (+1/−1, `signature="check"` só no `Brand` da sidebar, linha 155).
   - Nove removidos de `apps/frontend/public/`: os quatro PNGs antigos de `brand/` (`atendly-favicon-32x32.png`, `atendly-favicon-512x512.png`, `atendly-logo-horizontal.png`, `atendly-logo-icon.png`) e os cinco SVGs de exemplo do Next (`file.svg`, `globe.svg`, `next.svg`, `vercel.svg`, `window.svg`).
   - Os quatro documentos de `docs/migration/`, só por acréscimo no snapshot aceito (nenhuma linha removida): `CURRENT_STATE.md` (+132), `DECISIONS.md` (+33, D-087), `FINAL_AUDIT.md` (+132, §48) e `VALIDATION_GATE.md` (+176).
-- **Quatro arquivos novos**: `apps/frontend/public/brand/atendly-icon.svg` e os testes `apps/frontend/tests/goal068-marca.test.tsx` (**106** linhas), `goal068-assinatura.test.tsx` (**321** linhas) e `goal068-telas-de-entrada.test.tsx` (**192** linhas).
+- **Quatro arquivos novos**: `apps/frontend/public/brand/avenly-icon.svg` e os testes `apps/frontend/tests/goal068-marca.test.tsx` (**106** linhas), `goal068-assinatura.test.tsx` (**321** linhas) e `goal068-telas-de-entrada.test.tsx` (**192** linhas).
 - Nenhum contrato, BFF, orquestrador, Scheduling, `packages/`, migration, `scripts/` ou `tools/ia-loop/` foi tocado. Nenhuma configuração de teste mudou. `QA_LOCAL_REVIEW.md` e o Product Vault não foram editados.
 
 ## Rótulos das notas de correção nos documentos
@@ -79,7 +79,7 @@ Conferido na revisão: `goal068-*.test.tsx` **33**/**33**; `npm run test:gate` *
 
 ## Observações registradas, sem mudar a decisão
 
-1. **A composição entre 1024px e 1279px não é "card sobre Petróleo cheio".** Nessa faixa, `atendly.css` põe o painel Petróleo à esquerda (440px) e o card sobre papel à direita. Só entre 768px e 1023px o card fica sobre Petróleo cheio. O §3 do Goal pede "os dois sobre Petróleo", e o protótipo só diz "formulário à direita". D-087 item 4, CURRENT_STATE e FINAL_AUDIT §48 descreviam a faixa de forma errada. O fechamento acrescentou uma nota de correção nos três, e a escolha fica na conferência humana do §8.
+1. **A composição entre 1024px e 1279px não é "card sobre Petróleo cheio".** Nessa faixa, `avenly.css` põe o painel Petróleo à esquerda (440px) e o card sobre papel à direita. Só entre 768px e 1023px o card fica sobre Petróleo cheio. O §3 do Goal pede "os dois sobre Petróleo", e o protótipo só diz "formulário à direita". D-087 item 4, CURRENT_STATE e FINAL_AUDIT §48 descreviam a faixa de forma errada. O fechamento acrescentou uma nota de correção nos três, e a escolha fica na conferência humana do §8.
 2. **O adendo "Rodada 4" não repete `test:gate` 233.** A contagem está nas seções anteriores do §48, nenhum script mudou, e ela foi confirmada por WU-08 e por esta revisão.
 3. **O título de um teste ficou defasado.** Em `goal068-assinatura.test.tsx:258`, o nome ainda diz "a sidebar consome a sessão primeiro". A asserção agora vale sem depender da ordem.
 4. **O Goal custou cinco rodadas por entrega parcial.** Nas rodadas 2 a 4, blockers já nomeados foram entregues pela metade, e o relatório do Developer não citou o que faltava.

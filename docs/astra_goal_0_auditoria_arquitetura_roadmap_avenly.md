@@ -2,7 +2,7 @@
 
 ## Papel neste projeto
 
-Você é o **Tech Lead / Architect / Reviewer** do Atendly.
+Você é o **Tech Lead / Architect / Reviewer** do Avenly.
 
 A divisão de responsabilidades deste projeto é fixa:
 
@@ -51,7 +51,7 @@ O Claude Code será responsável por:
 
 # 1. Objetivo
 
-Realizar uma análise técnica independente e completa do Atendly antes do início da refatoração.
+Realizar uma análise técnica independente e completa do Avenly antes do início da refatoração.
 
 Você deve confrontar três realidades diferentes:
 
@@ -518,14 +518,14 @@ Não crie migrations neste Goal.
 
 # 10. Agenda e Scheduling
 
-Este é um domínio central do novo Atendly.
+Este é um domínio central do novo Avenly.
 
 Analise profundamente:
 
 - agenda atual;
 - providers;
 - CalendarProvider;
-- Atendly Calendar;
+- Avenly Calendar;
 - integrações externas;
 - disponibilidade;
 - appointments;
@@ -554,7 +554,7 @@ docs/product-vault/02-Fluxos/03-Fluxos-de-Agendamento.md
 A regra do produto é:
 
 ```text
-Agenda Atendly = única agenda operacional.
+Agenda Avenly = única agenda operacional.
 ```
 
 Determine quais abstrações existentes ainda fazem sentido nesse novo cenário.
@@ -1674,7 +1674,7 @@ A arquitetura proposta deve ser:
 - clara em responsabilidades;
 - sem duas agendas operacionais;
 - sem dependência operacional do Minha Agenda;
-- capaz de sustentar IA + WhatsApp + Agenda Atendly;
+- capaz de sustentar IA + WhatsApp + Agenda Avenly;
 - sem acoplamento desnecessário ao protótipo;
 - sem serviços extras sem justificativa.
 
@@ -1705,13 +1705,13 @@ O roadmap deve:
 
 Defina no MASTER_PLAN um DoD global semelhante a:
 
-O novo Atendly só está concluído quando:
+O novo Avenly só está concluído quando:
 
 - Product Vault está implementado no escopo MVP;
 - frontend está alinhado ao Claude Design aprovado;
-- Agenda Atendly é a única agenda operacional;
+- Agenda Avenly é a única agenda operacional;
 - Minha Agenda existe apenas como importação única;
-- dados importados permanecem operáveis no Atendly;
+- dados importados permanecem operáveis no Avenly;
 - frontend e backend estão alinhados;
 - contratos legados sem consumers foram removidos;
 - IA usa regras e estilos vigentes;

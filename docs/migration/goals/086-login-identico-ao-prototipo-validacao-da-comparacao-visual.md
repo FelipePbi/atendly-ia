@@ -86,7 +86,7 @@ O gate renderizado (`validate:ui`) continua passando nas cinco larguras, inclusi
 ## Pontos de implementação
 
 - `apps/frontend/src/features/auth/AuthScreen.tsx`
-- `apps/frontend/src/shared/styles/atendly.css` e `atendly-system.css`, no bloco de autenticação
+- `apps/frontend/src/shared/styles/avenly.css` e `avenly-system.css`, no bloco de autenticação
 - Ícones que faltarem, em `shared/ui/` ou junto do componente, no padrão já usado pelo app
 
 ## Fora do escopo

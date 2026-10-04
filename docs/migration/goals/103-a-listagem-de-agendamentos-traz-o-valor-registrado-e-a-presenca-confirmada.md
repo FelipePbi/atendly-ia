@@ -33,7 +33,7 @@ Este Goal faz a listagem e a leitura de um agendamento devolverem os campos de c
 Conferido no código da baseline:
 
 1. **O dado existe.** `Appointment` tem `completedAt`, `completionOrigin`, `noShowAt`, `noShowNote`, `presenceConfirmedAt` e `finalValue` (`apps/scheduling-service/prisma/schema.prisma`, migration `20260909180000_goal008_agenda_expand`). A rota de ciclo de vida já os serializa em `appointment-lifecycle-service.ts` (`toSnapshot`, com `toDecimalNumber` para o decimal e `toISOString` para as datas).
-2. **O Scheduling descarta.** `CalendarAppointment` (`apps/scheduling-service/src/modules/calendar/calendar-provider.ts`) não tem esses campos, e `toAtendlyAppointment` (`apps/scheduling-service/src/modules/integrations/atendly/provider.ts`) não os copia. A mesma função alimenta a listagem, a leitura de um agendamento, a série (`appointment-series-service.ts`) e o resumo da Home (`todayAppointments` e `nextAppointment` em `internal-api/routes.ts`).
+2. **O Scheduling descarta.** `CalendarAppointment` (`apps/scheduling-service/src/modules/calendar/calendar-provider.ts`) não tem esses campos, e `toAvenlyAppointment` (`apps/scheduling-service/src/modules/integrations/avenly/provider.ts`) não os copia. A mesma função alimenta a listagem, a leitura de um agendamento, a série (`appointment-series-service.ts`) e o resumo da Home (`todayAppointments` e `nextAppointment` em `internal-api/routes.ts`).
 3. **O BFF também descartaria.** `appointmentSchema` em `apps/bff/src/clients/scheduling/index.ts` é um `z.object` sem esses campos, e o zod remove chave desconhecida. Mesmo com o Scheduling corrigido, o BFF não repassaria.
 4. **O contrato já os declara.** `appointmentSchema` em `packages/public-api-contract/src/schemas.ts` tem os seis campos, opcionais e com `default(null)`. O comentário diz que o DTO "só os traz quando a rota de ciclo respondeu". O frontend já lê `finalValue` em `CustomerAgenda.tsx` e `presenceConfirmedAt` em `DayView.tsx`. O detalhe do agendamento (`AppointmentDetail.tsx`) junta a resposta da rota de ciclo e não depende da listagem.
 5. **A Agenda em Dia tem o mesmo defeito.** `DayView.tsx` mostra "presença confirmada pelo lembrete" quando a linha tem `presenceConfirmedAt`, e a listagem nunca o traz. A divergência 5 da prova visual de D-108 atribui a ausência ao seed ("o seed não grava `presenceConfirmedAt`"), com "causa não medida". A causa provável é este descarte; o Developer confirma ou descarta.
@@ -46,7 +46,7 @@ Conferido no código da baseline:
 
 **(b) Mesmo valor que a rota de ciclo de vida.** Para o mesmo agendamento, cada um dos seis campos da listagem é igual ao da rota de ciclo de vida: decimal como `number` com o mesmo arredondamento, data como a mesma string ISO. A serialização é a mesma, por função compartilhada ou extraída, nunca reescrita com outra regra.
 
-**(c) Resposta antiga continua decodificável.** `AtendlyCalendarProvider` é hoje o único `CalendarProvider`. Mas a resposta de idempotência gravada antes deste Goal não tem os campos, e `parseCalendarAppointment` (`calendarAppointmentSchema` em `calendar-service.ts`) a decodifica no replay e na série. Esse schema e o `appointmentSchema` do BFF recebem os seis campos com `nullable().default(null)` (ou equivalente). Nenhuma chave já respondida deixa de decodificar.
+**(c) Resposta antiga continua decodificável.** `AvenlyCalendarProvider` é hoje o único `CalendarProvider`. Mas a resposta de idempotência gravada antes deste Goal não tem os campos, e `parseCalendarAppointment` (`calendarAppointmentSchema` em `calendar-service.ts`) a decodifica no replay e na série. Esse schema e o `appointmentSchema` do BFF recebem os seis campos com `nullable().default(null)` (ou equivalente). Nenhuma chave já respondida deixa de decodificar.
 
 **(d) Só leitura.** Nenhuma regra de escrita muda. Concluir, marcar não comparecimento, confirmar presença e registrar valor continuam nas rotas de ciclo de vida, com as mesmas validações. Nenhuma migration, coluna, índice ou consulta nova: a linha já é lida inteira pelo `appointmentInclude` atual. Se a leitura exigir mudar a consulta, o Developer para e reporta.
 
@@ -58,7 +58,7 @@ Conferido no código da baseline:
 
 ### 1. Scheduling
 
-`CalendarAppointment` e `toAtendlyAppointment` conforme (a) e (b). `calendarAppointmentSchema` conforme (c). `GET /internal/appointments`, `GET /internal/appointments/:id` e o resumo da Home passam a trazer os seis campos com o valor gravado.
+`CalendarAppointment` e `toAvenlyAppointment` conforme (a) e (b). `calendarAppointmentSchema` conforme (c). `GET /internal/appointments`, `GET /internal/appointments/:id` e o resumo da Home passam a trazer os seis campos com o valor gravado.
 
 ### 2. BFF
 
@@ -67,7 +67,7 @@ Conferido no código da baseline:
 ### 3. Provas
 
 1. **Scheduling, contra PostgreSQL real** (`apps/scheduling-service/tests/integration/`, arquivo novo `goal103-…`). Um agendamento concluído com valor registrado, um com presença confirmada e não concluído, um não comparecimento com nota e um confirmado sem nada. Pela rota HTTP `/internal/appointments` (com `customerId` e com intervalo de datas) e por `/internal/appointments/:id`, cada um devolve os seis campos com o valor gravado. Para cada um, os seis campos são iguais aos da rota de ciclo de vida do mesmo agendamento (b). Um `finalValue` com centavos (por exemplo 149,90) volta como `149.9`. O agendamento sem nada devolve os seis como `null`.
-2. **Scheduling, unidade** (`apps/scheduling-service/tests/unit/`, arquivo novo `goal103-…`). `toAtendlyAppointment` mapeia os seis campos de um registro, e `parseCalendarAppointment` de um replay antigo (sem os campos) dá `null` nos seis.
+2. **Scheduling, unidade** (`apps/scheduling-service/tests/unit/`, arquivo novo `goal103-…`). `toAvenlyAppointment` mapeia os seis campos de um registro, e `parseCalendarAppointment` de um replay antigo (sem os campos) dá `null` nos seis.
 3. **BFF** (`apps/bff/tests/`, arquivo novo `goal103-…`). Com o Scheduling simulado devolvendo os seis campos, `GET /v1/appointments` e `GET /v1/appointments/:id` os devolvem iguais; com o Scheduling devolvendo a forma antiga (sem os campos), as duas rotas respondem 200 com `null`.
 4. **IA** (no arquivo da prova 2 ou num teste existente do `ai-orchestrator`, sem mudar `src/`). O agendamento decodificado pelo cliente da IA não tem `finalValue` nem `noShowNote`, mesmo quando a resposta do Scheduling os traz.
 
@@ -81,7 +81,7 @@ Depois da última edição de código, o Developer sobe BFF e Scheduling locais 
 
 Cada um com o arquivo restaurado e `sha256` idêntico conferido no fim:
 
-1. Remover `finalValue` do mapeamento de `toAtendlyAppointment`: a prova 1 reprova.
+1. Remover `finalValue` do mapeamento de `toAvenlyAppointment`: a prova 1 reprova.
 2. Remover os campos do `appointmentSchema` do BFF: a prova 3 reprova.
 3. Serializar `finalValue` com `Math.round` (inteiro): a prova 1 reprova no valor com centavos.
 4. Declarar `finalValue` no schema da IA: a prova 4 reprova.
@@ -98,7 +98,7 @@ Cada um com o arquivo restaurado e `sha256` idêntico conferido no fim:
 ## Pontos de implementação
 
 - `apps/scheduling-service/src/modules/calendar/calendar-provider.ts` (`CalendarAppointment`).
-- `apps/scheduling-service/src/modules/integrations/atendly/provider.ts` (`toAtendlyAppointment`).
+- `apps/scheduling-service/src/modules/integrations/avenly/provider.ts` (`toAvenlyAppointment`).
 - `apps/scheduling-service/src/modules/appointments/appointment-lifecycle-service.ts`, só para exportar ou extrair a serialização de (b), sem mudar o que a rota de ciclo devolve.
 - `apps/scheduling-service/src/modules/calendar/calendar-service.ts` (`calendarAppointmentSchema`).
 - `apps/bff/src/clients/scheduling/index.ts` (`appointmentSchema`).

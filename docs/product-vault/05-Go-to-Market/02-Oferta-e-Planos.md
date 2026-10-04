@@ -1,7 +1,7 @@
 ---
 title: Oferta e Planos
-aliases: [Planos Atendly, Grátis e Pro, Monetização]
-tags: [atendly, go-to-market, monetizacao, planos]
+aliases: [Planos Avenly, Grátis e Pro, Monetização]
+tags: [avenly, go-to-market, monetizacao, planos]
 status: direcao
 ---
 
@@ -17,7 +17,7 @@ Dois planos iniciais:
 
 Tudo o que é operação manual do negócio:
 
-- Agenda Atendly;
+- Agenda Avenly;
 - serviços;
 - agendamentos manuais;
 - faturamento (implementação futura — não comunicar até existir).

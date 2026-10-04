@@ -1,6 +1,6 @@
 # Goal 111 — Os registros e a documentação passam a dizer Avenly
 
-**Status: READY.** Preparado em 2026-10-04 pelo Tech Lead Agent após [Goal102 ACCEPTED](../reviews/102-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED.** Preparado em 2026-10-04 pelo Tech Lead Agent após [Goal102 ACCEPTED](../reviews/102-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

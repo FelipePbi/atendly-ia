@@ -173,8 +173,8 @@ Aplique cada controle e reverta-o no mesmo passo, com a restauração conferida 
 - `apps/frontend/src/features/settings/`: `SettingsHub.tsx`, `ProductSettingsScreen.tsx`, `CalendarSettings.tsx`, `BusinessSettings.tsx` (só o que (c) pede), `types.ts` (cenários novos) e `shared/labels.ts`. Componentes novos para o AG3, a folha de visualização e as funções puras de resumo e de "Na prática", na mesma pasta.
 - `apps/frontend/src/app/(platform)/configuracoes/agenda/regras/page.tsx` e `.../agenda/lembretes/page.tsx`, no padrão de `configuracoes/agenda/page.tsx`.
 - `apps/frontend/src/features/reminders/ReminderSettingsSection.tsx` só para o `h2` de (f), sem mudar comportamento.
-- `apps/frontend/src/shared/styles/atendly-settings.css`. `atendly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
-- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/atendly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
+- `apps/frontend/src/shared/styles/avenly-settings.css`. `avenly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
+- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/avenly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
 - `apps/frontend/e2e/visual/targets.json`: só o que (h) autoriza.
 - `apps/frontend/e2e/routes.ts`: só o que o §6 autoriza.
 - `apps/frontend/tests/`: a prova nova e as asserções do §5.

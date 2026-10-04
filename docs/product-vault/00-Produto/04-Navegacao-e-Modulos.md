@@ -1,7 +1,7 @@
 ---
 title: Navegação e Módulos
-aliases: [Arquitetura da Informação Atendly]
-tags: [atendly, navegacao, ia]
+aliases: [Arquitetura da Informação Avenly]
+tags: [avenly, navegacao, ia]
 status: vigente
 ---
 

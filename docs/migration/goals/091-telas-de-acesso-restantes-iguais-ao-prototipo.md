@@ -109,8 +109,8 @@ Aplique cada controle e reverta-o no mesmo passo, com a restauração conferida 
 
 - `apps/frontend/src/features/auth/AuthScreen.tsx`: textos e composição de L3, L4 e L5.
 - `apps/frontend/src/components/legal/LegalDocumentLayout.tsx`: estrutura de L8 e L9 e o sumário.
-- `apps/frontend/src/shared/styles/atendly.css`, nos blocos `.auth-*`, `.entry-*` e `.legal-*`. Regra compartilhada com o L1 só muda se o L1 não piorar.
-- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/atendly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
+- `apps/frontend/src/shared/styles/avenly.css`, nos blocos `.auth-*`, `.entry-*` e `.legal-*`. Regra compartilhada com o L1 só muda se o L1 não piorar.
+- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/avenly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
 - `apps/frontend/e2e/routes.ts`, só se um `contentMarker` depender de texto trocado, com o motivo no relatório.
 - `apps/frontend/tests/`: a prova nova e as asserções do §5.
 

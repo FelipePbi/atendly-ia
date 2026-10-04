@@ -42,7 +42,7 @@ Conferido no protótipo (`docs/design-reference/claude-design/prototype/project/
 1. **O cartão da IA não olha o WhatsApp.** `IaCard` (`apps/frontend/src/shared/layout/AppShell.tsx`) recebe só `status.aiView`: com a IA `active`, mostra "IA ativa", "atendendo pelo WhatsApp" e o link "Pausar", mesmo com `status.whatsappView === "off"`. O banner da casca ("Atendimento automático parado") e a faixa da Home (`resolveOperationalState`, em `features/dashboard/DashboardScreen.tsx`) já põem o WhatsApp desconectado à frente da IA. Depois do 087, a Home não tem mais pontos de estado (`StatusPoint` saiu); o R-06 restante é o cartão da sidebar.
 2. **O protótipo diz o que o cartão mostra nesse estado, e não é "IA sem conexão".** No quadro "Home / Home · WhatsApp desconectado / Desktop" (`Home-Desktop.dc.html`, H3), o cartão da sidebar tem fundo `#F8E2DE`, um ícone de círculo cortado em `#B3392E` (18 px, borda de 2 px), o título "WhatsApp desconectado" (13 px, peso 600, `#8A2A21`), a linha "a IA não está atendendo" (12 px, `#8A2A21`) e a ação "Reconectar" (13 px, peso 600, `#B3392E`). "IA sem conexão" é o estado **por linha** em Conversas (NT3, `Notificacoes*.dc.html`), não o do cartão. A escolha (a) da versão anterior deste Goal ("IA sem conexão" na sidebar) contradiz o H3 e é substituída.
 3. **No H3, a Home não repete o aviso.** Nos quatro devices do H3, o único aviso é a faixa de estado: "WhatsApp desconectado", "Sua IA não está atendendo. …" e "Reconectar WhatsApp". O app, em `/inicio` com o WhatsApp desconectado, mostra o banner da casca (`PersistentStatusBanner`, "Atendimento automático parado · Reconecte o WhatsApp para a IA voltar a responder.") **e**, logo abaixo, a faixa "WhatsApp desconectado". Nas outras telas, o banner persiste, como em NT3.
-4. **A casca depende de unidade de viewport.** Em `shared/styles/atendly.css`, `.app-frame` tem `min-height: 100dvh` e `.sidebar` tem `position: sticky; top: 0; height: 100dvh`; `body` tem `min-height: 100dvh` em `src/app/globals.css`. Depois do 087, a sidebar só aparece a partir de 1100 px (`.app-frame > .sidebar { display: none }` abaixo disso). O efeito relatado continua possível em navegador em que a unidade não acompanha a janela (webview, zoom, redimensionamento).
+4. **A casca depende de unidade de viewport.** Em `shared/styles/avenly.css`, `.app-frame` tem `min-height: 100dvh` e `.sidebar` tem `position: sticky; top: 0; height: 100dvh`; `body` tem `min-height: 100dvh` em `src/app/globals.css`. Depois do 087, a sidebar só aparece a partir de 1100 px (`.app-frame > .sidebar { display: none }` abaixo disso). O efeito relatado continua possível em navegador em que a unidade não acompanha a janela (webview, zoom, redimensionamento).
 5. **O gate autenticado tem o WhatsApp conectado** (`configuracoes-whatsapp` espera "WhatsApp conectado" em `e2e/authenticated-matrix.spec.ts`). O estado desconectado só é alcançável em jsdom e na conta visual do `visual:compare`.
 6. **Código morto do 087** (observação 2 do review087): `showMobileHeader` continua em `ShellConfig` (`shared/layout/ShellConfig.tsx`), em `sameConfig`, em `src/app/(platform)/layout.tsx` e em `ConversationThread.tsx`, sem efeito desde que o cabeçalho de marca saiu.
 
@@ -82,7 +82,7 @@ Conferido no protótipo (`docs/design-reference/claude-design/prototype/project/
 - R-08 (sublinhado das linhas de lista) e R-09 (nome no bloco curto da Semana): passam aos Goals que portarem CL1 e A10.
 - O estado por linha em Conversas ("IA sem conexão"), a observação 1 do review084 (JID estrangeiro formatado como brasileiro), `attention` e `loading` de `ConversationThread`: para o Goal que tocar Conversas.
 - Os estados "IA pausada" (H5), "IA com instabilidade" (H6) e "IA inativa" (H4) do cartão e da faixa, e a folha de pausa (H7).
-- `height: 100dvh` de `.conversation-detail-main` (`shared/styles/atendly-conversations.css`), a conversa aberta: mexer nele mexe na rolagem interna do chat.
+- `height: 100dvh` de `.conversation-detail-main` (`shared/styles/avenly-conversations.css`), a conversa aberta: mexer nele mexe na rolagem interna do chat.
 - O texto e o lugar do banner da casca nas outras rotas.
 - Qualquer mudança em `GET /v1/status`, no BFF, no contrato, nos serviços, em `docs/design-reference/`, no vault e em `e2e/visual/targets.json` (H3 já está mapeado para `/inicio`; mude só se o alvo estiver errado, e explique no relatório).
 
@@ -124,7 +124,7 @@ Dois arquivos novos em `apps/frontend/tests/`, com dublês do `ProductRuntime` n
 2. Com `ai.state: "ACTIVE"` e o WhatsApp `DISCONNECTED`, a casca mostra no cartão "WhatsApp desconectado", "a IA não está atendendo" e o link "Reconectar" para `/configuracoes/whatsapp`, e nunca "IA ativa" nem "Pausar". Com o WhatsApp `CONNECTED`, o cartão diz "IA ativa" e tem "Pausar".
 3. Em `/inicio`, com o WhatsApp `DISCONNECTED` e o painel carregado, o texto "Atendimento automático parado" não aparece e a faixa "WhatsApp desconectado" aparece uma vez; com o painel ainda carregando, o banner aparece. Em `/clientes`, com o WhatsApp `DISCONNECTED`, o banner aparece uma vez.
 
-`apps/frontend/tests/goal085-shell-css.test.ts`, guarda sobre a folha de estilo, lendo `src/shared/styles/atendly.css` e, se tocado, `src/app/globals.css`:
+`apps/frontend/tests/goal085-shell-css.test.ts`, guarda sobre a folha de estilo, lendo `src/shared/styles/avenly.css` e, se tocado, `src/app/globals.css`:
 
 4. Toda declaração de altura (`height`, `min-height`, `max-height`) dentro de qualquer regra cujo seletor contenha `.app-frame` ou `.sidebar`, inclusive dentro de `@media`, não usa `vh`, `dvh`, `svh` nem `lvh`.
 5. A guarda da prova 4 lê o arquivo de verdade: o teste falha se o arquivo não tiver nenhuma regra com `.app-frame` ou `.sidebar`, para não passar por arquivo vazio ou caminho errado.
@@ -161,8 +161,8 @@ O relatório e os documentos dizem que essa conferência **não foi feita** por 
 - `apps/frontend/src/shared/layout/AppShell.tsx`, `ShellConfig.tsx` e `src/app/(platform)/layout.tsx`: (a), (b) e (f).
 - `apps/frontend/src/features/dashboard/DashboardScreen.tsx`: (b) e (c).
 - `apps/frontend/src/features/conversations/ConversationThread.tsx`: só a remoção de `showMobileHeader`, por (f).
-- `apps/frontend/src/shared/styles/atendly.css`: o cartão, a faixa e (d). `apps/frontend/src/app/globals.css`: só se (d) usar a cadeia de altura de `html`/`body`.
-- Ícone que faltar (o círculo cortado do H3), em `shared/icons/Icon.tsx` e `public/icons/atendly-icons.svg`, no padrão do Goal086.
+- `apps/frontend/src/shared/styles/avenly.css`: o cartão, a faixa e (d). `apps/frontend/src/app/globals.css`: só se (d) usar a cadeia de altura de `html`/`body`.
+- Ícone que faltar (o círculo cortado do H3), em `shared/icons/Icon.tsx` e `public/icons/avenly-icons.svg`, no padrão do Goal086.
 - `apps/frontend/tests/`: as provas novas e as asserções do §5.
 - `apps/frontend/e2e/authenticated-matrix.spec.ts` e, se preciso, `e2e/measure.ts`: G-3, **só por acréscimo**.
 
@@ -228,4 +228,4 @@ Documento que cita uma unidade ainda não executada ou um controle ainda não ro
 | WU-11 | STANDARD | WU-08, WU-09, WU-10 | `visual:compare` final, controles negativos (§6) e documentação, depois da execução final |
 | WU-12 | DETERMINISTIC | WU-11 | git-diff-check final |
 
-WU-01 e WU-02 tocam `atendly.css` e por isso correm em série. Cada unidade de testes dirigidos leva um único filtro de arquivo do Vitest.
+WU-01 e WU-02 tocam `avenly.css` e por isso correm em série. Cada unidade de testes dirigidos leva um único filtro de arquivo do Vitest.

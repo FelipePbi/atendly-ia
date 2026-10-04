@@ -1,7 +1,7 @@
 ---
 title: Regras de Negócio
-aliases: [Regras Atendly]
-tags: [atendly, regras, produto]
+aliases: [Regras Avenly]
+tags: [avenly, regras, produto]
 status: vigente
 ---
 
@@ -9,7 +9,7 @@ status: vigente
 
 ## Princípios fundamentais
 
-1. A Agenda Atendly é a única agenda oficial do negócio.
+1. A Agenda Avenly é a única agenda oficial do negócio.
 2. Minha Agenda é apenas uma fonte de migração única.
 3. O MVP possui um usuário, um profissional, um negócio e um número de WhatsApp.
 4. A IA pode executar agendamentos, cancelamentos e remarcações dentro das regras do negócio.
@@ -105,7 +105,7 @@ Um contato marcado como **Ignorar IA**:
 
 - nunca recebe resposta da IA;
 - seu conteúdo não é usado pela IA;
-- continua podendo aparecer na Atendly conforme organização da inbox.
+- continua podendo aparecer na Avenly conforme organização da inbox.
 
 ## Uma única importação
 
@@ -115,7 +115,7 @@ Cada negócio pode concluir apenas uma importação do Minha Agenda.
 - importação parcial permanece aberta até conclusão explícita;
 - após `Concluir importação`, não existe nova importação;
 - credenciais deixam de ser usadas;
-- alterações futuras no Minha Agenda não chegam à Atendly.
+- alterações futuras no Minha Agenda não chegam à Avenly.
 
 ## Relacionado
 

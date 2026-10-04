@@ -49,8 +49,8 @@ O planejamento verificou o que segue na árvore de `d37e1fe5`. Não gastar rodad
 - **Ele alcança sete rotas públicas**, listadas em `apps/frontend/e2e/routes.ts:9`. Nenhuma rota autenticada é medida, e o comentário do arquivo já diz por quê.
 - **A medição de toque está em `apps/frontend/e2e/viewport-matrix.spec.ts`**: o teste roda só nos dois projetos `mobile-*`, o seletor está em `:105`, a isenção de link embutido em frase em `:118`–`:124`, a asserção de exceção obsoleta em `:143`–`:147` e a asserção final de `belowAA` no fim do bloco. `TOUCH_TARGET_AA = 24` e `TOUCH_TARGET_COMFORTABLE = 44` estão em `:23`–`:24`; o segundo é **relatado, nunca falha**.
 - **`KNOWN_SMALL_TARGETS` (`:41`) tem exatamente três entradas**, cada uma com `html`, `route` e `why`, e o mecanismo é estrito nos dois sentidos: exceção que deixa de reproduzir **falha**.
-- **O padrão de checkbox do produto já é o correto visualmente**: `atendly.css:479`–`:486` dá ao `.check`/`.radio` `display: flex` e `min-height: 44px`; `:487`–`:491` esconde o input nativo com `position: absolute; opacity: 0`; `:492`–`:504` desenha `.check-box` em 22×22; `:526`–`:530` dá foco visível ao `.check-box` pelo `:focus-visible` do input. O que falta não é estilo de checkbox.
-- **O link de `/link-expirado` está em `apps/frontend/src/features/auth/AuthScreen.tsx:255`–`:259`**, dentro de `<p className="auth-footer">`, sem outro texto no parágrafo. A classe `.auth-link` está em `atendly.css:3384`–`:3392` e **não** tem altura mínima. Os outros usos de `.auth-link` (`AuthScreen.tsx:393`, `:421`, `:428`) ficam ao lado de outro texto ou dentro de frase.
+- **O padrão de checkbox do produto já é o correto visualmente**: `avenly.css:479`–`:486` dá ao `.check`/`.radio` `display: flex` e `min-height: 44px`; `:487`–`:491` esconde o input nativo com `position: absolute; opacity: 0`; `:492`–`:504` desenha `.check-box` em 22×22; `:526`–`:530` dá foco visível ao `.check-box` pelo `:focus-visible` do input. O que falta não é estilo de checkbox.
+- **O link de `/link-expirado` está em `apps/frontend/src/features/auth/AuthScreen.tsx:255`–`:259`**, dentro de `<p className="auth-footer">`, sem outro texto no parágrafo. A classe `.auth-link` está em `avenly.css:3384`–`:3392` e **não** tem altura mínima. Os outros usos de `.auth-link` (`AuthScreen.tsx:393`, `:421`, `:428`) ficam ao lado de outro texto ou dentro de frase.
 - **`accessibility.spec.ts` roda axe com `wcag2a`, `wcag2aa`, `wcag21a` e `wcag21aa` nas mesmas sete rotas** e é o único lugar onde contraste é decidido de verdade.
 - **O veredito vigente do MVP é 1 `BLOQUEADOR-MVP` (A-01), 11 `PENDENCIA-POS-MVP` e 7 `LIMITE-DECLARADO`** ([FINAL_AUDIT §7](../FINAL_AUDIT.md)). A contagem só muda por evidência executada nesta rodada.
 
@@ -58,7 +58,7 @@ O planejamento verificou o que segue na árvore de `d37e1fe5`. Não gastar rodad
 
 - `apps/frontend/e2e/viewport-matrix.spec.ts`: a régua do alvo efetivo e a lista de exceções.
 - `apps/frontend/e2e/` (arquivo auxiliar novo, se ajudar a manter a régua legível): permitido, desde que não crie rota, fixture de produto nem sessão fabricada.
-- `apps/frontend/src/features/auth/AuthScreen.tsx` e `apps/frontend/src/shared/styles/atendly.css`: a correção do alvo real.
+- `apps/frontend/src/features/auth/AuthScreen.tsx` e `apps/frontend/src/shared/styles/avenly.css`: a correção do alvo real.
 - `apps/frontend/tests/`: apenas se a correção de produto mudar markup que um teste jsdom existente já afirma.
 - `docs/migration/`: [FINAL_AUDIT](../FINAL_AUDIT.md), [GAP_ANALYSIS](../GAP_ANALYSIS.md), [VALIDATION_GATE](../VALIDATION_GATE.md), [CURRENT_STATE](../CURRENT_STATE.md) e [DECISIONS](../DECISIONS.md), conforme §6.
 

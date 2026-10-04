@@ -80,7 +80,7 @@ Leia só o necessário:
 - `packages/public-api-contract/src/routes.ts` e `src/schemas.ts`, para a rota nova e o corpo de conexão.
 - `apps/frontend/src/data/services/BffWhatsAppService.ts` e o tipo de entrada de conexão.
 - `apps/frontend/src/features/whatsapp/` (o painel e, se o Developer dividir, componentes de consentimento, QR e código no mesmo módulo).
-- `apps/frontend/src/features/onboarding/` (rodapé de `whatsapp-conectar`, link de `whatsapp-concluido`) e `apps/frontend/src/shared/styles/atendly.css`.
+- `apps/frontend/src/features/onboarding/` (rodapé de `whatsapp-conectar`, link de `whatsapp-concluido`) e `apps/frontend/src/shared/styles/avenly.css`.
 - `apps/frontend/e2e/routes.ts` e o comentário em `e2e/authenticated-matrix.spec.ts`.
 - `scripts/goal033-authenticated-ui-rehearsal.mjs`: só acrescentar `consentAccepted: true` ao corpo de `POST /v1/whatsapp/connect`.
 - Testes novos com prefixo `goal071-` em `apps/bff/tests/` e `apps/frontend/tests/`.
@@ -107,7 +107,7 @@ Leia só o necessário:
 ### 3. Consentimento antes de conectar, dentro do painel (frontend)
 
 - O consentimento mora em `WhatsAppConnectionPanel`, então vale no onboarding e em Configurações › WhatsApp com uma implementação só. Com o número não conectado, o primeiro estado do painel é "Antes de conectar", no conteúdo da seção 4.2 do protótipo:
-  - checkbox **desmarcado**, obrigatório: "Entendo que as conversas deste número poderão ser processadas e armazenadas para oferecer os recursos da Atendly.", com "Saiba mais" para `/politica-de-privacidade`;
+  - checkbox **desmarcado**, obrigatório: "Entendo que as conversas deste número poderão ser processadas e armazenadas para oferecer os recursos da Avenly.", com "Saiba mais" para `/politica-de-privacidade`;
   - a pergunta "Você usa esse número também para conversas pessoais?", com "Sim, também" e "Não, só trabalho", **nenhuma pré-marcada**;
   - "Sim, também" revela o bloco "Tudo bem — você continua no controle", com as três linhas do protótipo (conversas separadas em Comercial, Não classificadas e Pessoal; contatos que a IA nunca responde; IA desativada em conversa pessoal e fora de cena quando você responde);
   - "Não, só trabalho" não revela o bloco e não desliga nenhuma proteção (vault 871).

@@ -35,8 +35,8 @@ Fazer o onboarding seguir a sequência e as regras do vault (`docs/product-vault
 - **QA O-26** (ALTA): só 2 dos 4 tipos de preço (vault, pergunta 44; "Sem preço informado", pergunta 780).
 - **QA O-28**: não existe "Adicionar outro serviço".
 - **QA O-30** e **QA O-31**: semana começando no domingo, e sem horário por dia (vault §6, "permitir personalizar por dia").
-- **QA O-34** e **QA O-35**: texto de desenvolvimento vazado em "Sua Agenda Atendly está pronta", e resumo sem preço, dias e horário.
-- **QA O-38**: "Atendly" no lugar de "IA" como nome da automação, contra `apps/frontend/AGENTS.md`.
+- **QA O-34** e **QA O-35**: texto de desenvolvimento vazado em "Sua Agenda Avenly está pronta", e resumo sem preço, dias e horário.
+- **QA O-38**: "Avenly" no lugar de "IA" como nome da automação, contra `apps/frontend/AGENTS.md`.
 - **QA O-41**, **QA O-43** e **QA O-50**: botões da introdução do WhatsApp espremidos no celular, "Só um número por negócio" ausente, e número inválido em contatos ignorados respondido com "Tente novamente".
 
 A posição é a da v78, logo depois do 064. O fechamento do 064 não trouxe evidência para reordenar.
@@ -47,19 +47,19 @@ Conferido no código da baseline:
 
 1. **Não há Boas-vindas.** `onboardingFlow` (`apps/frontend/src/features/onboarding/blocks.ts`) começa em `dados-do-negocio`, e `nextRequiredStep` (`OnboardingRuntime.tsx`) devolve `dados-do-negocio` para conta nova.
 2. **A validação é nativa.** O `onSubmit` de `OnboardingScreen.tsx` chama `checkValidity()` e `reportValidity()` sobre campos `required`, `min` e `type="number"`. O erro próprio só existe para dias, horário e modalidade, num `role="alert"` de rodapé que não marca campo nenhum.
-3. **"Sair" e segmentos.** `.onboarding-exit` (`apps/frontend/src/shared/styles/atendly.css`, perto da linha 2260) não reseta fundo nem borda. No celular (perto da linha 3225), o texto vai a `font-size: 0` e volta por `::after { content: "Sair" }`. `.chip-row` (perto da linha 631) tem `overflow-x: auto` e `scrollbar-width: none`, e os chips de `blocks/business.tsx` não têm `aria-pressed`.
+3. **"Sair" e segmentos.** `.onboarding-exit` (`apps/frontend/src/shared/styles/avenly.css`, perto da linha 2260) não reseta fundo nem borda. No celular (perto da linha 3225), o texto vai a `font-size: 0` e volta por `::after { content: "Sair" }`. `.chip-row` (perto da linha 631) tem `overflow-x: auto` e `scrollbar-width: none`, e os chips de `blocks/business.tsx` não têm `aria-pressed`.
 4. **"Seu negócio" é uma tela só.** `businessStepBody` junta nome, segmento, modalidade e endereço. `persistBusinessStep` grava tudo num `PATCH /v1/onboarding` só. A seção `business` do BFF exige `name` (2 a 160), `category` e `timezone` a cada gravação; `modalities` e `address` ausentes preservam o que está gravado. Etapas separadas regravam nome e segmento a partir do rascunho, sem mudança no BFF.
 5. **O onboarding reescreve o tipo de preço.** `PATCH /v1/onboarding` aceita `service.priceType` só em `FIXED` e `ON_REQUEST` (`apps/bff/src/modules/onboarding/routes.ts`, `patchSchema.service`). A leitura (`onboardingStateSchema`) e o Scheduling têm os quatro tipos. `onboardingPriceType` (`OnboardingRuntime.tsx`) troca `STARTING_AT` por `FIXED` e `NOT_INFORMED` por `ON_REQUEST`, e `draftFromState` usa essa troca. Assim, um serviço "A partir de" que passa pela etapa de preço é gravado de volta como "Fixo". Isso é escrita com perda, além de QA O-26. `features/services/ServiceForm.tsx` já tem os quatro tipos e a regra "valor obrigatório para Fixo e A partir de".
 6. **"O serviço do onboarding" é o primeiro ativo da lista.** `onboarding-state.ts` devolve `services.find((service) => service.active)`. Um serviço adicional criado por `POST /v1/services` pode passar a ser o serviço que o onboarding mostra e edita, se a ordem de `listServices` o puser antes. O Goal precisa provar que isso não acontece.
 7. **Os horários já podem ser por dia no BFF.** `availability.rules` é uma lista de `dayOfWeek`, `startTime` e `endTime` por regra. A tela manda o mesmo intervalo para todos os dias, e `draftFromState` lê só `activeRules[0]`. `weekdayLabels` começa no domingo.
-8. **Textos.** `scenarios.ts` diz "O restante da ativação continua em uma próxima etapa do produto." em `agenda-atendly-pronta`, e o resumo mostra só serviço, duração e "Fonte oficial". Os textos das etapas chamam a automação de "Atendly" em pelo menos três lugares ("Como a Atendly deve conversar?", "Isso ajuda a Atendly a usar nomes…", "A Atendly só informará o valor cadastrado…").
+8. **Textos.** `scenarios.ts` diz "O restante da ativação continua em uma próxima etapa do produto." em `agenda-atendly-pronta`, e o resumo mostra só serviço, duração e "Fonte oficial". Os textos das etapas chamam a automação de "Avenly" em pelo menos três lugares ("Como a Avenly deve conversar?", "Isso ajuda a Avenly a usar nomes…", "A Avenly só informará o valor cadastrado…").
 9. **WhatsApp.** Na introdução, "Voltar", "Fazer isso depois" e "Conectar meu WhatsApp" ficam numa linha. Em contatos ignorados, `blocks/whatsapp.tsx` responde a qualquer falha, inclusive `400 VALIDATION_ERROR` de número curto, com "Não foi possível marcar este número. Tente novamente."
 10. **Nenhuma etapa do onboarding é medida com layout.** `apps/frontend/e2e/routes.ts` deixa `/onboarding` fora de `AUTHENTICATED_ROUTES`. `scripts/goal033-authenticated-ui-rehearsal.mjs` semeia uma conta só, que conclui o onboarding. O jsdom não tem layout, então não prova QA O-04 nem QA O-41.
 
 ## Escolhas de desenho desta passada
 
 - **Sequência.** Boas-vindas → Segmento + nome → Modalidade → Endereço (só com "Local próprio") → o bloco "Sua agenda" como está hoje (Goal066) → Primeiro serviço → Serviços adicionais (opcional) → Dias de atendimento → Horários → Agenda pronta → Demonstração da IA → Estilo da IA → WhatsApp como está hoje (071 e 063). Os IDs de rota novos são escolha do Developer, em português e no padrão dos existentes. Rota antiga que deixa de existir (`servico-duracao`, `servico-preco`) não pode quebrar: ela redireciona para a etapa que a substitui.
-- **Boas-vindas não grava nada.** Ela aparece quando nenhuma seção do onboarding foi gravada. Depois da primeira gravação, retomar o onboarding não volta a ela. Texto do vault: "Configure sua Atendly em poucos passos.", CTA "Começar", e "Seu progresso fica salvo a cada etapa." Composição estática de três elementos (mensagem, resposta da IA, horário na agenda), sem carrossel. Se houver movimento, ele respeita `prefers-reduced-motion`. A composição animada do protótipo é do Goal072.
+- **Boas-vindas não grava nada.** Ela aparece quando nenhuma seção do onboarding foi gravada. Depois da primeira gravação, retomar o onboarding não volta a ela. Texto do vault: "Configure sua Avenly em poucos passos.", CTA "Começar", e "Seu progresso fica salvo a cada etapa." Composição estática de três elementos (mensagem, resposta da IA, horário na agenda), sem carrossel. Se houver movimento, ele respeita `prefers-reduced-motion`. A composição animada do protótipo é do Goal072.
 - **Endereço sem busca por CEP.** O endereço vira etapa própria, com o mesmo campo único `address` que o BFF já guarda. CEP que preenche bairro e cidade exige serviço externo novo e fica para o Goal072, se uma pessoa quiser.
 - **Quatro tipos de preço, sem conversão.** O BFF passa a aceitar os quatro tipos em `PATCH /v1/onboarding`, com a regra de `ServiceForm`: valor obrigatório e não negativo para `FIXED` e `STARTING_AT`; valor ausente ou `null` para `ON_REQUEST` e `NOT_INFORMED`. Violação responde `400 VALIDATION_ERROR` com o campo, antes de qualquer escrita. O frontend grava e relê o tipo escolhido, sem par mais próximo.
 - **Serviços adicionais usam a rota de Serviços.** A etapa lista os serviços ativos e cria outros por `POST /v1/services`, que o frontend já usa em `BffServiceCatalogService`. Editar ou desativar serviço adicional continua em Serviços. O serviço do onboarding continua o mesmo depois de criar outros (evidência 6).
@@ -81,7 +81,7 @@ Leia só o necessário:
 - as linhas dos achados listados em "Objetivo e posição" no [QA_LOCAL_REVIEW](../QA_LOCAL_REVIEW.md), seções 2a, 2c, 2d, 2e, 2f e 2g;
 - no vault: `03-UX-UI/04-Especificacao-das-Telas.md` §"Onboarding"; `02-Fluxos/01-Onboarding.md` §1, §2, §3, §5A e §6; as perguntas 44 e 780 de `04-Referencia/99-Perguntas-e-Respostas.md`;
 - no protótipo, só como referência de texto e de ordem: as telas 0, 1.1 a 1.3 e 2.3 a 2.7 de `docs/design-reference/claude-design/prototype/project/Onboarding-1-Negocio-e-Agenda.dc.html`, e a 4.1 de `Onboarding-3-IA-e-WhatsApp.dc.html`;
-- `apps/frontend/src/features/onboarding/` (doze arquivos, o maior com 363 linhas) e a seção do onboarding em `apps/frontend/src/shared/styles/atendly.css`;
+- `apps/frontend/src/features/onboarding/` (doze arquivos, o maior com 363 linhas) e a seção do onboarding em `apps/frontend/src/shared/styles/avenly.css`;
 - `apps/frontend/src/features/services/ServiceForm.tsx` (tipos de preço e regra de valor) e `apps/frontend/src/data/services/BffServiceCatalogService.ts`;
 - como modelo de validação inline, `apps/frontend/src/features/auth/AuthScreen.tsx` (D-082, item 5);
 - `apps/bff/src/modules/onboarding/routes.ts`, `apps/bff/src/lib/onboarding-state.ts` e a seção de onboarding de `apps/bff/PUBLIC_API_V1.md`;
@@ -92,7 +92,7 @@ Leia só o necessário:
 
 - `apps/bff/src/modules/onboarding/routes.ts` e `apps/bff/PUBLIC_API_V1.md`.
 - `packages/public-api-contract/`, só se o corpo de `PATCH /v1/onboarding` estiver descrito lá.
-- `apps/frontend/src/features/onboarding/` e a seção do onboarding em `apps/frontend/src/shared/styles/atendly.css`.
+- `apps/frontend/src/features/onboarding/` e a seção do onboarding em `apps/frontend/src/shared/styles/avenly.css`.
 - As páginas de `apps/frontend/src/app/onboarding/`, só se o redirecionamento de rota antiga pedir.
 - `apps/frontend/e2e/routes.ts`, `apps/frontend/e2e/authenticated-matrix.spec.ts` (ou um spec novo do onboarding) e `scripts/goal033-authenticated-ui-rehearsal.mjs`.
 - Testes novos com prefixo `goal065-` em `apps/bff/tests/` e `apps/frontend/tests/`.
@@ -144,7 +144,7 @@ Leia só o necessário:
 
 ### 7. Textos, introdução do WhatsApp e contatos ignorados (frontend)
 
-- Nos textos das etapas do onboarding, a automação se chama "IA". "Atendly" fica só como nome da plataforma. O título do estilo passa a "Como a IA deve conversar?".
+- Nos textos das etapas do onboarding, a automação se chama "IA". "Avenly" fica só como nome da plataforma. O título do estilo passa a "Como a IA deve conversar?".
 - A introdução do WhatsApp diz "Só um número por negócio." Os botões "Conectar meu WhatsApp" e "Fazer isso depois" ficam empilhados em largura total no celular, com "Conectar meu WhatsApp" como principal.
 - Em contatos ignorados, número recusado por validação mostra no campo o formato esperado, sem "Tente novamente". Falha de rede ou `5xx` continua com a mensagem de tentar de novo.
 
@@ -186,7 +186,7 @@ Cada teste novo é rodado primeiro contra o código da baseline, e **a saída do
    - "Personalizar dias diferentes" grava uma regra por dia com o intervalo de cada dia, e a retomada mostra esses intervalos;
    - a semana começa na segunda;
    - "Agenda pronta" mostra preço, dias e horário, e não contém "próxima etapa do produto" nem "Fonte oficial";
-   - nenhum texto das etapas usa "Atendly" como nome da automação, e nenhum contém "token", "API", "HTTP", "VALIDATION_ERROR" ou código cru;
+   - nenhum texto das etapas usa "Avenly" como nome da automação, e nenhum contém "token", "API", "HTTP", "VALIDATION_ERROR" ou código cru;
    - contatos ignorados com `400 VALIDATION_ERROR` mostra o formato esperado e não contém "Tente novamente".
 3. **Gate renderizado:** as etapas do §8 passam nas cinco larguras dentro de `validate:integration`, com **0** retentativas.
 

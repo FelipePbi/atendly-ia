@@ -1,7 +1,7 @@
 ---
 title: Fluxo de Importação Única
 aliases: [Fluxo Minha Agenda]
-tags: [atendly, importacao, fluxo]
+tags: [avenly, importacao, fluxo]
 status: vigente
 ---
 
@@ -24,7 +24,7 @@ flowchart TD
     L -->|Sim| M[Revisar/reprocessar durante sessão]
     M --> N[Concluir importação]
     L -->|Não| N
-    N --> O[Histórico + Agenda Atendly como fonte oficial]
+    N --> O[Histórico + Agenda Avenly como fonte oficial]
 ```
 
 ## Regras de experiência

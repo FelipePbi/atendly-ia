@@ -1,4 +1,4 @@
-# Documentação Atendly
+# Documentação Avenly
 
 ## Fontes por responsabilidade
 

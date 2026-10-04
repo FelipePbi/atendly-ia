@@ -5,8 +5,8 @@ Checkpoint de fechamento da auditoria em 2026-09-05, preservado abaixo como hist
 ## Baseline e preservação
 
 - Commit analisado: `5fb5d51abc1de58cb24718e7349d7a68ccaa7356`; HEAD permaneceu igual na retomada.
-- Alterações anteriores ao Goal: `graphify-out/manifest.json` modificado e `docs/astra_goal_0_auditoria_arquitetura_roadmap_atendly.md` não rastreado. SHA-256 preservados: `17024F507FBE81ADDC42276848C1B67115D2D3D130B465C2B19C5741CF1FC49A` e `6DD69C737F657B9FE31D1E6AEB273915354089E25D35809E4D3B14FBDE12DED6`.
-- Na primeira retomada após a interrupção não havia `docs/migration/` nem relatórios temporários dos subagentes. O registro do subagente IA confirmou que `rtk pnpm --filter @atendly-ia/ai-orchestrator test` gerou um lockfile vazio na raiz antes de executar Vitest. Esse `pnpm-lock.yaml` foi removido após confirmar conteúdo e horário; era resíduo desta auditoria, não alteração externa.
+- Alterações anteriores ao Goal: `graphify-out/manifest.json` modificado e `docs/astra_goal_0_auditoria_arquitetura_roadmap_avenly.md` não rastreado. SHA-256 preservados: `17024F507FBE81ADDC42276848C1B67115D2D3D130B465C2B19C5741CF1FC49A` e `6DD69C737F657B9FE31D1E6AEB273915354089E25D35809E4D3B14FBDE12DED6`.
+- Na primeira retomada após a interrupção não havia `docs/migration/` nem relatórios temporários dos subagentes. O registro do subagente IA confirmou que `rtk pnpm --filter @avenly-ia/ai-orchestrator test` gerou um lockfile vazio na raiz antes de executar Vitest. Esse `pnpm-lock.yaml` foi removido após confirmar conteúdo e horário; era resíduo desta auditoria, não alteração externa.
 - Os três trabalhos anteriores foram interrompidos por limite de uso, sem relatório final. Mensagens parciais foram preservadas; registros locais das três execuções foram localizados para recuperar as consultas e os resultados já obtidos. Não equivalem a auditorias concluídas.
 - Apenas documentos nesta pasta podem ser alterados por este Goal. Sem código, migrations, contratos, Product Vault, Claude Design, commit, push ou PR.
 
@@ -36,7 +36,7 @@ Checkpoint de fechamento da auditoria em 2026-09-05, preservado abaixo como hist
 1. BFF Fastify, Prisma/PostgreSQL, sessão JWT em cookie HttpOnly; `resolveTenantContext` deriva tenant de uma única associação do usuário, rejeitando zero ou múltiplas associações (`apps/bff/src/lib/auth.ts`, `lib/tenant-context.ts`). Cabeçalho do browser não seleciona tenant.
 2. Registro cria User, Tenant, TenantMember, BusinessProfile, AiSettings e aceite legal na mesma transação (`apps/bff/src/modules/auth/routes.ts`). WhatsAppInstance ainda pertence ao usuário por `userId @unique`, enquanto AI settings pertencem ao tenant (`apps/bff/prisma/schema.prisma`).
 3. Onboarding exige instância WhatsApp conectada e dois tons antigos, e aceita fonte `EXTERNAL` (`apps/bff/src/modules/onboarding/routes.ts`). Diverge do onboarding opcional de WhatsApp e dos três estilos vigentes.
-4. `SchedulingClient` e rotas BFF mantêm fontes ATENDLY/MINHA_AGENDA/EXTERNAL, integração operacional, reconexão e migração de agenda. São fatos legados; a regra alvo continua Agenda Atendly única e Minha Agenda importação única.
+4. `SchedulingClient` e rotas BFF mantêm fontes ATENDLY/MINHA_AGENDA/EXTERNAL, integração operacional, reconexão e migração de agenda. São fatos legados; a regra alvo continua Agenda Avenly única e Minha Agenda importação única.
 5. Settings grava estado local antes de sincronizar com AI Orchestrator; falha remota pode deixar configuração divergente (`apps/bff/src/modules/settings/routes.ts`).
 6. `InternalHttpClient` propaga tenant/user/request-id e segredo interno, valida resposta com Zod e repete GET; os schemas são duplicados localmente. `packages/contracts/src/internal/index.ts` e `tenant/index.ts` estão vazios.
 7. O teste de cadastro BFF é condicionado por flag e chama `/auth/register`, mas a rota registrada é `/v1/auth/register`. Não é evidência de integração saudável (`apps/bff/tests/auth-register.integration.test.ts`).
@@ -59,7 +59,7 @@ Esses achados começaram como resultados parciais. Foram consolidados com suas r
 
 - CURRENT_STATE fechado com todos os apps, fluxos, bancos lógicos, contratos e limites da validação. DATA_MIGRATION contém relatório completo de Scheduling/importação, recuperado apesar de encerramento posterior do subagente por limite de uso.
 - IA e frontend deixaram checkpoints curtos; suas mensagens e evidências foram incorporadas pelo agente principal. Não é necessário reabrir subagentes nem reconstruir auditoria.
-- Correção de precisão: há transações Serializable/advisory locks no provider Atendly; o risco é a cobertura incompleta entre escritores e a separação do replay, não ausência total de concorrência controlada.
+- Correção de precisão: há transações Serializable/advisory locks no provider Avenly; o risco é a cobertura incompleta entre escritores e a separação do replay, não ausência total de concorrência controlada.
 - Falha de autorização Go confirmada estaticamente: token de instância não é comparado ao instanceId alvo em GET/PUT advanced-settings. Nenhuma exploração externa realizada.
 - Auditoria estática executada: 14 checks passaram e 1 health remoto foi pulado; o script conta skipped como passed. Não é E2E nem validação de produção.
 - Discovery amplo encerrado. As matrizes LEGACY/GAP/REUSE, TARGET_ARCHITECTURE, plano de dados entre serviços, decisões e roadmap foram concluídos na síntese posterior.

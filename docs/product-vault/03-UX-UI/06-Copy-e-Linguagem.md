@@ -1,7 +1,7 @@
 ---
 title: Copy e Linguagem
-aliases: [Copy Atendly]
-tags: [atendly, copy, ux-writing]
+aliases: [Copy Avenly]
+tags: [avenly, copy, ux-writing]
 status: vigente
 ---
 
@@ -9,7 +9,7 @@ status: vigente
 
 ## Tom da plataforma
 
-A interface da Atendly deve ser:
+A interface da Avenly deve ser:
 
 - clara;
 - direta;
@@ -97,14 +97,14 @@ Usar **importação/migração**, nunca “sincronização”.
 
 Mensagem após conclusão:
 
-> Seus dados agora estão na Atendly. A partir deste momento, sua agenda deve ser gerenciada por aqui.
+> Seus dados agora estão na Avenly. A partir deste momento, sua agenda deve ser gerenciada por aqui.
 
 ## Termos de produto
 
-- Atendly = plataforma
+- Avenly = plataforma
 - IA = automação que atende clientes
 - Negócio = unidade do profissional
-- Agenda = Agenda Atendly
+- Agenda = Agenda Avenly
 - Cliente = pessoa atendida
 - Profissional = conceito praticamente oculto no MVP; usar “minha agenda”, “meus horários” etc. na interface
 

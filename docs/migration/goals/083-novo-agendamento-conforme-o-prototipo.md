@@ -22,7 +22,7 @@ Contagens da baseline, do [review081](../reviews/081-review.md) e de FINAL_AUDIT
 
 ## Objetivo e posição
 
-Fechar **R-11 (ALTA)** do re-teste local, relatado por Felipe: `/agenda/novo` está muito longe do protótipo **A6** (`Agenda-Desktop`, `Agenda-Tablet` e `Agenda` em `docs/design-reference/claude-design/prototype/project/`), com campos em estilo nativo do navegador, cabeçalho desalinhado e a faixa "Agenda Atendly é a fonte oficial · Operacional" que o AG-10 tirou da Agenda. E garantir que nenhum campo de texto, seleção ou área de texto da área logada fique com o estilo nativo do navegador.
+Fechar **R-11 (ALTA)** do re-teste local, relatado por Felipe: `/agenda/novo` está muito longe do protótipo **A6** (`Agenda-Desktop`, `Agenda-Tablet` e `Agenda` em `docs/design-reference/claude-design/prototype/project/`), com campos em estilo nativo do navegador, cabeçalho desalinhado e a faixa "Agenda Avenly é a fonte oficial · Operacional" que o AG-10 tirou da Agenda. E garantir que nenhum campo de texto, seleção ou área de texto da área logada fique com o estilo nativo do navegador.
 
 **Por que o 083 passa à frente do 082.** O 082 aplica U-12: obter, a partir de e-mail e senha, o acesso que o portal da Minha Agenda obtém. O mapa histórico do portal (`apps/api/docs/MINHAAGENDA_ENDPOINTS.md` no commit `1e22dff`, citado nos limites de [D-077](../DECISIONS.md)) diz que o login do portal usa `grant_type=password` com `Authorization: Basic` e o segredo do próprio app do portal. Obter esse valor em tempo de execução "como o portal faz" é ler o código público de um terceiro para extrair a credencial de cliente do app dele. Nesta passada, a leitura do código público do portal pelo agente foi **negada pela política de permissões do ambiente**. Uma pessoa precisa decidir como isso acontece; nenhum Developer autônomo conduz essa investigação. O 083 não depende do 082 (a dependência na v103 era só de ordem), e é o próximo achado de severidade ALTA fechável pelo repositório sozinho.
 
@@ -30,7 +30,7 @@ Fechar **R-11 (ALTA)** do re-teste local, relatado por Felipe: `/agenda/novo` es
 
 Conferido no código da baseline:
 
-1. **Campos sem classe.** `AppointmentForm.tsx` usa `<input>`, `<select>` e `<textarea>` sem `className`. O design system estiliza só `.input` e `.select` (`shared/styles/atendly.css`, bloco `.field`). Nenhuma regra alcança o controle sem classe, e o navegador desenha borda `inset` e raio 0.
+1. **Campos sem classe.** `AppointmentForm.tsx` usa `<input>`, `<select>` e `<textarea>` sem `className`. O design system estiliza só `.input` e `.select` (`shared/styles/avenly.css`, bloco `.field`). Nenhuma regra alcança o controle sem classe, e o navegador desenha borda `inset` e raio 0.
 2. **A faixa vem da casca dos fluxos.** `SourceStrip` (`AgendaBoard.tsx`) só é usado por `AppointmentFlowShell.tsx`, que o renderiza em todo fluxo da Agenda: novo, detalhe, bloqueio, bloqueio em série, cancelamento, remarcação, série e exceções. `goal069-agenda-structure.test.tsx` já proíbe "fonte oficial" no quadro da Agenda.
 3. **O cabeçalho dos fluxos** é `agenda-flow-header`, com o link "Voltar à agenda", o eyebrow "Agenda", o título e a descrição, empilhados sem alinhamento com a casca.
 4. **O contrato já cobre o A6, com uma exceção.** `POST /v1/calendar/appointments` (`apps/bff/src/modules/calendar/routes.ts`) aceita vários `serviceIds`. Aceita também o atendimento manual excepcional sem serviço cadastrado (`serviceIds` vazio, `title` e `durationMinutes`, Goal008). O cliente pode ser `customerId` ou `customerName` com `customerPhone` opcional. `CreateAppointmentInput` (`data/services/BffCalendarService.ts`) já tem esses campos. A exceção é **"Avisar a cliente pelo WhatsApp"**: `notifyCustomer` existe só em remarcar e cancelar, e o vault pede notificar "quando alteração relevante" (`03-UX-UI/04-Especificacao-das-Telas.md`, "Novo/editar agendamento"), não na criação.
@@ -77,7 +77,7 @@ Conferido no código da baseline:
 - `apps/frontend/src/features/agenda/AppointmentFlowShell.tsx` e `SourceStrip` em `AgendaBoard.tsx`: (f).
 - `apps/frontend/src/features/agenda/SlotPicker.tsx`: pode ganhar apresentação em chips e "Outro horário". O comportamento dos outros consumidores (remarcação, série, bloqueio) não muda, e os testes deles passam sem edição.
 - Componentes novos só se servirem ao formulário, em `features/agenda/` ou em `shared/ui/` quando forem genéricos.
-- `apps/frontend/src/shared/styles/atendly-agenda.css` e `atendly.css`: (b) e (g).
+- `apps/frontend/src/shared/styles/avenly-agenda.css` e `avenly.css`: (b) e (g).
 - `apps/frontend/e2e/routes.ts` (uma rota por acréscimo) e `apps/frontend/e2e/measure.ts` ou `authenticated-matrix.spec.ts` (uma medida por acréscimo): (h).
 
 ## Escopo obrigatório

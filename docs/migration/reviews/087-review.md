@@ -9,7 +9,7 @@ O Goal leva a casca da área logada e `/inicio` ao quadro **H1** do protótipo a
 - Baseline aceita vigente: `f65b88a74f3bae750a1ea82f46abd52d1932ae2e` (Goal086). Base imediata da implementação: `a72afaf8affcab6578c659b2f71023f4311b63d1`, HEAD da worktree `.ai-worktrees/goal-087`, inalterado nas três rodadas. Entre `f65b88a` e `a72afaf` há só documentação: o fechamento do Goal086 e a inserção deste Goal no plano.
 - Snapshot aceito, calculado pelo IA Loop: **18 arquivos**, hash do diff `df90ea91d7ee01e83d6ccd857f95c5a896fdd04b2a0d624aba6a95772f475fdf`. Mudança posterior nesses arquivos exige avaliar o novo diff.
 - Os 18 arquivos, por `git diff --numstat a72afaf` no snapshot aceito:
-  - Frontend de produção: `src/shared/styles/atendly.css` (+431/−197), `src/shared/layout/AppShell.tsx` (+86/−143), `src/features/dashboard/DashboardScreen.tsx` (+84/−102), `src/shared/layout/navigation.ts` (+27/−5), `src/shared/icons/Icon.tsx` (+9/−1), `public/icons/atendly-icons.svg` (+8, ícones de navegação) e `src/app/globals.css` (−1).
+  - Frontend de produção: `src/shared/styles/avenly.css` (+431/−197), `src/shared/layout/AppShell.tsx` (+86/−143), `src/features/dashboard/DashboardScreen.tsx` (+84/−102), `src/shared/layout/navigation.ts` (+27/−5), `src/shared/icons/Icon.tsx` (+9/−1), `public/icons/avenly-icons.svg` (+8, ícones de navegação) e `src/app/globals.css` (−1).
   - Gate autenticado, só por acréscimo: `e2e/authenticated-matrix.spec.ts` (+126, G-1 e G-2) e `e2e/measure.ts` (+115).
   - Testes: `tests/goal087-shell-navigation.test.tsx` (arquivo novo, **20** testes, provas 1 a 5) e asserções ajustadas em `goal018-dashboard-status` (+29/−16), `goal022-notifications-chrome` (+3/−3), `goal025-account-deletion-shell-banner` (+1/−1), `goal068-assinatura` (+3/−4) e `goal074-home` (+37). Nenhum teste foi removido ou pulado.
   - Documentos: `docs/migration/CURRENT_STATE.md`, `DECISIONS.md` (D-101) e `VALIDATION_GATE.md`.
@@ -25,7 +25,7 @@ O Goal leva a casca da área logada e `/inicio` ao quadro **H1** do protótipo a
    1. A conta do desktop ficava 6 px acima do quadro (avatar em y=715–744 contra 721–750), porque `.account-button` mantinha `min-height: 44px`.
    2. A barra do celular tinha 56 px. O quadro renderiza 99 px sem `box-sizing: border-box`; menos os 34 px do indicador de início, sobram 65 px. Faltavam 9 px além da divergência declarada.
    3. CURRENT_STATE, VALIDATION_GATE e D-101 citavam como execução final as corridas da rodada 1, anteriores à última edição de CSS. Também diziam que os controles do §6 eram posteriores a ela.
-3. **Rodada 3 — `ACCEPTED`, 0 blocker.** O delta da rodada 2 para a 3 é só `atendly.css` e os três documentos; o Tech Lead conferiu o patch da rodada 2 contra o da 3. `.account-button` passou a `min-height: 32px` com `line-height: normal`. A barra do celular e o `padding-bottom` do `app-frame` passaram de 56 para 65 px mais `env(safe-area-inset-bottom)`. Os documentos foram reescritos sobre a execução da rodada 3.
+3. **Rodada 3 — `ACCEPTED`, 0 blocker.** O delta da rodada 2 para a 3 é só `avenly.css` e os três documentos; o Tech Lead conferiu o patch da rodada 2 contra o da 3. `.account-button` passou a `min-height: 32px` com `line-height: normal`. A barra do celular e o `padding-bottom` do `app-frame` passaram de 56 para 65 px mais `env(safe-area-inset-bottom)`. Os documentos foram reescritos sobre a execução da rodada 3.
 
 ## O que o Tech Lead conferiu na rodada 3
 
@@ -36,7 +36,7 @@ O Goal leva a casca da área logada e `/inicio` ao quadro **H1** do protótipo a
   - O `a.fab` fica 7 px acima da barra no celular. É o que o protótipo mostra: em `Clientes.dc.html` e `Agenda.dc.html`, `bottom:106px` com barra de 99 px.
 - `visual:compare` de A1, CL1, Servicos:S1, Conversas:C1 e M1. Os 20 números coincidem com os do Developer em CURRENT_STATE. A navegação segue o protótipo em cada faixa.
 - Proveniência, em disco:
-  - `mtime` de `atendly.css`: `2026-10-01T06:52:09Z`.
+  - `mtime` de `avenly.css`: `2026-10-01T06:52:09Z`.
   - `e2e-results/authenticated/results.json`: `startTime` `2026-10-01T07:39:33.917Z`, **195** `expected`, **0** `unexpected`, **0** `flaky`.
   - `e2e-results/results.json`: uma corrida de `validate:ui` posterior à citada (`07:51:19Z`), com **169** `passed`, **21** `skipped`, **0** `unexpected` e **0** `flaky`. É consistente com a citada (`06:52:50.102Z`).
   - `sha256` de `AppShell.tsx`: `8fad2a06…33449`, igual ao declarado antes e depois de cada controle.
@@ -79,7 +79,7 @@ Os três documentos já declaram estes pontos.
 2. **Código morto.** `showMobileHeader` em `ShellConfig`, e `attention` e `loading` em `ConversationThread`, ficaram sem uso (rodada 1). Sem efeito no comportamento.
 3. **Contorno teal em S1 no tablet.** A linha sob o conteúdo curto é o outline de foco do `main`, anterior a este Goal.
 4. **Cor do bloco por serviço na Home.** O compromisso do contrato não tem `colorToken`, então a barra lateral da agenda não segue a cor do quadro. É dado, não layout.
-5. **Rodada 2.** A unidade FIX-001 terminou com `UNKNOWN_FATAL` depois de editar `atendly.css` e os documentos. O Tech Lead revisou a árvore resultante, e as rodadas seguintes partiram dela.
+5. **Rodada 2.** A unidade FIX-001 terminou com `UNKNOWN_FATAL` depois de editar `avenly.css` e os documentos. O Tech Lead revisou a árvore resultante, e as rodadas seguintes partiram dela.
 6. **Perfil de execução.** O Goal declarava `SONNET_HIGH`.
 
 ## O que o aceite não prova

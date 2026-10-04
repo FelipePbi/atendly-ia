@@ -1,7 +1,7 @@
 ---
 title: Escopo do MVP
-aliases: [MVP Atendly, Escopo Atendly]
-tags: [atendly, mvp, escopo]
+aliases: [MVP Avenly, Escopo Avenly]
+tags: [avenly, mvp, escopo]
 status: vigente
 ---
 
@@ -40,7 +40,7 @@ Não criar infraestrutura especial de beta apenas para esse momento.
 
 ### Agenda
 
-- Agenda Atendly como agenda oficial;
+- Agenda Avenly como agenda oficial;
 - serviços;
 - clientes;
 - disponibilidade semanal;
@@ -67,7 +67,7 @@ Não criar infraestrutura especial de beta apenas para esse momento.
 - atendimento automatizado;
 - handoff para humano;
 - pausa quando o profissional responde manualmente;
-- chat dentro da Atendly;
+- chat dentro da Avenly;
 - sugestões de resposta no atendimento humano;
 - compreensão de áudio;
 - imagens gerando handoff;

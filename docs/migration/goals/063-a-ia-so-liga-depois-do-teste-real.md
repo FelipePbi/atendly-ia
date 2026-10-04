@@ -184,7 +184,7 @@ Aplique cada controle numa cópia, ou reverta-o no mesmo passo. Cole a **saída 
 
 ### 9. O que só uma pessoa confere
 
-O teste real depende do número oficial da Atendly, que não existe no ambiente de migração (D-035, gate operacional). Nenhum teste prova o envio real. Depois do aceite, uma pessoa confere na pilha local com número da plataforma configurado:
+O teste real depende do número oficial da Avenly, que não existe no ambiente de migração (D-035, gate operacional). Nenhum teste prova o envio real. Depois do aceite, uma pessoa confere na pilha local com número da plataforma configurado:
 
 - que o onboarding chega ao teste pelos dois botões;
 - que o teste em Configurações › IA roda;

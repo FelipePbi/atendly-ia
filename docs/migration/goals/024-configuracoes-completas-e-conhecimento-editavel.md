@@ -28,7 +28,7 @@ Dois itens menores, também nominais no vault e também ausentes:
 - **"Sair de todos os dispositivos"** é item da seção Conta em [Especificação das Telas](../../product-vault/03-UX-UI/04-Especificacao-das-Telas.md). `revokeAllUserSessions` já existe e já é usado na troca de senha (`apps/bff/src/modules/auth/routes.ts`), mas **nenhuma rota pública o expõe** e a tela não oferece a ação.
 - **Importação está escondida dentro de Agenda.** `ImportSettingsSection` é montada dentro de `CalendarSettings`, enquanto o vault lista Importação como seção própria do hub.
 
-**A Home não recebe trabalho novo neste Goal, por conferência e não por omissão.** O vault pede para Início *"status IA/WhatsApp; pendências; próximos atendimentos; poucas métricas secundárias"*, e `features/dashboard/DashboardScreen.tsx` já entrega a faixa de status honesto (Goal014, reconciliada no Goal019), "Agenda de hoje", "Próximo atendimento", "O que a Atendly fez hoje", "Precisam de atenção", "Ações rápidas" e o checklist pós-onboarding do Goal018. Ela serve **uma** rota com **um** call site de `useShellConfig` — não é o padrão de monolito que G-31 persegue. Métricas adicionais do negócio continuam sem aprovação de produto e **não** entram aqui.
+**A Home não recebe trabalho novo neste Goal, por conferência e não por omissão.** O vault pede para Início *"status IA/WhatsApp; pendências; próximos atendimentos; poucas métricas secundárias"*, e `features/dashboard/DashboardScreen.tsx` já entrega a faixa de status honesto (Goal014, reconciliada no Goal019), "Agenda de hoje", "Próximo atendimento", "O que a Avenly fez hoje", "Precisam de atenção", "Ações rápidas" e o checklist pós-onboarding do Goal018. Ela serve **uma** rota com **um** call site de `useShellConfig` — não é o padrão de monolito que G-31 persegue. Métricas adicionais do negócio continuam sem aprovação de produto e **não** entram aqui.
 
 **A metade de conta de G-29 — exclusão recuperável em 7 dias, automações desligadas, WhatsApp desconectado, cancelamento dentro do prazo e restore exigindo novo teste de ativação — é do 024B**, conforme v44 do [MASTER_PLAN](../MASTER_PLAN.md#histórico-de-planejamento). O motivo está registrado lá e é de tamanho e de natureza: decompor oito rotas de configuração e construir uma máquina de estados destrutiva de conta são trabalhos diferentes, com custo de erro diferente, e este Goal entrega justamente a seção Conta decomposta em que aquele vai entrar.
 
@@ -53,14 +53,14 @@ Baseline arquitetural: [TARGET_ARCHITECTURE](../TARGET_ARCHITECTURE.md). **D-030
 - **As rotas de conhecimento existem e são proxies finos da IA**: `GET/POST /v1/knowledge/documents`, `GET/PUT/DELETE /v1/knowledge/documents/:id` e `PUT /v1/knowledge/other-info`. `type` é um de `FAQ`, `GUIDANCE`, `CARE`, `PROCEDURE`, `BUSINESS_INFO` ou `TEXT_POLICY`; editar gera versão nova e inativa a anterior; `DELETE` desativa e nunca remove linha; `serviceId` liga o documento a um serviço do catálogo por ID; existe exatamente **um** `BUSINESS_INFO` por negócio, gravado só por `PUT /v1/knowledge/other-info`, e `POST`/`PUT /v1/knowledge/documents` recusam `type: "BUSINESS_INFO"` com `409`. Falha do provider de embedding chega como `502` com `upstreamCode: "KNOWLEDGE_INDEX_UNAVAILABLE"` e **nada muda no banco**.
 - **`BffKnowledgeService` já implementa listar, criar, editar, desativar e o campo livre**, com `knowledgeDocumentSchema` em `data/mappers/publicApiSchemas.ts`. Falta consumidor, não cliente.
 - **`revokeAllUserSessions(userId, reason)` já existe** e é chamada em `PATCH /v1/auth/password`; `UserSession` é consultada a cada requisição desde o Goal003, então revogar derruba os outros dispositivos na requisição seguinte deles.
-- **O CSS de módulo é `shared/styles/atendly-settings.css`**, herdando `tokens.css`, no mesmo padrão de `atendly-imports.css` e `atendly-notifications.css`.
+- **O CSS de módulo é `shared/styles/avenly-settings.css`**, herdando `tokens.css`, no mesmo padrão de `avenly-imports.css` e `avenly-notifications.css`.
 - Gates: `scripts/validate-core.mjs` (builds e suítes sem banco), `scripts/validate-integration.mjs` (banco descartável) e `validate:ui` (Playwright nas cinco larguras).
 
 ## Pontos de implementação
 
 - `apps/frontend/src/features/settings/` — decomposição em módulos por seção, hub conforme o vault, seção de conhecimento e ação de sair de todos os dispositivos.
 - `apps/frontend/src/features/knowledge/` — módulo novo de conhecimento do negócio, consumido pela seção IA.
-- `apps/frontend/src/shared/styles/atendly-settings.css` — o que a decomposição e a seção nova exigirem, herdando tokens.
+- `apps/frontend/src/shared/styles/avenly-settings.css` — o que a decomposição e a seção nova exigirem, herdando tokens.
 - `apps/frontend/src/data/services/BffAuthService.ts` e `registry.ts` — a chamada de revogação de sessões.
 - `apps/bff/src/modules/auth/routes.ts` — a rota pública que expõe a revogação já existente.
 - `apps/bff/PUBLIC_API_V1.md` e os documentos de §10.
@@ -77,7 +77,7 @@ As primitivas locais hoje embutidas na tela (`Page`, `Password`, `SaveActions`, 
 
 ### 2. O hub lista o que o vault manda
 
-O hub passa a ter entrada própria para **Importação**, apontando para `/importacao`, e `ImportSettingsSection` deixa de ser montada dentro de Agenda. As demais entradas seguem o vault: Negócio, Agenda, Disponibilidade (só quando a fonte é Atendly, como já é hoje), IA, WhatsApp, Conversas, Conta. A copy de cada card continua dizendo o estado real do que ela leva — nome do negócio, tom da IA, fonte da agenda —, sem inventar contagem ou métrica.
+O hub passa a ter entrada própria para **Importação**, apontando para `/importacao`, e `ImportSettingsSection` deixa de ser montada dentro de Agenda. As demais entradas seguem o vault: Negócio, Agenda, Disponibilidade (só quando a fonte é Avenly, como já é hoje), IA, WhatsApp, Conversas, Conta. A copy de cada card continua dizendo o estado real do que ela leva — nome do negócio, tom da IA, fonte da agenda —, sem inventar contagem ou métrica.
 
 Lembretes continuam onde estão, dentro de Agenda: o vault não os aloca em seção própria e mover não é melhoria, é churn.
 
@@ -142,7 +142,7 @@ Cada critério é verificável no diff ou na execução. "Passou o lint" não é
 5. Nenhum formulário existente mudou campo, validação, destino ou mensagem, exceto onde §2, §3 ou §5 pediu — e o relatório nomeia cada exceção.
 6. `RetentionSection`, `ReminderSettingsSection`, `ImportSettingsSection` e o painel de WhatsApp não foram reescritos.
 7. O hub tem entrada própria para Importação apontando para `/importacao`, e `ImportSettingsSection` não é mais montada dentro de Agenda.
-8. A entrada de Disponibilidade continua aparecendo apenas quando a fonte da agenda é Atendly.
+8. A entrada de Disponibilidade continua aparecendo apenas quando a fonte da agenda é Avenly.
 9. Existe seção de conhecimento dentro de Configurações → IA que lista os documentos ativos do negócio.
 10. Documento geral e documento ligado a serviço são distinguíveis na lista.
 11. É possível criar documento de tipo `FAQ`, `GUIDANCE`, `CARE`, `PROCEDURE` ou `TEXT_POLICY`, opcionalmente ligado a um serviço escolhido por ID a partir do catálogo.

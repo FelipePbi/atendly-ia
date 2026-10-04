@@ -47,7 +47,7 @@ Baseline arquitetural: [TARGET_ARCHITECTURE](../TARGET_ARCHITECTURE.md) (fronten
 
 ## Pontos de implementação
 
-`apps/scheduling-service/src/modules/internal-api/routes.ts` e o módulo de calendário correspondente (leitura de blocos), `apps/bff/src/clients/scheduling/index.ts`, `apps/bff/src/modules/calendar/routes.ts`, `apps/bff/PUBLIC_API_V1.md`, `apps/bff/tests/`, `apps/frontend/src/data/services/BffCalendarService.ts`, `apps/frontend/src/data/mappers/publicApiSchemas.ts`, `apps/frontend/src/features/agenda/` (destino da decomposição), `apps/frontend/src/features/calendar/` (origem), `apps/frontend/src/app/(platform)/agenda/**`, `apps/frontend/src/shared/ui/` (consumo das primitivas existentes), `apps/frontend/src/shared/styles/atendly-agenda.css` e `apps/frontend/tests/`.
+`apps/scheduling-service/src/modules/internal-api/routes.ts` e o módulo de calendário correspondente (leitura de blocos), `apps/bff/src/clients/scheduling/index.ts`, `apps/bff/src/modules/calendar/routes.ts`, `apps/bff/PUBLIC_API_V1.md`, `apps/bff/tests/`, `apps/frontend/src/data/services/BffCalendarService.ts`, `apps/frontend/src/data/mappers/publicApiSchemas.ts`, `apps/frontend/src/features/agenda/` (destino da decomposição), `apps/frontend/src/features/calendar/` (origem), `apps/frontend/src/app/(platform)/agenda/**`, `apps/frontend/src/shared/ui/` (consumo das primitivas existentes), `apps/frontend/src/shared/styles/avenly-agenda.css` e `apps/frontend/tests/`.
 
 ## Escopo obrigatório
 
@@ -61,7 +61,7 @@ Nenhum outro endpoint é criado, removido ou alterado. `PUBLIC_API_V1.md` é atu
 
 ### 2. Decomposição por módulo, com a invariante do shell preservada
 
-Separar `ProductAgendaScreen` em `features/agenda/`, com um componente de topo que **despacha os estados da tela** e declara `useShellConfig` uma única vez por branch mutuamente exclusivo, com os valores derivados do estado — o padrão que o D-031 registrou e que o Goal015 provou. As seis rotas continuam funcionando e continuam sendo as mesmas seis: este Goal não inventa rota nova a menos que um fluxo obrigatório exija, e se exigir, a rota entra declarada no relatório. O CSS de módulo (`atendly-agenda.css`) continua existindo e herdando os tokens do Goal014; as primitivas de `shared/ui/` são a base da composição.
+Separar `ProductAgendaScreen` em `features/agenda/`, com um componente de topo que **despacha os estados da tela** e declara `useShellConfig` uma única vez por branch mutuamente exclusivo, com os valores derivados do estado — o padrão que o D-031 registrou e que o Goal015 provou. As seis rotas continuam funcionando e continuam sendo as mesmas seis: este Goal não inventa rota nova a menos que um fluxo obrigatório exija, e se exigir, a rota entra declarada no relatório. O CSS de módulo (`avenly-agenda.css`) continua existindo e herdando os tokens do Goal014; as primitivas de `shared/ui/` são a base da composição.
 
 ### 3. Dia, Semana e Mês — mobile-first, com ocupação honesta
 

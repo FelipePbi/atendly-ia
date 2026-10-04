@@ -1,13 +1,13 @@
 ---
 title: Glossário
-aliases: [Glossário Atendly]
-tags: [atendly, glossario]
+aliases: [Glossário Avenly]
+tags: [avenly, glossario]
 status: vigente
 ---
 
 # Glossário
 
-## Atendly
+## Avenly
 A plataforma como um todo. Não é o nome da IA/persona.
 
 ## IA
@@ -16,7 +16,7 @@ Automação responsável por conversar com clientes e executar ações permitida
 ## Negócio
 Unidade principal do usuário na plataforma. Pode representar uma pessoa autônoma ou estabelecimento.
 
-## Agenda Atendly
+## Agenda Avenly
 Agenda oficial e fonte de verdade operacional do negócio.
 
 ## Minha Agenda

@@ -1,7 +1,7 @@
 ---
 title: Design System Conceitual
-aliases: [Design System Atendly]
-tags: [atendly, design-system, ui]
+aliases: [Design System Avenly]
+tags: [avenly, design-system, ui]
 status: direcao
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: IA e Conversas
 aliases: [Regras da IA, Atendimento por IA]
-tags: [atendly, ia, conversas]
+tags: [avenly, ia, conversas]
 status: vigente
 ---
 
@@ -11,7 +11,7 @@ status: vigente
 
 A IA representa o negócio na conversa, mas não recebe um nome/personagem próprio.
 
-“Atendly” é o nome da plataforma. Na interface, o componente automatizado deve ser chamado simplesmente de **IA**.
+“Avenly” é o nome da plataforma. Na interface, o componente automatizado deve ser chamado simplesmente de **IA**.
 
 Estados de linguagem interna:
 
@@ -32,7 +32,7 @@ Se perguntarem diretamente se é uma pessoa ou robô, deve responder com transpa
 
 Ela nunca deve fingir ser uma pessoa específica.
 
-O nome “Atendly” não precisa aparecer para o cliente final durante o atendimento.
+O nome “Avenly” não precisa aparecer para o cliente final durante o atendimento.
 
 ## Estilos
 

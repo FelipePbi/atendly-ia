@@ -37,7 +37,7 @@ O vault define a Agenda como fonte única da operação (`AGENTS.md`) e já fixo
 
 Conferido no código da baseline `37c7371`:
 
-1. **A tela tem cabeçalho, faixa e botões que o protótipo não tem.** `apps/frontend/src/features/agenda/AgendaBoard.tsx:236-259` renderiza o cabeçalho "Operação diária" com "Agendamentos reais da fonte oficial do negócio.", e três botões soltos: "Exceções do dia" e "Bloquear horário" (quando `capabilities.manageAvailability`) e "Novo agendamento" (quando `capabilities.createAppointments`). Logo abaixo vem `SourceStrip` (linhas 416-420: "Agenda Atendly é a fonte oficial" com o selo "Operacional"). No celular, `useShellConfig` (linha 183) ainda publica a ação "Novo agendamento", que a casca desenha como FAB (`AppShell.tsx:319-321`), repetindo o botão (AG-01, AG-02).
+1. **A tela tem cabeçalho, faixa e botões que o protótipo não tem.** `apps/frontend/src/features/agenda/AgendaBoard.tsx:236-259` renderiza o cabeçalho "Operação diária" com "Agendamentos reais da fonte oficial do negócio.", e três botões soltos: "Exceções do dia" e "Bloquear horário" (quando `capabilities.manageAvailability`) e "Novo agendamento" (quando `capabilities.createAppointments`). Logo abaixo vem `SourceStrip` (linhas 416-420: "Agenda Avenly é a fonte oficial" com o selo "Operacional"). No celular, `useShellConfig` (linha 183) ainda publica a ação "Novo agendamento", que a casca desenha como FAB (`AppShell.tsx:319-321`), repetindo o botão (AG-01, AG-02).
 2. **Compromisso pessoal já existe, mas escondido.** `BlockForm.tsx` tem os dois tipos (`BLOCK` e `PERSONAL`, linhas 26-48) com o mesmo `POST /v1/time-blocks`, e abre sempre em `BLOCK`. Nada precisa mudar no contrato para "+ Novo" oferecer os três tipos (AG-02).
 3. **O dia vazio não sabe se a pessoa atende.** `DayView.tsx:62` diz só "Nenhum evento neste dia." A Agenda lê preferência de visualização e calendário (`AgendaBoard.tsx:105-160`), mas não a disponibilidade; `settings` tem `GET /v1/settings/availability`, usado por Configurações (AG-03).
 4. **"Próximo agendamento" é o primeiro da janela navegada.** `AgendaBoard.tsx:180-182` ordena os agendamentos ativos **carregados para a visualização** e pega o primeiro, mesmo que já tenha passado; a observação da revisão local (`QA_LOCAL_REVIEW.md:456`) confirma que no Dia 29/09 ele mostrava 29/09 12:00 enquanto o próximo real era 28/09 10:00 (AG-06). A mudança de visualização só troca `view` e mantém `cursor` (`AgendaBoard.tsx:218-224`), então o mês aberto a partir da Semana é o do `cursor`, que pode ser outro mês que o da semana vista (AG-05).
@@ -45,7 +45,7 @@ Conferido no código da baseline `37c7371`:
 6. **As ações de fim só olham o status.** `LifecycleActions.tsx:159-160`: `canComplete = status === "CONFIRMED"` e `canMarkNoShow` para `CONFIRMED` ou `COMPLETED`, sem olhar o horário (AG-09).
 7. **O telefone do detalhe já passa por `displayPhone`** (`AppointmentDetail.tsx:124`, `shared/phone.ts`), que devolve o valor cru quando o número não é reconhecido como brasileiro de 12 ou 13 dígitos. O caso da revisão local precisa ser reproduzido antes de mudar código (AG-08).
 8. **A copy técnica está em quatro telas.** `AgendaBoard.tsx:240` e `:280` ("fonte oficial"), `AppointmentDetail.tsx:73` ("Dados persistidos na fonte oficial do negócio."), `AppointmentForm.tsx:306` ("… um horário disponível na fonte oficial.") (AG-10). Os testes `goal016-agenda-reachability` e `goal016-exceptions-source` citam essa copy.
-9. **O trilho esconde a marca.** Abaixo de 1100 px, `atendly.css:2137-2155` põe o shell em trilho de 88 px e esconde `.sidebar .brand span`, entre outros; o protótipo mantém a marca no topo do trilho (AG-12).
+9. **O trilho esconde a marca.** Abaixo de 1100 px, `avenly.css:2137-2155` põe o shell em trilho de 88 px e esconde `.sidebar .brand span`, entre outros; o protótipo mantém a marca no topo do trilho (AG-12).
 10. **Configurações › Agenda deixa ocultar os sete dias.** `CalendarSettings.tsx:241-251` alterna qualquer dia sem limite; o BFF recusa mais de seis, e a tela só diz "Não foi possível salvar as preferências da Agenda." (observação 4 do review073).
 11. **O gate autenticado navega a Agenda por nome de botão.** `apps/frontend/e2e/authenticated-matrix.spec.ts:560-591` (`ensureAgendaOnMeasuredDate`) clica "Próximo dia" ou "Dia anterior" e, se o botão não existe (Semana ou Mês), assume que o dia semeado está na janela corrente, o que falha na virada de domingo para segunda (observação 2 do review073). `apps/frontend/e2e/routes.ts:43` reconhece a Agenda por `contentMarker: "Agenda"`.
 
@@ -79,14 +79,14 @@ Conferido no código da baseline `37c7371`:
 ## Dependências e contexto mínimo
 
 - Goal074 ACCEPTED (baseline acima). O Goal016 fez a Agenda operacional, o Goal073 fixou "Como você vê a Agenda" e a política, o Goal058 a casca e o gate que mede a composição, o Goal068 a marca e a assinatura na sidebar, e o Goal074 a Home, que leva a "/agenda/novo".
-- Arquivos de partida: `features/agenda/AgendaBoard.tsx`, `DayView.tsx`, `WeekView.tsx`, `MonthView.tsx`, `AppointmentDetail.tsx`, `AppointmentHistory.tsx`, `LifecycleActions.tsx`, `AppointmentForm.tsx`, `BlockForm.tsx`, `occupancy.ts`; `features/settings/CalendarSettings.tsx`; `shared/layout/AppShell.tsx`; `shared/phone.ts`; `shared/styles/atendly.css`; `e2e/authenticated-matrix.spec.ts` (só `ensureAgendaOnMeasuredDate`).
+- Arquivos de partida: `features/agenda/AgendaBoard.tsx`, `DayView.tsx`, `WeekView.tsx`, `MonthView.tsx`, `AppointmentDetail.tsx`, `AppointmentHistory.tsx`, `LifecycleActions.tsx`, `AppointmentForm.tsx`, `BlockForm.tsx`, `occupancy.ts`; `features/settings/CalendarSettings.tsx`; `shared/layout/AppShell.tsx`; `shared/phone.ts`; `shared/styles/avenly.css`; `e2e/authenticated-matrix.spec.ts` (só `ensureAgendaOnMeasuredDate`).
 - Testes de partida: os `goal016-*` e `goal073-*` que montam a Agenda ou Configurações › Agenda, `goal015-shell-invariant`, `goal058-*` e `goal068-*` que montam a casca.
 
 ## Pontos de implementação
 
 | Parte | Onde |
 | --- | --- |
-| Barra superior, "+ Novo", faixa da semana, copy, marca no trilho | `features/agenda/AgendaBoard.tsx`, `BlockForm.tsx`, `shared/layout/AppShell.tsx`, `shared/styles/atendly.css` |
+| Barra superior, "+ Novo", faixa da semana, copy, marca no trilho | `features/agenda/AgendaBoard.tsx`, `BlockForm.tsx`, `shared/layout/AppShell.tsx`, `shared/styles/avenly.css` |
 | Visualizações, duas colunas, dia vazio, próximo agendamento | `features/agenda/AgendaBoard.tsx`, `DayView.tsx`, `WeekView.tsx`, `MonthView.tsx`, `occupancy.ts` |
 | Detalhe, histórico, ações de fim, telefone, copy | `features/agenda/AppointmentDetail.tsx`, `AppointmentHistory.tsx`, `LifecycleActions.tsx`, `AppointmentForm.tsx`, `shared/phone.ts` |
 | Configurações › Agenda | `features/settings/CalendarSettings.tsx` |

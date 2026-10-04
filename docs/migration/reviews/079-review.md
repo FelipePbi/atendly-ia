@@ -10,7 +10,7 @@ O Goal corrige **QA O-36, O-37, O-39, O-42 e a parte animada de O-01** da [revis
 - Snapshot aceito, calculado pelo IA Loop: **26 arquivos**, hash do diff `4176e230e9020cb564c57207e66fa000f9457ed879703310a48eb2c8a51c9ce8`. Mudança posterior nesses arquivos exige avaliar o novo diff.
 - **20 arquivos rastreados**, por `git diff --numstat e0287e9`:
   - `apps/frontend/src/features/onboarding/`: `OnboardingScreen.tsx` (+22/−5), `scenarios.ts` (+6/−6), `blocks/ai.tsx` (+175/−124), `blocks/business.tsx` (+59/−14), `blocks/shared.tsx` (+14/−2) e `blocks/whatsapp.tsx` (+52/−13).
-  - `apps/frontend/src/shared/styles/atendly.css` (+81/−8), `apps/frontend/e2e/routes.ts` (+13, só acréscimo) e `apps/frontend/AGENTS.md` (+8/−4).
+  - `apps/frontend/src/shared/styles/avenly.css` (+81/−8), `apps/frontend/e2e/routes.ts` (+13, só acréscimo) e `apps/frontend/AGENTS.md` (+8/−4).
   - Testes existentes ajustados, sem teste removido nem pulado: `goal018-a11y` (+1/−3), `goal018-onboarding-reachability` (+55/−36), `goal019-a11y` (+1/−1), `goal065-onboarding-business` (+16/−3), `goal065-onboarding-copy-whatsapp` (+3/−1) e `goal065-onboarding-schedule` (+28/−2). O motivo de cada asserção mudada está em [FINAL_AUDIT §56](../FINAL_AUDIT.md).
   - `scripts/goal033-authenticated-ui-rehearsal.mjs` (+40/−9): o terceiro `PATCH /v1/onboarding` de `seedOnboardingAccount`, edição autorizada pelo §5 e pelo §10 do Goal.
   - Os quatro documentos do §8: `CURRENT_STATE.md` (+63), `DECISIONS.md` (+35, D-095), `FINAL_AUDIT.md` (+63, §56) e `VALIDATION_GATE.md` (+64), todos só com inserções.

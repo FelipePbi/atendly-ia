@@ -1,6 +1,6 @@
 # Brief — Protótipo da Landing Page (`apps/frontend-lp`)
 
-Documento de entrada para o Claude Code construir o **protótipo navegável** da landing page da Atendly. Consolida a sessão de brainstorm de 2026-10-01.
+Documento de entrada para o Claude Code construir o **protótipo navegável** da landing page da Avenly. Consolida a sessão de brainstorm de 2026-10-01.
 
 - **Produto, oferta, estrutura e copy** são definidos no Product Vault (`docs/product-vault/05-Go-to-Market/`). Este brief não os redefine: ele traduz essas decisões em instruções de construção.
 - **Visual** vem de `docs/design-reference/claude-design/` e dos tokens já implementados em `apps/frontend/src/shared/styles/tokens.css`.
@@ -176,8 +176,8 @@ Os textos estão nos blocos indicados de `04-Landing-Page-Copy.md`.
 | --- | --- | --- |
 | 0. Header | 1 | `Logo` (símbolo + wordmark Literata), âncoras `#como-funciona`, `#precos`, `#duvidas`, CTA |
 | 1. Hero | 2 + 3 | fundo `--lp-color-hero-bg`, texto `--at-color-on-primary`, brilho radial sutil; CTA em papel com texto petróleo; microcopy em `--at-color-primary-on-dark`; `HeroDemo` à direita/abaixo |
-| 2. Dor | 4 | fundo papel; título grande; texto curto; visual simples de **três conversas** em que só uma aparece respondida, a marcada pela Atendly (estático ou com uma entrada discreta ao entrar na tela); frase de transição em destaque |
-| 3. Como funciona | 5 | três passos numerados em cards; ícones de traço 1,75 (padrão Acabamento); no passo 3, um mini-chip "Esta é uma conversa de teste da Atendly"; CTA |
+| 2. Dor | 4 | fundo papel; título grande; texto curto; visual simples de **três conversas** em que só uma aparece respondida, a marcada pela Avenly (estático ou com uma entrada discreta ao entrar na tela); frase de transição em destaque |
+| 3. Como funciona | 5 | três passos numerados em cards; ícones de traço 1,75 (padrão Acabamento); no passo 3, um mini-chip "Esta é uma conversa de teste da Avenly"; CTA |
 | 4. Resultados | 6 | três cards de resultado + mock da **Home do app** com o cabeçalho "Bom dia! Enquanto você dormia, a IA marcou 3 atendimentos" e 3 linhas de agendamento com o rótulo "Marcado pela IA". **Não** usar tela de bloqueio nem notificação push |
 | 5. Controle | 7 | quatro itens; mock de chat com a sequência: mensagem da IA → mensagem da profissional → evento de sistema "Você assumiu · IA pausada" |
 | 6. Fala do seu jeito | 8 | três balões com os três estilos; no desktop, os três visíveis lado a lado; no mobile, cards em scroll-snap horizontal **ou** alternância automática com controle de pausa (seção 9); CTA |

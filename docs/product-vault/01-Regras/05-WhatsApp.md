@@ -1,7 +1,7 @@
 ---
 title: WhatsApp
 aliases: [Regras do WhatsApp]
-tags: [atendly, whatsapp, conversas]
+tags: [avenly, whatsapp, conversas]
 status: vigente
 ---
 
@@ -95,7 +95,7 @@ Quando o profissional envia qualquer mensagem manual:
 
 Visualizar mensagens não significa assumir atendimento.
 
-## Profissional responde pela Atendly
+## Profissional responde pela Avenly
 
 Também é possível responder diretamente pelo chat interno.
 

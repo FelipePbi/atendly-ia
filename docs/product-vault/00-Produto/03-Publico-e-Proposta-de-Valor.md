@@ -1,7 +1,7 @@
 ---
 title: Público e Proposta de Valor
-aliases: [Público Atendly]
-tags: [atendly, produto, publico]
+aliases: [Público Avenly]
+tags: [avenly, produto, publico]
 status: vigente
 ---
 

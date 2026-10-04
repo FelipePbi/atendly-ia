@@ -139,7 +139,7 @@ O relatório e os documentos dizem que essa conferência **não foi feita** por 
 - `apps/frontend/src/app/(platform)/layout.tsx`, se o campo novo precisar ser repassado à casca.
 - `apps/frontend/src/features/customers/`, `features/services/` e `features/settings/`: os componentes de topo passam a compor lista e detalhe pelo padrão; a lista ganha um modo de painel sem `useShellConfig` (f); `CustomerProfile`, `ServiceForm` e `SettingsPage` trocam o cabeçalho de página pela barra empurrada.
 - `apps/frontend/src/shared/styles/`: a regra do lado a lado e da tela empurrada uma vez, mais o porte de CL5, S4 e N1 nas folhas dos módulos.
-- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/atendly-icons.svg`.
+- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/avenly-icons.svg`.
 - `apps/frontend/tests/`: a prova nova e as asserções do §5.
 - `apps/frontend/e2e/authenticated-matrix.spec.ts` e, se preciso, `e2e/measure.ts`: G-4 e G-5, **só por acréscimo**.
 

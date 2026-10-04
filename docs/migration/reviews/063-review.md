@@ -10,7 +10,7 @@ O Goal aplica **U-11** e corrige **QA O-49** (ALTA), **QA S-02** (ALTA), **QA H-
 - Snapshot aceito, calculado pelo IA Loop: **27 arquivos**, hash do diff `0e217ff2aa7ff5110e8951286fe481d97cac55d1f1a58125c074bbf28d23aa9a`. Mudança posterior nesses arquivos exige avaliar o novo diff.
 - **Vinte e dois arquivos rastreados**, por `git diff --numstat 1c42689`:
   - `apps/bff/`: `PUBLIC_API_V1.md` (+14/−2), `src/lib/ai-activation.ts` (+37/−0), `src/lib/errors.ts` (+4/−0), `src/modules/dashboard/routes.ts` (+4/−17) e `src/modules/settings/routes.ts` (+68/−5).
-  - `apps/frontend/`: `AGENTS.md` (+3/−2), `e2e/authenticated-matrix.spec.ts` (+9/−5), `e2e/routes.ts` (+9/−0), `src/features/dashboard/DashboardScreen.tsx` (+37/−3), `src/features/onboarding/OnboardingRuntime.tsx` (+34/−1), `OnboardingScreen.tsx` (+42/−7), `blocks/activation-test.tsx` (+43/−367), `blocks/whatsapp.tsx` (+19/−11), `scenarios.ts` (+1/−1), `src/features/settings/AiSettings.tsx` (+344/−29), `src/shared/styles/atendly.css` (+20/−2), `tests/goal018-onboarding-reachability.test.tsx` (+21/−13) e `tests/goal024-settings-shell-invariant.test.tsx` (+4/−2).
+  - `apps/frontend/`: `AGENTS.md` (+3/−2), `e2e/authenticated-matrix.spec.ts` (+9/−5), `e2e/routes.ts` (+9/−0), `src/features/dashboard/DashboardScreen.tsx` (+37/−3), `src/features/onboarding/OnboardingRuntime.tsx` (+34/−1), `OnboardingScreen.tsx` (+42/−7), `blocks/activation-test.tsx` (+43/−367), `blocks/whatsapp.tsx` (+19/−11), `scenarios.ts` (+1/−1), `src/features/settings/AiSettings.tsx` (+344/−29), `src/shared/styles/avenly.css` (+20/−2), `tests/goal018-onboarding-reachability.test.tsx` (+21/−13) e `tests/goal024-settings-shell-invariant.test.tsx` (+4/−2).
   - Os quatro documentos de `docs/migration/`, por acréscimo no diff aceito: `CURRENT_STATE.md` (+91), `FINAL_AUDIT.md` (+161), `DECISIONS.md` (+35/−1, a nota de aplicação na linha U-11 e D-080) e `VALIDATION_GATE.md` (+23/−1, a linha de `validate:integration` passa a dizer oito rotas autenticadas).
 - **Cinco arquivos novos**:
   - `apps/frontend/src/features/activation-test/ActivationTestPanels.tsx` (**512** linhas), o módulo compartilhado do teste real;
@@ -68,7 +68,7 @@ Prova conferida na árvore final:
 
 ## O que o aceite não prova
 
-- Que o teste real envia e recebe mensagem de verdade: o número oficial da Atendly não existe no ambiente (D-035). A conferência humana do §9 do Goal — onboarding chegando ao teste pelos dois botões, teste de Configurações › IA rodando, a IA ligando ao terminar bem e a pausa não sendo desfeita por nova leitura — **não foi feita**.
+- Que o teste real envia e recebe mensagem de verdade: o número oficial da Avenly não existe no ambiente (D-035). A conferência humana do §9 do Goal — onboarding chegando ao teste pelos dois botões, teste de Configurações › IA rodando, a IA ligando ao terminar bem e a pausa não sendo desfeita por nova leitura — **não foi feita**.
 - Que `/onboarding/*` cumpre largura, toque, contraste, foco e movimento: não é medida pelo gate renderizado.
 - Que as telas batem com o protótipo aprovado (conferência humana, Goal068).
 - Consentimento, QR e visão de código (Goal071).

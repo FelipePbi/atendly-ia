@@ -1,7 +1,7 @@
 ---
 title: Princípios de UX/UI
-aliases: [UX Atendly, UI Atendly]
-tags: [atendly, ux, ui, mobile-first]
+aliases: [UX Avenly, UI Avenly]
+tags: [avenly, ux, ui, mobile-first]
 status: vigente
 ---
 

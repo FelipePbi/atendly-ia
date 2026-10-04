@@ -1,7 +1,7 @@
 ---
 title: UX do Onboarding
 aliases: [Onboarding UX]
-tags: [atendly, ux, onboarding]
+tags: [avenly, ux, onboarding]
 status: vigente
 ---
 

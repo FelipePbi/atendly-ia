@@ -1,7 +1,7 @@
 ---
 title: Ativação e Teste do WhatsApp
 aliases: [Teste de Ativação]
-tags: [atendly, whatsapp, ativacao]
+tags: [avenly, whatsapp, ativacao]
 status: vigente
 ---
 
@@ -26,7 +26,7 @@ Antes de continuar, usuário pode trocar/desconectar caso tenha conectado o núm
 Explicar antes da conexão:
 
 - pode usar WhatsApp pessoal ou comercial;
-- Atendly organiza todas as conversas;
+- Avenly organiza todas as conversas;
 - IA pode ser desativada para pessoas específicas;
 - quando o usuário responde manualmente, a IA sai de cena.
 
@@ -40,13 +40,13 @@ Usuário pode selecionar conversas/contatos disponíveis e também informar tele
 
 ## Teste real
 
-O teste não é apenas uma animação da interface. É uma conversa real enviada para o WhatsApp conectado por um número oficial da Atendly.
+O teste não é apenas uma animação da interface. É uma conversa real enviada para o WhatsApp conectado por um número oficial da Avenly.
 
 ### Antes
 
 Tela explica:
 
-> A Atendly vai enviar uma mensagem de teste simulando um cliente. Você não precisa responder. A IA fará o atendimento automaticamente.
+> A Avenly vai enviar uma mensagem de teste simulando um cliente. Você não precisa responder. A IA fará o atendimento automaticamente.
 
 CTA:
 
@@ -56,7 +56,7 @@ CTA:
 
 Primeiro enviar aviso separado:
 
-> Esta é uma conversa de teste da Atendly.
+> Esta é uma conversa de teste da Avenly.
 
 Depois iniciar o cliente simulado normalmente.
 

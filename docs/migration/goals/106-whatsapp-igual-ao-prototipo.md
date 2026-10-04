@@ -79,7 +79,7 @@ Conferido no protótipo (`docs/design-reference/claude-design/prototype/project/
 
 ### 1. W1 igual ao quadro
 
-**Porte** o HTML/CSS do quadro. Use o elemento com `data-screen-label="Configurações · WhatsApp"` de `Mais-WhatsApp-Importacao-Conta.dc.html` (mobile) e os de `Configuracoes-Tablet.dc.html` e `Configuracoes-Desktop.dc.html` ("Configurações / Configurações · WhatsApp / Portrait", "/ Landscape" e "/ Desktop"). Traduza para o CSS do app a mesma hierarquia e os mesmos valores inline: px, cores hex, Literata e Hanken Grotesk, pesos, raios, bordas, sombras, espaçamentos e posições. Não reinterprete o layout a partir da descrição acima: ela só aponta onde está a diferença. Reaproveite as classes de linha, de grupo e de área de atenção que o 097 e o 104 criaram em `atendly-settings.css` (o hub, o AG1 e o "Excluir conta" do C1), quando o quadro tiver a mesma forma.
+**Porte** o HTML/CSS do quadro. Use o elemento com `data-screen-label="Configurações · WhatsApp"` de `Mais-WhatsApp-Importacao-Conta.dc.html` (mobile) e os de `Configuracoes-Tablet.dc.html` e `Configuracoes-Desktop.dc.html` ("Configurações / Configurações · WhatsApp / Portrait", "/ Landscape" e "/ Desktop"). Traduza para o CSS do app a mesma hierarquia e os mesmos valores inline: px, cores hex, Literata e Hanken Grotesk, pesos, raios, bordas, sombras, espaçamentos e posições. Não reinterprete o layout a partir da descrição acima: ela só aponta onde está a diferença. Reaproveite as classes de linha, de grupo e de área de atenção que o 097 e o 104 criaram em `avenly-settings.css` (o hub, o AG1 e o "Excluir conta" do C1), quando o quadro tiver a mesma forma.
 
 Primeiro entregue (a). Depois repita `npm run visual:compare -- --target W1` até não haver divergência visível em nenhum dos quatro devices além das declaradas. O resultado deve ser **igual ao quadro W1 nos 4 devices**. Para cada device, o relatório final traz o diff do início (já com a resposta fixa, sobre o painel de hoje) e do fim, e o que ainda difere, com o motivo. As telas fazem login: se corridas seguidas baterem em limite (`429`), espere entre corridas em vez de mudar o script fora de (a). Depois de cada `visual:compare`, confira `git status`: no 095 e no 096, o `next dev` reescreveu `apps/frontend/AGENTS.md`. Arquivo fora do escopo que mudar volta ao original antes da entrega.
 
@@ -135,8 +135,8 @@ Aplique cada controle e reverta-o no mesmo passo, com a restauração conferida 
 - `apps/frontend/src/features/settings/`: `WhatsAppSettings.tsx`, `ProductSettingsScreen.tsx` (só passar `settings` a `WhatsAppSettings`), e um componente novo para o estado conectado, na mesma pasta.
 - `apps/frontend/src/features/whatsapp/`: `WhatsAppConnectionPanel.tsx` (só o ponto de extensão de (c)) e o arquivo novo do componente de contatos ignorados, movido.
 - `apps/frontend/src/features/onboarding/blocks/whatsapp.tsx`: só tirar o componente movido e importá-lo do lugar novo.
-- `apps/frontend/src/shared/styles/atendly-settings.css`. `atendly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
-- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/atendly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
+- `apps/frontend/src/shared/styles/avenly-settings.css`. `avenly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
+- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/avenly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
 - `scripts/visual-compare.mjs` (só servir `responses` em `captureApp`), o novo `scripts/lib/visual-responses.mjs` e o novo `scripts/tests/visual-responses.test.mjs`.
 - `apps/frontend/e2e/visual/targets.json`: só o `$comment` e a entrada do W1.
 - `apps/frontend/tests/`: a prova nova e as asserções do §5.

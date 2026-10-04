@@ -10,7 +10,7 @@ O Goal corrige **QA O-07, O-10/O-23, O-11, O-12, O-13, O-25, O-27, O-29 e O-32**
 - Snapshot aceito, calculado pelo IA Loop: **24 arquivos**, hash do diff `8b671c9f731f44a6c3d9ed47b0f2364cd501e5b083424d635ed360677297bf16`. Mudança posterior nesses arquivos exige avaliar o novo diff.
 - **20 arquivos rastreados**, por `git diff --numstat a0dc3bf`:
   - `apps/frontend/src/features/onboarding/`: `OnboardingShell.tsx` (+140/−53), `OnboardingScreen.tsx` (+34/−50), `OnboardingImportStep.tsx` (+1/−6), `blocks.ts` (+28), `blocks/schedule.tsx` (+189/−51), `blocks/business.tsx` (+18/−3) e `blocks/shared.tsx` (+2/−2).
-  - `apps/frontend/src/shared/`: `styles/atendly.css` (+284/−4) e `icons/Icon.tsx` (+2, `pin` e `monitor`). `apps/frontend/public/icons/atendly-icons.svg` (+2, os dois símbolos novos; **31** símbolos). `apps/frontend/AGENTS.md` (+1/−1, a frase da segunda conta do gate autenticado).
+  - `apps/frontend/src/shared/`: `styles/avenly.css` (+284/−4) e `icons/Icon.tsx` (+2, `pin` e `monitor`). `apps/frontend/public/icons/avenly-icons.svg` (+2, os dois símbolos novos; **31** símbolos). `apps/frontend/AGENTS.md` (+1/−1, a frase da segunda conta do gate autenticado).
   - Testes existentes ajustados, sem asserção apagada: `goal018-onboarding-reachability` (+25/−8), `goal065-onboarding-business` (+4/−2), `goal065-onboarding-schedule` (+17/−5) e `goal066-onboarding-importacao` (+12/−4). A lista de cada asserção mudada está em D-094, "Consequências".
   - `scripts/goal033-authenticated-ui-rehearsal.mjs` (+16/−5): o desvio do §10 descrito abaixo.
   - Os quatro documentos do §8: `CURRENT_STATE.md` (+95), `DECISIONS.md` (+34, D-094), `FINAL_AUDIT.md` (+64, §55) e `VALIDATION_GATE.md` (+71), todos só com inserções.
@@ -27,7 +27,7 @@ O Tech Lead aceitou essa edição na rodada 1 como desvio autorizado. É a únic
 ## Histórico das rodadas
 
 1. **Rodada 1 — `CHANGES_REQUIRED`, 3 blockers.** As partes funcionais batiam com o Goal.
-   - Blocker 1: `public/icons/atendly-icons.svg` ficou com `<symbol id="i-clock"viewBox="0 0 24 24">`, sem espaço entre atributos. O `DOMParser` do jsdom (`image/svg+xml`) devolvia `no whitespace between attributes`. No Chromium e no WebKit do Playwright, o `<use>` de `#i-clock` caía de 18 × 18 para 0 × 0. O ícone `clock` sumia no app inteiro: sidebar, Agenda, ocupação, painéis do teste real, "Enviando…" em Conversas e Configurações. Nenhum gate o detectou.
+   - Blocker 1: `public/icons/avenly-icons.svg` ficou com `<symbol id="i-clock"viewBox="0 0 24 24">`, sem espaço entre atributos. O `DOMParser` do jsdom (`image/svg+xml`) devolvia `no whitespace between attributes`. No Chromium e no WebKit do Playwright, o `<use>` de `#i-clock` caía de 18 × 18 para 0 × 0. O ícone `clock` sumia no app inteiro: sidebar, Agenda, ocupação, painéis do teste real, "Enviando…" em Conversas e Configurações. Nenhum gate o detectou.
    - Blocker 2: aceite do desvio de `scripts/` e pedido do docblock literal, com a prosa dos quatro documentos reescrita no lugar.
    - Blocker 3: as correções acima eram posteriores aos controles; refazer a execução final, os nove controles e a prosa na ordem do §8.
 2. **Rodada 2 — `CHANGES_REQUIRED`, 1 blocker.** Sprite, docblock e ordem do §8 corrigidos, com execução final **115**/**1186** e os nove controles refeitos. O teste de regressão do sprite pedido como evidência não foi escrito: o relatório disse que o Developer não quis mudar a contagem. O blocker 1 voltou só pela parte de evidência, porque o §8 exige código e evidência na mesma rodada.

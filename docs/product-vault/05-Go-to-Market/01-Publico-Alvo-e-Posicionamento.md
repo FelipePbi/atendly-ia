@@ -1,7 +1,7 @@
 ---
 title: Público-alvo e Posicionamento
-aliases: [ICP Atendly, Público-alvo da Landing Page]
-tags: [atendly, go-to-market, publico, posicionamento]
+aliases: [ICP Avenly, Público-alvo da Landing Page]
+tags: [avenly, go-to-market, publico, posicionamento]
 status: direcao
 ---
 

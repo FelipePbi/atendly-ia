@@ -1,13 +1,13 @@
 ---
-title: Atendly — Product Vault
-aliases: [Atendly Product Vault, Atendly MVP]
-tags: [atendly, produto, ux, ui, mvp]
+title: Avenly — Product Vault
+aliases: [Avenly Product Vault, Avenly MVP]
+tags: [avenly, produto, ux, ui, mvp]
 status: vigente
 ---
 
-# Atendly — Product Vault
+# Avenly — Product Vault
 
-Este vault consolida as decisões de **produto** e **UX/UI** do MVP da Atendly.
+Este vault consolida as decisões de **produto** e **UX/UI** do MVP da Avenly.
 
 > [!important]
 > Este pacote **não é uma especificação técnica de implementação**. Decisões de infraestrutura, banco, APIs, arquitetura de serviços, modelos de persistência, bibliotecas e detalhes internos devem ser documentadas separadamente.
@@ -21,7 +21,7 @@ O grafo de **código** é outro artefato e vive em `graphify-out/` — ele nunca
 ## Comece por aqui
 
 - [[00-HOME]] — mapa geral da documentação
-- [[00-Produto/01-Visao-do-Produto]] — o que é a Atendly, por que existe e qual problema resolve
+- [[00-Produto/01-Visao-do-Produto]] — o que é a Avenly, por que existe e qual problema resolve
 - [[00-Produto/02-Escopo-do-MVP]] — o que entra e o que não entra no MVP
 - [[01-Regras/01-Regras-de-Negocio]] — regras centrais consolidadas
 - [[02-Fluxos/01-Onboarding]] — onboarding definitivo
@@ -31,9 +31,9 @@ O grafo de **código** é outro artefato e vive em `graphify-out/` — ele nunca
 ## Convenções
 
 - **MVP** = única versão mínima definida para validação. Não há MVP 0.1/0.2.
-- **IA** = automação inteligente que atende clientes. “Atendly” é o nome da plataforma, não da persona da IA.
+- **IA** = automação inteligente que atende clientes. “Avenly” é o nome da plataforma, não da persona da IA.
 - **Negócio** = unidade do usuário dentro da plataforma.
-- **Agenda Atendly** = agenda oficial do negócio.
+- **Agenda Avenly** = agenda oficial do negócio.
 - **Minha Agenda** = fonte opcional de uma única migração de dados; nunca uma integração contínua.
 
 ## Ordem de prioridade da experiência

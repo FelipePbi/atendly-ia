@@ -24,7 +24,7 @@ Fazer Serviços (`/servicos`, `/servicos/novo`, `/servicos/editar` e as telas de
 
 1. **A lista é uma lista, não uma tabela**: cada linha com "nome · duração · preço", um filete na cor do serviço, as pendências em âmbar com "Corrigir" e os inativos separados, com "a IA não oferece" (SV-03).
 2. **O formulário tem os apoios do protótipo**: duração com − e + e atalhos 30, 60 e 90, e a frase "A IA responde: …" que mostra como a IA fala o que está sendo cadastrado (SV-04, sem "Instruções para a IA").
-3. **Nenhuma copy técnica**: sai a faixa "Gerenciado pela Agenda Atendly · … · Controle completo" e a origem "Agenda Atendly" repetida em cada linha (SV-05).
+3. **Nenhuma copy técnica**: sai a faixa "Gerenciado pela Agenda Avenly · … · Controle completo" e a origem "Agenda Avenly" repetida em cada linha (SV-05).
 
 Achados da [revisão local](../QA_LOCAL_REVIEW.md) que este Goal fecha: **SV-03**, **SV-04** sem "Instruções para a IA" e **SV-05**. SV-01 e SV-02 já foram corrigidos no Goal058. A parte "Instruções para a IA" de SV-04 é do Goal078; CV-05, NT-01 e NT-02, do Goal077; o onboarding, do Goal072.
 
@@ -32,8 +32,8 @@ Achados da [revisão local](../QA_LOCAL_REVIEW.md) que este Goal fecha: **SV-03*
 
 Conferido no código da baseline `faa0943`:
 
-1. **A lista é uma grade de tabela.** `apps/frontend/src/features/services/ServiceList.tsx:147-156` desenha o cabeçalho Serviço/Duração/Preço/Status/Ação, e cada linha (`:158-215`) repete o ícone e a origem "Agenda Atendly" (`:168`), um selo "Ativo" ou "Inativo", o selo "Revisar · <origem>" quando `needsReview`, e um botão "Desativar" ou "Ativar" por linha (`:196-204`), com o link de edição de nome acessível `Editar <nome>` (`:207-213`). Pendentes e inativos ficam misturados com os ativos, separados só pelo filtro Todos/Ativos/Inativos (`:129-138`) (SV-03).
-2. **A faixa técnica aparece em duas telas.** `DirectorySourceStrip` (`ServiceList.tsx:299-314`) diz "Gerenciado pela Agenda Atendly", "Serviços podem ser criados, editados e desativados aqui." e o selo "Controle completo"; é usada na lista (`:99`) e no formulário (`ServiceForm.tsx:18` e `:163`) (SV-05).
+1. **A lista é uma grade de tabela.** `apps/frontend/src/features/services/ServiceList.tsx:147-156` desenha o cabeçalho Serviço/Duração/Preço/Status/Ação, e cada linha (`:158-215`) repete o ícone e a origem "Agenda Avenly" (`:168`), um selo "Ativo" ou "Inativo", o selo "Revisar · <origem>" quando `needsReview`, e um botão "Desativar" ou "Ativar" por linha (`:196-204`), com o link de edição de nome acessível `Editar <nome>` (`:207-213`). Pendentes e inativos ficam misturados com os ativos, separados só pelo filtro Todos/Ativos/Inativos (`:129-138`) (SV-03).
+2. **A faixa técnica aparece em duas telas.** `DirectorySourceStrip` (`ServiceList.tsx:299-314`) diz "Gerenciado pela Agenda Avenly", "Serviços podem ser criados, editados e desativados aqui." e o selo "Controle completo"; é usada na lista (`:99`) e no formulário (`ServiceForm.tsx:18` e `:163`) (SV-05).
 3. **A duração é um campo numérico cru.** `ServiceForm.tsx` desenha `name="duration"` com `min={1}` e `step={1}` (o Goal058 trocou o `step={5}` de SV-01), sem − nem +, sem atalhos e sem frase de prévia (SV-04).
 4. **O contrato já traz tudo o que a lista precisa.** `serviceSchema` (`packages/public-api-contract/src/schemas.ts:262-277`) tem `colorToken`, `needsReview`, `reviewOrigin`, `active`, `priceType`, `price`, `durationMinutes` e `recurrenceIntervalDays`. Filete, pendência, "Corrigir", inativos e a frase não pedem campo novo.
 5. **O modo somente leitura existe.** A lista só mostra ações quando `result?.editable` (`ServiceList.tsx:195-216`); fora disso, "Somente leitura". Essa guarda por fonte continua.
@@ -51,7 +51,7 @@ Conferido no código da baseline `faa0943`:
 - **A linha**: o nome em destaque e, abaixo, "duração · preço", e " · a cada N semanas" (ou "a cada N dias", quando `recurrenceIntervalDays` não é múltiplo de 7) quando há recorrência:
   - duração: "40 min", "1 h", "1 h 30", "2 h"; sem duração, "sem duração";
   - preço: `FIXED` "R$ 90" (centavos só quando não zero, "R$ 55,50"), `STARTING_AT` "a partir de R$ 60", `ON_REQUEST` "sob consulta", `NOT_INFORMED` "sem preço informado".
-- **O filete na cor**: uma barra vertical à esquerda da linha na cor de `colorToken`, com as mesmas cores da prévia de cor que o formulário já desenha (`.service-swatch[data-color]` em `shared/styles/atendly-services.css:57` em diante); sem cor, um filete neutro. A cor nunca é a única informação: o texto da linha não depende dela.
+- **O filete na cor**: uma barra vertical à esquerda da linha na cor de `colorToken`, com as mesmas cores da prévia de cor que o formulário já desenha (`.service-swatch[data-color]` em `shared/styles/avenly-services.css:57` em diante); sem cor, um filete neutro. A cor nunca é a única informação: o texto da linha não depende dela.
 - **A ação de cada linha**: a linha inteira é o link de edição, com nome acessível **exatamente** `Editar <nome>`, porque o gate a abre por esse nome. "Corrigir" é um link visível a mais, só nas pendentes, com nome acessível `Corrigir <nome>`, para o mesmo destino.
 - **Ativar e desativar continuam alcançáveis**, com o mesmo diálogo de confirmação de hoje ("Desativar serviço?", "Ativar serviço?") e o mesmo `PATCH`. O Developer escolhe entre manter a ação na linha, num menu da linha, ou no formulário de edição (o protótipo S4 e S8 a põem no formulário), e declara no relatório onde ficou. Nenhum serviço é excluído.
 - **Somente leitura**: sem `editable`, nenhuma linha tem link de edição, "Corrigir" nem ativar/desativar, e a tela diz em linguagem de dono de negócio que os serviços não podem ser editados aqui.
@@ -68,7 +68,7 @@ Conferido no código da baseline `faa0943`:
   - `NOT_INFORMED`: "Hidratação leva 30 min; o valor você confirma com a cliente."
   - sem duração, a parte da duração some ("Manicure custa R$ 55."); sem nome, a frase não aparece; com preço fixo ou a partir de sem valor, a frase não aparece.
   - A frase é **prévia**, rotulada como tal, e não é o texto literal que o modelo vai gerar. Nenhum teste nem documento diz que a IA fala exatamente isso.
-- **Copy**: saem "Gerenciado pela Agenda Atendly", "Serviços podem ser criados, editados e desativados aqui.", "Controle completo" e a origem "Agenda Atendly" por linha, na lista e no formulário. `DirectorySourceStrip` deixa de ser usado; pode ser removido.
+- **Copy**: saem "Gerenciado pela Agenda Avenly", "Serviços podem ser criados, editados e desativados aqui.", "Controle completo" e a origem "Agenda Avenly" por linha, na lista e no formulário. `DirectorySourceStrip` deixa de ser usado; pode ser removido.
 - **O que o formulário não ganha**: "Instruções para a IA" (Goal078), "Onde é feito" (modalidade por serviço, não é achado da revisão local), o sheet de tipo de preço do S5, o de recorrência do S6, o de revisão do S7 e o de sair sem salvar do S9. As opções atrás de `<details>` continuam como estão.
 
 ## Fora do escopo
@@ -81,15 +81,15 @@ Conferido no código da baseline `faa0943`:
 ## Dependências e contexto mínimo
 
 - Goal075 ACCEPTED (baseline acima). O Goal007 fez o catálogo, o Goal015 a tela de Serviços e o Goal058 a correção da duração e do preço (SV-01, SV-02) e a casca medida pelo gate.
-- Arquivos de partida: `apps/frontend/src/features/services/ServiceList.tsx`, `ServiceForm.tsx`, `ProductServicesScreen.tsx`; `apps/frontend/src/shared/styles/atendly-services.css` e `atendly.css`.
+- Arquivos de partida: `apps/frontend/src/features/services/ServiceList.tsx`, `ServiceForm.tsx`, `ProductServicesScreen.tsx`; `apps/frontend/src/shared/styles/avenly-services.css` e `avenly.css`.
 - Testes de partida: `apps/frontend/tests/goal015-services.test.tsx`, `goal058-service-form.test.tsx`, `service-schema.test.ts`, `goal015-shell-invariant.test.tsx`.
 
 ## Pontos de implementação
 
 | Parte | Onde |
 | --- | --- |
-| Lista, grupos, linha, filete, "Corrigir", ativar/desativar, copy | `apps/frontend/src/features/services/ServiceList.tsx`, `shared/styles/atendly-services.css` |
-| Duração com − e +, atalhos, frase, copy do formulário | `apps/frontend/src/features/services/ServiceForm.tsx`, `shared/styles/atendly-services.css` |
+| Lista, grupos, linha, filete, "Corrigir", ativar/desativar, copy | `apps/frontend/src/features/services/ServiceList.tsx`, `shared/styles/avenly-services.css` |
+| Duração com − e +, atalhos, frase, copy do formulário | `apps/frontend/src/features/services/ServiceForm.tsx`, `shared/styles/avenly-services.css` |
 | Formatação comum de duração e preço | onde o Developer escolher dentro de `features/services/`, usada pela linha e pela frase |
 | Testes | `apps/frontend/tests/goal076-*.test.tsx` |
 
@@ -116,13 +116,13 @@ Conferido no código da baseline `faa0943`:
 
 Cada teste novo é rodado primeiro contra o código da baseline, e **a saída do vermelho vai colada no relatório**, com o SHA `faa0943`. Todos em `apps/frontend/tests/goal076-*.test.tsx` (jsdom), com o serviço de dados dublado como nos testes do Goal015:
 
-1. Com serviços dos quatro tipos de preço, com e sem duração e com recorrência de 35 dias, cada linha mostra "45 min · R$ 90", "40 min · a partir de R$ 60", "30 min · sem preço informado", "1 h 30 · sob consulta · a cada 5 semanas" e "2 h · R$ 250 · a IA não oferece", sem a origem "Agenda Atendly".
+1. Com serviços dos quatro tipos de preço, com e sem duração e com recorrência de 35 dias, cada linha mostra "45 min · R$ 90", "40 min · a partir de R$ 60", "30 min · sem preço informado", "1 h 30 · sob consulta · a cada 5 semanas" e "2 h · R$ 250 · a IA não oferece", sem a origem "Agenda Avenly".
 2. Os grupos: o pendente aparece sob "Precisa de revisão" com "Corrigir" levando a `/servicos/editar?id=<id>`; o inativo aparece sob "Inativos"; os ativos ficam em ordem pt-BR; o resumo diz "N ativos · N precisa(m) de revisão · N inativo(s)" com os números certos; a busca esconde grupo vazio.
 3. Cada linha é link com nome acessível exatamente `Editar <nome>`; a linha tem o filete com a cor de `colorToken` e o filete neutro sem cor; sem `editable`, não há link de edição, "Corrigir" nem ativar/desativar.
 4. Ativar e desativar continuam alcançáveis, abrem a confirmação e chamam o `PATCH` com `active` trocado.
 5. "+" leva de vazio a 5 e de 40 a 45; "−" leva de 45 a 40, não desce abaixo de 5 e não faz nada com o campo vazio; "30", "60" e "90" põem o valor exato e ficam `aria-pressed` quando iguais ao valor; o valor digitado 41 continua válido.
 6. A frase mostra o texto de cada um dos quatro tipos de preço, some sem nome, perde a parte da duração sem duração e acompanha a mudança de tipo e de valor.
-7. Nenhuma destas copies aparece em `/servicos`, `/servicos/novo` nem `/servicos/editar`: "Gerenciado pela", "Controle completo", "podem ser criados, editados e desativados aqui", e "Agenda Atendly" como origem da linha.
+7. Nenhuma destas copies aparece em `/servicos`, `/servicos/novo` nem `/servicos/editar`: "Gerenciado pela", "Controle completo", "podem ser criados, editados e desativados aqui", e "Agenda Avenly" como origem da linha.
 
 Os testes existentes continuam passando. Só muda asserção que dependa de texto ou composição trocados aqui. O relatório lista cada asserção mudada, com o motivo, e diz qual teste substitui qual. As asserções do `goal058-service-form.test.tsx` (duração válida e inválida, preço vazio no serviço novo, digitação do preço, buffers com `min 0` e `step 5`), as de axe do Goal015, as de guarda por fonte e as da invariante da casca (D-030, D-031) não podem ser apagadas; podem mudar de seletor.
 
@@ -130,7 +130,7 @@ Os testes existentes continuam passando. Só muda asserção que dependa de text
 
 Aplique cada controle numa cópia, ou reverta-o no mesmo passo, e confira a restauração por hash. Cole a **saída real** no relatório:
 
-1. A linha volta a mostrar a origem "Agenda Atendly": o teste 1 ou o 7 reprova.
+1. A linha volta a mostrar a origem "Agenda Avenly": o teste 1 ou o 7 reprova.
 2. O serviço pendente volta ao grupo dos ativos, sem "Corrigir": o teste 2 reprova.
 3. O link da linha perde o nome `Editar <nome>`: o teste 3 reprova.
 4. "+" passa a somar 1 minuto: o teste 5 reprova.

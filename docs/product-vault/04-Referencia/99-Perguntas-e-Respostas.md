@@ -1,13 +1,13 @@
 ---
 title: Perguntas e Respostas da Entrevista de Produto
-aliases: [Decision Log Atendly, Entrevista Atendly]
-tags: [atendly, decisoes, entrevista, produto, ux]
+aliases: [Decision Log Avenly, Entrevista Avenly]
+tags: [avenly, decisoes, entrevista, produto, ux]
 status: referencia
 ---
 
 # Perguntas e Respostas da Entrevista de Produto
 
-Este arquivo registra a entrevista de produto realizada para redefinir a Atendly.
+Este arquivo registra a entrevista de produto realizada para redefinir a Avenly.
 
 ## Como ler
 
@@ -21,7 +21,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 
 # Rodada 1 — Fundamentos do produto
 
-1. **Qual é a identidade central da Atendly?** — **B — Atendente de WhatsApp que também controla a agenda.** **Vigente.** A agenda é infraestrutura essencial; o valor percebido principal é automação do atendimento.
+1. **Qual é a identidade central da Avenly?** — **B — Atendente de WhatsApp que também controla a agenda.** **Vigente.** A agenda é infraestrutura essencial; o valor percebido principal é automação do atendimento.
 2. **Quem pode operar o MVP?** — **C — Interface focada em autônomo, conceito preparado para profissional/recurso.** **Vigente no nível de produto**, porém o MVP expõe apenas um profissional.
 3. **Como a importação aparece no onboarding?** — **A — Perguntar se já usa sistema para organizar agendamentos.** **Vigente.**
 4. **Minha Agenda deve aparecer explicitamente?** — **C — Tela genérica de origem preparada conceitualmente para fontes, com Minha Agenda disponível.** **Vigente**, sem prometer integrações futuras na UI.
@@ -204,8 +204,8 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 163. **Quando conversa encerra?** — **C — Sem obrigação de “fechar ticket”; estado muda conforme interação.** **Vigente.**
 164. **Nova conversa futura volta para IA?** — **B — Sim, nova sessão volta automaticamente.** **Vigente.**
 165. **O que define nova sessão?** — **A — 24h.** **Vigente.**
-166. **Onde humano responde?** — **B — WhatsApp normal ou Atendly.** **Vigente.** Observação: número pode ser pessoal e profissional.
-167. **Sugestões de resposta?** — **B — Sim, apenas no chat da Atendly.** **Vigente.**
+166. **Onde humano responde?** — **B — WhatsApp normal ou Avenly.** **Vigente.** Observação: número pode ser pessoal e profissional.
+167. **Sugestões de resposta?** — **B — Sim, apenas no chat da Avenly.** **Vigente.**
 168. **Pode editar sugestão?** — **A — Sim.** **Vigente.**
 169. **Mensagens humanas podem servir à personalização futura?** — **C — Guardar possibilidade, só usar quando feature for ativada.** **Futuro.**
 170. **Apagar mensagem interna?** — **C — Ocultar/retirar de contexto quando aplicável, preservando registro necessário.** **Vigente conceitualmente.**
@@ -216,7 +216,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 172. **Mensagem incerta?** — **C — Aguardar contexto antes de responder.** **Vigente.**
 173. **Usar histórico para contatos pessoais?** — **C — Apenas contatos marcados manualmente como sinal permanente.** **Vigente na forma refinada pelas rodadas seguintes.**
 174. **Tipos de contato?** — **C — Cliente / potencial cliente / pessoal / ignorado + estado da IA.** **Vigente conceitualmente.**
-175. **Contato pessoal aparece onde?** — **B com refinamento:** todas as conversas permanecem na Atendly em abas Comercial / Não classificadas / Pessoal. **Vigente.**
+175. **Contato pessoal aparece onde?** — **B com refinamento:** todas as conversas permanecem na Avenly em abas Comercial / Não classificadas / Pessoal. **Vigente.**
 176. **Conversas pessoais armazenadas?** — **A — Sim integralmente dentro da retenção.** **Vigente.**
 177. **Contato pessoal envia pedido comercial?** — **C — Notificar/perguntar antes quando explicitamente marcado pessoal na sessão; depois regras foram refinadas por sessão.**
 178. **Lista de contatos que IA nunca atende?** — **A — Sim.** **Vigente.**
@@ -227,7 +227,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 183. **Apenas visualizar pausa?** — **B — Não.** **Vigente.**
 184. **Humano e IA respondem juntos?** — **B — Humano tem prioridade.** **Vigente.**
 185. **IA deve esperar antes de responder?** — **C — Espera contextual/configurável em cenários apropriados.** **Vigente conceitualmente**, refinada pelas mensagens ambíguas.
-186. **Distinguir autoria na Atendly?** — **C — Sim internamente, sem diferença para cliente.** **Vigente.**
+186. **Distinguir autoria na Avenly?** — **C — Sim internamente, sem diferença para cliente.** **Vigente.**
 187. **IA atende fora do horário comercial?** — **A — Sim, 24h.** **Vigente.**
 188. **Pode confirmar agendamento fora do horário?** — **A — Sim.** **Vigente.**
 189. **Mensagem pessoal fora do horário?** — **B — Mesmas proteções.** **Vigente.**
@@ -235,7 +235,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 191. **Intenção comercial clara?** — **A — Responder imediatamente.** **Vigente.**
 192. **Mensagem ambígua?** — **C com observação 190.** **Vigente.**
 193. **Intenção comercial aparece depois?** — **A — IA entra naquele momento se humano ainda não assumiu.** **Vigente.**
-194. **Humano já respondeu e depois surge pedido comercial?** — **B + C — Conversa permanece humana e IA pode sugerir resposta na Atendly.** **Vigente.**
+194. **Humano já respondeu e depois surge pedido comercial?** — **B + C — Conversa permanece humana e IA pode sugerir resposta na Avenly.** **Vigente.**
 195. **O que mostrar na inbox?** — **Todas as conversas separadas em Comercial / Não classificadas / Pessoal.** **Vigente.**
 196. **Classificação errada?** — **A — Usuário corrige.** **Vigente.**
 197. **Ao marcar pessoal, apagar conteúdo?** — **Não. Apenas desativar IA para a conversa e manter armazenamento.** **Vigente.**
@@ -319,13 +319,13 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 269. **Quantos estilos?** — **B — 3: profissional, equilibrado, descontraído.** **Vigente.**
 270. **Nomes do estilo?** — **A — Termos descritivos, não personas.** **Vigente.**
 271. **Após demonstração, WhatsApp?** — **B — Oferecer conexão podendo pular.** **Vigente.**
-272. **Copy de transição?** — **B — “Agora vamos colocar sua Atendly para atender de verdade”, com CTA conectar.** **Vigente como direção de copy.**
+272. **Copy de transição?** — **B — “Agora vamos colocar sua Avenly para atender de verdade”, com CTA conectar.** **Vigente como direção de copy.**
 273. **Explicar número pessoal?** — **B — Resumo curto na própria conexão.** **Vigente.**
 274. **Contatos ignorados no onboarding?** — **C — Após conectar, opcional e pulável.** **Vigente.**
 275. **Como escolher ignorados?** — **C — Conversas/contatos + número manual.** **Vigente.**
-276. **Qual teste de ativação?** — **B originalmente — outro telefone. Substituída** por número oficial da Atendly simulando cliente real.
+276. **Qual teste de ativação?** — **B originalmente — outro telefone. Substituída** por número oficial da Avenly simulando cliente real.
 277. **O que validar no teste?** — **C — Fluxo completo até agendamento.** **Vigente no teste real atual.**
-278. **Como identificar telefone de teste?** — **Substituída.** Teste usa número oficial da Atendly, sem telefone informado pelo usuário.
+278. **Como identificar telefone de teste?** — **Substituída.** Teste usa número oficial da Avenly, sem telefone informado pelo usuário.
 279. **Depois do teste, ativar?** — **B originalmente. Substituída:** sucesso ativa automaticamente.
 280. **Se pulou WhatsApp?** — **B — Onboarding concluído, IA não ativa.** **Vigente.**
 281. **Home sem ativação?** — **B — Checklist.** **Vigente.**
@@ -335,9 +335,9 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 # Rodada 11 — Teste real de ativação (versão vigente)
 
 284. **Como o teste começa?** — **B — Usuário lê explicação e clica Iniciar teste.** **Vigente.**
-285. **O que explicar antes?** — **B — Informar claramente que um número da Atendly simulará um cliente e o usuário apenas observa.** **Vigente.**
+285. **O que explicar antes?** — **B — Informar claramente que um número da Avenly simulará um cliente e o usuário apenas observa.** **Vigente.**
 286. **Como indicar no WhatsApp que é teste?** — **B — Mensagem separada antes da conversa simulada.** **Vigente.**
-287. **Número de teste?** — **A — Um número oficial da Atendly inicialmente.** **Vigente como produto.**
+287. **Número de teste?** — **A — Um número oficial da Avenly inicialmente.** **Vigente como produto.**
 288. **Caminho feliz do teste?** — **A — Perguntar preço → pedir horário → escolher opção → confirmar.** **Vigente.**
 289. **Qual serviço usar?** — **C — Sistema escolhe automaticamente um serviço válido e informa.** **Vigente.**
 290. **Serviço sob consulta inadequado para teste?** — **A — Escolher outro serviço apto.** **Vigente.**
@@ -407,7 +407,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 
 # Rodada 13 original — Reimportação e reconciliação
 
-351–396. **Toda a rodada original sobre reimportação, diff entre origem/Atendly, propagação de alterações e snapshots de reimportação foi substituída antes de ser respondida.** **Descartada.** A decisão vigente é: **uma única importação concluída por negócio, sem reimportação.** As perguntas foram substituídas pela Rodada 13 revisada abaixo.
+351–396. **Toda a rodada original sobre reimportação, diff entre origem/Avenly, propagação de alterações e snapshots de reimportação foi substituída antes de ser respondida.** **Descartada.** A decisão vigente é: **uma única importação concluída por negócio, sem reimportação.** As perguntas foram substituídas pela Rodada 13 revisada abaixo.
 
 # Rodada 13 revisada — Importação única
 
@@ -417,12 +417,12 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 354. **Depois de concluir, como fica a área?** — **B — Histórico visível, sem nova importação.** **Vigente.**
 355. **Se não importar no onboarding?** — **A — Pode importar depois, enquanto nunca tiver concluído uma.** **Vigente.**
 356. **Prazo para primeira importação?** — **A — A qualquer momento, se nunca concluiu.** **Vigente.**
-357. **Já existem dados Atendly quando importar?** — **A — Permitir, com análise de conflitos.** **Vigente.**
+357. **Já existem dados Avenly quando importar?** — **A — Permitir, com análise de conflitos.** **Vigente.**
 358. **Conflitos da primeira importação?** — **A — Comparar e permitir decisão.** **Vigente.**
 359. **Credenciais depois da conclusão?** — **A — Não manter relação.** **Vigente em produto.**
 360. **Manter referência de origem?** — **A — Sim para rastreabilidade.** **Vigente conceitualmente.**
 361. **Manter snapshot completo para reimportação?** — **B — Não; só o necessário da importação concluída.** **Vigente conceitualmente.**
-362. **Mensagem final deve explicar que Atendly vira fonte oficial?** — **A — Sim.** **Vigente.**
+362. **Mensagem final deve explicar que Avenly vira fonte oficial?** — **A — Sim.** **Vigente.**
 
 # Rodada 14 — Lembretes e pós-atendimento
 
@@ -451,7 +451,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 385. **Confirmação após novo agendamento?** — **A — Sim, resumo.** **Vigente.**
 386. **Mostrar política na confirmação?** — **B — Só se houver regra restritiva.** **Vigente.**
 387. **Profissional recebe notificação de novo agendamento?** — **C — Configurável, default silencioso.** **Vigente.**
-388. **Onde notificar?** — **A — Dentro da Atendly inicialmente.** **Vigente.**
+388. **Onde notificar?** — **A — Dentro da Avenly inicialmente.** **Vigente.**
 389. **Remarcação manual notifica cliente?** — **B — Perguntar, marcado por padrão.** **Vigente.**
 390. **Cancelamento manual notifica?** — **A — Mesmo comportamento, marcado por padrão.** **Vigente.**
 391. **Alteração interna de preço/nota notifica?** — **B — Não.** **Vigente.**
@@ -500,7 +500,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 431. **Mostrar consumo técnico?** — **C — Mostrar valor operacional, não tokens.** **Direção futura.**
 432. **Plano/cobrança na UI?** — **A — Configurações → Plano e cobrança.** **Futuro.**
 433. **Dias restantes do trial?** — **B — Só últimos 3 dias.** **Futuro.**
-434. **CTA ao fim do trial?** — **A — Assinar Atendly.** **Futuro.**
+434. **CTA ao fim do trial?** — **A — Assinar Avenly.** **Futuro.**
 
 > [!important]
 > Após esta rodada, o usuário decidiu **não implementar cobrança/planos antes da validação prática**. Também deixou em aberto se a Agenda será gratuita ou se haverá planos Básico/Pro. Portanto, 404–434 são apenas hipóteses de monetização e não regras do MVP.
@@ -772,7 +772,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 
 # Rodada 23 — Fronteiras do MVP
 
-668. **Pagamento do serviço pela Atendly?** — **B — Futuro.**
+668. **Pagamento do serviço pela Avenly?** — **B — Futuro.**
 669. **Sinal para confirmar agendamento?** — **B — Futuro.**
 670. **Financeiro completo?** — **B — Futuro módulo separado.**
 671. **Valor final cobrado opcional?** — **A — Continua no MVP.**
@@ -783,7 +783,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 676. **Aniversário automático?** — **B — Futuro.**
 677. **Avaliação pós-atendimento?** — **B — Futuro.**
 678. **Google Calendar?** — **C — Nunca integrar agendas externas.** **Vigente como direção.**
-679. **Futuras integrações de agenda?** — **C recomendado originalmente**, mas 678C endureceu a direção: Agenda Atendly permanece oficial e não sincroniza agendas externas.
+679. **Futuras integrações de agenda?** — **C recomendado originalmente**, mas 678C endureceu a direção: Agenda Avenly permanece oficial e não sincroniza agendas externas.
 680. **Multi-profissional no MVP?** — **B — Não; futuro.**
 681. **Funcionários/login/permissões?** — **B — Futuro.**
 682. **Vários números por negócio?** — **A — Nunca; um negócio = um número.** **Vigente.**
@@ -808,7 +808,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 
 # Rodada 24 — Identidade e comunicação da IA
 
-701. **Nome Atendly aparece ao cliente?** — **A — Não; IA representa o negócio.** **Vigente.**
+701. **Nome Avenly aparece ao cliente?** — **A — Não; IA representa o negócio.** **Vigente.**
 702. **Como se apresentar na primeira interação?** — **B — Saudação natural, sem anunciar assistente.** **Vigente.**
 703. **Autônomo sem marca: como falar?** — **B — Atendimento natural em nome da pessoa.** **Vigente.**
 704. **Profissional dá nome à IA?** — **B — Não.** **Vigente.**
@@ -842,8 +842,8 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 732. **Cliente escreve em maiúsculas?** — **B — IA mantém estilo normal.** **Vigente.**
 733. **Só emojis?** — **B — Sem intenção clara, não iniciar fluxo operacional.** **Vigente.**
 734. **Só “?”?** — **A — Usar contexto da sessão.** **Vigente.**
-735. **Como chamar a IA dentro da plataforma?** — **A — “IA”.** **Vigente.** Atendly é a plataforma.
-736. **Estados “Atendly ativa”?** — **Substituída pela 735A:** usar `IA ativa / IA pausada / IA com instabilidade`.
+735. **Como chamar a IA dentro da plataforma?** — **A — “IA”.** **Vigente.** Avenly é a plataforma.
+736. **Estados “Avenly ativa”?** — **Substituída pela 735A:** usar `IA ativa / IA pausada / IA com instabilidade`.
 737. **Estados na conversa?** — **A com nomenclatura refinada:** `IA atendendo / Aguardando você / Você atendendo`. **Vigente.**
 
 # Rodada 25 — Ciclo de vida do WhatsApp
@@ -897,15 +897,15 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 781. **Serviço importado entra ativo?** — **A — Sim, salvo impedimento operacional.** **Vigente.**
 782. **Inferir recorrência de serviço pelo histórico?** — **A — Não; fica desativada até profissional configurar.** **Vigente.**
 783. **O que preservar do histórico?** — **A — Data, horário, cliente, serviço, status, preço quando disponível.** **Vigente.**
-784. **Agendamento futuro importado?** — **A — Vira agendamento normal da Atendly.** **Vigente.**
+784. **Agendamento futuro importado?** — **A — Vira agendamento normal da Avenly.** **Vigente.**
 785. **Futuro sem serviço válido?** — **B — Preservar criando referência incompleta/arquivada apropriada.** **Vigente no produto.**
 786. **Agendamento sem cliente identificável?** — **A — Criar cliente mínimo.** **Vigente.**
 787. **Cancelado histórico?** — **A — Preservar.** **Vigente.**
 788. **Falta histórica?** — **A — Preservar.** **Vigente.**
-789. **Jornada importada conflita com Atendly?** — **C — Usuário escolhe.** **Vigente.**
-790. **Sem horários na Atendly?** — **A — Importar automaticamente.** **Vigente.**
+789. **Jornada importada conflita com Avenly?** — **C — Usuário escolhe.** **Vigente.**
+790. **Sem horários na Avenly?** — **A — Importar automaticamente.** **Vigente.**
 791. **Bloqueios/exceções da origem?** — **C — Importar futuros quando disponíveis.** **Vigente.**
-792. **Cliente Atendly + origem com telefone/nome compatíveis?** — **A — Mesclar automaticamente.** **Vigente.**
+792. **Cliente Avenly + origem com telefone/nome compatíveis?** — **A — Mesclar automaticamente.** **Vigente.**
 793. **Mesmo telefone, nomes claramente diferentes?** — **B — Manter separados e pedir decisão.** **Vigente.**
 794. **Serviço idêntico?** — **A — Considerar o mesmo.** **Vigente.**
 795. **Mesmo nome, preço/duração divergentes?** — **C — Mostrar conflito.** **Vigente.**
@@ -917,7 +917,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 801. **Relação com credenciais após concluir?** — **A — Encerrar.** **Vigente.**
 802. **Histórico da importação mostra?** — **A — Origem, data, totais, ignorados/falhos, status.** **Vigente.**
 803. **Configurações → Importação depois?** — **A — Histórico sem CTA de nova importação.** **Vigente.**
-804. **Mensagem final da migração?** — **A — Atendly vira fonte oficial e Minha Agenda não sincroniza.** **Vigente.**
+804. **Mensagem final da migração?** — **A — Avenly vira fonte oficial e Minha Agenda não sincroniza.** **Vigente.**
 
 # Rodada 27 — Continuidade, autosave e estados vazios
 
@@ -988,7 +988,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 # Rodada 29 — Privacidade e consentimentos
 
 865. **Aceite de Termos/Privacidade?** — **A — Checkbox obrigatório, desmarcado.** **Vigente.**
-866. **Links abrem onde?** — **A — Páginas próprias na Atendly.** **Vigente.**
+866. **Links abrem onde?** — **A — Páginas próprias na Avenly.** **Vigente.**
 867. **Confirmação específica antes de conectar WhatsApp?** — **A — Sim.** **Vigente.**
 868. **Formato da confirmação?** — **A — Checkbox obrigatório.** **Vigente.**
 869. **Perguntar se número é pessoal?** — **A — Sim.** **Vigente.**
@@ -1122,7 +1122,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 984. **Antes do teste?** — **A — Tela dedicada + Iniciar teste.** **Vigente.**
 985. **Durante teste?** — **A — Progresso em tempo real + instrução para observar WhatsApp.** **Vigente.**
 986. **Mobile pode abrir WhatsApp?** — **A — Sim quando apropriado.** **Vigente como UX.**
-987. **Ao voltar para Atendly?** — **A — Detectar conclusão automaticamente.** **Vigente.**
+987. **Ao voltar para Avenly?** — **A — Detectar conclusão automaticamente.** **Vigente.**
 988. **Tela final ativa?** — **A — Tudo pronto + Ir para o início.** **Vigente.**
 989. **Tela final se pulou WhatsApp?** — **A — Comemorar configuração, deixando IA inativa clara.** **Vigente.**
 990. **CTAs se pulou?** — **C — Ir para o início principal + Conectar agora secundário.** **Vigente.**
@@ -1143,7 +1143,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 
 A entrevista levou às seguintes mudanças centrais em relação à direção inicial:
 
-1. **Atendly deixou de ser “IA conectável a Agenda Atendly ou Minha Agenda”.** A Agenda Atendly passou a ser obrigatoriamente a agenda oficial.
+1. **Avenly deixou de ser “IA conectável a Agenda Avenly ou Minha Agenda”.** A Agenda Avenly passou a ser obrigatoriamente a agenda oficial.
 2. **Minha Agenda virou migração única**, sem sincronização e sem reimportação.
 3. **Um negócio utiliza um número de WhatsApp**, que pode ser pessoal.
 4. A diferenciação importante passou a ser **IA que identifica atendimento em um WhatsApp real e sai de cena quando o profissional assume**.
@@ -1164,7 +1164,7 @@ As perguntas abaixo também fizeram parte da entrevista. Elas são listadas indi
 
 ## Rodada 11 original — Ativação antes da definição do teste real
 
-- **R11-original-284.** Depois de conectar o WhatsApp, existe algum teste real antes de ativar? — **Não respondida nessa forma; substituída** pelo teste real enviado por número oficial da Atendly.
+- **R11-original-284.** Depois de conectar o WhatsApp, existe algum teste real antes de ativar? — **Não respondida nessa forma; substituída** pelo teste real enviado por número oficial da Avenly.
 - **R11-original-285.** O “teste bem-sucedido” significa demonstração, validação técnica ou ambos? — **Substituída.** A ativação atual usa demonstração + teste real ponta a ponta.
 - **R11-original-286.** O teste técnico pode enviar mensagem visível no WhatsApp? — **Substituída.** O teste atual envia uma conversa real explicitamente identificada como teste.
 - **R11-original-287.** Se conectar mas não validar totalmente envio/recebimento, pode ativar? — **Substituída pela regra vigente:** falha no teste real impede ativação.
@@ -1219,10 +1219,10 @@ As perguntas abaixo também fizeram parte da entrevista. Elas são listadas indi
 - **R13-original-373.** Nomes semelhantes de serviço? — **Sugerir correspondência, usuário confirma. Vigente.**
 - **R13-original-374.** Como detectar agendamento duplicado? — **Usar sinais determinísticos disponíveis. Vigente como comportamento.**
 - **R13-original-375.** Mesmo registro externo mudou na origem em reimportação? — **Descartada**, pois reimportação foi removida.
-- **R13-original-376.** Atualizar automaticamente se Atendly nunca alterou registro? — **Descartada.**
-- **R13-original-377.** Classificar diferenças de reimportação por origem/Atendly? — **Descartada.**
+- **R13-original-376.** Atualizar automaticamente se Avenly nunca alterou registro? — **Descartada.**
+- **R13-original-377.** Classificar diferenças de reimportação por origem/Avenly? — **Descartada.**
 - **R13-original-378.** Mudou apenas na origem? — **Descartada.**
-- **R13-original-379.** Mudou apenas na Atendly? — **Descartada.**
+- **R13-original-379.** Mudou apenas na Avenly? — **Descartada.**
 - **R13-original-380.** Mudou nos dois lados? — **Descartada.**
 - **R13-original-381.** Registro desapareceu da origem em reimportação? — **Descartada.**
 - **R13-original-382.** Cancelado/excluído na origem durante reimportação? — **Descartada.**
@@ -1238,7 +1238,7 @@ As perguntas abaixo também fizeram parte da entrevista. Elas são listadas indi
 - **R13-original-392.** Revisar pendências no dia seguinte exige nova autenticação para buscar novos dados? — **Conceito perde relevância após simplificação; nenhuma reimportação futura.**
 - **R13-original-393.** Snapshot técnico para comparar reimportações? — **Descartado como necessidade de produto.**
 - **R13-original-394.** Usuário vê detalhes técnicos? — **Não normalmente. Vigente como UX.**
-- **R13-original-395.** Mensagem “gerencie agora pela Atendly”? — **Sim. Vigente.**
+- **R13-original-395.** Mensagem “gerencie agora pela Avenly”? — **Sim. Vigente.**
 - **R13-original-396.** Alertar que Minha Agenda não sincroniza? — **Sim. Vigente.**
 
 ## Rodada 17 — Perguntas do “MVP menor” rejeitado
@@ -1264,7 +1264,7 @@ As perguntas abaixo também fizeram parte da entrevista. Elas são listadas indi
 - **R17-486.** Regra de mensagem ambígua entra primeiro? — **Sim no MVP completo, conforme rodada 9.**
 - **R17-487.** Ignorar IA entra primeiro? — **Sim.**
 - **R17-488.** Detectar mensagem manual e pausar IA entra primeiro? — **Sim.**
-- **R17-489.** Chat Atendly permite responder? — **Sim.**
+- **R17-489.** Chat Avenly permite responder? — **Sim.**
 - **R17-490.** Sugestões da IA no humano entram primeiro? — **Sim no MVP completo.**
 - **R17-491.** Áudio entra primeiro? — **Sim.**
 - **R17-492.** Imagem gera handoff? — **Sim.**

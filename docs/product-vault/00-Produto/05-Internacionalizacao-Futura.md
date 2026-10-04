@@ -1,7 +1,7 @@
 ---
 title: Internacionalização Futura — Direção de Produto
-aliases: [Global Ready Atendly]
-tags: [atendly, produto, internacionalizacao]
+aliases: [Global Ready Avenly]
+tags: [avenly, produto, internacionalizacao]
 status: futuro
 ---
 

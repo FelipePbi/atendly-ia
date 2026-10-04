@@ -1,7 +1,7 @@
 ---
 title: Fluxos de Agendamento
 aliases: [Fluxos da Agenda]
-tags: [atendly, agendamento, fluxo]
+tags: [avenly, agendamento, fluxo]
 status: vigente
 ---
 

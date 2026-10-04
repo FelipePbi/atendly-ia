@@ -47,7 +47,7 @@ Conferido no protótipo (`docs/design-reference/claude-design/prototype/project/
 
    Na Boas-vindas, os quatro estão pendentes.
 6. **Título e CTA.** H1 em Literata 28 px, peso 500, `line-height:1.2`, `letter-spacing:-0.01em`. A descrição, quando existe (3.2), vem colada ao título (14 px, `#5F574E`, `gap:6px`). O CTA principal tem 52 px de altura e raio 14, ocupa a largura da coluna e fica no rodapé (padding 12/20/46 no mobile e 12/20/32 no tablet e no desktop). Em 2.1 os cartões são a ação, e o rodapé fica vazio.
-7. **O app hoje** (`features/onboarding/OnboardingShell.tsx`, `atendly.css` a partir de `.onboarding-shell`):
+7. **O app hoje** (`features/onboarding/OnboardingShell.tsx`, `avenly.css` a partir de `.onboarding-shell`):
    - `OnboardingTopbar` em todas as larguras, com marca, rótulo do capítulo, segmentos (o atual mais grosso, sem preenchimento parcial) e o botão "Sair";
    - `OnboardingRail` de 260 px a partir de 768 px, abaixo da barra superior;
    - eyebrow, H1 e descrição num `header`;
@@ -156,8 +156,8 @@ O relatório e os documentos dizem que essa conferência **não foi feita** por 
 - `apps/frontend/src/features/onboarding/OnboardingShell.tsx`: a moldura única ((a), (b), (d), (e), (f), (g)) para `OnboardingShell` e `OnboardingFrame`.
 - `apps/frontend/src/features/onboarding/blocks.ts`: a fração do capítulo atual (c), ao lado de `chapterProgress`.
 - `apps/frontend/src/features/onboarding/OnboardingScreen.tsx`, `OnboardingImportStep.tsx` e `blocks/*.tsx`, só onde a etapa passa o eyebrow, a descrição ou as ações para a moldura, e no conteúdo de 0, 1.1, 2.1 e 3.2.
-- `apps/frontend/src/shared/styles/atendly.css`, nas regras `.onboarding-*`. Se o Developer preferir, as regras da moldura podem ir para uma folha nova `shared/styles/atendly-onboarding.css`, importada como as outras folhas de módulo. O relatório diz qual foi a escolha.
-- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/atendly-icons.svg`.
+- `apps/frontend/src/shared/styles/avenly.css`, nas regras `.onboarding-*`. Se o Developer preferir, as regras da moldura podem ir para uma folha nova `shared/styles/atendly-onboarding.css`, importada como as outras folhas de módulo. O relatório diz qual foi a escolha.
+- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/avenly-icons.svg`.
 - `apps/frontend/tests/`: a prova nova e as asserções do §5.
 - `apps/frontend/e2e/authenticated-matrix.spec.ts` e, se preciso, `e2e/measure.ts`: G-6, **só por acréscimo**.
 

@@ -1,11 +1,11 @@
 ---
 title: Home da Documentação
-aliases: [MOC Atendly, Índice Atendly]
-tags: [atendly, moc, produto]
+aliases: [MOC Avenly, Índice Avenly]
+tags: [avenly, moc, produto]
 status: vigente
 ---
 
-# Atendly — Mapa da documentação
+# Avenly — Mapa da documentação
 
 ## Produto
 

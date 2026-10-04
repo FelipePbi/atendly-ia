@@ -1,7 +1,7 @@
 ---
 title: Clientes e Memória
 aliases: [Regras de Clientes]
-tags: [atendly, clientes, memoria]
+tags: [avenly, clientes, memoria]
 status: vigente
 ---
 

@@ -37,15 +37,15 @@ Critério: **`/onboarding/modalidade`, `/onboarding/endereco`, `/onboarding/quan
 Conferido no protótipo (`docs/design-reference/claude-design/prototype/project/Onboarding-1-Negocio-e-Agenda.dc.html`, com `-Tablet` e `-Desktop`) e no código. O `visual:compare` final do Goal089 dá, por device (mobile / retrato / paisagem / desktop): 1.2 **4,5 / 1,8 / 2,2 / 1,6**; 1.3 **16,7 / 5,2 / 5,3 / 4,2**; 2.2 **11,8 / 7,5 / 7,3 / 5,9**; 2.3 **5,9 / 2,7 / 3,0 / 2,3**; 2.4 **4,5 / 1,8 / 2,2 / 1,7**; 2.5 **6,8 / 2,7 / 3,1 / 2,3**; 2.6 **5,8 / 4,3 / 3,5 / 2,6**. A porcentagem é tendência; a leitura é a dos `side-by-side.png`.
 
 1. **Eyebrow.** Em todos os quadros do capítulo 2 o eyebrow é o nome do capítulo, "Sua agenda". O app usa o primeiro item de `onboardingScenarios` (`scenarios.ts`): "Primeiro serviço", "Serviços adicionais", "Disponibilidade" e "Horário habitual". Em 1.2 e 1.3 o app já mostra "Seu negócio".
-2. **Títulos e descrições.** Os quadros têm textos diferentes dos do app em 2.3 ("Qual é o seu primeiro serviço?" / "Comece pelo mais comum. Os outros você adiciona depois."), 2.4 ("Seus serviços" / "Adicione o que seus clientes mais pedem. Você pode ajustar tudo depois."), 2.2 ("A importação acontece uma única vez e leva alguns minutos. Depois dela, a Atendly passa a ser sua agenda oficial.") e 2.6 ("Vale para segunda a sábado. Pausas e bloqueios você configura depois."). O 2.5 não tem descrição. O Product Vault não fixa esses textos: a busca pelos títulos do app e dos quadros só acha as respostas 828 e 964 de `04-Referencia/99-Perguntas-e-Respostas.md`, que tratam do fluxo e não do texto.
-3. **2.2 Importar agora ou depois.** O quadro tem uma ilustração "Minha Agenda → uma vez → Atendly" e, no rodapé, "Importar agora" como ação principal em cima, "Fazer depois" embaixo e a nota "Se fizer depois, a importação fica em Mais › Importação." O app não tem a ilustração, põe a nota no corpo (`scheduleStepBody`, `onboarding-note` com ícone) e mostra "Fazer depois" antes de "Importar agora" (`OnboardingScreen.tsx`).
+2. **Títulos e descrições.** Os quadros têm textos diferentes dos do app em 2.3 ("Qual é o seu primeiro serviço?" / "Comece pelo mais comum. Os outros você adiciona depois."), 2.4 ("Seus serviços" / "Adicione o que seus clientes mais pedem. Você pode ajustar tudo depois."), 2.2 ("A importação acontece uma única vez e leva alguns minutos. Depois dela, a Avenly passa a ser sua agenda oficial.") e 2.6 ("Vale para segunda a sábado. Pausas e bloqueios você configura depois."). O 2.5 não tem descrição. O Product Vault não fixa esses textos: a busca pelos títulos do app e dos quadros só acha as respostas 828 e 964 de `04-Referencia/99-Perguntas-e-Respostas.md`, que tratam do fluxo e não do texto.
+3. **2.2 Importar agora ou depois.** O quadro tem uma ilustração "Minha Agenda → uma vez → Avenly" e, no rodapé, "Importar agora" como ação principal em cima, "Fazer depois" embaixo e a nota "Se fizer depois, a importação fica em Mais › Importação." O app não tem a ilustração, põe a nota no corpo (`scheduleStepBody`, `onboarding-note` com ícone) e mostra "Fazer depois" antes de "Importar agora" (`OnboardingScreen.tsx`).
 4. **2.3 Primeiro serviço.** O CTA do quadro é "Salvar serviço"; o do app, "Continuar". Os controles (nome, duração de 5 em 5 com atalhos 30/60/90, os quatro tipos de preço e o preço com máscara) já existem desde D-094.
 5. **2.4 Seus serviços.** O quadro mostra **todos** os serviços num cartão de lista (raio 16, borda `#E5DED4`, fundo `#FFFDFA`, linhas com borda superior), cada linha com nome (15 px, 600), "duração · preço" (13 px, `#5F574E`, "sem preço informado" em `#716859`) e um lápis à direita. Embaixo vêm o botão tracejado "Adicionar outro serviço" (52 px, raio 14, borda 1,5 px tracejada `#B9B1A6`, texto `#0F5F63`) e a nota "Recorrência, descrição e instruções para a IA ficam para depois, em Serviços." O app lista só os adicionais (`additional` filtra `draft.serviceId`), em `summary-row`, e o "Adicionar outro serviço" é `.btn .btn-secondary`. O onboarding não tem edição de serviço.
 6. **2.5 Dias de atendimento.** Sete pílulas e uma linha-resumo com ícone, "Segunda a sábado · 6 dias por semana". O app já tem as pílulas e o resumo em `days-summary` (D-094, item 7); a diferença é de composição e estilo.
 7. **2.6 Horário-base.** Rótulos "Começa" e "Termina" (o app usa "Início" e "Fim"), hora em Literata, régua de 0 a 24 h com as marcas 0h, 6h, 12h, 18h e 24h, e "Personalizar dias diferentes" como cartão com subtítulo "Ex.: sábado até mais cedo" e chevron (o app usa `.btn .btn-secondary`). A descrição diz para quais dias o horário vale.
 8. **1.3 Endereço.** O quadro tem CEP, uma linha "Preenchido pelo CEP" com bairro e cidade, "Rua e número" e "Complemento (opcional)", e mostra o teclado aberto. O app tem um campo só, "Endereço do seu espaço", gravado como texto único em `business.address` (`blocks/business.tsx`). A busca por CEP está **pendente de decisão humana** (D-094, item 9), e campos estruturados mudariam o contrato. O `targets.json` manda ignorar o teclado.
 9. **1.2 Modalidade.** Já está próximo do quadro (cartões com ícone e indicador, D-094, item 4). Conferir espaçamento, raios, tipografia e o estado selecionado contra o quadro.
-10. **Regras mortas** (observação 3 do review089). Sobram regras `.onboarding-main` dentro de `@media (max-width: 767px)` em `atendly.css`. A classe ainda é usada por estados de carregamento.
+10. **Regras mortas** (observação 3 do review089). Sobram regras `.onboarding-main` dentro de `@media (max-width: 767px)` em `avenly.css`. A classe ainda é usada por estados de carregamento.
 
 ## Escolhas de desenho desta passada
 
@@ -53,7 +53,7 @@ Conferido no protótipo (`docs/design-reference/claude-design/prototype/project/
 
 **(b) Textos do quadro.** Títulos, descrições, rótulos de campo, CTAs e notas das sete etapas passam a ser os do quadro (evidência 2 a 7). As mensagens de validação, os nomes acessíveis dos controles e o que é gravado não mudam, salvo onde este documento diz.
 
-**(c) 2.2 com a ilustração e a ordem do quadro.** A ilustração "Minha Agenda → uma vez → Atendly" é decorativa (`aria-hidden`), porque o título e a descrição já dizem o que ela mostra. As ações ficam empilhadas no rodapé: "Importar agora" primeiro, "Fazer depois" depois e a nota embaixo. A ordem no DOM é a ordem visual. A gravação de cada ação não muda.
+**(c) 2.2 com a ilustração e a ordem do quadro.** A ilustração "Minha Agenda → uma vez → Avenly" é decorativa (`aria-hidden`), porque o título e a descrição já dizem o que ela mostra. As ações ficam empilhadas no rodapé: "Importar agora" primeiro, "Fazer depois" depois e a nota embaixo. A ordem no DOM é a ordem visual. A gravação de cada ação não muda.
 
 **(d) 2.3 com "Salvar serviço".** O CTA muda de texto. A gravação e o destino não mudam.
 
@@ -63,7 +63,7 @@ Conferido no protótipo (`docs/design-reference/claude-design/prototype/project/
 
 **(g) 1.3 continua com um campo só.** O campo segue o estilo de campo do quadro (rótulo, altura, raio, borda, tipografia). CEP, a linha "Preenchido pelo CEP", "Rua e número" e "Complemento" não entram: dependem da busca por CEP, pendente de decisão humana, e de mudança de contrato. É divergência declarada.
 
-**(h) Regras mortas.** As regras `.onboarding-*` que nenhum seletor vivo usa saem de `atendly.css`. Antes de remover, confira o uso em `src/`. A classe `.onboarding-main` fica enquanto um estado de carregamento a usar.
+**(h) Regras mortas.** As regras `.onboarding-*` que nenhum seletor vivo usa saem de `avenly.css`. Antes de remover, confira o uso em `src/`. A classe `.onboarding-main` fica enquanto um estado de carregamento a usar.
 
 **Divergências declaradas, que não contam como defeito na comparação:**
 
@@ -142,8 +142,8 @@ O relatório e os documentos dizem que essa conferência **não foi feita** por 
 - `apps/frontend/src/features/onboarding/blocks/schedule.tsx`: 2.2 a 2.6.
 - `apps/frontend/src/features/onboarding/OnboardingScreen.tsx`: ações de `quando-importar` e o CTA de `servico-nome`; o eyebrow, se for derivado do capítulo.
 - `apps/frontend/src/features/onboarding/blocks/shared.tsx` e `OnboardingShell.tsx`, só se a etapa precisar passar algo novo para a moldura. A moldura não muda.
-- `apps/frontend/src/shared/styles/atendly.css`, nas regras `.onboarding-*`, `.days-*`, `.hours-*`, `.service-summary` e `.summary-row`, mais as regras novas das sete etapas. Se o Developer preferir, as regras novas podem ir para `shared/styles/atendly-onboarding.css`, importada como as outras folhas de módulo. O relatório diz qual foi a escolha.
-- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/atendly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
+- `apps/frontend/src/shared/styles/avenly.css`, nas regras `.onboarding-*`, `.days-*`, `.hours-*`, `.service-summary` e `.summary-row`, mais as regras novas das sete etapas. Se o Developer preferir, as regras novas podem ir para `shared/styles/atendly-onboarding.css`, importada como as outras folhas de módulo. O relatório diz qual foi a escolha.
+- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/avenly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
 - `apps/frontend/tests/`: a prova nova e as asserções do §5.
 
 ## Fora do escopo

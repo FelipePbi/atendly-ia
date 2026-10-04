@@ -120,7 +120,7 @@ Seção de Importação em Configurações que mostra **somente o histórico** q
 
 **As rotas `/v1/calendar/migrations` do BFF e as rotas internas correspondentes permanecem intactas.** A retirada delas é do Goal025 e não acontece aqui. O que muda é que passam a ter zero consumidor — e com isso a linha 73 de `PUBLIC_API_V1.md`, que já afirma isso, passa a ser verdadeira. Atualizar essa linha para registrar desde quando, e documentar as duas rotas novas na seção da importação única, com os códigos de recusa que elas podem devolver.
 
-CSS: `shared/styles/atendly-migration.css` acompanha o módulo — o que a jornada nova usa é preservado e renomeado junto; o que ficar sem seletor correspondente sai. Não deixar folha importada apontando para diretório vazio, o resíduo que o [review015](../reviews/015-review.md) registrou.
+CSS: `shared/styles/avenly-migration.css` acompanha o módulo — o que a jornada nova usa é preservado e renomeado junto; o que ficar sem seletor correspondente sai. Não deixar folha importada apontando para diretório vazio, o resíduo que o [review015](../reviews/015-review.md) registrou.
 
 ### 10. Invariante do shell e código morto
 

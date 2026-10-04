@@ -1,7 +1,7 @@
 ---
 title: Especificação das Telas
-aliases: [Telas Atendly]
-tags: [atendly, telas, ux]
+aliases: [Telas Avenly]
+tags: [avenly, telas, ux]
 status: vigente
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: Onboarding
 aliases: [Fluxo de Onboarding]
-tags: [atendly, onboarding, fluxo]
+tags: [avenly, onboarding, fluxo]
 status: vigente
 ---
 
@@ -68,7 +68,7 @@ flowchart TD
 
 Tela curta:
 
-> Configure sua Atendly em poucos passos.
+> Configure sua Avenly em poucos passos.
 
 CTA:
 
@@ -197,7 +197,7 @@ Se pular, onboarding é considerado concluído, mas IA fica inativa.
 
 Mensagem positiva:
 
-> **Sua Atendly está configurada.**  
+> **Sua Avenly está configurada.**
 > Conecte seu WhatsApp quando quiser colocar a IA para atender seus clientes.
 
 Ações:

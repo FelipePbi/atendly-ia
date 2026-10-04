@@ -126,9 +126,9 @@ Aplique cada controle e reverta-o no mesmo passo, com a restauração conferida 
 - `apps/frontend/src/features/agenda/AppointmentFlowShell.tsx`: a composição para o novo agendamento, só por acréscimo.
 - `apps/frontend/src/features/agenda/AppointmentForm.tsx` e `NewAppointmentFields.tsx`: o corpo do A6, a barra com "×" e a saída de `DayList`.
 - `apps/frontend/src/features/agenda/AgendaDayColumn.tsx`: só o que o novo consumidor exigir, sem mudar o que ela faz nas três rotas do 093.
-- `apps/frontend/src/shared/styles/atendly-agenda.css`. `atendly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
+- `apps/frontend/src/shared/styles/avenly-agenda.css`. `avenly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
 - `apps/frontend/src/shared/layout/PushedBar.tsx`, `ListDetail.tsx` e `useWideLayout.ts`, só por acréscimo compatível. Clientes, Serviços e Configurações não podem mudar.
-- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/atendly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
+- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/avenly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
 - `apps/frontend/e2e/authenticated-matrix.spec.ts`, só o acréscimo de G-8.
 - `apps/frontend/tests/`: a prova nova e as asserções do §6.
 

@@ -18,7 +18,7 @@ O SHA identifica o commit de fechamento do Goal025 já integrado em `main` (orig
 
 ## Objetivo e posição
 
-Tornar verdadeira, **na árvore e não só na intenção**, a regra de produto que o contrato público já enuncia: *Agenda Atendly é a única agenda operacional; Minha Agenda só pode participar da importação única; não existe conexão operacional, troca de fonte ou migração reversa* (`apps/bff/PUBLIC_API_V1.md`). Hoje o produto **se comporta** assim — o Goal010 cortou o caminho operacional e o Goal020 tirou o protocolo antigo da interface —, mas o código que fazia o contrário continua na árvore, compilado, publicado e alcançável por rota pública:
+Tornar verdadeira, **na árvore e não só na intenção**, a regra de produto que o contrato público já enuncia: *Agenda Avenly é a única agenda operacional; Minha Agenda só pode participar da importação única; não existe conexão operacional, troca de fonte ou migração reversa* (`apps/bff/PUBLIC_API_V1.md`). Hoje o produto **se comporta** assim — o Goal010 cortou o caminho operacional e o Goal020 tirou o protocolo antigo da interface —, mas o código que fazia o contrário continua na árvore, compilado, publicado e alcançável por rota pública:
 
 - `POST /v1/calendar/migrations/diagnose`, `POST /v1/calendar/migrations` e `GET /v1/calendar/migrations/:id` continuam registradas no BFF, com cliente interno, rota interna no Scheduling e as 939 linhas de `CalendarMigrationService` atrás delas — sem consumidor de frontend desde 2026-09-12, como o próprio contrato declara;
 - `MinhaAgendaCalendarProvider` (1 010 linhas) continua implementando `CalendarProvider` inteiro, com `createAppointment`, `rescheduleAppointment`, `cancelAppointment`, `createHold`, `releaseHold` e `getAvailability` escritos e testáveis. Nenhum caminho operacional o instancia — `CalendarProviderFactory` recusa `MINHA_AGENDA` com `409` —, mas *writer remoto inexistente* é o resultado verificável que o roadmap pede, e um writer que existe e não é chamado não é um writer inexistente.
@@ -33,7 +33,7 @@ Baseline arquitetural: [TARGET_ARCHITECTURE](../TARGET_ARCHITECTURE.md). **D-026
 
 - Goals 010, 020, 023, 024 e 025 ACCEPTED e integrados. Partir da baseline acima; conferir o diff inicial e preservar alterações externas/preexistentes, inclusive os artefatos Graphify.
 - Não abrir o Product Vault para este Goal: nenhuma regra de produto muda. Se alguma copy de tela for tocada por remoção de código morto, conferir apenas [Copy e Linguagem](../../product-vault/03-UX-UI/06-Copy-e-Linguagem.md).
-- [GAP_ANALYSIS](../GAP_ANALYSIS.md): **G-10** (somente Agenda Atendly operacional) e **G-19/G-20** (importação) são os alvos de consistência; **G-32** é tocado por honestidade, não por fechamento — ver §3.
+- [GAP_ANALYSIS](../GAP_ANALYSIS.md): **G-10** (somente Agenda Avenly operacional) e **G-19/G-20** (importação) são os alvos de consistência; **G-32** é tocado por honestidade, não por fechamento — ver §3.
 - Contratos vigentes: `apps/bff/PUBLIC_API_V1.md`, seção de calendário/importação. Usar Graphify apenas para confirmar consumidores de `CalendarMigrationService`, de `MinhaAgendaCalendarProvider` e de `@atendly/contracts`; não reconstruir o grafo.
 
 ### Fatos já confirmados na baseline, sem precisar redescobrir

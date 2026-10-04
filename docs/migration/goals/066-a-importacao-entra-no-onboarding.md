@@ -24,7 +24,7 @@ Aplicar **U-09** ([DECISIONS](../DECISIONS.md)): a importação fica nos dois lu
 
 Fecha, do [QA_LOCAL_REVIEW](../QA_LOCAL_REVIEW.md) (IDs com prefixo `QA`, como decidido na v79), seção 2b:
 
-- **QA O-17**: duas telas sem decisão ("Onde seus agendamentos serão controlados?", com um card só, e "A Agenda Atendly cuidará dos seus horários") antes da pergunta real.
+- **QA O-17**: duas telas sem decisão ("Onde seus agendamentos serão controlados?", com um card só, e "A Agenda Avenly cuidará dos seus horários") antes da pergunta real.
 - **QA O-18**: fuso horário exibido como identificador técnico (`America/Sao_Paulo`).
 - **QA O-19**: "Começar do zero" pré-marcado.
 - **QA O-20** (ALTA): escolher "Importar do Minha Agenda" só mostra um aviso e segue para o primeiro serviço.
@@ -54,7 +54,7 @@ Conferido no código da baseline:
 - **Sequência.** … Modalidade → Endereço (só com "Local próprio") → **Sistema atual** → se "Sim, quero importar": **Quando importar** → se "Importar agora": **Importação** → Primeiro serviço, Dias e Horários **só se a importação não os trouxe** → Demonstração da IA. Com "Não, começar do zero" ou "Fazer depois", o caminho é o de hoje: Primeiro serviço → Serviços adicionais → Dias → Horários → Agenda pronta → Demonstração da IA.
 - **IDs de rota:** `sistema-atual`, `quando-importar` e `importacao`. `fonte-da-agenda`, `agenda-atendly-confirmar` e `agenda-atendly-metodo` deixam de ser etapas e redirecionam para `sistema-atual`, pelo mesmo mecanismo de `legacyStepRedirects`.
 - **Sistema atual.** Pergunta do vault: "Você já usa algum sistema para organizar seus clientes e agendamentos?". Dois cards que **são** a ação, como no protótipo 2.1: "Sim, quero importar" e "Não, começar do zero". Nenhum vem marcado. Não há "Continuar" nem ✓ de seleção, então QA O-22 fecha por construção.
-- **Quando importar.** Título "Quer importar agora?". Mostra que a cópia é do Minha Agenda para a Atendly, uma vez só. "Importar agora" é o botão principal, e "Fazer depois" é o secundário. Texto: "Se fizer depois, a importação fica em Mais › Importação.". Não há tela separada de escolha de origem: o produto só tem o Minha Agenda (pergunta 250), e uma tela de um card só é o defeito de QA O-17. D-084 registra essa escolha para a conferência humana.
+- **Quando importar.** Título "Quer importar agora?". Mostra que a cópia é do Minha Agenda para a Avenly, uma vez só. "Importar agora" é o botão principal, e "Fazer depois" é o secundário. Texto: "Se fizer depois, a importação fica em Mais › Importação.". Não há tela separada de escolha de origem: o produto só tem o Minha Agenda (pergunta 250), e uma tela de um card só é o defeito de QA O-17. D-084 registra essa escolha para a conferência humana.
 - **Quando o bloco grava.** "Sim, quero importar" só navega. "Importar agora", "Fazer depois" e "Não, começar do zero" gravam `calendar: { source: "ATENDLY" }` pelo `PATCH /v1/onboarding` de hoje, e só avançam com `200`. Assim a importação sempre encontra `calendarSettings` (evidência 5), e quem sai antes de responder volta para `sistema-atual`. Nenhum campo novo é gravado, e o BFF não muda.
 - **A importação no onboarding é a mesma de `/importacao`.** O módulo `features/imports` passa a ter uma entrada que não depende do shell da plataforma. `/importacao` e a etapa `importacao` do onboarding montam as mesmas telas (conectar, análise e revisão, conflitos, execução e resultado), sobre o mesmo `getImportState` e as mesmas chamadas. O que muda entre as duas é só a moldura:
   - `/importacao` continua como hoje, com o link "Configurações" e `useShellConfig`;
@@ -108,7 +108,7 @@ Leia só o necessário:
 - As etapas `sistema-atual` e `quando-importar` conforme "Escolhas de desenho", com os textos do vault e do protótipo.
 - As três telas antigas saem da sequência, do progresso e de `blockForScenario`. As três rotas antigas redirecionam para `sistema-atual`.
 - Os cards de `sistema-atual` são botões com nome acessível próprio. Nenhum tem estado selecionado, nem `aria-pressed`, nem ✓.
-- Nenhuma etapa do bloco mostra fuso horário, "Fonte oficial" ou "Agenda Atendly" como escolha.
+- Nenhuma etapa do bloco mostra fuso horário, "Fonte oficial" ou "Agenda Avenly" como escolha.
 - `calendar.source` é gravado conforme "Quando o bloco grava". Falha no `PATCH` fica na etapa, com o erro de tela de sempre, e não avança.
 - "Fazer depois" e "Não, começar do zero" levam a `servico-nome`. O texto "Configurações → Agenda" sai do onboarding.
 - `servicePopulation` e o aviso de importação depois saem do rascunho e da tela.

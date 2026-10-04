@@ -1,7 +1,7 @@
 ---
 title: Responsividade Mobile-First
-aliases: [Responsividade Atendly]
-tags: [atendly, responsivo, mobile]
+aliases: [Responsividade Avenly]
+tags: [avenly, responsivo, mobile]
 status: vigente
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: Importação do Minha Agenda
 aliases: [Migração Minha Agenda]
-tags: [atendly, importacao, migracao]
+tags: [avenly, importacao, migracao]
 status: vigente
 ---
 
@@ -11,7 +11,7 @@ status: vigente
 
 A importação é uma **migração assistida** e não uma sincronização.
 
-O Minha Agenda serve apenas como origem de dados para mover a operação para a Atendly.
+O Minha Agenda serve apenas como origem de dados para mover a operação para a Avenly.
 
 ## Quando pode acontecer
 
@@ -32,7 +32,7 @@ Uma importação parcial pode permanecer em andamento até o usuário decidir co
 2. Selecionar Minha Agenda como origem disponível.
 3. Explicar que não haverá sincronização permanente.
 4. Informar credenciais.
-5. Analisar dados sem alterar a Atendly.
+5. Analisar dados sem alterar a Avenly.
 6. Mostrar preview.
 7. Importar tudo por padrão, com opção de escolher categorias.
 8. Resolver conflitos quando necessário.
@@ -83,7 +83,7 @@ Mostrar resumo por categoria, por exemplo:
 
 ## Agendamentos
 
-Agendamentos futuros importados tornam-se agendamentos normais da Atendly.
+Agendamentos futuros importados tornam-se agendamentos normais da Avenly.
 
 Históricos devem preservar informações disponíveis, como:
 
@@ -98,7 +98,7 @@ Cancelamentos e faltas devem ser preservados quando a origem oferecer essa infor
 
 ## Conflitos
 
-Caso o negócio já tenha dados na Atendly:
+Caso o negócio já tenha dados na Avenly:
 
 - correspondências claras podem ser mescladas automaticamente;
 - divergências relevantes exigem decisão do usuário;
@@ -117,7 +117,7 @@ Antes de concluir definitivamente, se houver pendências:
 Depois:
 
 > **Importação concluída**  
-> Seus dados agora estão na Atendly. A partir deste momento, sua agenda deve ser gerenciada por aqui. Alterações futuras no Minha Agenda não serão refletidas na Atendly.
+> Seus dados agora estão na Avenly. A partir deste momento, sua agenda deve ser gerenciada por aqui. Alterações futuras no Minha Agenda não serão refletidas na Avenly.
 
 ## Histórico
 

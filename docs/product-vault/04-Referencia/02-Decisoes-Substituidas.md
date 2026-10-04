@@ -1,7 +1,7 @@
 ---
 title: Decisões Substituídas
 aliases: [Histórico de Mudanças de Direção]
-tags: [atendly, decisoes, historico]
+tags: [avenly, decisoes, historico]
 status: referencia
 ---
 
@@ -15,7 +15,7 @@ Este documento evita que decisões antigas reapareçam durante design ou impleme
 
 Direção atual:
 
-- Agenda Atendly é sempre a agenda oficial;
+- Agenda Avenly é sempre a agenda oficial;
 - Minha Agenda serve somente para uma importação única;
 - não há reimportação;
 - não há sincronização.
@@ -30,7 +30,7 @@ A primeira ideia permitia reimportar e reconciliar alterações. Isso foi descar
 
 **Substituída parcialmente.**
 
-Existe demonstração automática para primeiro valor, mas a ativação do WhatsApp usa um **teste real** enviado por um número oficial da Atendly.
+Existe demonstração automática para primeiro valor, mas a ativação do WhatsApp usa um **teste real** enviado por um número oficial da Avenly.
 
 ## Teste opcional/manual recorrente
 

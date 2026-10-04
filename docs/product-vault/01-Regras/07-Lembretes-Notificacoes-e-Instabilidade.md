@@ -1,7 +1,7 @@
 ---
 title: Lembretes, Notificações e Instabilidade
-aliases: [Notificações Atendly]
-tags: [atendly, lembretes, notificacoes]
+aliases: [Notificações Avenly]
+tags: [avenly, lembretes, notificacoes]
 status: vigente
 ---
 
@@ -110,7 +110,7 @@ Abertura da conversa não significa que o profissional assumiu. O estado muda qu
 
 ## Alertas externos
 
-E-mail deve ser usado para problemas críticos em que o usuário pode não estar com a Atendly aberta.
+E-mail deve ser usado para problemas críticos em que o usuário pode não estar com a Avenly aberta.
 
 Exemplos:
 

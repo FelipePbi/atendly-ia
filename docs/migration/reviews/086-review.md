@@ -9,10 +9,10 @@ O Goal valida o mecanismo de comparação visual do ia-loop V33 numa tela só. `
 - Baseline aceita vigente: `10f2348bf120dcc43e49f762c7438abf49fdd4e9` (Goal082). Base imediata da implementação: `72800791ccff56c86feea285d87a3e039489707d`, HEAD da worktree `.ai-worktrees/goal-086`, inalterado nas duas rodadas. Entre `10f2348` e `7280079` há o fechamento do Goal082, a integração do ia-loop V33 (comparação visual, sem código de produto) e a inserção deste Goal no plano.
 - Snapshot aceito, calculado pelo IA Loop: **6 arquivos**, hash do diff `78221212e10f73f284e8ea105e60c34b529799e857a7ff93631e5437a57e8aab`. Mudança posterior nesses arquivos exige avaliar o novo diff.
 - Os 6 arquivos são rastreados e modificados, por `git diff --numstat 7280079` no snapshot aceito:
-  - Frontend: `src/features/auth/AuthScreen.tsx` (+51/−43), `src/shared/styles/atendly.css` (+224/−133), `src/shared/icons/Icon.tsx` (+1, o nome `mail`) e `public/icons/atendly-icons.svg` (+1, o símbolo `i-mail`).
+  - Frontend: `src/features/auth/AuthScreen.tsx` (+51/−43), `src/shared/styles/avenly.css` (+224/−133), `src/shared/icons/Icon.tsx` (+1, o nome `mail`) e `public/icons/avenly-icons.svg` (+1, o símbolo `i-mail`).
   - Teste existente: `apps/frontend/tests/goal068-telas-de-entrada.test.tsx` (+2/−2). A única asserção mudada é o raio da folha do formulário no celular, de `24px 24px 0 0` para `28px 28px 0 0`, porque o L1 usa 28px. Nenhum teste foi removido ou pulado.
   - Documento: `docs/migration/CURRENT_STATE.md` (delta do Goal086).
-- Nenhuma rota, contrato, migration, variável de ambiente ou campo mudou. `atendly-system.css`, `apps/frontend/e2e/visual/targets.json` (o L1 já estava mapeado para `/login`), `apps/bff/PUBLIC_API_V1.md`, o vault e `docs/design-reference/` não foram editados.
+- Nenhuma rota, contrato, migration, variável de ambiente ou campo mudou. `avenly-system.css`, `apps/frontend/e2e/visual/targets.json` (o L1 já estava mapeado para `/login`), `apps/bff/PUBLIC_API_V1.md`, o vault e `docs/design-reference/` não foram editados.
 
 ## Histórico das rodadas
 

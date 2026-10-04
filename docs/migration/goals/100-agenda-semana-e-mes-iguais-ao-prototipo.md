@@ -121,8 +121,8 @@ Aplique cada controle e reverta-o no mesmo passo, com a restauração conferida 
 - Um componente novo de resumo do dia em `features/agenda/` (por exemplo `DaySummaryCard.tsx`), usado por Semana e Mês.
 - `apps/frontend/src/features/agenda/AgendaBoard.tsx`: repassar cores, regras de horário, dia selecionado do Mês e a pílula; sem mudar a barra.
 - `apps/frontend/src/features/agenda/occupancy.ts` e `timeGrid.ts`, só no que o porte exigir, sem mudar o Dia.
-- `apps/frontend/src/shared/styles/atendly-agenda.css`; `atendly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
-- Ícones que faltarem (o olho da pílula), em `shared/icons/Icon.tsx` e `public/icons/atendly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
+- `apps/frontend/src/shared/styles/avenly-agenda.css`; `avenly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
+- Ícones que faltarem (o olho da pílula), em `shared/icons/Icon.tsx` e `public/icons/avenly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
 - `apps/frontend/e2e/routes.ts`, só se um `contentMarker` depender de texto trocado, com o motivo no relatório.
 - `apps/frontend/tests/`: a prova nova e as asserções do §5.
 

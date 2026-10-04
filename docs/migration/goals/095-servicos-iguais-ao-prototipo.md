@@ -26,13 +26,13 @@ Critério: **`/servicos`, `/servicos/novo` e `/servicos/editar` iguais aos quadr
 
 ## O que a evidência desta passada mostra
 
-Conferido no protótipo (`docs/design-reference/claude-design/prototype/project/Servicos.dc.html`, `Servicos-Tablet.dc.html`, `Servicos-Desktop.dc.html`, `Agenda.dc.html` e a legenda de cores de `Atendly.dc.html`), no código da baseline e no contrato (`packages/public-api-contract/src/schemas.ts`).
+Conferido no protótipo (`docs/design-reference/claude-design/prototype/project/Servicos.dc.html`, `Servicos-Tablet.dc.html`, `Servicos-Desktop.dc.html`, `Agenda.dc.html` e a legenda de cores de `Avenly.dc.html`), no código da baseline e no contrato (`packages/public-api-contract/src/schemas.ts`).
 
 1. **S1 (lista).** Cabeçalho "Serviços" com o resumo "6 ativos · 1 precisa de revisão · 1 inativo". Cada linha tem o traço na cor do serviço, o nome e "45 min · R$ 90". A pendência fica em âmbar, com "Precisa de revisão · sem duração" e a ação "Corrigir" ao lado. "Inativos" fica separado, em cinza, com "· a IA não oferece". A legenda do quadro diz: "Sem descrição na lista". **A linha não tem botão "Desativar"**; o app tem esse botão em cada linha (`ServiceList.tsx`, D-091 item 5), além do resumo "Serviços cadastrados" e de um cabeçalho próprio. Medida do 094 (início e fim): **8,8 / 5,3 / 3,9 / 2,9**.
 2. **S3 (novo serviço).** Título "Novo serviço". Campos "Nome" e "Duração" (− 40 min +, atalhos 30, 60 e 90). "Preço" com controle segmentado "Fixo | A partir de | Sob consulta | Sem preço" e o valor "R$ 55,00". A frase "A IA responde: …". Depois, "Mais opções" como **linhas fechadas que mostram o valor atual**: "Cor na agenda · Sem cor", "Descrição · Opcional", "Recorrência · Não", "Intervalo antes e depois · Nenhum" e "Instruções para a IA · Nenhuma". O CTA é "Salvar serviço". A legenda diz: "Novo serviço nasce ativo". O app (`ServiceForm.tsx`) tem o título de seção "Essencial", "Nome do serviço", o seletor de tipo de preço com "Preço fixo" e "Não informado", "Prévia · como a IA responde", as opções **sempre abertas** (D-103), a caixa "Serviço ativo" também na criação e o CTA "Criar serviço". Medida do 088: **7,0 / 7,5 / 13,4 / 7,7**.
 3. **Servicos:S4 (editar, opções abertas).** Portado pelo 088 (D-103), com a linha-resumo aberta (`ESSENTIALS_OPEN_ON_EDIT = true`, divergência 4 de D-103, autorizada no review088). As linhas do quadro aparecem abertas: "Recorrência", "Intervalo antes e depois" com os steppers Antes e Depois, "Instruções para a IA · só ela lê" e "Serviço ativo". O CTA é "Salvar alterações". "Onde é feito" não existe no contrato `Service`. Medida do 094: **9,7 / 8,7 / 14,2 / 8,7**.
 4. **Agenda:S1 (editar, cor na agenda).** Mesma tela, com "Cor na agenda (opcional)" aberta: "sem cor", **seis cores** e o "+" do seletor livre; o texto "Seis cores sugeridas ou toque em + para escolher qualquer outra no seletor de cores."; e a prévia "Assim na agenda", uma linha da Agenda com hora, traço na cor, nome e "Corte feminino · 45 min · R$ 90". O app mostra "Identidade visual (opcional)", um seletor com nomes próprios e um quadrado de cor com texto de ajuda. Medida do 088: **9,7 / 8,9 / 14,4 / 8,8**.
-5. **A paleta.** A legenda de cores do protótipo (`Atendly.dc.html`) nomeia as seis cores, na ordem do quadro: **Ameixa `#8E5A86`, Terracota `#B8674A`, Oliva `#7C8A3E`, Ardósia `#5B6E9A`, Rosa-antigo `#C07A88` e Lavanda `#8B7BB5`**. O contrato tem seis tokens (`ROSE`, `AMBER`, `EMERALD`, `SKY`, `VIOLET`, `SLATE`), persistidos no Scheduling. O app os chama de "Rosa", "Âmbar", "Esmeralda", "Azul-celeste", "Violeta" e "Ardósia" (`ServiceForm.tsx`), com outros hex. O hex mora num lugar só: as regras `[data-color="…"]` de `shared/styles/atendly-services.css`, que a Agenda e Clientes também leem por `--swatch` (D-108 (f)). D-108 (f) e D-112 deixaram a troca para este Goal.
+5. **A paleta.** A legenda de cores do protótipo (`Avenly.dc.html`) nomeia as seis cores, na ordem do quadro: **Ameixa `#8E5A86`, Terracota `#B8674A`, Oliva `#7C8A3E`, Ardósia `#5B6E9A`, Rosa-antigo `#C07A88` e Lavanda `#8B7BB5`**. O contrato tem seis tokens (`ROSE`, `AMBER`, `EMERALD`, `SKY`, `VIOLET`, `SLATE`), persistidos no Scheduling. O app os chama de "Rosa", "Âmbar", "Esmeralda", "Azul-celeste", "Violeta" e "Ardósia" (`ServiceForm.tsx`), com outros hex. O hex mora num lugar só: as regras `[data-color="…"]` de `shared/styles/avenly-services.css`, que a Agenda e Clientes também leem por `--swatch` (D-108 (f)). D-108 (f) e D-112 deixaram a troca para este Goal.
 6. **O que o contrato não tem.** Cor livre (S1b, o "+"), "Onde é feito" (estúdio ou domicílio) e o menu "•••" com o sheet de desativar (S8). Isso entra como divergência declarada, não como contrato novo.
 7. **Gate.** `/servicos` está em `AUTHENTICATED_ROUTES`. G-4 e G-5 (Goal088) medem a lista e o formulário nas duas faixas. Dois testes do gate autenticado tocam este formulário: "servicos: a 45-minute service saves through the form" preenche `input[name="duration"]` logo que `/servicos/editar` carrega e clica "Salvar alterações"; "servicos: Criar serviço is reached by a real click" clica o botão pelo nome "Criar serviço". O segundo deixa de achar o botão quando o CTA vira "Salvar serviço" (escolha (c)).
 
@@ -61,7 +61,7 @@ Conferido no protótipo (`docs/design-reference/claude-design/prototype/project/
 | 5 | Rosa-antigo | `#C07A88` | `ROSE` |
 | 6 | Lavanda | `#8B7BB5` | `VIOLET` |
 
-Motivo do mapa: `SLATE` já se chama "Ardósia" e fica com o nome; `ROSE`, `AMBER`, `EMERALD` e `VIOLET` vão para a cor do protótipo de mesma família; `SKY` é o único token sem família correspondente e fica com Ameixa. O hex muda só nas regras `[data-color="…"]` de `atendly-services.css`. A Agenda (A1, A10, A11) e Clientes (CL6) passam a mostrar as novas cores pelo mesmo `--swatch`, sem mudar código deles. A cor nunca é a única informação (D-108 (f)).
+Motivo do mapa: `SLATE` já se chama "Ardósia" e fica com o nome; `ROSE`, `AMBER`, `EMERALD` e `VIOLET` vão para a cor do protótipo de mesma família; `SKY` é o único token sem família correspondente e fica com Ameixa. O hex muda só nas regras `[data-color="…"]` de `avenly-services.css`. A Agenda (A1, A10, A11) e Clientes (CL6) passam a mostrar as novas cores pelo mesmo `--swatch`, sem mudar código deles. A cor nunca é a única informação (D-108 (f)).
 
 **Divergências declaradas, que não contam como defeito na comparação:**
 
@@ -109,7 +109,7 @@ Rode `npm run visual:compare -- --target CL1,CL6,M1,N1,A1,A10,H3` no início e n
 1. **Lista (S1).** O resumo, a linha com nome e "duração · preço", o traço com `data-color`, a pendência com "Corrigir" e os inativos com "a IA não oferece". Nenhuma linha tem botão "Desativar" ou "Ativar". O link `Editar <nome>` e a classe `directory-row` continuam.
 2. **Novo serviço (S3).** Os rótulos "Nome", "Duração" e "Preço", sem "Essencial". O preço tem quatro opções com estado, e cada uma grava o `priceType` de (c). As cinco linhas de opção nascem fechadas (`aria-expanded="false"`), mostram o valor atual e abrem ao toque. "Serviço ativo" não aparece. O CTA é "Salvar serviço", e o pedido de criação leva `active: true` e os mesmos campos de hoje.
 3. **Editar (S4 e Agenda:S1).** As linhas nascem fechadas e abrem ao toque, e os campos de buffer, recorrência e instruções mantêm nome acessível e validação. Fechar uma linha alterada não descarta o valor no pedido. "Cor na agenda" mostra "sem cor" e as seis cores na ordem e com os nomes de (g); escolher envia o token do mapa; a prévia "Assim na agenda" mostra a cor escolhida e a linha do serviço. Desmarcar "Serviço ativo" e salvar envia `active: false` no `PATCH`.
-4. **Paleta.** As regras `[data-color="…"]` de `atendly-services.css` têm o hex de (g) para cada token, conferidas pelo texto do arquivo.
+4. **Paleta.** As regras `[data-color="…"]` de `avenly-services.css` têm o hex de (g) para cada token, conferidas pelo texto do arquivo.
 5. **Casca.** Uma chamada de `useShellConfig` por árvore renderizada em `/servicos`, `/servicos/novo` e `/servicos/editar`, nas duas faixas, no padrão de `goal088-list-detail`.
 
 As provas 1 a 4 **reprovam na baseline**, salvo asserção que a baseline já cumpra, declarada uma a uma. A prova 5 guarda comportamento e pode passar na baseline; declare o que passa. O relatório cola a saída das provas rodadas contra os arquivos de produção da baseline, com a restauração conferida por hash.
@@ -135,9 +135,9 @@ Aplique cada controle e reverta-o no mesmo passo, com a restauração conferida 
 ## Pontos de implementação
 
 - `apps/frontend/src/features/services/`: `ServiceList.tsx`, `ServiceForm.tsx` e `serviceFormatting.ts` (só por acréscimo, se o valor atual de uma linha de opção exigir uma função nova; as funções existentes não mudam de saída). `ProductServicesScreen.tsx` só se a composição exigir, sem mudar D-103.
-- `apps/frontend/src/shared/styles/atendly-services.css`, inclusive as regras `[data-color="…"]`. `atendly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
+- `apps/frontend/src/shared/styles/avenly-services.css`, inclusive as regras `[data-color="…"]`. `avenly.css` só se uma regra compartilhada exigir, sem piorar outra tela.
 - `apps/frontend/src/data/services/BffServiceCatalogService.ts`: nada muda no tipo do token.
-- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/atendly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
+- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/avenly-icons.svg`. `goal072-icon-sprite.test.ts` guarda o sprite.
 - `apps/frontend/e2e/visual/targets.json`: só os `steps` das entradas Agenda:S1 e Servicos:S4, por (e).
 - `apps/frontend/e2e/authenticated-matrix.spec.ts`: só o que o §6 autoriza.
 - `apps/frontend/tests/`: a prova nova e as asserções do §5.
@@ -200,7 +200,7 @@ No relatório, para cada quadro e cada device, descreva o que se vê em `side-by
 
 | WU | Tipo | Depende de | Entrega |
 | --- | --- | --- | --- |
-| WU-01 | STANDARD | — | Recontagem e `visual:compare` da baseline; S1 (linha do quadro, sem botão de status) e a paleta de (g) em `atendly-services.css` |
+| WU-01 | STANDARD | — | Recontagem e `visual:compare` da baseline; S1 (linha do quadro, sem botão de status) e a paleta de (g) em `avenly-services.css` |
 | WU-02 | STANDARD | WU-01 | S3, S4 e Agenda:S1: preço segmentado, linhas de opção fechadas com valor, cor do quadro com a prévia "Assim na agenda", "Salvar serviço", `steps` de `targets.json` e a mudança do §6 no spec |
 | WU-03 | STANDARD | WU-01, WU-02 | Provas 1 a 5 com o vermelho da baseline; asserções do §5 |
 | WU-04 | DETERMINISTIC | WU-03 | typecheck de `apps/frontend` |

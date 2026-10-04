@@ -50,7 +50,7 @@ Conferido no código da baseline:
 
 1. **A política não existe em camada nenhuma.** `CalendarSettings` do Scheduling (`apps/scheduling-service/prisma/schema.prisma`) tem só `timezone`, `minLeadMinutes`, `maxLeadDays` e `granularityMinutes`. Nenhuma rota, nenhum campo de contrato e nenhuma regra da IA falam de prazo para cancelar ou remarcar. O comportamento de hoje é o padrão do vault ("a qualquer momento", pergunta 100).
 2. **O Scheduling já sabe quem pede.** `POST /internal/appointments/:id/cancel` e `/reschedule` (`apps/scheduling-service/src/modules/calendar/routes.ts`) gravam `source: callerSource(context.caller)`, que é `AI` quando o chamador é o `ai-orchestrator` e `USER` quando é o BFF (`shared/auth/internal-auth.ts`). A credencial do chamador é a prova da origem, e não o corpo.
-3. **A escrita já roda numa transação com o estado relido.** `cancelAppointment` e `rescheduleAppointment` de `integrations/atendly/provider.ts` travam o dia com `lockCalendarDays` e relêem o atendimento dentro de `runCalendarWrite`. Cancelar um atendimento já cancelado devolve o estado atual, sem erro.
+3. **A escrita já roda numa transação com o estado relido.** `cancelAppointment` e `rescheduleAppointment` de `integrations/avenly/provider.ts` travam o dia com `lockCalendarDays` e relêem o atendimento dentro de `runCalendarWrite`. Cancelar um atendimento já cancelado devolve o estado atual, sem erro.
 4. **Há dois chamadores `AI` de cancelamento, e só um é pedido da cliente.** As ferramentas `cancel_appointment` e `reschedule_appointment` de `apps/ai-orchestrator/src/modules/tools/assistant-tools.ts` agem pela cliente. A limpeza do teste real, em `activation-test/ActivationTestCleanupService.ts` (`removeAppointment`), cancela o atendimento de teste com a mesma credencial e não pode ser barrada por prazo.
 5. **O orquestrador ainda não lê as regras do negócio.** `GET /internal/availability-settings` do Scheduling é `internalOnly` e não exige chamador humano; só o `PATCH` exige. O cliente do Scheduling no orquestrador não tem chamada para essa leitura.
 6. **A remarcação prepara um hold antes de perguntar.** `prepareReschedule` cria o hold do horário novo antes de devolver `requiresConfirmation`. Uma recusa por prazo que viesse depois do hold deixaria hold criado sem uso.
@@ -97,7 +97,7 @@ Leia só o necessário:
 - as linhas de QA S-06 e S-08 do [QA_LOCAL_REVIEW](../QA_LOCAL_REVIEW.md) e as observações do [review067](../reviews/067-review.md);
 - no vault, só os trechos listados em "Objetivo e posição";
 - no protótipo, só os dois blocos de `Mais-Negocio-Agenda-IA.dc.html` citados;
-- `apps/scheduling-service/prisma/schema.prisma` (`CalendarSettings`), `src/modules/internal-api/routes.ts` (`/internal/availability-settings`, `offerRulesDto`, `assertOfferRules`), `src/modules/calendar/routes.ts` (`cancelBodySchema`, `rescheduleBodySchema`), `src/modules/integrations/atendly/provider.ts` (`cancelAppointment`, `rescheduleAppointment`), `src/modules/calendar/calendar-service.ts` e `src/shared/auth/internal-auth.ts`;
+- `apps/scheduling-service/prisma/schema.prisma` (`CalendarSettings`), `src/modules/internal-api/routes.ts` (`/internal/availability-settings`, `offerRulesDto`, `assertOfferRules`), `src/modules/calendar/routes.ts` (`cancelBodySchema`, `rescheduleBodySchema`), `src/modules/integrations/avenly/provider.ts` (`cancelAppointment`, `rescheduleAppointment`), `src/modules/calendar/calendar-service.ts` e `src/shared/auth/internal-auth.ts`;
 - `apps/ai-orchestrator/src/modules/scheduling-service/client.ts`, `modules/tools/assistant-tools.ts` (prepare e confirm de cancelar e remarcar), `modules/activation-test/ActivationTestCleanupService.ts`, `modules/assistant/assistant.service.ts` (`loadTurnConfirmedEffects`) e `modules/prompts/scheduling.ts`;
 - `apps/bff/prisma/schema.prisma` (`NotificationPreference`, como modelo), `src/modules/settings/routes.ts`, `src/clients/scheduling/index.ts` e `PUBLIC_API_V1.md`, nas seções de settings;
 - `packages/public-api-contract/src/schemas.ts` e `src/routes.ts`;
@@ -106,7 +106,7 @@ Leia só o necessário:
 
 ## Pontos de implementação
 
-- `apps/scheduling-service/`: `prisma/schema.prisma`, uma migration nova `*_goal073_customer_change_policy`, `modules/internal-api/routes.ts`, `modules/calendar/routes.ts`, `modules/integrations/atendly/provider.ts` e o que a escrita precisar em `modules/calendar/`.
+- `apps/scheduling-service/`: `prisma/schema.prisma`, uma migration nova `*_goal073_customer_change_policy`, `modules/internal-api/routes.ts`, `modules/calendar/routes.ts`, `modules/integrations/avenly/provider.ts` e o que a escrita precisar em `modules/calendar/`.
 - `apps/ai-orchestrator/`: `modules/scheduling-service/client.ts`, `modules/tools/assistant-tools.ts`, `modules/activation-test/ActivationTestCleanupService.ts`, `modules/assistant/assistant.service.ts` (só se a recusa exigir) e `modules/prompts/scheduling.ts`.
 - `apps/bff/`: `prisma/schema.prisma`, uma migration nova `*_goal073_agenda_view_preference`, `modules/settings/routes.ts`, `clients/scheduling/index.ts` e `PUBLIC_API_V1.md`.
 - `packages/public-api-contract/src/schemas.ts` e `src/routes.ts`: o campo novo de `availability` e as duas rotas novas. Aqui o pacote é escopo declarado, e não desvio.

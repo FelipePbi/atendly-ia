@@ -11,7 +11,7 @@ O Goal corrige **QA CV-03** (MÉDIA) da [revisão local de ponta a ponta](../QA_
 - **Dezenove arquivos rastreados**, por `git diff --numstat 66cf5fb`:
   - `apps/ai-orchestrator/`: `src/modules/internal/routes.ts` (+38/−0) e `tests/assistant/assistant.service.test.ts` (+10/−10, três literais computados pela árvore).
   - `apps/bff/`: `PUBLIC_API_V1.md` (+15/−1), `src/clients/ai-orchestrator/index.ts` (+44/−0) e `src/modules/conversations/routes.ts` (+17/−0).
-  - `apps/frontend/`: `e2e/authenticated-matrix.spec.ts` (+54/−1), `src/data/services/BffConversationService.ts` (+17/−0), `src/features/conversations/ConversationThread.tsx` (+26/−1), `MessageTimeline.tsx` (+122/−13), `format.ts` (+33/−0) e `src/shared/styles/atendly-conversations.css` (+20/−0).
+  - `apps/frontend/`: `e2e/authenticated-matrix.spec.ts` (+54/−1), `src/data/services/BffConversationService.ts` (+17/−0), `src/features/conversations/ConversationThread.tsx` (+26/−1), `MessageTimeline.tsx` (+122/−13), `format.ts` (+33/−0) e `src/shared/styles/avenly-conversations.css` (+20/−0).
   - `packages/public-api-contract/src/`: `routes.ts` (+2/−0) e `schemas.ts` (+34/−0).
   - `scripts/`: `goal033-authenticated-ui-rehearsal.mjs` (+194/−0) e `tests/goal033-authenticated-ui-rehearsal.test.mjs` (+73/−0, **6** testes).
   - Os quatro documentos de `docs/migration/`, por acréscimo puro no diff aceito: `CURRENT_STATE.md` +129, `FINAL_AUDIT.md` +88, `DECISIONS.md` +31 e `VALIDATION_GATE.md` +24.

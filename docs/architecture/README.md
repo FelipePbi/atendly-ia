@@ -1,6 +1,6 @@
 # Arquitetura
 
-Local dos documentos arquiteturais e ADRs vigentes do Atendly.
+Local dos documentos arquiteturais e ADRs vigentes do Avenly.
 
 Os ADRs anteriores foram removidos junto com a proposta substituída pelo product vault. Enquanto não houver decisão arquitetural nova registrada, use:
 

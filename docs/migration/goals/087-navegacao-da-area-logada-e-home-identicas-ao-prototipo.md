@@ -34,13 +34,13 @@ Este Goal corrige a casca comum, a que aparece em toda tela logada, e a Home, qu
 
 Conferido no protótipo (`docs/design-reference/claude-design/prototype/project/`) e no código da baseline:
 
-1. **Tablet não tem sidebar no protótipo.** Os arquivos `*-Tablet.dc.html` da área logada (Home, Agenda, Clientes, Conversas, Configurações, Notificações) usam, em retrato e em paisagem, uma **barra inferior** de 72 px (`background:#FFFDFA; border-top:1px solid #E5DED4`), com cinco itens centralizados (Início, Conversas, Agenda, Clientes, Mais), 72 px de largura cada, `gap:56px`, ícone de 20 px e rótulo de 11 px peso 600; ativo `#0F5F63`, inativo `#716859`. Nenhum quadro tablet tem sidebar. O vault diz o mesmo: tablet tem "base semelhante ao mobile" (`docs/product-vault/00-Produto/04-Navegacao-e-Modulos.md`). O app mostra, de 768 a 1099 px, um trilho de 88 px (`atendly.css`, `@media (max-width: 1099px)`), decidido no item 1 de D-074.
+1. **Tablet não tem sidebar no protótipo.** Os arquivos `*-Tablet.dc.html` da área logada (Home, Agenda, Clientes, Conversas, Configurações, Notificações) usam, em retrato e em paisagem, uma **barra inferior** de 72 px (`background:#FFFDFA; border-top:1px solid #E5DED4`), com cinco itens centralizados (Início, Conversas, Agenda, Clientes, Mais), 72 px de largura cada, `gap:56px`, ícone de 20 px e rótulo de 11 px peso 600; ativo `#0F5F63`, inativo `#716859`. Nenhum quadro tablet tem sidebar. O vault diz o mesmo: tablet tem "base semelhante ao mobile" (`docs/product-vault/00-Produto/04-Navegacao-e-Modulos.md`). O app mostra, de 768 a 1099 px, um trilho de 88 px (`avenly.css`, `@media (max-width: 1099px)`), decidido no item 1 de D-074.
 2. **A sidebar do desktop é outra.** Nos `*-Desktop.dc.html`, a sidebar tem **232 px** (`background:#FFFDFA; border-right:1px solid #E5DED4; padding:18px 14px 16px`):
-   - no topo, o logo (26 px) e "Atendly" em Literata 20 px peso 600;
+   - no topo, o logo (26 px) e "Avenly" em Literata 20 px peso 600;
    - a navegação, com `margin-top:22px` e `gap:2px`: Início, Conversas, Agenda, Clientes, Serviços e **Configurações** na mesma lista; item com `padding:9px 10px`, raio 10 px, 14 px; ativo peso 600, cor `#0B4A4E` e fundo `#EDF4F3`; inativo peso 500 e cor `#5F574E`;
    - no fim (`margin-top:auto`, `gap:14px`), um **cartão da IA** (borda `#E5DED4`, raio 12 px, `padding:12px`), com o ponto que respira, "IA ativa" 13 px peso 600, "atendendo pelo WhatsApp" 12 px `#716859` e a ação "Pausar" 12 px peso 600 `#0F5F63`; e, abaixo, a **conta**: avatar de 32 px com as iniciais (`#DCECEB`/`#0B4A4E`), o nome da pessoa 13 px peso 600 e o nome do negócio 12 px `#716859`.
 
-   O app tem 248 px e, nesta ordem: logo, bloco do negócio (avatar, nome do negócio e "Agenda Atendly oficial"), uma linha de estado do WhatsApp e outra da IA (`StatusLine`), os cinco destinos, e no fim Notificações, Configurações e o botão da conta com o e-mail e "Conta proprietária" (`shared/layout/AppShell.tsx`).
+   O app tem 248 px e, nesta ordem: logo, bloco do negócio (avatar, nome do negócio e "Agenda Avenly oficial"), uma linha de estado do WhatsApp e outra da IA (`StatusLine`), os cinco destinos, e no fim Notificações, Configurações e o botão da conta com o e-mail e "Conta proprietária" (`shared/layout/AppShell.tsx`).
 3. **O celular não tem cabeçalho de marca no protótipo.** Nenhum quadro mobile da área logada tem o logo no topo; a Home começa no título "Bom dia, …". O app põe em toda rota logada, abaixo de 768 px, um cabeçalho fixo com a marca e um selo (nome do negócio ou "Atenção"). A barra inferior do protótipo tem `padding:8px 6px 0`, itens de 64 px com `justify-content:space-around`, e 90 px de altura, que incluem os 34 px do indicador de início do iPhone.
 4. **A Home do H1** tem a faixa de estado com "IA ativa", a descrição e a ação "Pausar" à direita, sem a linha de pontos de estado (WhatsApp, IA, Agenda) que o app mostra dentro da faixa (`OperationalBand` em `features/dashboard/DashboardScreen.tsx`). O resto da Home foi portado pelo Goal074 (D-088); a comparação diz o que ainda difere.
 5. **A sessão tem o nome da pessoa.** `user.name` existe no contrato desde o Goal064 (`packages/public-api-contract/src/schemas.ts`), nulo para conta anterior.
@@ -145,8 +145,8 @@ O relatório e os documentos dizem que essa conferência **não foi feita** por 
 
 - `apps/frontend/src/shared/layout/AppShell.tsx` e, se preciso, `navigation.ts`.
 - `apps/frontend/src/features/dashboard/DashboardScreen.tsx`: a faixa (f).
-- `apps/frontend/src/shared/styles/atendly.css`: a regra base da casca, a sidebar, as barras e a faixa da Home. Outras folhas de `shared/styles/` só onde uma regra de módulo sobrescreve a casca e impede o resultado.
-- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/atendly-icons.svg`, no padrão do Goal086.
+- `apps/frontend/src/shared/styles/avenly.css`: a regra base da casca, a sidebar, as barras e a faixa da Home. Outras folhas de `shared/styles/` só onde uma regra de módulo sobrescreve a casca e impede o resultado.
+- Ícones que faltarem, em `shared/icons/Icon.tsx` e `public/icons/avenly-icons.svg`, no padrão do Goal086.
 - `apps/frontend/tests/`: a prova nova e as asserções do §5.
 - `apps/frontend/e2e/authenticated-matrix.spec.ts` e, se preciso, `e2e/measure.ts`: G-1 e G-2, **só por acréscimo**.
 

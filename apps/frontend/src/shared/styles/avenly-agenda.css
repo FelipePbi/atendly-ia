@@ -2550,6 +2550,10 @@
 .agenda-appt-split {
   min-width: 0;
 }
+/* Divisão desligada (abaixo de 1024 px): o invólucro não gera caixa. */
+.agenda-appt-split.agenda-appt-split-flat {
+  display: contents;
+}
 .agenda-appt-split .agenda-command-bar {
   margin: 0;
   padding: 14px 28px 0;

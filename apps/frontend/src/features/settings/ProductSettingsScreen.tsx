@@ -131,19 +131,10 @@ function SettingsContent({
 }) {
   const wide = useWideLayout();
   const hub = isHubScenario(scenario);
-  if (!wide) {
-    if (hub) return <SettingsHub settings={settings} />;
-    return (
-      <SettingsSection
-        scenario={scenario}
-        settings={settings}
-        setSettings={setSettings}
-        setWhatsappConnected={setWhatsappConnected}
-      />
-    );
-  }
+  if (!wide && hub) return <SettingsHub settings={settings} />;
   // De 1024 px em diante, a lista de Configurações fica à esquerda e a seção
-  // aberta à direita; no hub, a seção aberta é o Negócio (M1).
+  // aberta à direita; no hub, a seção aberta é o Negócio (M1). Abaixo disso, a
+  // seção segue na mesma posição da árvore, só sem a lista.
   return (
     <ListDetailLayout
       detail={
@@ -170,6 +161,7 @@ function SettingsContent({
         />
       }
       listLabel="Configurações"
+      split={wide}
     />
   );
 }

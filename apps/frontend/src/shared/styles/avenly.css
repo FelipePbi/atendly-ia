@@ -7121,6 +7121,12 @@ p {
 .list-detail-panel {
   min-width: 0;
 }
+/* Divisão desligada (abaixo de 1024 px): os invólucros somem da caixa e o
+   detalhe se comporta como filho direto da área de conteúdo. */
+.list-detail-flat,
+.list-detail-flat > .list-detail-panel {
+  display: contents;
+}
 .list-detail-empty {
   min-height: 60vh;
   padding: 24px;

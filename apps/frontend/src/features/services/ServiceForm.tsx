@@ -908,12 +908,12 @@ export function ServiceForm({
     </section>
   );
 
-  if (!wide) return screen;
   return (
     <ListDetailLayout
       detail={screen}
       list={<ServiceListPanel openId={edit ? serviceId : undefined} />}
       listLabel="Serviços"
+      split={wide}
     />
   );
 }

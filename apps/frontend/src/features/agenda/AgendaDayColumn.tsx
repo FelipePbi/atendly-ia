@@ -29,9 +29,11 @@ import {
  * Coluna da Agenda ao lado de detalhe, cancelamento e remarcação, de 1024 px
  * em diante (D-110 (a) e (b), estendendo D-103): o Dia da data do agendamento
  * aberto, com a linha dele marcada. Quem decide montar isto é a tela da rota,
- * que também configura a casca — esta coluna nunca chama `useShellConfig`, e
- * abaixo de 1024 px ela nem é montada, para não buscar dados de um painel
- * que não aparece (D-103 (f)).
+ * que também configura a casca — esta coluna nunca chama `useShellConfig`. O
+ * invólucro existe nas duas larguras, para que o fluxo no painel continue o
+ * mesmo nó ao cruzar 1024 px (Goal112); com `split` desligado a barra e a
+ * coluna ficam de fora e nada é buscado para um painel que não aparece
+ * (D-103 (f)).
  */
 export function AgendaDayColumn({
   appointmentId,
@@ -39,6 +41,7 @@ export function AgendaDayColumn({
   children,
   date,
   panelFirst = false,
+  split = true,
 }: {
   appointmentId?: string;
   /** Lido pela tela da rota; a coluna espera por ele em vez de pedir de novo. */
@@ -48,6 +51,8 @@ export function AgendaDayColumn({
   date: string | null;
   /** O formulário vem antes da coluna no DOM, para que o foco e a leitura comecem nele. */
   panelFirst?: boolean;
+  /** Divisão ligada (1024 px em diante): barra do dia e coluna ao lado do fluxo. */
+  split?: boolean;
 }) {
   const [anchor, setAnchor] = useState(date);
   const [cursor, setCursor] = useState<Date | null>(() =>
@@ -76,8 +81,12 @@ export function AgendaDayColumn({
   );
 
   return (
-    <div className="agenda-appt-split">
-      {calendar && cursor && calendar.source && (
+    <div
+      className={
+        split ? "agenda-appt-split" : "agenda-appt-split agenda-appt-split-flat"
+      }
+    >
+      {split && calendar && cursor && calendar.source && (
         <AgendaColumnBar
           calendar={calendar}
           cursor={cursor}
@@ -89,6 +98,7 @@ export function AgendaDayColumn({
         list={list}
         listLabel="Agenda do dia"
         panelFirst={panelFirst}
+        split={split}
       />
     </div>
   );

@@ -271,12 +271,12 @@ export function CustomerForm() {
     </div>
   );
 
-  if (!wide) return form;
   return (
     <ListDetailLayout
       detail={form}
       list={<CustomerListPanel />}
       listLabel="Clientes"
+      split={wide}
     />
   );
 }

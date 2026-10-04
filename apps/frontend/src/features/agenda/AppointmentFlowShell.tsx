@@ -16,7 +16,9 @@ import { isoDate } from "./occupancy";
 
 /**
  * Rota com a coluna da Agenda ao lado: tela empurrada abaixo de 1024 px e, a
- * partir dela, a coluna à esquerda (D-110 (a), estendendo D-103). `date` vem
+ * partir dela, a coluna à esquerda (D-110 (a), estendendo D-103). A estrutura
+ * da coluna é montada nas duas larguras e só a divisão liga e desliga: o
+ * fluxo não é remontado ao cruzar 1024 px (Goal112). `date` vem
  * da tela da rota e fica `null` enquanto o agendamento não chegou; `id` marca
  * a linha do agendamento aberto e falta no novo agendamento, onde nada está
  * aberto.
@@ -82,7 +84,7 @@ export function AppointmentFlowShell({
       {loading ? <AgendaLoading /> : children}
     </div>
   );
-  if (!appointmentRoute || !wide) return page;
+  if (!appointmentRoute) return page;
   return (
     <AgendaDayColumn
       appointmentId={appointmentRoute.id}
@@ -91,6 +93,7 @@ export function AppointmentFlowShell({
         appointmentRoute.date ?? (loading ? null : isoDate(new Date()))
       }
       panelFirst={Boolean(closeLabel)}
+      split={wide}
     >
       {page}
     </AgendaDayColumn>

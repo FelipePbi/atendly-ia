@@ -6255,3 +6255,77 @@ A troca dos nomes de ambiente (D-122 (viii)), que é do supervisor e do operador
 - **Gates do IA Loop.** Só `git diff --check` (WU-06), com exit 0 na rodada 1 (170 ms) e na rodada 2 (180 ms). Nenhum gate de app rodou, porque nenhum código mudou. Snapshot aceito: 171 arquivos (170 `M` e 1 `R098`), hash do diff `2f61d906…`.
 - **Conferência do Tech Lead na rodada 2,** com scripts próprios: a prova linha a linha contra `db877ca` (920 linhas mudadas, 1096 ocorrências trocadas e 77 mantidas, só com a exceção declarada de `01-Onboarding.md:200`); os 15 tokens protegidos com a mesma contagem; o inventário acima, que bate arquivo a arquivo; `git ls-files` com o nome antigo só nas duas migrations e nos dois `.zip`; D-120 a D-123 sem hunk; e o status só com arquivos de `docs/`.
 - **Aceito sem prova completa.** A contagem de links e âncoras (5965 conferidos, 0 quebrados por este diff, 20 já quebrados na base) vem do script do Developer; o Tech Lead conferiu só os quatro links de DATA_MIGRATION §14 e os títulos mudados. Detalhe no [review111](reviews/111-review.md).
+
+## As telas não perdem o que a pessoa fez quando a largura cruza 1024 px, do Goal112
+
+Texto do Goal112 (decisão [D-126](DECISIONS.md), `PROPOSED`), escrito pela WU-05 da rodada 1 e refeito pela FIX-001 da rodada 2 sobre a árvore final, por acréscimo. Toda contagem diz a execução que a sustenta. O Goal previa D-125, tomada fora do loop pelos nomes de ambiente; a decisão deste Goal é D-126.
+
+### O que a rodada 1 deixou e como a rodada 2 fechou
+
+- **Gate autenticado.** Na rodada 1, `validate:integration` reprovou 9 testes `G-4 pushed screen below 1024px` (clientes, serviços e configurações, em mobile-360, mobile-390 e tablet-768) com `a list is mounted beside the detail below 1024px.`: `e2e/authenticated-matrix.spec.ts` procura `.list-detail` no DOM, e o invólucro sem divisão ainda carregava essa classe. A rodada 1 registrou os gates como não rodados e omitiu a falha. Correção: o invólucro sem divisão passa a ser `div.list-detail-flat`, **sem** a classe `list-detail`; o `.list-detail` existe só com a divisão ligada. O spec não foi editado.
+- **Testes existentes.** Pelo mesmo motivo, os sete arquivos que a rodada 1 tinha editado (088, 093, 097, 101, 104, 105 e 106) voltaram a `HEAD`, sem diff: as asserções originais (`querySelector(".list-detail")` nulo abaixo de 1024 px) passam sem mudança, inclusive as do 088 que provam D-103 (f). Nenhum teste existente foi alterado por este Goal.
+- **Visual.** O `visual:compare` dos doze quadros foi rodado antes e depois (seção própria abaixo).
+
+### Execuções finais (árvore final, depois dos controles revertidos)
+
+| Comando | Resultado |
+| --- | --- |
+| `npm run typecheck` em `apps/frontend` | exit 0 |
+| `npm run lint` em `apps/frontend` | exit 0, `--max-warnings=0` |
+| `npx vitest run tests/goal112-*.test.tsx` | 4 arquivos, **52** testes passando (8 de `goal112-list-detail-stable`, 15 de `goal112-clientes-servicos`, 7 de `goal112-configuracoes-importacao` e 22 de `goal112-agenda`) |
+| `npx vitest run` em `apps/frontend` | **153** arquivos e **1893** testes passando, com os sete arquivos antigos sem diff |
+| `npm run validate:core` | exit 0, `PASSED`: 17 passos, 15 passaram, 0 falharam, 2 pulados e reportados (`test:bff`, que só existe na integração, e `test:health-worker`, sem suíte) |
+| `npm run validate:ui` | exit 0: **169** testes passaram e 21 foram pulados pelo próprio spec, sem retentativa |
+| `npm run validate:integration` com `BFF_TEST_DATABASE_URL` apontando para um PostgreSQL descartável em `127.0.0.1:55432/avenly_bff_test` | exit 0, `PASSED`: 36 passos, 36 passaram. O ensaio `rehearse:goal033-authenticated-ui` rodou **274** testes Playwright passando e **1 instável** (ver abaixo). Os quinze `G-4 pushed screen below 1024px` (três telas em cinco devices) passam |
+| `git diff --check` | exit 0 |
+
+**Instabilidade registrada.** Um teste passou só na segunda tentativa: `[notebook-1024] onboarding-tom-da-ia › measured, logged in`, com `/onboarding/tom-da-ia did not render its own heading ("Gostou da forma como a IA conversou?") within 20000ms` na primeira (20,7 s) e verde na retentativa (1,9 s). A rota de onboarding não usa `ListDetailLayout` e não foi tocada por este Goal; os outros quatro devices passaram de primeira. Não foi investigada além disso.
+
+**Ambiente.** O banco de integração e os serviços do `visual:compare` usaram bancos PostgreSQL descartáveis num cluster local na porta 55432, criado só para esta rodada; o banco de desenvolvimento do operador não foi tocado.
+
+### Controles negativos
+
+Rodados de novo nesta rodada, sobre a árvore final, um de cada vez, cada um com o arquivo de produção devolvido ao original e o `sha256` conferido igual ao de antes.
+
+| Controle | Edição | Comando | Testes que reprovaram e mensagem |
+| --- | --- | --- | --- |
+| (a) uma tela volta ao `if (!wide) return …` | `CustomerForm.tsx`: `if (!wide) return form;` antes do `ListDetailLayout` | `npx vitest run tests/goal112-clientes-servicos.test.tsx` | 2 de 15 reprovam, `Goal112 CL4 … estreito para largo e de volta` e `largo para estreito e de volta`: `AssertionError: expected <input autocomplete="name" …(4)></input> to be <input autocomplete="name" …(4)></input> // Object.is equality` |
+| (b) o espaço `null` da lista vira um ramo que desloca o painel | `ListDetail.tsx`: `if (!split) return <div className={className}>{panelNode}</div>;` antes do retorno | `npx vitest run tests/goal112-list-detail-stable.test.tsx` | 2 de 8 reprovam, `lista à esquerda: alternar a divisão mantém o nó e o que foi digitado` (`expected <input …(1)></input> to be <input …(1)></input> // Object.is equality`) e `o invólucro do painel também é o mesmo objeto ao cruzar 1024 px` (`expected <div class="list-detail-panel">…(1)</div> to be <div class="list-detail-panel">…(1)</div> // Object.is equality`) |
+| (c) a Importação volta a trocar a árvore por `!settings` | `ImportsScreen.tsx`: `if (!wide \|\| !settings) return flow;` antes do `ListDetailLayout` | `npx vitest run tests/goal112-configuracoes-importacao.test.tsx` | 3 de 7 reprovam (`estreito para largo e de volta`, `largo para estreito e de volta` e `na faixa larga, com settings pendente: avançar, resolver settings e manter fase e valores`): `TestingLibraryElementError: Unable to find a label with the text of: E-mail do Minha Agenda` (a fase volta ao início) |
+
+Com os três arquivos revertidos, os mesmos arquivos de teste voltam a passar (execução acima).
+
+### `visual:compare`: doze quadros, quatro devices, antes e depois
+
+Comando, rodado duas vezes: `npm run visual:compare -- --target CL4,CL5,S3,Servicos:S4,M1,N1,IA1,I2,A5,A6,A8,A9`. **Antes:** a mesma árvore com os dez arquivos de `src/` trocados temporariamente pelas versões de `HEAD` (`git show HEAD:…`), devolvidos depois com o `sha256` conferido. **Depois:** a árvore final. A conta `visual-prototipo-v2@example.invalid` foi semeada nas duas vezes contra um BFF local (porta 3002) com scheduling-service e ai-orchestrator em bancos descartáveis; as 48 capturas (12 quadros por 4 devices) saíram nas duas rodadas, e o `side-by-side.png` de A6 em mobile foi aberto e lido como amostra (os demais 47 foram comparados por pixel, abaixo). A porcentagem do `visual:compare` é a diferença de pixels contra o protótipo, a mesma antes e depois em todos os 48 pares.
+
+| Quadro | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| CL4 (`/clientes/novo`) | 6,2% | 2,7% | 6,6% | 4,1% |
+| CL5 (`/clientes/detalhes`) | 9,5% | 4,7% | 6,1% | 5,4% |
+| S3 (`/servicos/novo`) | 6,3% | 2,8% | 12,8% | 4,3% |
+| S4 (`/servicos/editar`) | 9,9% | 6,0% | 13,7% | 5,3% |
+| M1 | 8,5% | 3,8% | 5,9% | 5,1% |
+| N1 | 8,2% | 3,8% | 5,9% | 5,2% |
+| IA1 | 12,7% | 6,0% | 7,8% | 6,6% |
+| I2 (`/importacao`) | 16,0% | 11,3% | 12,2% | 10,8% |
+| A5 | 8,0% | 3,4% | 7,9% | 6,3% |
+| A6 | 16,0% | 9,0% | 12,4% | 10,3% |
+| A8 | 6,4% | 4,7% | 7,8% | 5,8% |
+| A9 | 13,8% | 8,0% | 11,7% | 9,6% |
+
+**Antes contra depois, pixel a pixel** (as capturas do app, com `sharp`): dos 48 pares, 35 são byte a byte idênticos; os outros 13 diferem em 2 a 61 pixels (suavização de borda de texto, sem deslocamento de bloco), e todos os 48 têm a mesma porcentagem contra o protótipo. Nenhum quadro mudou de desenho por causa desta mudança.
+
+**Divergências que restam contra o protótipo** (as mesmas antes e depois, portanto não vêm deste Goal): o estado da conta de teste: faixa "Atendimento automático parado" por WhatsApp desconectado acima do conteúdo, serviço extra semeado (Coloração), datas do dia no lugar das do protótipo e "Nenhum horário disponível" em vez dos horários do protótipo (lido em A6 mobile) e diferenças de fidelidade que já existiam na baseline. Esta rodada não mexeu em nenhuma delas e não as classifica uma a uma; o que ela prova é que o Goal112 não acrescentou nenhuma.
+
+### Alcance do que foi provado
+
+A única mudança de CSS é `display: contents` em `.list-detail-flat`, `.list-detail-flat > .list-detail-panel` e `.agenda-appt-split.agenda-appt-split-flat`, que existem só com a divisão desligada. A identidade de nó e o valor nos dois sentidos estão provados nos 52 testes novos; a ausência de lista montada abaixo de 1024 px, pelos testes originais (088 e demais) sem alteração e pelos `G-4` do gate autenticado.
+
+**Nota de fechamento — review112, 2026-10-04.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima:
+
+- **Decisão.** D-126 ACCEPTED na rodada 2, sem blocker, depois de 4 blockers na rodada 1: o gate autenticado com nove `G-4` reprovados, sete testes existentes com asserção trocada, o `visual:compare` não rodado e os registros sem a execução final.
+- **Gates do IA Loop, rodada 2, todos com exit 0:** `typecheck` (WU-06, 2,3 s), `lint` (WU-07, 21 s), testes alvo (WU-08, 7 s), suíte do frontend (WU-09, 57 s), `validate:core` (WU-10, 129 s), `validate:ui` (WU-11, 53 s), `validate:integration` (WU-12, 746 s) e `git diff --check` (WU-13). Na rodada 1, só WU-12 falhou (exit 1, 723 s). Snapshot aceito: 17 arquivos (13 rastreados e 4 testes novos não rastreados), hash do diff rastreado `e9280bd7…`.
+- **Conferência do Tech Lead na rodada 2.** Os testes `goal112`, `goal088` e `goal105`: 6 arquivos e 107 testes passando. O `visual:compare` dos 12 quadros nos 4 devices, refeito num PostgreSQL descartável (porta 55441, com `prisma migrate deploy`) contra a árvore final e uma cópia da base `f2ba7c5` tirada com `git archive`: a porcentagem contra o protótipo é igual nos 48 pares e bate com a tabela acima; as capturas do app antes e depois (`sharp`, limiar 30) dão 0 pixel em 46 pares, 4 pixels em M1 desktop e 1 pixel em S4 tablet paisagem. Os `side-by-side.png` de 10 pares foram abertos (CL4 nos 4 devices, CL5 mobile, S4 mobile, I2 tablet retrato, A9 mobile, A6 tablet paisagem e N1 mobile); os outros 38, só por pixel. A diferença com a contagem do Developer (35 pares idênticos e 13 com 2 a 61 pixels) é de método: o Developer comparou sem limiar.
+- **Aceito sem prova completa.** Os três controles negativos vêm da execução do Developer e não foram refeitos pelo Tech Lead. O teste instável de onboarding não foi investigado.
+- **Ambiente.** Na rodada 1, o banco de desenvolvimento do scheduling-service do operador estava sem a migration do enum `CalendarSource` (D-120). Ninguém a aplicou ali: a rodada 2 e o review usaram bancos descartáveis. Detalhe no [review112](reviews/112-review.md).

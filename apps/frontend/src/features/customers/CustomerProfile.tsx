@@ -440,12 +440,12 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
     </section>
   );
 
-  if (!wide) return profile;
   return (
     <ListDetailLayout
       detail={profile}
       list={<CustomerListPanel openId={customerId} />}
       listLabel="Clientes"
+      split={wide}
     />
   );
 }

@@ -82,7 +82,9 @@ export function useImportState(): ImportStateReader {
  * Composição de Configurações (D-103, Goal105): abaixo de 1024 px a tela é
  * empurrada; de 1024 px em diante a lista do hub fica ao lado, com
  * "Importação" marcada. Sem a leitura de `settings` (ainda a caminho ou
- * falhou), a tela da importação aparece sozinha.
+ * falhou), a tela da importação aparece sozinha. O fluxo fica sempre na mesma
+ * posição da árvore, então a fase e as credenciais sobrevivem à chegada tardia
+ * de `settings` e à troca de largura.
  */
 export function ImportsScreen() {
   const reader = useImportState();
@@ -109,18 +111,20 @@ export function ImportsScreen() {
   const flow = (
     <ImportsFlow reader={reader} timeZone={settings?.business?.timezone} />
   );
-  if (!wide || !settings) return flow;
   return (
     <ListDetailLayout
       detail={flow}
       list={
-        <SettingsHubPanel
-          heading="h2"
-          openHref="/importacao"
-          settings={settings}
-        />
+        settings ? (
+          <SettingsHubPanel
+            heading="h2"
+            openHref="/importacao"
+            settings={settings}
+          />
+        ) : null
       }
       listLabel="Configurações"
+      split={wide && settings !== null}
     />
   );
 }

@@ -6,7 +6,7 @@
  *
  * - autoria `CUSTOMER`, `AI` e `OWNER` é distinguível por texto e por forma
  *   (classe do balão), e o que a IA escreveu se apresenta como escrito por
- *   ela, nunca com nome de pessoa nem "Atendly";
+ *   ela, nunca com nome de pessoa nem "Avenly";
  * - áudio apresenta os quatro `transcriptStatus` de forma distinta, e
  *   `FAILED` nunca mostra texto de transcrição, mesmo que o dado trouxesse um;
  * - áudio com bytes na origem pode ser ouvido: o player nasce do mesmo proxy

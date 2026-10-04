@@ -237,7 +237,7 @@ export const reminderSettingsSchema = z.object({
 });
 
 // --- Preferencia de visualizacao da agenda (Goal073) ------------------------
-// Espelha `GET/PATCH /v1/settings/agenda-view`. So do BFF; a Agenda Atendly
+// Espelha `GET/PATCH /v1/settings/agenda-view`. So do BFF; a Agenda Avenly
 // nao tem nocao de "vista". Ausencia de linha e o default do produto (nada
 // oculto, sem vista inicial), nunca gravada so pela leitura.
 export const agendaInitialViewSchema = z.enum(["DAY", "WEEK", "MONTH"]);

@@ -57,7 +57,7 @@ export function Icon({ name, label, className, ...props }: IconProps) {
       role={label ? "img" : undefined}
       {...props}
     >
-      <use href={`/icons/atendly-icons.svg#i-${name}`} />
+      <use href={`/icons/avenly-icons.svg#i-${name}`} />
     </svg>
   );
 }

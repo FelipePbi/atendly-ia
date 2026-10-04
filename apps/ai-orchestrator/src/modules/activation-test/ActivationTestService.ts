@@ -50,7 +50,7 @@ import {
 
 /** Aviso separado, antes de qualquer demonstracao: a conversa e de teste. */
 export const ACTIVATION_TEST_NOTICE =
-  "Esta e uma conversa de teste da Atendly. Voce so precisa observar: a IA vai " +
+  "Esta e uma conversa de teste da Avenly. Voce so precisa observar: a IA vai " +
   "conversar sozinha com um cliente simulado e marcar um atendimento de teste, " +
   "que e removido no final.";
 
@@ -599,7 +599,7 @@ export class ActivationTestService {
       case "TEST_NOTICE":
         // Aviso separado: nao e marco porque nao demonstra nada, e nao vai
         // para a IA porque nao e pergunta de cliente — responder ao aviso
-        // seria a IA conversando com a Atendly, nao com o cliente de teste.
+        // seria a IA conversando com a Avenly, nao com o cliente de teste.
         return (
           await this.sendAsClient(run, step, attempt, ACTIVATION_TEST_NOTICE)
         ).run;

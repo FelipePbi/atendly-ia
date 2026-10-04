@@ -1,6 +1,6 @@
-# Atendly
+# Avenly
 
-Atendly é uma plataforma de atendimento por IA para profissionais autônomos de serviços. A IA atende clientes pelo WhatsApp e executa agendamentos na Agenda Atendly, enquanto o profissional continua podendo usar o WhatsApp e assumir conversas manualmente.
+Avenly é uma plataforma de atendimento por IA para profissionais autônomos de serviços. A IA atende clientes pelo WhatsApp e executa agendamentos na Agenda Avenly, enquanto o profissional continua podendo usar o WhatsApp e assumir conversas manualmente.
 
 ## Documentação
 

@@ -103,7 +103,7 @@ export function ReadOnlyState({ operation }: { operation: string }) {
       <StatePanel
         actionHref="/agenda"
         actionLabel="Voltar à agenda"
-        description={`A configuração atual de Agenda Atendly não permite ${operation} por aqui.`}
+        description={`A configuração atual de Agenda Avenly não permite ${operation} por aqui.`}
         icon="lock"
         title="Operação indisponível"
       />

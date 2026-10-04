@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { passwordPolicySchema } from "@atendly-ia/public-api-contract";
+import { passwordPolicySchema } from "@avenly-ia/public-api-contract";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 

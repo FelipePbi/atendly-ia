@@ -196,13 +196,13 @@ function AgendaDayColumnContent({
       endDate: isoDate(addDays(start, 6)),
       startDate: weekStart,
     };
-    const atendly = source === "AVENLY";
+    const avenly = source === "AVENLY";
     Promise.all([
       services.listAppointments(queryWindow, controller.signal),
-      atendly
+      avenly
         ? services.listTimeBlocks(queryWindow, controller.signal)
         : Promise.resolve<TimeBlock[]>([]),
-      atendly
+      avenly
         ? services.listAvailabilityExceptions(queryWindow, controller.signal)
         : Promise.resolve<AvailabilityException[]>([]),
     ])

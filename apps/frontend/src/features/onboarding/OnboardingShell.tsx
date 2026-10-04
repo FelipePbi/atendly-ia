@@ -127,7 +127,7 @@ function OnboardingTop({
         {scenario === "boas-vindas" && (
           <span aria-hidden="true" className="onboarding-welcome-brand">
             <BrandMark />
-            <span>Atendly</span>
+            <span>Avenly</span>
           </span>
         )}
         <OnboardingProgress scenario={scenario} />

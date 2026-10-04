@@ -34,7 +34,7 @@ const WORK_ERROR_LABELS: Record<ImportWorkErrorCode, string> = {
   IMPORT_PREVIEW_STALE:
     "Seus dados mudaram desde a última análise. Nada foi importado nesta tentativa.",
   IMPORT_INTERNAL_ERROR:
-    "Não foi possível continuar agora por uma falha da Atendly. Tente novamente.",
+    "Não foi possível continuar agora por uma falha da Avenly. Tente novamente.",
 };
 
 export function workErrorLabel(code: string): string {
@@ -56,7 +56,7 @@ const FAILED_REASON_LABELS: Record<string, string> = {
   IMPORT_APPOINTMENT_INTERVAL_INVALID:
     "Este atendimento está sem duração e sem horário de término na Minha Agenda.",
   IMPORT_SOURCE_RECORD_INVALID:
-    "Este registro veio incompleto ou em um formato que a Atendly não reconhece.",
+    "Este registro veio incompleto ou em um formato que a Avenly não reconhece.",
   IMPORT_AVAILABILITY_COMPANY_MISSING:
     "A Minha Agenda não informou o horário de funcionamento do seu negócio.",
   IMPORT_ITEM_FAILED:
@@ -237,7 +237,7 @@ const CONFLICT_REASON_LABELS: Record<string, string> = {
   CUSTOMER_NAME_MISSING:
     "Esse cliente não tem nome na origem. Ele fica identificado temporariamente pelo id de origem, a não ser que você decida outra coisa.",
   APPOINTMENT_SLOT_TAKEN:
-    "Esse horário já está ocupado por um atendimento na Atendly. Decida se ainda assim deve ser incluído ou não.",
+    "Esse horário já está ocupado por um atendimento na Avenly. Decida se ainda assim deve ser incluído ou não.",
   AVAILABILITY_REPLACES_CURRENT:
     "O negócio já tem horários de atendimento cadastrados. Escolha se quer usar os horários do Minha Agenda no lugar deles ou manter os atuais.",
   AVAILABILITY_SOURCE_OVERLAP:

@@ -479,7 +479,7 @@ export function OnboardingScreen({
           <div className="choice-grid">
             <ActionCard
               accent
-              copy="Trazemos seus serviços, clientes e agendamentos para a Atendly."
+              copy="Trazemos seus serviços, clientes e agendamentos para a Avenly."
               disabled={busy}
               icon={<Icon name="import" />}
               title="Sim, quero importar"

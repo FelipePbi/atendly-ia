@@ -1,6 +1,6 @@
 /**
  * Retirada da fonte externa (Goal027): `CalendarProviderFactory` nao escolhe
- * mais fonte nenhuma — ela instancia a Agenda Atendly e pronto. O que antes
+ * mais fonte nenhuma — ela instancia a Agenda Avenly e pronto. O que antes
  * era provado pelo erro `MINHA_AGENDA_OPERATIONAL_SOURCE_DISABLED` continua
  * provado aqui de outro jeito, e e o que importa: **nenhum caminho do
  * calendario constroi o leitor remoto**. O dublê de
@@ -30,7 +30,7 @@ vi.mock(
   }),
 );
 
-import { AtendlyCalendarProvider } from "../../src/modules/integrations/atendly/provider.js";
+import { AvenlyCalendarProvider } from "../../src/modules/integrations/avenly/provider.js";
 import { CalendarService } from "../../src/modules/calendar/calendar-service.js";
 import { CalendarProviderFactory } from "../../src/modules/calendar/provider-factory.js";
 import { createDatabaseDouble } from "./support/database-double.js";
@@ -39,7 +39,7 @@ const tenantId = "tenant-a";
 const context = { tenantId, userId: "user-1", requestId: "request-1" };
 
 describe("CalendarProviderFactory: uma fonte so (Goal027)", () => {
-  it("instancia a Agenda Atendly sem consultar a conexão da integração", async () => {
+  it("instancia a Agenda Avenly sem consultar a conexão da integração", async () => {
     const prisma = {
       integrationConnection: {
         findUnique: () => {
@@ -57,7 +57,7 @@ describe("CalendarProviderFactory: uma fonte so (Goal027)", () => {
       timeZone: "America/Sao_Paulo",
     });
 
-    expect(provider).toBeInstanceOf(AtendlyCalendarProvider);
+    expect(provider).toBeInstanceOf(AvenlyCalendarProvider);
   });
 });
 

@@ -15,7 +15,7 @@ apps/evolution-go/whatsmeow-lib/proto/
 **/*.pb.go
 
 # Vendored third-party Go library (go.mod: replace go.mau.fi/whatsmeow => ./whatsmeow-lib).
-# Indexing it floods code queries with library internals instead of Atendly code.
+# Indexing it floods code queries with library internals instead of Avenly code.
 apps/evolution-go/whatsmeow-lib/
 
 # Legacy agent config from the previous Codex setup + MCP scratch output.

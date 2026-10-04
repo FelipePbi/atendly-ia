@@ -9,7 +9,7 @@ import {
   requireInternalAuth,
 } from "../../shared/auth/internal-auth.js";
 import { AppError } from "../../shared/errors/app-error.js";
-import { AtendlyAppointmentSeriesService } from "../appointments/appointment-series-service.js";
+import { AvenlyAppointmentSeriesService } from "../appointments/appointment-series-service.js";
 import { CalendarService } from "./calendar-service.js";
 import { CalendarRemovalService } from "./removal.js";
 
@@ -465,7 +465,7 @@ export async function registerCalendarRoutes(
       const context = currentInternalContext(request);
       const calendar = await requireCalendar(prisma, context.tenantId);
       const body = parse(seriesPreviewBodySchema, request.body);
-      const service = new AtendlyAppointmentSeriesService(
+      const service = new AvenlyAppointmentSeriesService(
         prisma,
         context.tenantId,
         calendar.timezone,
@@ -487,7 +487,7 @@ export async function registerCalendarRoutes(
       const context = currentInternalContext(request);
       const calendar = await requireCalendar(prisma, context.tenantId);
       const body = parse(seriesConfirmBodySchema, request.body);
-      const service = new AtendlyAppointmentSeriesService(
+      const service = new AvenlyAppointmentSeriesService(
         prisma,
         context.tenantId,
         calendar.timezone,

@@ -8,7 +8,7 @@ Este arquivo não redefine arquitetura técnica; apenas fixa as premissas de pro
 
 ## Premissas obrigatórias
 
-- Agenda Atendly é a única agenda operacional.
+- Agenda Avenly é a única agenda operacional.
 - Minha Agenda só participa de uma única importação.
 - Não criar/continuar contrato público de “calendar source ativo”, sincronização, reimportação ou troca de provider por decisão de produto antiga.
 - Um negócio utiliza um número de WhatsApp.

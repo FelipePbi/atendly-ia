@@ -9,7 +9,7 @@ import (
 
 // O segredo da instancia nao pode voltar ao payload de evento.
 //
-// O consumer da Atendly deixou de aceitar `instanceToken` do corpo no Goal003 —
+// O consumer da Avenly deixou de aceitar `instanceToken` do corpo no Goal003 —
 // a credencial de resposta vem do vinculo persistido. Manter o campo no
 // produtor so mantinha o segredo circulando por webhook, log e fila. Este teste
 // e um guarda de regressao sobre a montagem dos eventos: qualquer ponto novo

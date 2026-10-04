@@ -1,1 +1,1 @@
-export * from "./atendly-service-service.js";
+export * from "./avenly-service-service.js";

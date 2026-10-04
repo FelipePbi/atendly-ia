@@ -283,8 +283,8 @@ export function AccountSettings() {
         >
           <p className="settings-modal-copy">
             {session?.user.name
-              ? "Como a Atendly chama você."
-              : "Adicione seu nome para a Atendly usar no cumprimento."}
+              ? "Como a Avenly chama você."
+              : "Adicione seu nome para a Avenly usar no cumprimento."}
           </p>
           <label className="field">
             <span className="label">Nome</span>

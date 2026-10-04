@@ -139,7 +139,7 @@ services:
         sync: false
       - key: SCHEDULING_SERVICE_BASE_URL
         value: https://atendly-ia-scheduling-service.onrender.com
-      # Numero oficial da Atendly usado no teste real da IA (Goal019).
+      # Numero oficial da Avenly usado no teste real da IA (Goal019).
       # Configuracao do servico, nunca vinculo de negocio; nao vira linha de
       # ChannelConnection nem aparece em listagem de conexoes de tenant.
       - key: PLATFORM_WHATSAPP_INSTANCE_ID

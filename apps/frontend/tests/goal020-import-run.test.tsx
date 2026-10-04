@@ -339,7 +339,7 @@ describe("executar é executar o preview aprovado", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Nada foi importado. Sua agenda na Atendly continua como estava."),
+      screen.getByText("Nada foi importado. Sua agenda na Avenly continua como estava."),
     ).toBeInTheDocument();
     // Estado, não erro genérico: a saída é ver de novo o que existe agora.
     expect(screen.queryByText(/Não foi possível importar agora/)).not.toBeInTheDocument();

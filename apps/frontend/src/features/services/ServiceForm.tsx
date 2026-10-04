@@ -461,7 +461,7 @@ export function ServiceForm({
           <DirectoryState
             actionHref="/servicos"
             actionLabel="Voltar para serviços"
-            description="Serviços desta fonte ficam somente para consulta na Atendly."
+            description="Serviços desta fonte ficam somente para consulta na Avenly."
             title="Edição gerenciada no Minha Agenda"
           />
         ) : (

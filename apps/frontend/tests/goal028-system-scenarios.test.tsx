@@ -25,7 +25,7 @@ describe("cenários sobreviventes de SystemScreen", () => {
     renderScenario("offline");
 
     expect(screen.getByRole("heading", { name: "Você está sem conexão" })).toBeVisible();
-    expect(screen.getByText("Atendly está offline")).toBeVisible();
+    expect(screen.getByText("Avenly está offline")).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Voltar para Início" }),
     ).toHaveAttribute("href", "/inicio");

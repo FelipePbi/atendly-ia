@@ -1,6 +1,6 @@
-# Atendly Frontend
+# Avenly Frontend
 
-Frontend web do produto Atendly.
+Frontend web do produto Avenly.
 
 ## Principais áreas
 
@@ -24,7 +24,7 @@ A interface existente ainda contém fluxos de agenda externa e dois tons antigos
 
 `src/shared/styles/tokens.css` é a fonte única dos tokens semânticos (cor, tipografia,
 espaçamento, raio, sombra, foco, z-index e movimento) da direção visual Recepção. O
-`src/shared/styles/atendly.css` e os `atendly-*.css` por módulo herdam esses tokens
+`src/shared/styles/avenly.css` e os `avenly-*.css` por módulo herdam esses tokens
 através dos nomes de variável já existentes (`--bg`, `--fg`, `--accent`, `--s*`,
 `--r-*` etc.) — trocar o valor de um token em `tokens.css` já muda o app inteiro, sem
 precisar caçar cada tela.

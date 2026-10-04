@@ -6,7 +6,7 @@ import {
   localDateTimeToInstant,
 } from "../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../shared/errors/app-error.js";
-import { AtendlyAvailability } from "../availability/atendly-availability.js";
+import { AvenlyAvailability } from "../availability/avenly-availability.js";
 import type {
   CalendarHold,
   CalendarHoldStatus,
@@ -19,9 +19,9 @@ import {
   runCalendarWrite,
 } from "../calendar/write-policy.js";
 import {
-  AtendlyServiceService,
+  AvenlyServiceService,
   maxServiceBuffer,
-} from "../services/atendly-service-service.js";
+} from "../services/avenly-service-service.js";
 
 /**
  * Hold: ocupacao temporaria de um horario enquanto ele esta em confirmacao
@@ -169,7 +169,7 @@ export async function releaseHoldWithin(
   });
 }
 
-export class AtendlyAppointmentHoldService {
+export class AvenlyAppointmentHoldService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly tenantId: string,
@@ -188,7 +188,7 @@ export class AtendlyAppointmentHoldService {
     const source = input.source ?? "AI";
     return runCalendarWrite(this.prisma, async (transaction) => {
       await lockCalendarDays(transaction, this.tenantId, [input.date]);
-      const services = await new AtendlyServiceService(
+      const services = await new AvenlyServiceService(
         transaction,
         this.tenantId,
       ).requireActive(input.serviceIds);
@@ -201,7 +201,7 @@ export class AtendlyAppointmentHoldService {
       // somados.
       const bufferBeforeMinutes = maxServiceBuffer(services, "bufferBeforeMinutes");
       const bufferAfterMinutes = maxServiceBuffer(services, "bufferAfterMinutes");
-      const slot = await new AtendlyAvailability(
+      const slot = await new AvenlyAvailability(
         transaction,
         this.tenantId,
         this.timeZone,

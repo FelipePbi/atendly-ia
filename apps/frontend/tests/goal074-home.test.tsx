@@ -2,7 +2,7 @@
 /**
  * Goal074/WU-04 §7.5 — a Home vira uma faixa de estado só, na ordem
  * estado → Precisa da sua atenção → Hoje (com o marcador "agora") →
- * Esta semana. Saem StatusStrip, Próximo atendimento, "O que a Atendly fez
+ * Esta semana. Saem StatusStrip, Próximo atendimento, "O que a Avenly fez
  * hoje", receita e Ações rápidas; entra o sino, com link para /notificacoes e
  * ponto só com notificações não lidas.
  *
@@ -12,7 +12,7 @@
  * - existe só UMA faixa de estado por render, mesmo quando há um problema
  *   (nada de alerta duplicado sobre o resumo operacional);
  * - nenhuma copy proibida aparece ("fonte oficial", "persistência",
- *   "O que a Atendly fez hoje", "Status honesto") e nenhuma data ISO
+ *   "O que a Avenly fez hoje", "Status honesto") e nenhuma data ISO
  *   (AAAA-MM-DD) aparece na tela;
  * - "Esta semana" mostra os três números reais e cai para "—" quando a fonte
  *   que os produz falhou;
@@ -172,7 +172,7 @@ function systemStatusFixture(overrides: Partial<SystemStatus> = {}): SystemStatu
   };
 }
 
-const FORBIDDEN = /fonte oficial|persistência|O que a Atendly fez hoje|Status honesto/i;
+const FORBIDDEN = /fonte oficial|persistência|O que a Avenly fez hoje|Status honesto/i;
 const ISO_DATE = /\b\d{4}-\d{2}-\d{2}\b/;
 
 async function renderHome() {
@@ -215,7 +215,7 @@ describe("Goal074/WU-04: Home conforme o protótipo", () => {
 
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText("Próximo atendimento")).toBeNull();
-    expect(screen.queryByText("O que a Atendly fez hoje")).toBeNull();
+    expect(screen.queryByText("O que a Avenly fez hoje")).toBeNull();
     expect(screen.queryByText("Ações rápidas")).toBeNull();
     expect(screen.queryByText(/^Status honesto$/)).toBeNull();
 

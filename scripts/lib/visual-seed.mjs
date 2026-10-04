@@ -99,7 +99,7 @@ export async function seedVisualAccount(client, { account, legalVersions, expect
         address: VISUAL_BUSINESS.address,
       },
     }],
-    ["agenda", { calendar: { source: "ATENDLY" } }],
+    ["agenda", { calendar: { source: "AVENLY" } }],
     ["operação", {
       service: { ...ONBOARDING_SERVICE },
       availability: {
@@ -241,7 +241,7 @@ export async function seedOnboardingAccount(client, { account, legalVersions, ex
   // Agenda e operação também, como no ensaio autenticado (Goal079): a
   // demonstração da IA e a lista de serviços do onboarding precisam de um
   // serviço e de horários para mostrar o que o quadro mostra.
-  expectStatus(await client.request("PATCH", "/v1/onboarding", { calendar: { source: "ATENDLY" } }), 200, "PATCH /v1/onboarding (agenda, conta de onboarding)");
+  expectStatus(await client.request("PATCH", "/v1/onboarding", { calendar: { source: "AVENLY" } }), 200, "PATCH /v1/onboarding (agenda, conta de onboarding)");
   expectStatus(await client.request("PATCH", "/v1/onboarding", {
     service: { ...ONBOARDING_SERVICE },
     availability: {

@@ -123,7 +123,7 @@ describe("platform credential isolation", () => {
 
     // Plataforma configurada e, ainda assim, ausencia de projecao continua
     // sendo recusa. Fundir os caminhos faria este envio sair assinado pela
-    // Atendly em vez de falhar.
+    // Avenly em vez de falhar.
     expect(() =>
       service.resolveChannelCredential({
         tenantId: "tenant-a",

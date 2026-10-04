@@ -1,6 +1,6 @@
-# Claude Design — referência do Atendly
+# Claude Design — referência do Avenly
 
-Esta pasta preserva a exportação do projeto **Atendly Stage 1 delivery**, identificado no Claude Design em 4 de setembro de 2026.
+Esta pasta preserva a exportação do projeto **Avenly Stage 1 delivery**, identificado no Claude Design em 4 de setembro de 2026.
 
 Os arquivos aqui são uma **referência visual e comportamental**. Eles não representam a arquitetura do produto, a implementação final nem código pronto para produção. HTML, CSS, JavaScript, JSX e scripts auxiliares gerados pelo Claude Design devem ser estudados como especificação do resultado visual e das interações, não copiados automaticamente para a aplicação.
 
@@ -54,7 +54,7 @@ claude-design/
 │   └── claude-code-prompt.md
 ├── prototype/
 │   ├── Atendly-Stage-1-delivery.zip
-│   ├── Atendly-standalone.html
+│   ├── Avenly-standalone.html
 │   └── project/
 ├── assets/
 │   ├── README.md
@@ -67,18 +67,18 @@ claude-design/
 - `handoff/claude-code-prompt.md`: prompt copiado da opção **Local agent** do handoff.
 - `prototype/Atendly-Stage-1-delivery.zip`: exportação original, canônica e imutável do Claude Design, preservada como arquivo histórico das 40 páginas originais.
 - `prototype/project/`: working copy extraída e sanitizada para inspeção pelos agentes. Pode ter documentação redundante removida, preserva as telas, assets e a estrutura necessários para inspeção e não substitui o ZIP como arquivo histórico original.
-- `prototype/Atendly-standalone.html`: standalone offline da página principal `Atendly.dc.html`, que reúne índice e design system.
+- `prototype/Avenly-standalone.html`: standalone offline da página principal `Avenly.dc.html`, que reúne índice e design system.
 - `assets/`: cópia de fácil acesso dos assets visuais e artefatos de QA; inputs documentais históricos permanecem apenas nos ZIPs originais.
 
-O bundle de handoff foi gerado depois do standalone e, por isso, também contém a página exportada `Atendly - Índice e Design System.html`. A working copy em `prototype/project/` preserva o estado anterior, com as 40 páginas originais.
+O bundle de handoff foi gerado depois do standalone e, por isso, também contém a página exportada `Avenly - Índice e Design System.html`. A working copy em `prototype/project/` preserva o estado anterior, com as 40 páginas originais.
 
 Depois das exportações, a página temporária usada para gerar o standalone foi removida do projeto online, restaurando o Claude Design às 40 páginas originais. Seu conteúdo permanece recuperável no standalone e no bundle de handoff arquivados aqui.
 
 ## Como consultar
 
-Abra `prototype/project/Atendly.dc.html` para começar pelo índice e pelo design system. Os demais arquivos `.dc.html` ficam ao lado e cobrem os módulos e breakpoints do protótipo.
+Abra `prototype/project/Avenly.dc.html` para começar pelo índice e pelo design system. Os demais arquivos `.dc.html` ficam ao lado e cobrem os módulos e breakpoints do protótipo.
 
-O arquivo `prototype/Atendly-standalone.html` funciona isoladamente para consultar o índice/design system. Os links internos para outras páginas só funcionam quando os arquivos `.dc.html` irmãos estão disponíveis; para navegação completa, prefira `prototype/project/`.
+O arquivo `prototype/Avenly-standalone.html` funciona isoladamente para consultar o índice/design system. Os links internos para outras páginas só funcionam quando os arquivos `.dc.html` irmãos estão disponíveis; para navegação completa, prefira `prototype/project/`.
 
 As fontes Literata e Hanken Grotesk são carregadas pelo Google Fonts. Sem conexão, o standalone usa os fallbacks Georgia e `system-ui` definidos pelo próprio protótipo.
 
@@ -110,9 +110,9 @@ Tokens de cor destacados no protótipo:
 - os 125 itens do arquivo completo e os 127 itens do bundle de handoff foram lidos integralmente sem erro;
 - as 40 páginas principais foram extraídas, além de um documento de QA e um fragmento HTML auxiliar;
 - os 41 documentos HTML completos possuem estrutura de documento válida; `_build/sidebar.html` é intencionalmente um fragmento reutilizável;
-- o standalone possui estrutura HTML completa, referência ao Atendly e 1.232.815 bytes;
+- o standalone possui estrutura HTML completa, referência ao Avenly e 1.232.815 bytes;
 - 42 imagens PNG/JPG/JPEG foram decodificadas sem erro;
-- SVGs e ícones presentes no HTML permanecem inline; `Atendly.dc.html` sozinho contém 48 elementos SVG.
+- SVGs e ícones presentes no HTML permanecem inline; `Avenly.dc.html` sozinho contém 48 elementos SVG.
 
 Hashes SHA-256 dos formatos originais:
 
@@ -120,7 +120,7 @@ Hashes SHA-256 dos formatos originais:
 Atendly-Stage-1-delivery.zip
 337CCBD0A6483E9E528D85246996C17227454997C6E2D8D0781CD5D9A6FE07BC
 
-Atendly-standalone.html
+Avenly-standalone.html
 96B717C2C181901D818EA49C63F42738067151E1B27468C6608CC58776988425
 
 Atendly-Stage-1-delivery-handoff.zip
@@ -135,4 +135,4 @@ D161EFCED38AFF66145D37D81D120F53FA22FCBE65780A5BE7616B4EDCA5EAFA
 - o próprio relatório de acabamento do protótipo distingue telas efetivamente inspecionadas de estados apenas especificados: 25 telas-chave foram verificadas em 360/390/430 px e seis frames em 1440 px;
 - transições mobile entre telas, teclado virtual, gatilhos por sessão, foco/teclado no produto e realce de evento na Agenda estão especificados, mas não são totalmente executáveis no ambiente estático.
 
-Nenhum frontend ou backend do Atendly foi implementado ou alterado por este handoff.
+Nenhum frontend ou backend do Avenly foi implementado ou alterado por este handoff.

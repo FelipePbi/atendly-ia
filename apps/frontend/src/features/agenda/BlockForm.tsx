@@ -138,7 +138,7 @@ export function BlockForm() {
   return (
     <AppointmentFlowShell
       calendar={calendar}
-      description="Reserve um intervalo na Agenda Atendly para impedir novos agendamentos ou marcar um compromisso seu."
+      description="Reserve um intervalo na Agenda Avenly para impedir novos agendamentos ou marcar um compromisso seu."
       loading={loading}
       title="Bloquear horário"
     >

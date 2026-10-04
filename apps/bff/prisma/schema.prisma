@@ -463,7 +463,7 @@ model NotificationSyncState {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
-/// Vista inicial da Agenda (Goal073). So do BFF: a Agenda Atendly nao tem
+/// Vista inicial da Agenda (Goal073). So do BFF: a Agenda Avenly nao tem
 /// nocao de "vista", esta preferencia e so de apresentacao.
 enum AgendaInitialView {
   DAY

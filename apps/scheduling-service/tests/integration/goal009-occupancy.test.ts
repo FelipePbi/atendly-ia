@@ -2,7 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { PrismaClient } from "../../src/generated/prisma/client.js";
-import { AtendlyAppointmentSeriesService } from "../../src/modules/appointments/appointment-series-service.js";
+import { AvenlyAppointmentSeriesService } from "../../src/modules/appointments/appointment-series-service.js";
 import {
   createExtraAvailability,
   removeAvailabilityException,
@@ -12,8 +12,8 @@ import {
   removeBlockOccurrence,
   removeBlockSeriesFuture,
 } from "../../src/modules/calendar/block-series.js";
-import { AtendlyAvailability } from "../../src/modules/availability/atendly-availability.js";
-import { AtendlyCalendarProvider } from "../../src/modules/integrations/atendly/provider.js";
+import { AvenlyAvailability } from "../../src/modules/availability/avenly-availability.js";
+import { AvenlyCalendarProvider } from "../../src/modules/integrations/avenly/provider.js";
 import { resetTenant } from "./support/reset-tenant.js";
 import { upcomingDate } from "./support/test-date.js";
 
@@ -42,7 +42,7 @@ let serviceIdB = "";
 let customerIdB = "";
 
 function provider(tenantId: string, userId = "user-1") {
-  return new AtendlyCalendarProvider(prisma, tenantId, userId, timeZone);
+  return new AvenlyCalendarProvider(prisma, tenantId, userId, timeZone);
 }
 
 async function seedTenant(tenantId: string) {
@@ -145,7 +145,7 @@ describeWithDatabase("goal009 occupancy against PostgreSQL", () => {
   });
 
   it("an occurrence taken between preview and confirmation aborts the whole series, nothing created", async () => {
-    const service = new AtendlyAppointmentSeriesService(prisma, tenantA, timeZone);
+    const service = new AvenlyAppointmentSeriesService(prisma, tenantA, timeZone);
     const preview = await service.preview({
       serviceIds: [serviceIdA],
       occurrenceCount: 2,
@@ -242,7 +242,7 @@ describeWithDatabase("goal009 occupancy against PostgreSQL", () => {
       startTime: "23:00",
       endTime: "23:30",
     });
-    const seriesServiceB = new AtendlyAppointmentSeriesService(
+    const seriesServiceB = new AvenlyAppointmentSeriesService(
       prisma,
       tenantB,
       timeZone,
@@ -270,7 +270,7 @@ describeWithDatabase("goal009 occupancy against PostgreSQL", () => {
 
     // Nada de B ocupa a agenda de A: 09:00 (serie de atendimento de B) e
     // 14:00 (bloco de B) continuam ofertaveis em A.
-    const slotsA = await new AtendlyAvailability(
+    const slotsA = await new AvenlyAvailability(
       prisma,
       tenantA,
       timeZone,
@@ -340,7 +340,7 @@ describeWithDatabase("goal009 occupancy against PostgreSQL", () => {
   });
 
   it("a mesma Idempotency-Key na confirmacao da serie faz replay contra o banco real", async () => {
-    const service = new AtendlyAppointmentSeriesService(
+    const service = new AvenlyAppointmentSeriesService(
       prisma,
       tenantA,
       timeZone,

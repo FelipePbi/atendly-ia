@@ -90,7 +90,7 @@ export function ImportHistoryCard({
       )}
       <p className="import-history-note">
         A importação do Minha Agenda é feita uma única vez. Alterações feitas lá
-        depois de {completedDay ?? "esta data"} não chegam à Atendly — sua
+        depois de {completedDay ?? "esta data"} não chegam à Avenly — sua
         agenda oficial é esta.
       </p>
     </div>

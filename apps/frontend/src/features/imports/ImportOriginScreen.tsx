@@ -7,7 +7,7 @@ const STEPS = [
     Seus dados são copiados <strong>uma única vez</strong>.
   </>,
   "O Minha Agenda não fica conectado. Alterações feitas lá depois não chegam aqui.",
-  "A Atendly passa a ser sua agenda oficial.",
+  "A Avenly passa a ser sua agenda oficial.",
 ];
 
 /**

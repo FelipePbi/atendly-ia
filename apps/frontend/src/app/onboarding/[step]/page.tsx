@@ -10,9 +10,11 @@ import {
 // nome, duração e preço), e as que o Goal066 substituiu por "sistema-atual"
 // (pergunta pelo sistema atual, sem as telas de fonte oficial/método): quem
 // chegar pelo link antigo é levado à etapa que a substitui, em vez de 404.
+// "agenda-atendly-pronta" é o nome anterior à troca de marca (Goal102).
 const legacyStepRedirects: Record<string, string> = {
   "agenda-atendly-confirmar": "sistema-atual",
   "agenda-atendly-metodo": "sistema-atual",
+  "agenda-atendly-pronta": "agenda-avenly-pronta",
   "fonte-da-agenda": "sistema-atual",
   "servico-duracao": "servico-nome",
   "servico-preco": "servico-nome",

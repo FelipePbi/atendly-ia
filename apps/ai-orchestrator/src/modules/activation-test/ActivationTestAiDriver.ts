@@ -242,7 +242,7 @@ export class ActivationTestAiDriver implements ActivationTestAiPort {
 }
 
 /** Nome do cliente simulado, o mesmo que a limpeza reconhece pelos IDs. */
-export const ACTIVATION_TEST_CLIENT_NAME = "Atendly (teste)";
+export const ACTIVATION_TEST_CLIENT_NAME = "Avenly (teste)";
 
 /** Ferramentas cujo uso sustenta cada marco do vault. */
 export const ACTIVATION_TEST_TOOL_NAMES = {

@@ -1276,7 +1276,7 @@ async function seedTenant(client, ai, { bffDb, schedulingDb, aiDb, legalVersions
         },
       },
     ],
-    ["calendar", { calendar: { source: "ATENDLY" } }],
+    ["calendar", { calendar: { source: "AVENLY" } }],
     [
       "operation",
       {
@@ -1556,7 +1556,7 @@ async function seedTenant(client, ai, { bffDb, schedulingDb, aiDb, legalVersions
  * Semeia a SEGUNDA conta (Goal065/WU-05), pelas rotas do produto, e para no
  * meio do onboarding de propósito: registra a conta e faz exatamente
  * três `PATCH /v1/onboarding` — o bloco de negócio (nome, segmento, "Local
- * próprio" e endereço), a fonte da agenda (`ATENDLY`, que a etapa `importacao`
+ * próprio" e endereço), a fonte da agenda (`AVENLY`, que a etapa `importacao`
  * exige) e um serviço ativo com a disponibilidade (as formas de `servico-nome`
  * e `horarios`, que a demonstração da IA usa). Nunca chama
  * `POST /v1/onboarding/complete` — é isso que mantém a sessão em
@@ -1608,7 +1608,7 @@ async function seedOnboardingAccount(createClient, legalVersions) {
   // A etapa `importacao` só abre para quem já gravou a fonte da agenda
   // (Goal072/WU-01): sem ela, a URL direta volta para `sistema-atual`.
   const calendar = await client.request("PATCH", "/v1/onboarding", {
-    body: { calendar: { source: "ATENDLY" } },
+    body: { calendar: { source: "AVENLY" } },
   });
   step(
     calendar.status === 200,

@@ -8,7 +8,7 @@ import {
 import { AppError } from "../../../shared/errors/app-error.js";
 import { recordAppointmentEvent } from "../../appointments/appointment-event-service.js";
 import { toSnapshot } from "../../appointments/appointment-lifecycle-service.js";
-import { AtendlyAvailability } from "../../availability/atendly-availability.js";
+import { AvenlyAvailability } from "../../availability/avenly-availability.js";
 import {
   type AvailableSlot,
   type CalendarAppointment,
@@ -32,9 +32,9 @@ import {
   notifiableAppointmentFields,
   runCalendarWrite,
 } from "../../calendar/write-policy.js";
-import { AtendlyCustomerService } from "../../customers/atendly-customer-service.js";
+import { AvenlyCustomerService } from "../../customers/avenly-customer-service.js";
 import {
-  AtendlyAppointmentHoldService,
+  AvenlyAppointmentHoldService,
   consumeHold,
   findHoldForConsumption,
   holdUnusable,
@@ -43,9 +43,9 @@ import {
 } from "../../holds/appointment-hold-service.js";
 import { recomputeAppointmentIntentsWithin } from "../../reminders/notification-intent-service.js";
 import {
-  AtendlyServiceService,
+  AvenlyServiceService,
   maxServiceBuffer,
-} from "../../services/atendly-service-service.js";
+} from "../../services/avenly-service-service.js";
 
 export const appointmentInclude = {
   customer: true,
@@ -61,7 +61,7 @@ export type AppointmentRecord = Prisma.AppointmentGetPayload<{
  * de atendimento (Goal009), que cria varias linhas na mesma transacao sem
  * passar pelas mutacoes de uma unidade so do provider.
  */
-export function toAtendlyAppointment(
+export function toAvenlyAppointment(
   appointment: AppointmentRecord,
   timeZone: string,
 ): CalendarAppointment {
@@ -109,7 +109,7 @@ export function toAtendlyAppointment(
   };
 }
 
-export class AtendlyCalendarProvider implements CalendarProvider {
+export class AvenlyCalendarProvider implements CalendarProvider {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly tenantId: string,
@@ -118,7 +118,7 @@ export class AtendlyCalendarProvider implements CalendarProvider {
   ) {}
 
   async listServices(): Promise<CalendarServiceDefinition[]> {
-    return new AtendlyServiceService(
+    return new AvenlyServiceService(
       this.prisma,
       this.tenantId,
     ).listForScheduling();
@@ -133,7 +133,7 @@ export class AtendlyCalendarProvider implements CalendarProvider {
     if (input.customerId) {
       customerIds = [input.customerId];
     } else if (input.customerPhone) {
-      const candidates = await new AtendlyCustomerService(
+      const candidates = await new AvenlyCustomerService(
         this.prisma,
         this.tenantId,
       ).findCandidatesByPhone(input.customerPhone);
@@ -177,7 +177,7 @@ export class AtendlyCalendarProvider implements CalendarProvider {
   }
 
   async getAvailability(input: GetAvailabilityInput): Promise<AvailableSlot[]> {
-    return new AtendlyAvailability(
+    return new AvenlyAvailability(
       this.prisma,
       this.tenantId,
       this.timeZone,
@@ -201,7 +201,7 @@ export class AtendlyCalendarProvider implements CalendarProvider {
       await lockCalendarDays(transaction, this.tenantId, [input.date]);
       const services = manual
         ? []
-        : await new AtendlyServiceService(
+        : await new AvenlyServiceService(
             transaction,
             this.tenantId,
           ).requireActive(input.serviceIds);
@@ -228,7 +228,7 @@ export class AtendlyCalendarProvider implements CalendarProvider {
         : null;
       const slot = overrideReason
         ? this.forcedSlot(input.date, input.startTime, durationMinutes)
-        : await new AtendlyAvailability(
+        : await new AvenlyAvailability(
             transaction,
             this.tenantId,
             this.timeZone,
@@ -401,7 +401,7 @@ export class AtendlyCalendarProvider implements CalendarProvider {
         : null;
       const slot = overrideReason
         ? this.forcedSlot(input.date, input.startTime, persistedDuration)
-        : await new AtendlyAvailability(
+        : await new AvenlyAvailability(
             transaction,
             this.tenantId,
             this.timeZone,
@@ -576,8 +576,8 @@ export class AtendlyCalendarProvider implements CalendarProvider {
     return this.holds().releaseHold(holdId);
   }
 
-  private holds(): AtendlyAppointmentHoldService {
-    return new AtendlyAppointmentHoldService(
+  private holds(): AvenlyAppointmentHoldService {
+    return new AvenlyAppointmentHoldService(
       this.prisma,
       this.tenantId,
       this.timeZone,
@@ -643,7 +643,7 @@ export class AtendlyCalendarProvider implements CalendarProvider {
     },
   ): Promise<boolean> {
     try {
-      await new AtendlyAvailability(
+      await new AvenlyAvailability(
         transaction,
         this.tenantId,
         this.timeZone,
@@ -748,7 +748,7 @@ export class AtendlyCalendarProvider implements CalendarProvider {
     transaction: Prisma.TransactionClient,
     input: CreateCalendarAppointmentInput,
   ): Promise<string> {
-    const customers = new AtendlyCustomerService(transaction, this.tenantId);
+    const customers = new AvenlyCustomerService(transaction, this.tenantId);
     if (input.customerId) return (await customers.get(input.customerId)).id;
     if (!input.customerName && !input.customerPhone) {
       throw new AppError(
@@ -778,7 +778,7 @@ export class AtendlyCalendarProvider implements CalendarProvider {
   }
 
   private toAppointment(appointment: AppointmentRecord): CalendarAppointment {
-    return toAtendlyAppointment(appointment, this.timeZone);
+    return toAvenlyAppointment(appointment, this.timeZone);
   }
 }
 

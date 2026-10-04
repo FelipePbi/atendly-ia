@@ -20,7 +20,7 @@ import { registerManagementRoutes } from "../../src/modules/internal-api/routes.
 import type { RescheduleCalendarAppointmentInput } from "../../src/modules/calendar/calendar-provider.js";
 import { CalendarService } from "../../src/modules/calendar/calendar-service.js";
 import { databaseNow } from "../../src/modules/calendar/write-policy.js";
-import { AtendlyCalendarProvider } from "../../src/modules/integrations/atendly/provider.js";
+import { AvenlyCalendarProvider } from "../../src/modules/integrations/avenly/provider.js";
 import {
   deriveInternalToken,
   SERVICE_AUDIENCE,
@@ -86,8 +86,8 @@ const targetDate = upcomingDate(10);
 
 let prisma: PrismaClient;
 
-function provider(tenantId: string, userId = "user-1"): AtendlyCalendarProvider {
-  return new AtendlyCalendarProvider(prisma, tenantId, userId, timeZone);
+function provider(tenantId: string, userId = "user-1"): AvenlyCalendarProvider {
+  return new AvenlyCalendarProvider(prisma, tenantId, userId, timeZone);
 }
 
 function calendarContext(tenantId: string, requestId = "request-1") {

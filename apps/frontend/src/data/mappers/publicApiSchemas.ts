@@ -1,1 +1,1 @@
-export * from "@atendly-ia/public-api-contract";
+export * from "@avenly-ia/public-api-contract";

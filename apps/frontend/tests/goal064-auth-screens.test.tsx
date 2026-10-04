@@ -291,7 +291,7 @@ describe("/recuperar-senha — chamada real, sem encenação de código", () => 
 
     expect(
       await screen.findByText(
-        "Não foi possível falar com a Atendly. Tente novamente.",
+        "Não foi possível falar com a Avenly. Tente novamente.",
       ),
     ).toBeVisible();
     expect(push).not.toHaveBeenCalled();
@@ -315,7 +315,7 @@ describe("/recuperar-senha — chamada real, sem encenação de código", () => 
 
     expect(
       await screen.findByText(
-        "Não foi possível falar com a Atendly. Tente novamente.",
+        "Não foi possível falar com a Avenly. Tente novamente.",
       ),
     ).toBeVisible();
     expect(push).not.toHaveBeenCalled();
@@ -527,7 +527,7 @@ describe("copy sem vocabulário técnico", () => {
     await user.click(screen.getByRole("button", { name: "Enviar link" }));
 
     await screen.findByText(
-      "Não foi possível falar com a Atendly. Tente novamente.",
+      "Não foi possível falar com a Avenly. Tente novamente.",
     );
     for (const pattern of forbidden) {
       expect(container.textContent).not.toMatch(pattern);

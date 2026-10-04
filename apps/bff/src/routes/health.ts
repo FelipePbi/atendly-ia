@@ -9,7 +9,7 @@ export async function registerHealthRoutes(
   app.get("/health", async (request) =>
     dataResponse(request, {
       status: "ok",
-      service: "atendly-ia-bff",
+      service: "avenly-ia-bff",
       timestamp: new Date().toISOString(),
     }),
   );

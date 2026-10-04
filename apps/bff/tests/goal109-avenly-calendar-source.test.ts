@@ -4,7 +4,7 @@ import {
   customerListSchema,
   onboardingStateSchema,
   serviceListSchema,
-} from "@atendly-ia/public-api-contract";
+} from "@avenly-ia/public-api-contract";
 import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 

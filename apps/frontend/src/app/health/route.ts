@@ -7,7 +7,7 @@ export function GET(request: NextRequest) {
   return NextResponse.json(
     {
       status: "ok",
-      service: "atendly-ia-frontend",
+      service: "avenly-ia-frontend",
       requestId,
       timestamp: new Date().toISOString(),
     },

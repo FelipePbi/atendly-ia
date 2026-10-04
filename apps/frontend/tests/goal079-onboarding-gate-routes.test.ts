@@ -24,7 +24,7 @@ const BASELINE_PATHS = [
   "/onboarding/servicos-adicionais",
   "/onboarding/dias-de-atendimento",
   "/onboarding/horarios",
-  "/onboarding/agenda-atendly-pronta",
+  "/onboarding/agenda-avenly-pronta",
   "/onboarding/whatsapp",
 ];
 

@@ -107,6 +107,17 @@ describe("as três rotas antigas redirecionam para sistema-atual", () => {
     expect(redirectMock).toHaveBeenCalledWith("/onboarding/sistema-atual");
   });
 
+  test("agenda-atendly-pronta, nome anterior à troca de marca, redireciona para agenda-avenly-pronta", async () => {
+    const OnboardingPage = (await import("@/app/onboarding/[step]/page"))
+      .default;
+    await OnboardingPage({
+      params: Promise.resolve({ step: "agenda-atendly-pronta" }),
+    });
+    expect(redirectMock).toHaveBeenCalledWith(
+      "/onboarding/agenda-avenly-pronta",
+    );
+  });
+
   test("as três rotas antigas não existem mais como cenário válido", async () => {
     const { isOnboardingScenario } = await import(
       "@/features/onboarding/scenarios"
@@ -260,12 +271,12 @@ describe("sistema-atual: dois cards de ação, sem marcação e sem Continuar", 
     expect(push).not.toHaveBeenCalled();
   });
 
-  test("nenhuma etapa do bloco mostra fuso horário, 'Fonte oficial' ou 'Agenda Atendly' como escolha", async () => {
+  test("nenhuma etapa do bloco mostra fuso horário, 'Fonte oficial' ou 'Agenda Avenly' como escolha", async () => {
     await renderStep("sistema-atual", stateFixture(businessDone));
     await screen.findByRole("button", { name: /Sim, quero importar/ });
     expect(screen.queryByText(/America\//)).toBeNull();
     expect(screen.queryByText("Fonte oficial")).toBeNull();
-    expect(screen.queryByText(/Agenda Atendly cuidará/)).toBeNull();
+    expect(screen.queryByText(/Agenda Avenly cuidará/)).toBeNull();
   });
 
   test("servicePopulation e o aviso antigo de importação saíram do rascunho e da tela", async () => {

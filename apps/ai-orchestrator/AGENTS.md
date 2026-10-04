@@ -6,7 +6,7 @@ Leia `../../docs/product-vault/01-Regras/03-IA-e-Conversas.md`, `04-Clientes-e-M
 
 ## Identidade
 
-- Atendly é a plataforma.
+- Avenly é a plataforma.
 - A automação é chamada de `IA`.
 - Não criar nome/persona própria.
 - Se cliente perguntar se está falando com uma pessoa, responder com transparência que é uma assistente virtual do negócio.

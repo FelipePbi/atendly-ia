@@ -216,7 +216,7 @@ function findStaleContrastExceptions(
  * attempts per IP per fifteen minutes (`apps/bff/src/modules/auth/routes.ts`).
  * Seven routes times five widths is thirty-five tests, and a login inside each
  * one walked into `429` from the eleventh test onwards — the screen answered
- * "Não foi possível falar com a Atendly" and every later test died at the
+ * "Não foi possível falar com a Avenly" and every later test died at the
  * login timeout without measuring anything. Relaxing the throttle is not on
  * the table: it is a product rule, and this gate exists to measure the product
  * as it is.

@@ -158,7 +158,7 @@ function setViewport(width: number) {
 type Scenario = Parameters<typeof SettingsScreen>[0]["scenario"];
 
 const CONSENT_TEXT =
-  "Entendo que as conversas deste número poderão ser processadas e armazenadas para oferecer os recursos da Atendly.";
+  "Entendo que as conversas deste número poderão ser processadas e armazenadas para oferecer os recursos da Avenly.";
 const DISCONNECT_FAILURE = "Não foi possível desconectar o número.";
 
 function connectionFixture(
@@ -507,7 +507,7 @@ describe("Goal106 prova 2: ações do W1", () => {
     const dialog = screen.getByRole("dialog", { name: "Desconectar WhatsApp?" });
     expect(
       within(dialog).getByText(
-        "A Atendly deixará de responder automaticamente assim que a desconexão for concluída.",
+        "A Avenly deixará de responder automaticamente assim que a desconexão for concluída.",
       ),
     ).toBeVisible();
 

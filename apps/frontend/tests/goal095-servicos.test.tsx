@@ -13,7 +13,7 @@
  * 3. a edição (S4 e Agenda:S1): linhas que abrem ao toque sem perder valor,
  *    as seis cores com a paleta do protótipo, a prévia "Assim na agenda" e
  *    `active: false` no PATCH;
- * 4. a paleta: o hex de cada token em `atendly-services.css`;
+ * 4. a paleta: o hex de cada token em `avenly-services.css`;
  * 5. a casca: uma chamada de `useShellConfig` por árvore, nas duas faixas.
  *
  * Fidelidade visual não é provada aqui: jsdom não tem layout. Ela é decidida
@@ -717,7 +717,7 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
 
   test("intervalo, instruções e recorrência abertos escondem o valor da linha por CSS", async () => {
     const css = readFileSync(
-      path.join(process.cwd(), "src/shared/styles/atendly-services.css"),
+      path.join(process.cwd(), "src/shared/styles/avenly-services.css"),
       "utf8",
     );
     const rule =
@@ -836,7 +836,7 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
 
 describe("Goal095 prova 4: a paleta", () => {
   const css = readFileSync(
-    path.join(process.cwd(), "src/shared/styles/atendly-services.css"),
+    path.join(process.cwd(), "src/shared/styles/avenly-services.css"),
     "utf8",
   ).replace(/\/\*[\s\S]*?\*\//g, "");
 

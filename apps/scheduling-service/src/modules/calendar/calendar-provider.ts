@@ -11,12 +11,12 @@ export interface CalendarServiceDefinition {
   priceType: ServicePriceType;
   price: number | null;
   active: boolean;
-  /** Numero legado do Minha Agenda; sempre nulo para a Agenda Atendly. */
+  /** Numero legado do Minha Agenda; sempre nulo para a Agenda Avenly. */
   colorId?: number | null;
-  /** Token estavel da identidade visual do servico (Agenda Atendly). */
+  /** Token estavel da identidade visual do servico (Agenda Avenly). */
   colorToken?: string | null;
   /**
-   * Intervalo de referencia para recorrencia (Agenda Atendly, Goal009).
+   * Intervalo de referencia para recorrencia (Agenda Avenly, Goal009).
    * Ausente/nulo para a origem Minha Agenda, que nao tem este cadastro — a IA
    * so pode ofertar recorrencia quando este campo existe.
    */
@@ -133,7 +133,7 @@ export interface GetAvailabilityInput {
   /**
    * So a fonte externa (Minha Agenda) ainda le este campo (Goal009): ela nao
    * tem regra de oferta propria, entao o passo continua vindo de quem
-   * pergunta. A Agenda Atendly ignora — a granularidade e sempre a do
+   * pergunta. A Agenda Avenly ignora — a granularidade e sempre a do
    * negocio, nunca a do chamador.
    */
   stepMinutes?: number;
@@ -183,7 +183,7 @@ export interface CreateCalendarHoldInput {
   serviceIds: string[];
   date: string;
   startTime: string;
-  /** Ignorado pela Agenda Atendly (Goal009): a granularidade e sempre a do negocio. */
+  /** Ignorado pela Agenda Avenly (Goal009): a granularidade e sempre a do negocio. */
   stepMinutes?: number;
   customerId?: string;
   contactRef?: string;
@@ -281,7 +281,7 @@ export interface CalendarMutationEffect {
 /**
  * Grava o resultado idempotente **dentro da transacao do efeito** (Goal008).
  *
- * A fonte oficial (Agenda Atendly) chama isto com o client transacional da
+ * A fonte oficial (Agenda Avenly) chama isto com o client transacional da
  * propria mutacao, de modo que efeito e resultado entram no mesmo commit. A
  * fonte externa nao tem transacao de banco para o efeito remoto e nao chama:
  * ali o resultado continua sendo gravado logo depois, como antes do Goal008.
@@ -311,7 +311,7 @@ export interface CalendarProvider {
     commit?: CalendarMutationCommit<CalendarAppointment>,
   ): Promise<CalendarAppointment>;
   /**
-   * Holds (Goal008). Sao da Agenda Atendly: reservar um horario por minutos
+   * Holds (Goal008). Sao da Agenda Avenly: reservar um horario por minutos
    * depende da politica unica de escrita — mesma transacao, mesmo lock, mesmo
    * relogio — que nao existe do outro lado de uma chamada HTTP. A fonte
    * externa mantem a assinatura e recusa com erro proprio.

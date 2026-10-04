@@ -1,4 +1,4 @@
-# Atendly health worker
+# Avenly health worker
 
 Web service Node que consulta os health checks dos serviços a cada 40 segundos.
 

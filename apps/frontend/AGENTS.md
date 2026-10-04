@@ -6,7 +6,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 <!-- END:nextjs-agent-rules -->
 
-# Atendly frontend
+# Avenly frontend
 
 ## Produto primeiro
 
@@ -21,11 +21,11 @@ O product vault prevalece sobre protótipos históricos/legados e mocks existent
 
 ## Regras obrigatórias
 
-- Agenda Atendly é a única agenda oficial.
+- Agenda Avenly é a única agenda oficial.
 - Minha Agenda aparece somente como importação única.
 - Não renderizar estados de agenda externa ativa, sync, last sync, conflito de sync ou troca de fonte.
 - IA possui `Profissional`, `Equilibrada` e `Descontraída`.
-- `Atendly` é a plataforma; usar `IA` nos estados da automação.
+- `Avenly` é a plataforma; usar `IA` nos estados da automação.
 - Conversas usam `Comercial / Não classificadas / Pessoal`.
 - Mobile bottom nav: `Início / Conversas / Agenda / Clientes / Mais`.
 - Um negócio usa um número de WhatsApp.
@@ -239,7 +239,7 @@ cima (QA O-41, Goal065 rodada 2).
 
 A casca que essas medidas protegem é a classe base `app-frame`, que
 `AppShell` aplica em toda casca ao lado de `${module}-shell`
-(`src/shared/styles/atendly.css`). Cabeçalho móvel e barra inferior da base
+(`src/shared/styles/avenly.css`). Cabeçalho móvel e barra inferior da base
 ficam dentro de `:where()`, com especificidade zero, para que a regra de um
 módulo (por exemplo `.settings-bottom-nav`) sempre vença.
 

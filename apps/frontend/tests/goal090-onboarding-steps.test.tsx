@@ -193,7 +193,7 @@ describe("1. o eyebrow é o nome do capítulo", () => {
 });
 
 describe("2. quando-importar: ilustração, ordem das ações e gravação", () => {
-  test("a ilustração Minha Agenda → uma vez → Atendly é decorativa", async () => {
+  test("a ilustração Minha Agenda → uma vez → Avenly é decorativa", async () => {
     await renderStep("quando-importar");
     await screen.findByRole("button", { name: "Importar agora" });
     const hidden = screen
@@ -201,7 +201,7 @@ describe("2. quando-importar: ilustração, ordem das ações e gravação", () 
       .closest('[aria-hidden="true"]');
     expect(hidden).not.toBeNull();
     expect(hidden).toHaveTextContent("uma vez");
-    expect(hidden).toHaveTextContent("Atendly");
+    expect(hidden).toHaveTextContent("Avenly");
   });
 
   test("a ordem do DOM é Importar agora, Fazer depois, nota", async () => {
@@ -462,7 +462,7 @@ describe("6. regressão de gravação: o corpo de cada PATCH e POST não mudou",
       }),
     );
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("/onboarding/agenda-atendly-pronta"),
+      expect(push).toHaveBeenCalledWith("/onboarding/agenda-avenly-pronta"),
     );
   });
 

@@ -18,7 +18,7 @@ describe("Brand — marca v4", () => {
   test("renderiza svg aria-hidden com os três traços do Marca.dc.html e stroke=currentColor", () => {
     render(<Brand />);
 
-    const link = screen.getByRole("link", { name: "Atendly — Início" });
+    const link = screen.getByRole("link", { name: "Avenly — Início" });
     const svg = link.querySelector("svg.brand-mark");
 
     expect(svg).not.toBeNull();
@@ -42,16 +42,16 @@ describe("Brand — marca v4", () => {
   test("link mantém apenas um elemento .brand-mark, sem span de caixa", () => {
     render(<Brand />);
 
-    const link = screen.getByRole("link", { name: "Atendly — Início" });
+    const link = screen.getByRole("link", { name: "Avenly — Início" });
     const marks = link.querySelectorAll(".brand-mark");
 
     expect(marks).toHaveLength(1);
     expect(marks[0].tagName).toBe("svg");
   });
 
-  test("atendly.css não tem regra .brand-mark com pseudo-elemento, caixa ou pontos", () => {
+  test("avenly.css não tem regra .brand-mark com pseudo-elemento, caixa ou pontos", () => {
     const css = readFileSync(
-      path.join(appDir, "src/shared/styles/atendly.css"),
+      path.join(appDir, "src/shared/styles/avenly.css"),
       "utf8",
     );
 
@@ -64,16 +64,16 @@ describe("Brand — marca v4", () => {
 });
 
 describe("Favicon v4", () => {
-  test("layout.tsx declara /brand/atendly-icon.svg e o arquivo existe", () => {
+  test("layout.tsx declara /brand/avenly-icon.svg e o arquivo existe", () => {
     const layoutSource = readFileSync(
       path.join(appDir, "src/app/layout.tsx"),
       "utf8",
     );
 
-    expect(layoutSource).toContain("/brand/atendly-icon.svg");
+    expect(layoutSource).toContain("/brand/avenly-icon.svg");
     expect(layoutSource).not.toContain("atendly-favicon-32x32.png");
 
-    const iconPath = path.join(appDir, "public/brand/atendly-icon.svg");
+    const iconPath = path.join(appDir, "public/brand/avenly-icon.svg");
     expect(existsSync(iconPath)).toBe(true);
   });
 

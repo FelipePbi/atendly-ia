@@ -1333,7 +1333,7 @@ async function stageOnboarding(client, bffDb, schedulingDb, tenantId, breakLink)
   refusals.push(await attemptComplete(client));
 
   const calendar = await client.request("PATCH", "/v1/onboarding", {
-    body: { calendar: { source: "ATENDLY" } },
+    body: { calendar: { source: "AVENLY" } },
   });
   step(
     calendar.status === 200,

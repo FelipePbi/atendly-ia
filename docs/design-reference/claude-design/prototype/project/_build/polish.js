@@ -1,5 +1,5 @@
 // Polish pass — loaded with new Function('ctx', src)(ctx); ctx = { readFile, saveFile, log }
-// Applies the Atendly motion language + interactive states to every frame of every page, in place.
+// Applies the Avenly motion language + interactive states to every frame of every page, in place.
 const { readFile, saveFile, log } = ctx;
 const parseDoc = s => new DOMParser().parseFromString(s, 'text/html');
 const serialize = doc => '<!DOCTYPE html>\n' + doc.documentElement.outerHTML + '\n';
@@ -47,7 +47,7 @@ function brandSignature(root) {
     const d = p.getAttribute('d'); const a = LOGO_ANIM[d]; if (!a) return;
     p.setAttribute('style', a); p.setAttribute('pathLength', '100'); n++;
     const svg = p.closest('svg'); const word = svg && svg.nextElementSibling;
-    if (word && word.tagName === 'SPAN' && /Atendly/.test(word.textContent) && !/animation:/.test(styleOf(word))) addStyle(word, `animation:at-fade .32s ease-out .38s both`);
+    if (word && word.tagName === 'SPAN' && /Avenly/.test(word.textContent) && !/animation:/.test(styleOf(word))) addStyle(word, `animation:at-fade .32s ease-out .38s both`);
   });
   return n;
 }
@@ -159,7 +159,7 @@ function overlays(frame) {
 // ---------- Login mobile: marca um pouco maior para a apresentação ----------
 function loginBrandRow(frame) {
   const svg = frame.querySelector('svg[width="26"][viewBox="0 0 64 64"]'); if (!svg) return false;
-  const word = svg.nextElementSibling; if (!word || !/Atendly/.test(word.textContent)) return false;
+  const word = svg.nextElementSibling; if (!word || !/Avenly/.test(word.textContent)) return false;
   svg.setAttribute('width', '30'); svg.setAttribute('height', '30');
   setStyle(word, styleOf(word).replace('font-size:20px', 'font-size:22px'));
   return true;

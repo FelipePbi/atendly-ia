@@ -739,7 +739,7 @@ function RealDashboard({
                 </span>
                 <h3>Nenhum atendimento hoje.</h3>
                 <p>
-                  Agendamentos criados manualmente ou pela Atendly aparecerão
+                  Agendamentos criados manualmente ou pela Avenly aparecerão
                   aqui.
                 </p>
                 <Link className="btn btn-secondary" href="/agenda/novo">

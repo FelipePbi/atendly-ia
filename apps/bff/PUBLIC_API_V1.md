@@ -90,11 +90,11 @@ As rotas abaixo também estão registradas e possuem consumidores no frontend at
 | Estado/fonte de calendário | `GET /v1/calendar` |
 | Conexão da origem de importação (antes: conexão operacional de agenda externa) | `POST /v1/calendar/integration/connect`; `POST /v1/calendar/integration/reconnect`; `DELETE /v1/calendar/integration` |
 
-Essas três rotas foram reescopadas pelo Goal010 e continuam com o mesmo contrato: elas guardam, testam e removem a **credencial da origem de importação** e nada mais. Conectar não muda a fonte da agenda operacional e não exige que ela seja externa — exigir isso deixaria a importação inalcançável depois do corte do writer remoto. Desde o Goal060, `POST /v1/calendar/integration/connect` aceita só `{ email, password }`; um corpo no formato anterior (`credentials`/`configuration`, incluindo qualquer declaração de escrita) é recusado com `400 VALIDATION_ERROR`, antes de qualquer chamada à origem — este contrato não usa mais `409 INTEGRATION_WRITES_NOT_SUPPORTED` (ver "Conexão da origem: só e-mail e senha" abaixo). Desconectar remove a credencial e **nunca** desativa a Agenda Atendly.
+Essas três rotas foram reescopadas pelo Goal010 e continuam com o mesmo contrato: elas guardam, testam e removem a **credencial da origem de importação** e nada mais. Conectar não muda a fonte da agenda operacional e não exige que ela seja externa — exigir isso deixaria a importação inalcançável depois do corte do writer remoto. Desde o Goal060, `POST /v1/calendar/integration/connect` aceita só `{ email, password }`; um corpo no formato anterior (`credentials`/`configuration`, incluindo qualquer declaração de escrita) é recusado com `400 VALIDATION_ERROR`, antes de qualquer chamada à origem — este contrato não usa mais `409 INTEGRATION_WRITES_NOT_SUPPORTED` (ver "Conexão da origem: só e-mail e senha" abaixo). Desconectar remove a credencial e **nunca** desativa a Agenda Avenly.
 
 Pela regra de produto vigente:
 
-- Agenda Atendly é a única agenda operacional;
+- Agenda Avenly é a única agenda operacional;
 - Minha Agenda só pode participar da importação única;
 - não existe conexão operacional, troca de fonte ou migração reversa.
 
@@ -246,7 +246,7 @@ Um hold segura um horário enquanto a confirmação acontece — cinco minutos p
 
 Na remarcação, o hold é do horário **novo**; o original continua ocupado pelo próprio atendimento até a remarcação commitar.
 
-Holds só existem na Agenda Atendly, a única agenda operacional (Goal027).
+Holds só existem na Agenda Avenly, a única agenda operacional (Goal027).
 
 ### Sobreposição e atendimento manual: só por decisão humana
 
@@ -304,7 +304,7 @@ O histórico nunca é apagado nem reescrito. Eventos de criação **não** foram
 
 `POST /v1/appointments/:id/cancel` aceita `reason` (o nome anterior, `comments`, continua aceito): o motivo vai para o evento de cancelamento.
 
-Ciclo de vida e histórico só existem na Agenda Atendly, a única agenda operacional (Goal027).
+Ciclo de vida e histórico só existem na Agenda Avenly, a única agenda operacional (Goal027).
 
 ### Agenda disputada
 
@@ -320,7 +320,7 @@ Toda escrita da agenda roda em transação `Serializable` com lock por dia. Abor
 
 A recusa que a IA vê quando a cliente tenta mudar o próprio atendimento fora desse prazo é `CUSTOMER_CHANGE_OUTSIDE_POLICY` (D-086), devolvida pelo Scheduling e tratada pela ferramenta de agenda da IA — **nunca** uma resposta de rota pública deste contrato: nenhuma das rotas acima devolve esse código para o cliente do BFF.
 
-O motor de disponibilidade aplica as três a **toda** oferta — nenhum slot antes da antecedência mínima nem depois da máxima, passo sempre igual à granularidade do negócio. `GET /v1/availability` não aceita mais `stepMinutes`: quem decide o passo é sempre o negócio, nunca quem chama. A confirmação (`POST /v1/appointments`, `.../reschedule`, `POST /v1/holds`) continua aceitando `stepMinutes` no corpo por compatibilidade, mas o valor é ignorado pela Agenda Atendly — o horário pedido é sempre validado contra a grade do negócio. Override humano de sobreposição (`overlapOverride`) continua ignorando a grade; a IA nunca tem esse campo.
+O motor de disponibilidade aplica as três a **toda** oferta — nenhum slot antes da antecedência mínima nem depois da máxima, passo sempre igual à granularidade do negócio. `GET /v1/availability` não aceita mais `stepMinutes`: quem decide o passo é sempre o negócio, nunca quem chama. A confirmação (`POST /v1/appointments`, `.../reschedule`, `POST /v1/holds`) continua aceitando `stepMinutes` no corpo por compatibilidade, mas o valor é ignorado pela Agenda Avenly — o horário pedido é sempre validado contra a grade do negócio. Override humano de sobreposição (`overlapOverride`) continua ignorando a grade; a IA nunca tem esse campo.
 
 ### Buffers como ocupação externa
 
@@ -411,7 +411,7 @@ Como toda recusa de domínio que o BFF repassa do Scheduling, esses códigos che
 
 Nenhuma das duas rotas de seleção altera `previewVersion`, item ou `status`: a leitura é pura e a marcação escreve apenas `ImportSessionCategory.selected`, que a execução lê no início de cada passada.
 
-`previewVersion` é obrigatória em `execute` de propósito: executar é executar o preview que o negócio aprovou. Se a origem mudou desde a análise, a versão vigente é outra e o trabalho grava `409 IMPORT_PREVIEW_STALE` como `lastError` — sem o campo, omitir a versão executaria a análise vigente qualquer que fosse ela, e a recusa de preview obsoleto viraria opt-in de quem chama. Agendamento futuro cujo horário já está ocupado por um atendimento da Agenda Atendly não é sobreposto: o item fica em `NEEDS_REVIEW` com `APPOINTMENT_SLOT_TAKEN` e a decisão volta para o negócio.
+`previewVersion` é obrigatória em `execute` de propósito: executar é executar o preview que o negócio aprovou. Se a origem mudou desde a análise, a versão vigente é outra e o trabalho grava `409 IMPORT_PREVIEW_STALE` como `lastError` — sem o campo, omitir a versão executaria a análise vigente qualquer que fosse ela, e a recusa de preview obsoleto viraria opt-in de quem chama. Agendamento futuro cujo horário já está ocupado por um atendimento da Agenda Avenly não é sobreposto: o item fica em `NEEDS_REVIEW` com `APPOINTMENT_SLOT_TAKEN` e a decisão volta para o negócio.
 
 Uma vez concluída (`POST .../complete`), a sessão é o único registro definitivo do negócio: `POST /v1/calendar/imports` para o mesmo negócio devolve `409 IMPORT_ALREADY_COMPLETED` — não existe uma segunda importação. Decisão já tomada em um item, ou item já resolvido pela execução, recusa uma segunda decisão com `409 IMPORT_ITEM_ALREADY_DECIDED`.
 
@@ -569,7 +569,7 @@ Toda recusa tem código próprio e nenhuma vira `500` para o consumidor. `ACTIVA
 | Código | Onde aparece | `error.statusCode` | Significado | Como se resolve |
 | --- | --- | --- | --- | --- |
 | `ACTIVATION_TEST_AI_ALREADY_ACTIVE` | `error.code` | `409` | a IA já está ativa para o negócio (`AiSettings.enabled`, o desejado gravado pelo BFF); testar não é ferramenta recorrente depois que a IA está no ar | desligar a IA em `PATCH /v1/settings/ai` antes de testar de novo, ou reconectar/trocar o WhatsApp, que volta a exigir teste. Por esta mesma recusa, Configurações › IA só oferece o teste enquanto a IA não está ativa (Goal063) |
-| `PLATFORM_NUMBER_NOT_CONFIGURED` | `error.details.upstreamCode` | `502` (a IA falhou com `503`) | a instância oficial da Atendly não está configurada neste ambiente | configuração de ambiente, fora do autoatendimento; a tela diz que o teste não está disponível, sem simular progresso |
+| `PLATFORM_NUMBER_NOT_CONFIGURED` | `error.details.upstreamCode` | `502` (a IA falhou com `503`) | a instância oficial da Avenly não está configurada neste ambiente | configuração de ambiente, fora do autoatendimento; a tela diz que o teste não está disponível, sem simular progresso |
 | `ACTIVATION_TEST_WHATSAPP_NOT_CONNECTED` | `error.details.upstreamCode` | `409` | não há vínculo de WhatsApp ativo para o negócio | conectar o WhatsApp (`POST /v1/whatsapp/connect`) antes de testar |
 | `ACTIVATION_TEST_TENANT_PHONE_UNKNOWN` | `error.details.upstreamCode` | `409` | `tenantPhone` enviado está vazio (depois de normalizado) ou é igual ao número da própria plataforma | enviar o número real do WhatsApp do negócio |
 | `ACTIVATION_TEST_NO_ELIGIBLE_SERVICE` | `error.details.upstreamCode` | `409` | o catálogo não tem nenhum serviço apto a agendamento normal | cadastrar ou ativar um serviço (`POST`/`PATCH /v1/services`) |
@@ -588,7 +588,7 @@ Desligar (`enabled: false`, "Pausar") só grava `activatedByRunId` — da execu�
 
 **O teste real fora do onboarding (Goal063, U-11).** As rotas `GET/POST /v1/activation-test` e `POST /v1/activation-test/restart` não mudam e nunca olharam o onboarding. O que muda é quem as oferece: além do onboarding, Configurações › IA oferece o mesmo teste **enquanto a IA não está ativa** — sem prova válida e com WhatsApp conectado. Com a IA ativa a tela não mostra entrada para o teste, e o BFF continua recusando com `ACTIVATION_TEST_AI_ALREADY_ACTIVE`. Um teste novo bem-sucedido depois de uma pausa continua ligando a IA pela reconciliação, como antes. O cliente trata `409 AI_ACTIVATION_TEST_REQUIRED` relendo o estado (`GET /v1/settings` e `GET /v1/activation-test`), nunca como erro genérico. O onboarding só é concluído (`POST /v1/onboarding/complete`) pela ação que sai dele, depois da etapa do teste; a regra é do cliente e não muda a rota.
 
-**Limites.** IA ligada antes do Goal063 sem teste continua ligada: não há regra retroativa nem migration. Salvar só o estilo com a IA já ligada nunca é recusado por falta de teste. Que o teste envia e recebe mensagem de verdade não é provado por teste automatizado, porque o número oficial da Atendly não existe no ambiente de migração (D-035); essa conferência humana **não foi feita** pelo Goal063.
+**Limites.** IA ligada antes do Goal063 sem teste continua ligada: não há regra retroativa nem migration. Salvar só o estilo com a IA já ligada nunca é recusado por falta de teste. Que o teste envia e recebe mensagem de verdade não é provado por teste automatizado, porque o número oficial da Avenly não existe no ambiente de migração (D-035); essa conferência humana **não foi feita** pelo Goal063.
 
 ## Checklist pós-onboarding da Home (Goal018/WU-10)
 
@@ -610,7 +610,7 @@ Os três campos, somados a `whatsapp.status` de `GET /v1/status`, alimentam o ch
 | --- | --- |
 | `ai.data.aiAppointmentsThisWeek` | atendimentos que a IA confirmou desde a segunda-feira 00:00 da semana local do negócio, incluindo os dias já passados dela — mesmo cálculo de `aiAppointmentsToday`, só com a janela maior |
 | `ai.data.conversationsTakenOverThisWeek` | conversas **distintas** que passaram de IA para humano desde a mesma segunda-feira 00:00; mais de uma tomada na mesma conversa na semana conta uma vez só |
-| `scheduling.data.appointmentsThisWeek` | atendimentos não cancelados da Agenda Atendly na mesma semana local, segunda a domingo, incluindo os dias já passados |
+| `scheduling.data.appointmentsThisWeek` | atendimentos não cancelados da Agenda Avenly na mesma semana local, segunda a domingo, incluindo os dias já passados |
 
 A semana é sempre a semana local corrente do negócio (fuso de `platform.timezone`), segunda a domingo — nunca só "hoje até domingo". Os três contam de novo a cada leitura, sem persistir separado do que já gera `aiAppointmentsToday`/`appointmentsToday`; nenhum dos dois campos diários muda de forma ou de cálculo por causa deste acréscimo.
 
@@ -891,7 +891,7 @@ O `PATCH` devolve a mesma forma do `GET`, inclusive `lastSweepCompletedAt`: grav
 
 ## Preferência de visualização da agenda (Goal073/WU-03)
 
-Duas rotas sob `requireTenantContext`, só do BFF: a Agenda Atendly não tem noção de "vista", então não existe rota interna correspondente no Scheduling — a preferência é gravada e lida só aqui. A **ausência da linha** é o default do produto: nada oculto, sem vista inicial escolhida, nunca gravada só pela leitura.
+Duas rotas sob `requireTenantContext`, só do BFF: a Agenda Avenly não tem noção de "vista", então não existe rota interna correspondente no Scheduling — a preferência é gravada e lida só aqui. A **ausência da linha** é o default do produto: nada oculto, sem vista inicial escolhida, nunca gravada só pela leitura.
 
 | Rota | O que faz |
 | --- | --- |
@@ -929,7 +929,7 @@ Corpo/resposta:
 
 `reason` assume `LEAD_ALREADY_PASSED`, `APPOINTMENT_VERSION_SUPERSEDED`, `APPOINTMENT_NOT_CONFIRMED`, `APPOINTMENT_CANCELLED`, `APPOINTMENT_ALREADY_STARTED`, `REMINDER_CONFIGURATION_CHANGED`, `CUSTOMER_WITHOUT_PHONE`, `CONTACT_IGNORED`, `AI_NOT_ENABLED`, `CHANNEL_NOT_CONNECTED`, `TRANSPORT_FAILED`, `TRANSPORT_UNKNOWN` ou `ATTEMPTS_EXHAUSTED`. `TRANSPORT_UNKNOWN` é terminal e significa "não dá para afirmar se saiu" — quem lê não deve traduzi-lo como "não enviado".
 
-A resposta **não** traz os fatos compostos para a entrega (nome e telefone do cliente já formatados) nem qualquer dado de lease: eles são do envio, não da leitura. Lista vazia é resposta normal — negócio sem lembrete configurado, atendimento passado ou importado antes deste Goal simplesmente não têm intenção nenhuma, e a interface não afirma estado de lembrete nesse caso. Como o histórico, só existe na Agenda Atendly, a única agenda operacional (Goal027).
+A resposta **não** traz os fatos compostos para a entrega (nome e telefone do cliente já formatados) nem qualquer dado de lease: eles são do envio, não da leitura. Lista vazia é resposta normal — negócio sem lembrete configurado, atendimento passado ou importado antes deste Goal simplesmente não têm intenção nenhuma, e a interface não afirma estado de lembrete nesse caso. Como o histórico, só existe na Agenda Avenly, a única agenda operacional (Goal027).
 
 ### `notifyCustomer` em cancelar e remarcar
 

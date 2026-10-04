@@ -203,14 +203,14 @@ export function AgendaBoard() {
         setExceptions([]);
         return;
       }
-      const atendly = calendarResult.source === "AVENLY";
+      const avenly = calendarResult.source === "AVENLY";
       const [appointmentResult, blockResult, exceptionResult] =
         await Promise.all([
           services.listAppointments(queryWindow, controller.signal),
-          atendly
+          avenly
             ? services.listTimeBlocks(queryWindow, controller.signal)
             : Promise.resolve<TimeBlock[]>([]),
-          atendly
+          avenly
             ? services.listAvailabilityExceptions(queryWindow, controller.signal)
             : Promise.resolve<AvailabilityException[]>([]),
         ]);

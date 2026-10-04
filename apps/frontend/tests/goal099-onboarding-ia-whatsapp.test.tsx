@@ -94,7 +94,7 @@ import { AiSettings } from "@/features/settings/AiSettings";
 import { WhatsAppSettings } from "@/features/settings/WhatsAppSettings";
 
 const CONSENT_TEXT =
-  "Entendo que as conversas deste número poderão ser processadas e armazenadas para oferecer os recursos da Atendly.";
+  "Entendo que as conversas deste número poderão ser processadas e armazenadas para oferecer os recursos da Avenly.";
 
 function state(overrides: Partial<OnboardingState> = {}): OnboardingState {
   return {
@@ -474,15 +474,15 @@ describe("7. teste-real (4.6): introdução do quadro", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "Um número da Atendly vai enviar uma mensagem no seu WhatsApp simulando um cliente. Você só observa — a IA faz o atendimento sozinha.",
+        "Um número da Avenly vai enviar uma mensagem no seu WhatsApp simulando um cliente. Você só observa — a IA faz o atendimento sozinha.",
       ),
     ).toBeVisible();
 
     const preview = container.querySelector(".activation-test-preview");
     expect(preview).not.toBeNull();
     const previewScope = within(preview as HTMLElement);
-    expect(previewScope.getByText("Atendly · Teste")).toBeVisible();
-    expect(previewScope.getByText(/Esta é uma conversa de teste da Atendly/)).toBeVisible();
+    expect(previewScope.getByText("Avenly · Teste")).toBeVisible();
+    expect(previewScope.getByText(/Esta é uma conversa de teste da Avenly/)).toBeVisible();
     expect(previewScope.getByText("Oi! Quanto custa o atendimento?")).toBeVisible();
     expect(preview?.textContent).not.toMatch(/Corte feminino/iu);
 
@@ -515,7 +515,7 @@ describe("7. teste-real (4.6): introdução do quadro", () => {
       (node) => node.textContent,
     );
     expect(items).toEqual([
-      "A conversa começa com um aviso separado: “Esta é uma conversa de teste da Atendly.”",
+      "A conversa começa com um aviso separado: “Esta é uma conversa de teste da Avenly.”",
       "Um cliente simulado pergunta o preço de um serviço e pede um horário.",
       "A IA responde sozinha, consulta sua agenda e marca um atendimento de teste de verdade.",
       "No fim, o agendamento e o cliente de teste são removidos, e sua IA é ativada.",

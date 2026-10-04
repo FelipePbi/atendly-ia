@@ -85,7 +85,7 @@ function upstreamError(upstreamCode: string, status = 409): BffHttpError {
 function networkError(): BffHttpError {
   return new BffHttpError({
     code: "NETWORK_ERROR",
-    message: "Não foi possível acessar a Atendly.",
+    message: "Não foi possível acessar a Avenly.",
     requestId: "req-1",
     status: 0,
   });
@@ -569,7 +569,7 @@ describe("interrompida oferece Continuar, e cada classe de lastError tem texto p
   test.each([
     ["IMPORT_SOURCE_AUTH_REJECTED", "senha pode ter mudado"],
     ["IMPORT_SOURCE_UNAVAILABLE", "não respondeu"],
-    ["IMPORT_INTERNAL_ERROR", "falha da Atendly"],
+    ["IMPORT_INTERNAL_ERROR", "falha da Avenly"],
   ] as const)("classe %s mostra texto próprio", async (code, expectedFragment) => {
     getImportState.mockResolvedValue(stateWithSession(runningSession()));
     getImportProgress.mockResolvedValue(

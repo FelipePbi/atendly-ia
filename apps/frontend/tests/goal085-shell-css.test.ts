@@ -14,7 +14,7 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 const STYLE_FILES = [
-  "src/shared/styles/atendly.css",
+  "src/shared/styles/avenly.css",
   "src/app/globals.css",
 ] as const;
 
@@ -97,7 +97,7 @@ describe("Goal085 (d): a casca não usa unidade de viewport", () => {
     },
   );
 
-  test("a guarda lê a folha de verdade: atendly.css tem regras com .app-frame e .sidebar", () => {
+  test("a guarda lê a folha de verdade: avenly.css tem regras com .app-frame e .sidebar", () => {
     const selectors = shellDeclarations(STYLE_FILES[0]).map(
       (declaration) => declaration.selector,
     );

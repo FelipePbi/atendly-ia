@@ -560,7 +560,7 @@ export function rehearsalEnvironment({
     // de sair da máquina.
     SCHEDULING_SERVICE_BASE_URL: "http://127.0.0.1:1",
     // Instância oficial da plataforma: vazia de propósito. Nenhum caminho
-    // deste ensaio envia pela identidade da Atendly.
+    // deste ensaio envia pela identidade da Avenly.
     PLATFORM_WHATSAPP_INSTANCE_ID: "",
     PLATFORM_WHATSAPP_CREDENTIAL: "",
     PLATFORM_WHATSAPP_NUMBER: "",

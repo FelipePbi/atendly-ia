@@ -17,9 +17,9 @@ import type {
 } from "../calendar/calendar-provider.js";
 import { databaseNow } from "../calendar/write-policy.js";
 import {
-  AtendlyServiceService,
+  AvenlyServiceService,
   maxServiceBuffer,
-} from "../services/atendly-service-service.js";
+} from "../services/avenly-service-service.js";
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -42,7 +42,7 @@ export interface OfferRules {
 
 export const OFFER_RULES_NOT_FOUND = "CALENDAR_SETTINGS_NOT_FOUND";
 
-export class AtendlyAvailability {
+export class AvenlyAvailability {
   constructor(
     private readonly database: DatabaseClient,
     private readonly tenantId: string,
@@ -52,7 +52,7 @@ export class AtendlyAvailability {
   async getAvailableSlots(
     input: GetAvailabilityInput,
   ): Promise<AvailableSlot[]> {
-    const services = await new AtendlyServiceService(
+    const services = await new AvenlyServiceService(
       this.database,
       this.tenantId,
     ).requireActive(input.serviceIds);

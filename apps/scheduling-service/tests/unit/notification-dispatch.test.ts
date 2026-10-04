@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AtendlyAppointmentLifecycleService } from "../../src/modules/appointments/appointment-lifecycle-service.js";
+import { AvenlyAppointmentLifecycleService } from "../../src/modules/appointments/appointment-lifecycle-service.js";
 import {
   claimDueNotificationIntents,
   NOTIFICATION_INTENT_LEASE_LOST,
@@ -803,7 +803,7 @@ describe("confirmação de presença", () => {
     });
     return {
       database,
-      lifecycle: new AtendlyAppointmentLifecycleService(
+      lifecycle: new AvenlyAppointmentLifecycleService(
         database.client as never,
         "tenant-a",
         "user-1",

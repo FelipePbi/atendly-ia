@@ -2,10 +2,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { PrismaClient } from "../../src/generated/prisma/client.js";
-import { AtendlyCalendarProvider } from "../../src/modules/integrations/atendly/provider.js";
+import { AvenlyCalendarProvider } from "../../src/modules/integrations/avenly/provider.js";
 import {
-  AtendlyServiceService,
-} from "../../src/modules/services/atendly-service-service.js";
+  AvenlyServiceService,
+} from "../../src/modules/services/avenly-service-service.js";
 import { resetTenant } from "./support/reset-tenant.js";
 import { upcomingDate } from "./support/test-date.js";
 
@@ -47,11 +47,11 @@ async function openWholeDay(tenantId: string) {
 }
 
 function provider(tenantId: string) {
-  return new AtendlyCalendarProvider(prisma, tenantId, "user-1", timeZone);
+  return new AvenlyCalendarProvider(prisma, tenantId, "user-1", timeZone);
 }
 
 function services(tenantId: string) {
-  return new AtendlyServiceService(prisma, tenantId);
+  return new AvenlyServiceService(prisma, tenantId);
 }
 
 describeWithDatabase("service catalog against PostgreSQL", () => {

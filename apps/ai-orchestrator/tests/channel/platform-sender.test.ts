@@ -115,14 +115,14 @@ describe("PlatformWhatsAppSender", () => {
       () => provider,
     ).sendToTenantUnderTest(
       { tenantId: "tenant-a", runId: "run-1", phone: `+55 11 99999-9999` },
-      { text: "oi, aqui e a Atendly", correlationId: "run-1-msg-1" },
+      { text: "oi, aqui e a Avenly", correlationId: "run-1-msg-1" },
     );
 
     expect(result).toMatchObject({ provider: "evolution-go" });
     expect(sent).toEqual([
       expect.objectContaining({
         to: TENANT_NUMBER,
-        text: "oi, aqui e a Atendly",
+        text: "oi, aqui e a Avenly",
       }),
     ]);
   });

@@ -416,7 +416,7 @@ export interface CustomerChangePolicy {
 }
 
 /**
- * Mesmo codigo que `AtendlyCalendarProvider.assertCustomerChangePolicy`
+ * Mesmo codigo que `AvenlyCalendarProvider.assertCustomerChangePolicy`
  * emite no Scheduling: o cliente (via IA) tentou alterar o proprio
  * atendimento com menos antecedencia do que o negocio permite.
  */

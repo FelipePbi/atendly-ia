@@ -8,7 +8,7 @@ import {
   minutesFromTime,
 } from "../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../shared/errors/app-error.js";
-import { AtendlyAvailability } from "../availability/atendly-availability.js";
+import { AvenlyAvailability } from "../availability/avenly-availability.js";
 import type {
   CalendarAppointment,
   CalendarMutationCommit,
@@ -20,26 +20,26 @@ import {
   lockCalendarDays,
   runCalendarWrite,
 } from "../calendar/write-policy.js";
-import { AtendlyCustomerService } from "../customers/atendly-customer-service.js";
+import { AvenlyCustomerService } from "../customers/avenly-customer-service.js";
 import {
-  AtendlyAppointmentHoldService,
+  AvenlyAppointmentHoldService,
   consumeHold,
   findHoldForConsumption,
   holdUnusable,
 } from "../holds/appointment-hold-service.js";
 import {
   appointmentInclude,
-  toAtendlyAppointment,
-} from "../integrations/atendly/provider.js";
+  toAvenlyAppointment,
+} from "../integrations/avenly/provider.js";
 import { recomputeAppointmentIntentsWithin } from "../reminders/notification-intent-service.js";
-import { AtendlyServiceService } from "../services/atendly-service-service.js";
+import { AvenlyServiceService } from "../services/avenly-service-service.js";
 import { recordAppointmentEvent } from "./appointment-event-service.js";
 
 /**
  * Serie de atendimento a partir de um servico (Goal009): pedido com
  * quantidade, intervalo (padrao do servico ou explicito) e primeira
  * data/horario. A pre-visualizacao cria um hold por ocorrencia (reutilizando
- * `AtendlyAppointmentHoldService`); a confirmacao consome todos em uma unica
+ * `AvenlyAppointmentHoldService`); a confirmacao consome todos em uma unica
  * transacao — se qualquer ocorrencia nao puder ser confirmada, nada e
  * criado.
  */
@@ -80,7 +80,7 @@ export interface ConfirmSeriesInput {
   idempotencyKey: string;
 }
 
-export class AtendlyAppointmentSeriesService {
+export class AvenlyAppointmentSeriesService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly tenantId: string,
@@ -101,13 +101,13 @@ export class AtendlyAppointmentSeriesService {
         { cap },
       );
     }
-    const services = await new AtendlyServiceService(
+    const services = await new AvenlyServiceService(
       this.prisma,
       this.tenantId,
     ).requireActive(input.serviceIds);
     const intervalDays = this.resolveIntervalDays(input, services);
     const windowDays = env.APPOINTMENT_SERIES_ADJUST_WINDOW_DAYS;
-    const holds = new AtendlyAppointmentHoldService(
+    const holds = new AvenlyAppointmentHoldService(
       this.prisma,
       this.tenantId,
       this.timeZone,
@@ -269,11 +269,11 @@ export class AtendlyAppointmentSeriesService {
                 false,
               );
             }
-            const services = await new AtendlyServiceService(
+            const services = await new AvenlyServiceService(
               transaction,
               this.tenantId,
             ).requireActive(toServiceIds(hold.proposedServiceIds));
-            const slot = await new AtendlyAvailability(
+            const slot = await new AvenlyAvailability(
               transaction,
               this.tenantId,
               this.timeZone,
@@ -325,7 +325,7 @@ export class AtendlyAppointmentSeriesService {
               },
               include: appointmentInclude,
             });
-            const appointment = toAtendlyAppointment(record, this.timeZone);
+            const appointment = toAvenlyAppointment(record, this.timeZone);
             await recordAppointmentEvent(
               transaction,
               this.tenantId,
@@ -426,7 +426,7 @@ export class AtendlyAppointmentSeriesService {
     return {
       seriesId,
       appointments: records.map((record) =>
-        toAtendlyAppointment(record, this.timeZone),
+        toAvenlyAppointment(record, this.timeZone),
       ),
     };
   }
@@ -448,7 +448,7 @@ export class AtendlyAppointmentSeriesService {
       });
       if (!hold) return null;
       const date = instantToLocalDateTime(hold.startAt, this.timeZone).date;
-      return await new AtendlyAvailability(
+      return await new AvenlyAvailability(
         this.prisma,
         this.tenantId,
         this.timeZone,
@@ -500,7 +500,7 @@ export class AtendlyAppointmentSeriesService {
     requestedTime: string;
     windowDays: number;
   }): Promise<{ date: string; startTime: string; endTime: string } | null> {
-    const availability = new AtendlyAvailability(
+    const availability = new AvenlyAvailability(
       this.prisma,
       this.tenantId,
       this.timeZone,
@@ -536,7 +536,7 @@ export class AtendlyAppointmentSeriesService {
     transaction: Prisma.TransactionClient,
     input: ConfirmSeriesInput,
   ): Promise<string> {
-    const customers = new AtendlyCustomerService(transaction, this.tenantId);
+    const customers = new AvenlyCustomerService(transaction, this.tenantId);
     if (input.customerId) return (await customers.get(input.customerId)).id;
     if (!input.customerName && !input.customerPhone) {
       throw new AppError(

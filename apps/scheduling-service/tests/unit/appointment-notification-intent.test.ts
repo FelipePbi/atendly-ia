@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AtendlyAppointmentLifecycleService } from "../../src/modules/appointments/appointment-lifecycle-service.js";
+import { AvenlyAppointmentLifecycleService } from "../../src/modules/appointments/appointment-lifecycle-service.js";
 import { CalendarService } from "../../src/modules/calendar/calendar-service.js";
 import { recomputeAppointmentIntentsWithin } from "../../src/modules/reminders/notification-intent-service.js";
 import {
@@ -79,7 +79,7 @@ function setup() {
   return {
     database,
     calendar: new CalendarService(database.client as never),
-    lifecycle: new AtendlyAppointmentLifecycleService(
+    lifecycle: new AvenlyAppointmentLifecycleService(
       database.client as never,
       tenantId,
       context.userId,

@@ -13,7 +13,7 @@ export function createPrivacyPolicy(
   return {
     title: "Política de Privacidade",
     intro:
-      "Esta Política explica como dados pessoais são tratados no uso da Atendly e apresenta os direitos previstos na Lei Geral de Proteção de Dados Pessoais (LGPD).",
+      "Esta Política explica como dados pessoais são tratados no uso da Avenly e apresenta os direitos previstos na Lei Geral de Proteção de Dados Pessoais (LGPD).",
     version: PRIVACY_POLICY_VERSION,
     effectiveDate: PRIVACY_POLICY_EFFECTIVE_DATE,
     lastUpdatedDate: PRIVACY_POLICY_LAST_UPDATED_DATE,
@@ -24,14 +24,14 @@ export function createPrivacyPolicy(
         paragraphs: [
           `${details.legalName}, nome fantasia ${details.tradeName}, CNPJ ${details.cnpj}, endereço ${details.address}, atua como controladora dos dados de cadastro, conta e relacionamento direto com seus Usuários.`,
           `Canal de privacidade: ${details.privacyEmail}. Responsável ou encarregado: ${details.privacyOfficer}.`,
-          "Para dados de Contatos inseridos pelo Cliente, os papéis de controlador e operador dependem da atividade concreta. Em geral, o Cliente define finalidades e meios essenciais do atendimento e a Atendly trata os dados segundo suas instruções, sem afastar responsabilidades próprias previstas em lei.",
+          "Para dados de Contatos inseridos pelo Cliente, os papéis de controlador e operador dependem da atividade concreta. Em geral, o Cliente define finalidades e meios essenciais do atendimento e a Avenly trata os dados segundo suas instruções, sem afastar responsabilidades próprias previstas em lei.",
         ],
       },
       {
         id: "escopo",
         title: "2. Escopo",
         paragraphs: [
-          "Esta Política se aplica ao site, painel, cadastro, suporte, integrações e funcionalidades da Atendly. Serviços de Terceiros possuem políticas próprias, que devem ser consultadas pelo Usuário.",
+          "Esta Política se aplica ao site, painel, cadastro, suporte, integrações e funcionalidades da Avenly. Serviços de Terceiros possuem políticas próprias, que devem ser consultadas pelo Usuário.",
         ],
       },
       {
@@ -116,7 +116,7 @@ export function createPrivacyPolicy(
         id: "ia",
         title: "6. Inteligência artificial e decisões automatizadas",
         paragraphs: [
-          `Conteúdo e instruções podem ser enviados a ${details.aiProvider} para gerar respostas, classificar contexto ou acionar ferramentas configuradas. A Atendly aplica minimização e controles contratuais e técnicos compatíveis com a operação.`,
+          `Conteúdo e instruções podem ser enviados a ${details.aiProvider} para gerar respostas, classificar contexto ou acionar ferramentas configuradas. A Avenly aplica minimização e controles contratuais e técnicos compatíveis com a operação.`,
           "A Plataforma automatiza respostas e fluxos, mas não deve ser configurada para decisão exclusivamente automatizada que produza efeitos jurídicos ou significativamente afete pessoas sem avaliação, transparência e supervisão adequadas.",
           `Pedidos de informação ou revisão sobre tratamento automatizado podem ser enviados para ${details.privacyEmail}.`,
         ],
@@ -191,7 +191,7 @@ export function createPrivacyPolicy(
         title: "14. Como exercer seus direitos",
         paragraphs: [
           `Envie a solicitação para ${details.privacyEmail}, descrevendo o direito e o contexto. Poderemos pedir confirmação proporcional de identidade para impedir fraude, sem coletar dados excessivos.`,
-          "Quando a Atendly atuar apenas como operadora de dados de um Contato, encaminharemos a solicitação ao Cliente controlador ou orientaremos o titular a procurá-lo. Respostas observarão prazos e exceções legais.",
+          "Quando a Avenly atuar apenas como operadora de dados de um Contato, encaminharemos a solicitação ao Cliente controlador ou orientaremos o titular a procurá-lo. Respostas observarão prazos e exceções legais.",
         ],
       },
       {
@@ -206,7 +206,7 @@ export function createPrivacyPolicy(
         id: "criancas",
         title: "16. Crianças e adolescentes",
         paragraphs: [
-          "A conta Atendly é destinada a pessoas capazes de contratar e não é dirigida a crianças. O Cliente não deve usar a Plataforma para tratar dados de crianças ou adolescentes sem avaliar o melhor interesse, a base legal e as salvaguardas específicas exigidas.",
+          "A conta Avenly é destinada a pessoas capazes de contratar e não é dirigida a crianças. O Cliente não deve usar a Plataforma para tratar dados de crianças ou adolescentes sem avaliar o melhor interesse, a base legal e as salvaguardas específicas exigidas.",
           `Se identificar tratamento indevido, contate ${details.privacyEmail}.`,
         ],
       },

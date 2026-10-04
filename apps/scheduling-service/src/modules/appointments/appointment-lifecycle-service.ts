@@ -401,7 +401,7 @@ export async function confirmPresenceWithin(
  * vida não ocupa nem libera horário, então não precisa da política de
  * escrita da agenda.
  */
-export class AtendlyAppointmentLifecycleService {
+export class AvenlyAppointmentLifecycleService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly tenantId: string,

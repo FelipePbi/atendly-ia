@@ -32,8 +32,8 @@ export function ImportIllustration({ bars = DEFAULT_BARS }: { bars?: number[] })
         </svg>
         <span>uma vez</span>
       </div>
-      <div className="import-card is-atendly">
-        <span className="import-card-label">Atendly</span>
+      <div className="import-card is-avenly">
+        <span className="import-card-label">Avenly</span>
         <ImportCardBars bars={bars} />
       </div>
     </div>

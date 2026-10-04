@@ -306,7 +306,7 @@ function chapterStates(html) {
 const CHECK = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F7F4EF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>';
 function rail(w, states) {
   const rows = CHAPTERS.map((c, i) => { const st = states[i]; const wrap = st === 'current' ? 'background:#EDF4F3;color:#0B4A4E' : `color:${st === 'done' ? '#221E1A' : '#716859'}`; const dot = st === 'done' ? 'background:#0F5F63;color:#F7F4EF' : st === 'current' ? 'border:1.5px solid #0F5F63;color:#0F5F63;box-sizing:border-box' : 'border:1px solid #D6CEC2;color:#716859;box-sizing:border-box'; return `<div style="display:flex;align-items:center;gap:14px;padding:11px 12px;border-radius:12px;${wrap}"><span style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none;${dot}">${st === 'done' ? CHECK : i + 1}</span><span style="font-size:15px;font-weight:600">${c}</span></div>`; }).join('');
-  return `<div style="width:${w}px;flex:none;background:#FFFDFA;border-right:1px solid #E5DED4;display:flex;flex-direction:column;gap:40px;padding:36px 32px 32px;box-sizing:border-box"><div style="display:flex;align-items:center;gap:10px">${logo(28)}<span style="${SERIF};font-size:22px;font-weight:600;letter-spacing:-0.02em">Atendly</span></div><div style="display:flex;flex-direction:column;gap:12px"><span style="${EYEBROW};padding:0 12px">Configuração inicial</span><div style="display:flex;flex-direction:column;gap:4px">${rows}</div></div></div>`;
+  return `<div style="width:${w}px;flex:none;background:#FFFDFA;border-right:1px solid #E5DED4;display:flex;flex-direction:column;gap:40px;padding:36px 32px 32px;box-sizing:border-box"><div style="display:flex;align-items:center;gap:10px">${logo(28)}<span style="${SERIF};font-size:22px;font-weight:600;letter-spacing:-0.02em">Avenly</span></div><div style="display:flex;flex-direction:column;gap:12px"><span style="${EYEBROW};padding:0 12px">Configuração inicial</span><div style="display:flex;flex-direction:column;gap:4px">${rows}</div></div></div>`;
 }
 
 // ---------- hosting modes ----------
@@ -387,7 +387,7 @@ function page({ title, intro, links, minWidth, body }) {
 ${HELMET}
 
 <div style="${FONT};color:#221E1A;padding:48px 56px 96px;min-width:${minWidth}px;display:flex;flex-direction:column;gap:56px">
-<header style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;padding-bottom:28px;border-bottom:1px solid #D6CEC2;max-width:1920px"><div style="display:flex;flex-direction:column;gap:14px"><a href="Atendly.dc.html" style="display:flex;align-items:center;gap:10px;color:#221E1A">${logo(30)}<span style="${SERIF};font-size:24px;font-weight:600;letter-spacing:-0.02em">Atendly</span><span style="font-size:13px;color:#716859;margin-left:6px">← Índice e design system</span></a><h1 style="margin:0;${SERIF};font-size:36px;line-height:1.1;font-weight:500;letter-spacing:-0.015em">${esc(title)}</h1><p style="margin:0;font-size:15px;line-height:1.5;color:#5F574E;max-width:820px;text-wrap:pretty">${intro}</p></div><nav style="display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:500;flex:none;text-align:right">${nav}</nav></header>
+<header style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;padding-bottom:28px;border-bottom:1px solid #D6CEC2;max-width:1920px"><div style="display:flex;flex-direction:column;gap:14px"><a href="Avenly.dc.html" style="display:flex;align-items:center;gap:10px;color:#221E1A">${logo(30)}<span style="${SERIF};font-size:24px;font-weight:600;letter-spacing:-0.02em">Avenly</span><span style="font-size:13px;color:#716859;margin-left:6px">← Índice e design system</span></a><h1 style="margin:0;${SERIF};font-size:36px;line-height:1.1;font-weight:500;letter-spacing:-0.015em">${esc(title)}</h1><p style="margin:0;font-size:15px;line-height:1.5;color:#5F574E;max-width:820px;text-wrap:pretty">${intro}</p></div><nav style="display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:500;flex:none;text-align:right">${nav}</nav></header>
 ${body}
 </div>
 </x-dc>
@@ -415,9 +415,9 @@ async function buildModule(cfg) {
   };
   const ser = dev => series('Série completa', `Cada tela do celular em ${DEV[dev].orient} · ${DEV[dev].w} × ${DEV[dev].h}`, '', cfg.specs.map(s => build(s, dev)));
   const mob = cfg.files.map(f => [`← ${f.replace('.dc.html', '')} (celular)`, f]);
-  const tablet = page({ title: `${cfg.title} — Tablet`, intro: cfg.introTablet, minWidth: 2200, links: [...mob, [`${cfg.title} — Desktop →`, `${cfg.slug}-Desktop.dc.html`], ['Índice →', 'Atendly.dc.html']],
+  const tablet = page({ title: `${cfg.title} — Tablet`, intro: cfg.introTablet, minWidth: 2200, links: [...mob, [`${cfg.title} — Desktop →`, `${cfg.slug}-Desktop.dc.html`], ['Índice →', 'Avenly.dc.html']],
     body: group('portrait', 'Orientação 1 de 2', 'Portrait · 768 × 1024', cfg.noteP, ser('P')) + group('landscape', 'Orientação 2 de 2', 'Landscape · 1024 × 768', cfg.noteL, ser('L')) });
-  const desktop = page({ title: `${cfg.title} — Desktop`, intro: cfg.introDesktop, minWidth: 2000, links: [...mob, [`${cfg.title} — Tablet →`, `${cfg.slug}-Tablet.dc.html`], ['Índice →', 'Atendly.dc.html']],
+  const desktop = page({ title: `${cfg.title} — Desktop`, intro: cfg.introDesktop, minWidth: 2000, links: [...mob, [`${cfg.title} — Tablet →`, `${cfg.slug}-Tablet.dc.html`], ['Índice →', 'Avenly.dc.html']],
     body: group('desktop', 'Referência 1440 × 900 · validado em 1366 × 768', 'Desktop · 1366 × 768', cfg.noteD, ser('D')) });
   await saveFile(`${cfg.slug}-Tablet.dc.html`, relogo(tablet));
   await saveFile(`${cfg.slug}-Desktop.dc.html`, relogo(desktop));

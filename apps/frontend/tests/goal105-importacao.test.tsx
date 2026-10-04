@@ -468,7 +468,7 @@ describe("Goal105 prova 1: I2 e a entrada da importação", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "Traga serviços, clientes, horários e agendamentos de uma vez. Leva alguns minutos e acontece uma única vez — depois, a Atendly é sua agenda oficial.",
+        "Traga serviços, clientes, horários e agendamentos de uma vez. Leva alguns minutos e acontece uma única vez — depois, a Avenly é sua agenda oficial.",
       ),
     ).toBeVisible();
     expect(
@@ -485,7 +485,7 @@ describe("Goal105 prova 1: I2 e a entrada da importação", () => {
     expect(illustration).toHaveAttribute("aria-hidden", "true");
     expect(illustration?.textContent).toContain("Minha Agenda");
     expect(illustration?.textContent).toContain("uma vez");
-    expect(illustration?.textContent).toContain("Atendly");
+    expect(illustration?.textContent).toContain("Avenly");
 
     expect(credentialsLabel()).toBeNull();
     expect(screen.queryByLabelText("Senha do Minha Agenda")).toBeNull();
@@ -649,7 +649,7 @@ describe("Goal105 prova 3: I1, o histórico só de leitura", () => {
     expect(screen.queryByText(/camila@example\.com/)).toBeNull();
     expect(
       screen.getByText(
-        "A importação do Minha Agenda é feita uma única vez. Alterações feitas lá depois de 18/09 não chegam à Atendly — sua agenda oficial é esta.",
+        "A importação do Minha Agenda é feita uma única vez. Alterações feitas lá depois de 18/09 não chegam à Avenly — sua agenda oficial é esta.",
       ),
     ).toBeVisible();
   });
@@ -664,7 +664,7 @@ describe("Goal105 prova 3: I1, o histórico só de leitura", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "A importação do Minha Agenda é feita uma única vez. Alterações feitas lá depois de 19/09 não chegam à Atendly — sua agenda oficial é esta.",
+        "A importação do Minha Agenda é feita uma única vez. Alterações feitas lá depois de 19/09 não chegam à Avenly — sua agenda oficial é esta.",
       ),
     ).toBeVisible();
   });
@@ -1033,7 +1033,7 @@ describe("Goal105 prova 5: o que fica como era", () => {
         '<svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 34 24" width="34">' +
         '<path d="M2 12h28M23 5l7 7-7 7"></path></svg>' +
         "<span>uma vez</span></div>" +
-        '<div class="import-card is-atendly"><span class="import-card-label">Atendly</span>' +
+        '<div class="import-card is-avenly"><span class="import-card-label">Avenly</span>' +
         allBars +
         "</div></div>",
     );

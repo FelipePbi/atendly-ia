@@ -2,8 +2,8 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { PrismaClient } from "../../src/generated/prisma/client.js";
-import { AtendlyCalendarProvider } from "../../src/modules/integrations/atendly/provider.js";
-import { AtendlyCustomerService } from "../../src/modules/customers/atendly-customer-service.js";
+import { AvenlyCalendarProvider } from "../../src/modules/integrations/avenly/provider.js";
+import { AvenlyCustomerService } from "../../src/modules/customers/avenly-customer-service.js";
 import { resetTenant } from "./support/reset-tenant.js";
 import { upcomingDate } from "./support/test-date.js";
 
@@ -55,7 +55,7 @@ async function openWholeDay(tenantId: string) {
 }
 
 function provider(tenantId: string) {
-  return new AtendlyCalendarProvider(prisma, tenantId, "user-1", timeZone);
+  return new AvenlyCalendarProvider(prisma, tenantId, "user-1", timeZone);
 }
 
 describeWithDatabase("customer identity against PostgreSQL", () => {
@@ -81,7 +81,7 @@ describeWithDatabase("customer identity against PostgreSQL", () => {
   });
 
   it("persists two people with the same phone in the same tenant", async () => {
-    const customers = new AtendlyCustomerService(prisma, tenantA);
+    const customers = new AvenlyCustomerService(prisma, tenantA);
     const maria = await customers.create({
       name: "Maria",
       phone: "+55 11 90000-0001",
@@ -98,7 +98,7 @@ describeWithDatabase("customer identity against PostgreSQL", () => {
   });
 
   it("persists a customer without a phone", async () => {
-    const customers = new AtendlyCustomerService(prisma, tenantA);
+    const customers = new AvenlyCustomerService(prisma, tenantA);
     const child = await customers.create({ name: "Pedro" });
     const stored = await prisma.customer.findUnique({
       where: { tenantId_id: { tenantId: tenantA, id: child.id } },
@@ -107,26 +107,26 @@ describeWithDatabase("customer identity against PostgreSQL", () => {
   });
 
   it("keeps the same number in two tenants as two different people", async () => {
-    const inA = await new AtendlyCustomerService(prisma, tenantA).create({
+    const inA = await new AvenlyCustomerService(prisma, tenantA).create({
       name: "Maria",
       phone: "5511900000001",
     });
-    const inB = await new AtendlyCustomerService(prisma, tenantB).create({
+    const inB = await new AvenlyCustomerService(prisma, tenantB).create({
       name: "Maria",
       phone: "5511900000001",
     });
 
     expect(inA.id).not.toBe(inB.id);
     expect(
-      await new AtendlyCustomerService(prisma, tenantB).findCandidatesByPhone(
+      await new AvenlyCustomerService(prisma, tenantB).findCandidatesByPhone(
         "5511900000001",
       ),
     ).toHaveLength(1);
   });
 
   it("does not expose notes, tags or relations of one tenant to another", async () => {
-    const a = new AtendlyCustomerService(prisma, tenantA);
-    const b = new AtendlyCustomerService(prisma, tenantB);
+    const a = new AvenlyCustomerService(prisma, tenantA);
+    const b = new AvenlyCustomerService(prisma, tenantB);
     const inA = await a.create({ name: "Maria", phone: "5511900000001" });
     await a.addNote(inA.id, { body: "segredo", aiAuthorized: true });
     await a.addTag(inA.id, { label: "vip", aiAuthorized: true });
@@ -163,7 +163,7 @@ describeWithDatabase("customer identity against PostgreSQL", () => {
   it("does not create or rename anyone when the confirmation fails on the slot", async () => {
     const service = await seedTenant(tenantA);
     await openWholeDay(tenantA);
-    const customers = new AtendlyCustomerService(prisma, tenantA);
+    const customers = new AvenlyCustomerService(prisma, tenantA);
     const maria = await customers.create({
       name: "Maria",
       phone: "5511900000001",
@@ -211,7 +211,7 @@ describeWithDatabase("customer identity against PostgreSQL", () => {
   it("schedules for the chosen person and keeps each history separate", async () => {
     const service = await seedTenant(tenantA);
     await openWholeDay(tenantA);
-    const customers = new AtendlyCustomerService(prisma, tenantA);
+    const customers = new AvenlyCustomerService(prisma, tenantA);
     const maria = await customers.create({
       name: "Maria",
       phone: "5511900000001",
@@ -257,7 +257,7 @@ describeWithDatabase("customer identity against PostgreSQL", () => {
   });
 
   it("persists guardian provenance and confirmation state", async () => {
-    const customers = new AtendlyCustomerService(prisma, tenantA);
+    const customers = new AvenlyCustomerService(prisma, tenantA);
     const pedro = await customers.create({ name: "Pedro" });
     const maria = await customers.create({
       name: "Maria",
@@ -286,7 +286,7 @@ describeWithDatabase("customer identity against PostgreSQL", () => {
   });
 
   it("stores notes and tags unauthorised by default", async () => {
-    const customers = new AtendlyCustomerService(prisma, tenantA);
+    const customers = new AvenlyCustomerService(prisma, tenantA);
     const maria = await customers.create({ name: "Maria" });
     const note = await customers.addNote(maria.id, { body: "assunto pessoal" });
     const tag = await customers.addTag(maria.id, { label: "interno" });

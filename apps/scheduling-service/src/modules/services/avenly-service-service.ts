@@ -29,7 +29,7 @@ const COLOR_TOKENS: readonly ServiceColorToken[] = [
   "SLATE",
 ];
 
-export interface CreateAtendlyServiceInput {
+export interface CreateAvenlyServiceInput {
   name: string;
   /** Ausente vira pendencia de revisao; nunca zero fabricado. */
   durationMinutes?: number | null;
@@ -49,9 +49,9 @@ export interface CreateAtendlyServiceInput {
   reviewOrigin?: ServiceReviewOrigin;
 }
 
-export type UpdateAtendlyServiceInput = Partial<CreateAtendlyServiceInput>;
+export type UpdateAvenlyServiceInput = Partial<CreateAvenlyServiceInput>;
 
-export interface AtendlyServiceRecord {
+export interface AvenlyServiceRecord {
   id: string;
   tenantId: string;
   name: string;
@@ -84,7 +84,7 @@ export function isOperationalService(service: {
   );
 }
 
-export class AtendlyServiceService {
+export class AvenlyServiceService {
   constructor(
     private readonly database: DatabaseClient,
     private readonly tenantId: string,
@@ -116,14 +116,14 @@ export class AtendlyServiceService {
     return (await this.listOperational()).map(toCalendarService);
   }
 
-  async create(input: CreateAtendlyServiceInput) {
+  async create(input: CreateAvenlyServiceInput) {
     const data = serviceData(input);
     return this.database.service.create({
       data: { tenantId: this.tenantId, ...data },
     });
   }
 
-  async update(serviceId: string, input: UpdateAtendlyServiceInput) {
+  async update(serviceId: string, input: UpdateAvenlyServiceInput) {
     const current = await this.requireService(serviceId);
     const priceType = input.priceType ?? (current.priceType);
     const price = !PRICED_TYPES.has(priceType)
@@ -238,7 +238,7 @@ export class AtendlyServiceService {
   }
 }
 
-function serviceData(input: CreateAtendlyServiceInput) {
+function serviceData(input: CreateAvenlyServiceInput) {
   const name = input.name.trim();
   if (!name || name.length > 200) {
     throw new AppError(

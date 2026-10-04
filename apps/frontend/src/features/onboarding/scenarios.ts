@@ -1,7 +1,7 @@
 export const onboardingScenarios = {
   "boas-vindas": [
     "Vamos começar",
-    "Configure sua Atendly em poucos passos.",
+    "Configure sua Avenly em poucos passos.",
     "Sua IA atende seus clientes pelo WhatsApp e marca horários direto na sua agenda.",
     "welcome",
   ],
@@ -26,13 +26,13 @@ export const onboardingScenarios = {
   "sistema-atual": [
     "Sua agenda",
     "Você já usa algum sistema para organizar seus clientes e agendamentos?",
-    "Isso ajuda a saber se já existem dados para trazer para a Atendly.",
+    "Isso ajuda a saber se já existem dados para trazer para a Avenly.",
     "current-system",
   ],
   "quando-importar": [
     "Sua agenda",
     "Quer importar agora?",
-    "A importação acontece uma única vez e leva alguns minutos. Depois dela, a Atendly passa a ser sua agenda oficial.",
+    "A importação acontece uma única vez e leva alguns minutos. Depois dela, a Avenly passa a ser sua agenda oficial.",
     "when-import",
   ],
   // A etapa monta as telas do módulo de importação (Goal066), com o título
@@ -68,9 +68,9 @@ export const onboardingScenarios = {
     "Pausas e bloqueios você configura depois.",
     "hours",
   ],
-  "agenda-atendly-pronta": [
+  "agenda-avenly-pronta": [
     "Agenda configurada",
-    "Sua Agenda Atendly está pronta",
+    "Sua Agenda Avenly está pronta",
     "Serviço e disponibilidade foram salvos.",
     "ready",
   ],
@@ -112,7 +112,7 @@ export const onboardingScenarios = {
   "teste-real": [
     "WhatsApp",
     "Vamos fazer um teste real",
-    "Um número da Atendly vai enviar uma mensagem no seu WhatsApp simulando um cliente. Você só observa — a IA faz o atendimento sozinha.",
+    "Um número da Avenly vai enviar uma mensagem no seu WhatsApp simulando um cliente. Você só observa — a IA faz o atendimento sozinha.",
     "activation-test",
   ],
   "teste-real-progresso": [
@@ -141,7 +141,7 @@ export const onboardingScenarios = {
   ],
   "whatsapp-concluido": [
     "Onboarding concluído",
-    "Sua Atendly está configurada.",
+    "Sua Avenly está configurada.",
     "Conecte seu WhatsApp quando quiser colocar a IA para atender seus clientes.",
     "whatsapp-done",
   ],

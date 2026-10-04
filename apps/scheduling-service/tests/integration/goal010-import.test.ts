@@ -2,7 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { PrismaClient } from "../../src/generated/prisma/client.js";
-import { AtendlyCalendarProvider } from "../../src/modules/integrations/atendly/provider.js";
+import { AvenlyCalendarProvider } from "../../src/modules/integrations/avenly/provider.js";
 import { ImportCompletionService } from "../../src/modules/migrations/import-completion-service.js";
 import { ImportExecutionService } from "../../src/modules/migrations/import-execution-service.js";
 import {
@@ -883,7 +883,7 @@ describeWithDatabase("goal010 import against PostgreSQL", () => {
   describe("importing onto a destination that is already in use", () => {
     it("imports without requiring an empty destination and resolves each conflict by the preview rules", async () => {
       // Destino já povoado: pessoa, serviço e um atendimento próprio da
-      // Atendly, criados antes de qualquer importação.
+      // Avenly, criados antes de qualquer importação.
       const existingService = await prisma.service.create({
         data: {
           tenantId: tenantA,
@@ -897,7 +897,7 @@ describeWithDatabase("goal010 import against PostgreSQL", () => {
       const existingCustomer = await prisma.customer.create({
         data: { tenantId: tenantA, name: "Ana Souza", phone: "5511999990000" },
       });
-      const existingAppointment = await new AtendlyCalendarProvider(
+      const existingAppointment = await new AvenlyCalendarProvider(
         prisma,
         tenantA,
         "user-0",
@@ -1185,7 +1185,7 @@ describeWithDatabase("goal010 import against PostgreSQL", () => {
       customerId: string,
       idempotencyKey: string,
     ) {
-      return new AtendlyCalendarProvider(
+      return new AvenlyCalendarProvider(
         other,
         tenantA,
         "user-2",

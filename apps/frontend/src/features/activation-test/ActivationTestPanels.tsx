@@ -280,7 +280,7 @@ export function ActivationTestCleanupNote({
 /**
  * Número do WhatsApp do negócio, lido da conexão real.
  *
- * O teste precisa dele para saber para onde a Atendly conversa. Sem conexão
+ * O teste precisa dele para saber para onde a Avenly conversa. Sem conexão
  * conectada não há teste: a recusa é dita antes de qualquer chamada, e não
  * vira progresso simulado.
  */
@@ -400,7 +400,7 @@ export function ActivationTestIntro() {
         <Icon name="check" />
         <span>
           A conversa começa com um aviso separado: “Esta é uma conversa de teste
-          da Atendly.”
+          da Avenly.”
         </span>
       </li>
       <li>
@@ -439,11 +439,11 @@ export function ActivationTestOnboardingIntro() {
     <div className="activation-test-intro">
       <div className="activation-test-preview">
         <div className="activation-test-preview-head">
-          <span>Atendly · Teste</span>
+          <span>Avenly · Teste</span>
           <span>agora</span>
         </div>
         <p className="activation-test-bubble">
-          Esta é uma conversa de teste da Atendly. Você só precisa observar: a
+          Esta é uma conversa de teste da Avenly. Você só precisa observar: a
           IA vai conversar sozinha com um cliente simulado e marcar um
           atendimento de teste, que é removido no final.
         </p>
@@ -516,7 +516,7 @@ export function ActivationTestPaused() {
       </div>
       {run?.state === "PAUSED_BY_HUMAN" && (
         <p className="field-help">
-          Ao reiniciar, a Atendly começa uma conversa de teste nova.
+          Ao reiniciar, a Avenly começa uma conversa de teste nova.
         </p>
       )}
     </div>
@@ -552,7 +552,7 @@ export function ActivationTestFailed() {
       </p>
       {run && run.attempts > 1 && (
         <p className="field-help">
-          A Atendly tentou {run.attempts} de {run.maxAttempts} vezes antes de
+          A Avenly tentou {run.attempts} de {run.maxAttempts} vezes antes de
           parar.
         </p>
       )}

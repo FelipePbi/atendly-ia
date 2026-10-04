@@ -157,7 +157,7 @@ export const ONBOARDING_ROUTES = [
   {
     path: "/onboarding/boas-vindas",
     name: "onboarding-boas-vindas",
-    contentMarker: "Configure sua Atendly em poucos passos.",
+    contentMarker: "Configure sua Avenly em poucos passos.",
   },
   {
     path: "/onboarding/segmento-e-nome",
@@ -211,9 +211,9 @@ export const ONBOARDING_ROUTES = [
     contentMarker: "Qual é seu horário de atendimento?",
   },
   {
-    path: "/onboarding/agenda-atendly-pronta",
-    name: "onboarding-agenda-atendly-pronta",
-    contentMarker: "Sua Agenda Atendly está pronta",
+    path: "/onboarding/agenda-avenly-pronta",
+    name: "onboarding-agenda-avenly-pronta",
+    contentMarker: "Sua Agenda Avenly está pronta",
   },
   // Goal079: as duas etapas do capítulo "Sua IA". A segunda conta grava
   // serviço e disponibilidade (terceiro PATCH da semeadura), que a

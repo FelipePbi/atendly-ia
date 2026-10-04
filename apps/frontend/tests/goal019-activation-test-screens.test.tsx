@@ -168,12 +168,12 @@ describe("antes do teste: explicação e CTA do vault", () => {
 
     expect(
       await screen.findByText(
-        /Um número da Atendly vai enviar uma mensagem no seu WhatsApp/,
+        /Um número da Avenly vai enviar uma mensagem no seu WhatsApp/,
       ),
     ).toBeInTheDocument();
     // Prévia: o aviso que o orquestrador envia e uma pergunta sem serviço.
     expect(
-      screen.getByText(/Esta é uma conversa de teste da Atendly/),
+      screen.getByText(/Esta é uma conversa de teste da Avenly/),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Oi! Quanto custa o atendimento?"),
@@ -226,7 +226,7 @@ describe("antes do teste: explicação e CTA do vault", () => {
       new BffHttpError({
         code: "UPSTREAM_ERROR",
         details: { upstreamCode: "PLATFORM_NUMBER_NOT_CONFIGURED" },
-        message: "A instancia oficial da Atendly nao esta configurada.",
+        message: "A instancia oficial da Avenly nao esta configurada.",
         requestId: "request-1",
         status: 502,
       }),

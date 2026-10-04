@@ -374,7 +374,7 @@ export function ImportPreviewScreen({
   if (stale) {
     return (
       <ImportsPage
-        description="Nada foi importado. Sua agenda na Atendly continua como estava."
+        description="Nada foi importado. Sua agenda na Avenly continua como estava."
         title="Seus dados mudaram desde esta análise"
       >
         <StatePanel
@@ -410,7 +410,7 @@ export function ImportPreviewScreen({
   if (effectivePhase.kind === "error") {
     return (
       <ImportsPage
-        description="Nada foi alterado na Atendly."
+        description="Nada foi alterado na Avenly."
         title="Analisando seus dados"
       >
         <StatePanel
@@ -429,7 +429,7 @@ export function ImportPreviewScreen({
   if (effectivePhase.kind === "working") {
     return (
       <ImportsPage
-        description="Nada muda na Atendly até você confirmar."
+        description="Nada muda na Avenly até você confirmar."
         title="Analisando seus dados…"
       >
         <div className="imports-panel" aria-busy="true">
@@ -549,7 +549,7 @@ export function ImportPreviewScreen({
 
   return (
     <ImportsPage
-      description="Isso não altera nada na Atendly. Revise antes de confirmar."
+      description="Isso não altera nada na Avenly. Revise antes de confirmar."
       title="Encontramos isto no Minha Agenda"
     >
       <div className="imports-panel">

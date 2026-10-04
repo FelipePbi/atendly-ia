@@ -722,10 +722,10 @@ describe("horarios: Personalizar dias diferentes grava uma regra por dia", () =>
   });
 });
 
-describe("agenda-atendly-pronta: resumo completo, sem texto de desenvolvimento nem Fonte oficial", () => {
+describe("agenda-avenly-pronta: resumo completo, sem texto de desenvolvimento nem Fonte oficial", () => {
   test("mostra serviço, duração, preço, dias e horário", async () => {
     await renderStep(
-      "agenda-atendly-pronta",
+      "agenda-avenly-pronta",
       stateFixture({
         service: serviceFixture({ name: "Corte", durationMinutes: 45, price: 120, priceType: "FIXED" }),
         availability: {
@@ -753,7 +753,7 @@ describe("agenda-atendly-pronta: resumo completo, sem texto de desenvolvimento n
 
   test("com um dia personalizado, o resumo lista o horário de cada dia a partir do que está gravado", async () => {
     await renderStep(
-      "agenda-atendly-pronta",
+      "agenda-avenly-pronta",
       stateFixture({
         availability: availabilityFixture([
           { dayOfWeek: 3, endTime: "13:00", startTime: "08:00" },
@@ -772,7 +772,7 @@ describe("agenda-atendly-pronta: resumo completo, sem texto de desenvolvimento n
 
   test("não contém texto de desenvolvimento nem Fonte oficial", async () => {
     await renderStep(
-      "agenda-atendly-pronta",
+      "agenda-avenly-pronta",
       stateFixture({ service: serviceFixture() }),
     );
     await screen.findByRole("heading", { level: 1 });

@@ -100,7 +100,7 @@ export function classifyEvolutionEvent(
 
 /**
  * Recibo de entrega/leitura vindo do Go. Reconcilia saidas que ficaram
- * `unknown`: `MessageIDs` contem o operation-id que a Atendly enviou.
+ * `unknown`: `MessageIDs` contem o operation-id que a Avenly enviou.
  */
 export function mapEvolutionReceipt(payload: unknown): EvolutionReceipt | null {
   if (!isRecord(payload)) return null;

@@ -114,7 +114,7 @@ describe("boas-vindas: entrada da conta nova, sem gravação", () => {
     expect(
       await screen.findByRole("heading", {
         level: 1,
-        name: "Configure sua Atendly em poucos passos.",
+        name: "Configure sua Avenly em poucos passos.",
       }),
     ).toBeVisible();
     expect(

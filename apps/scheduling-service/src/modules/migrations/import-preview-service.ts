@@ -987,7 +987,7 @@ function classifyRecord(input: {
   const { category, record, entityType, externalMapIndex } = input;
 
   // Universal, para toda categoria: se este identificador de origem ja foi
-  // criado na Atendly por uma importacao anterior (idempotencia de
+  // criado na Avenly por uma importacao anterior (idempotencia de
   // `ExternalEntityMap`), a correspondencia e claramente identica.
   const alreadyImportedId = externalMapIndex.get(
     `${entityType}:${record.externalId}`,
@@ -998,7 +998,7 @@ function classifyRecord(input: {
       status: "PENDING",
       reasonCode: "ALREADY_IMPORTED_MATCH",
       reasonDetail:
-        "Este registro já existe na Atendly, criado por uma importação anterior.",
+        "Este registro já existe na Avenly, criado por uma importação anterior.",
       matchClass: "EXACT",
       candidateInternalIds: [alreadyImportedId],
     };

@@ -467,7 +467,7 @@ const IMPORT_WORK_ERROR_MESSAGES: Record<ImportWorkErrorCode, string> = {
     "The import source answered outside the expected contract.",
   IMPORT_PREVIEW_STALE:
     "The import source changed after the approved preview; analyze again.",
-  IMPORT_INTERNAL_ERROR: "The import work failed inside Atendly.",
+  IMPORT_INTERNAL_ERROR: "The import work failed inside Avenly.",
 };
 
 const SOURCE_UNAVAILABLE_CODES = new Set([

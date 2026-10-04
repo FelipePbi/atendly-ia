@@ -118,7 +118,7 @@ function AppShellChrome({
       : null;
 
   useEffect(() => {
-    document.title = title ? `${title} — Atendly` : "Atendly";
+    document.title = title ? `${title} — Avenly` : "Avenly";
   }, [title]);
 
   useEffect(() => {

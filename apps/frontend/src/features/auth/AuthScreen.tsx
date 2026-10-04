@@ -73,7 +73,7 @@ function AuthLayout({
 }) {
   return (
     <main className={`entry-shell${compact ? " entry-shell--compact" : ""}`}>
-      <aside className="entry-panel" aria-label="Atendly">
+      <aside className="entry-panel" aria-label="Avenly">
         <Brand href="/login" signature="entry" />
         <div className="entry-copy">
           <span className="entry-badge">Atendimento com IA no WhatsApp</span>
@@ -81,7 +81,7 @@ function AuthLayout({
             Seu atendimento começa com uma boa conversa.
           </h2>
           <p className="entry-support">
-            A Atendly aprende o jeito do seu negócio, responde clientes no
+            A Avenly aprende o jeito do seu negócio, responde clientes no
             WhatsApp e marca direto na sua agenda.
           </p>
           <div className="entry-mock" aria-hidden="true">
@@ -417,7 +417,7 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
             <Icon name="check" />
           </span>
           <h1>Senha redefinida</h1>
-          <p>Você já pode entrar na Atendly com sua nova senha.</p>
+          <p>Você já pode entrar na Avenly com sua nova senha.</p>
           <Link className="btn btn-primary" href="/login">
             Ir para entrar
           </Link>
@@ -652,7 +652,7 @@ function mapAuthError(
   }
   return {
     fieldErrors: {},
-    formError: "Não foi possível falar com a Atendly. Tente novamente.",
+    formError: "Não foi possível falar com a Avenly. Tente novamente.",
   };
 }
 

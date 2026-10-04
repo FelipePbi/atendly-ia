@@ -1,7 +1,7 @@
 import Fastify, { type FastifyRequest } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { dashboardSchema } from "@atendly-ia/public-api-contract";
+import { dashboardSchema } from "@avenly-ia/public-api-contract";
 
 /**
  * Goal074/WU-03 §7.4 — `GET /v1/dashboard` acrescenta `aiAppointmentsThisWeek`

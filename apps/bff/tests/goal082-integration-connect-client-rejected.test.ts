@@ -13,7 +13,7 @@ import {
 
 /**
  * Goal082/WU-02 — a recusa da identificação do app pelo portal
- * (`MINHA_AGENDA_CLIENT_REJECTED`, falha da Atendly) chega do Scheduling com
+ * (`MINHA_AGENDA_CLIENT_REJECTED`, falha da Avenly) chega do Scheduling com
  * 503 e o BFF a repassa como `UPSTREAM_ERROR` com o mesmo 503, não 502, e com
  * `details.upstreamCode` igual. `MINHA_AGENDA_AUTH_FAILED` (422) e
  * `MINHA_AGENDA_NOT_CONFIGURED` (503) seguem como no Goal060. O Scheduling é

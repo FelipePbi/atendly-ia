@@ -55,7 +55,7 @@ function headers(extra: Record<string, string> = {}) {
   };
 }
 
-function seedAtendlyCalendar(db: Database) {
+function seedAvenlyCalendar(db: Database) {
   db.client.calendarSettings.rows.push({
     id: "settings-1",
     tenantId,
@@ -113,7 +113,7 @@ describe("Goal060: conexão Minha Agenda com e-mail e senha", () => {
   beforeEach(async () => {
     db = createDatabaseDouble();
     app = await buildTestApp(db.client as unknown as PrismaClient);
-    seedAtendlyCalendar(db);
+    seedAvenlyCalendar(db);
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
   });

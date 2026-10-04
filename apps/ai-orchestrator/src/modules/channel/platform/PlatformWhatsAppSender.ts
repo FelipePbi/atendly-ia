@@ -56,7 +56,7 @@ const defaultProviderFactory: PlatformProviderFactory = (config, logger) =>
   new EvolutionProvider(logger, config.credential, config.instanceId);
 
 /**
- * Remetente do numero oficial da Atendly.
+ * Remetente do numero oficial da Avenly.
  *
  * Mais um uso da porta `WhatsAppProvider` ja existente, nunca um transporte
  * novo. A credencial vem da configuracao do servico

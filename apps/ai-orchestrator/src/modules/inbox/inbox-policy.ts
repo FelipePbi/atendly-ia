@@ -142,12 +142,12 @@ export function conversationWindowMs(input: ConversationWindowInput): number {
   const desiredMs = ambiguous
     ? input.pendingFragments <= 1
       ? // Mensagem ambigua de numero sem historico: a espera nao e debounce de
-        // fragmento, e tempo para a pessoa dizer o que quer antes de a Atendly
+        // fragmento, e tempo para a pessoa dizer o que quer antes de a Avenly
         // responder. Conta desde o primeiro evento, nao desde agora.
         Math.max(0, input.policy.ambiguousSeconds * 1000 - elapsedMs)
       : // O fragmento seguinte continua igualmente ambiguo ("oi", "bom dia"):
         // a pessoa ainda nao disse o que quer, entao a espera recomeca a partir
-        // dele em vez de a Atendly responder uma saudacao com outra. O teto
+        // dele em vez de a Avenly responder uma saudacao com outra. O teto
         // desde o primeiro evento continua valendo e fecha a janela.
         input.policy.ambiguousSeconds * 1000
     : fragmentWindowMs(input);

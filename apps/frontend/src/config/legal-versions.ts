@@ -6,7 +6,7 @@ export {
   TERMS_EFFECTIVE_DATE,
   TERMS_LAST_UPDATED_DATE,
   TERMS_VERSION,
-} from "@atendly-ia/legal-contract";
+} from "@avenly-ia/legal-contract";
 
 export function formatLegalDate(date: string): string {
   return new Intl.DateTimeFormat("pt-BR", {

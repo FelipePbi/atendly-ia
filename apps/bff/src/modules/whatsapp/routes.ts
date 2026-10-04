@@ -218,7 +218,7 @@ async function ensureInstance(
   const profile = await getPrisma().businessProfile.findUnique({
     where: { tenantId: tenant.tenantId },
   });
-  const name = `${slug(profile?.businessName || "atendly")}_${randomBytes(4).toString("hex")}`;
+  const name = `${slug(profile?.businessName || "avenly")}_${randomBytes(4).toString("hex")}`;
   const token = `wa_${randomBytes(32).toString("hex")}`;
   const created = await evolution.createInstance(
     {
@@ -428,6 +428,6 @@ function slug(value: string): string {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "_")
       .replace(/^_|_$/g, "")
-      .slice(0, 48) || "atendly"
+      .slice(0, 48) || "avenly"
   );
 }

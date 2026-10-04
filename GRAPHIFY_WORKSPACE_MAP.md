@@ -1,4 +1,4 @@
-# Atendly Workspace Map
+# Avenly Workspace Map
 
 ## Projetos
 

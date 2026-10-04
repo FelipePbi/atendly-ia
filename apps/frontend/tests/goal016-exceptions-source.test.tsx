@@ -351,7 +351,7 @@ describe("sem capability de manageAvailability nenhuma leitura de agenda por pes
     ).toBeVisible();
     expect(
       screen.getByText(
-        `A configuração atual de Agenda Atendly não permite ${operationLabel("manageAvailability")} por aqui.`,
+        `A configuração atual de Agenda Avenly não permite ${operationLabel("manageAvailability")} por aqui.`,
       ),
     ).toBeVisible();
     expect(screen.queryByText(/algo deu errado/i)).toBeNull();

@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { CalendarService } from "../../src/modules/calendar/calendar-service.js";
 import {
-  AtendlyServiceService,
+  AvenlyServiceService,
   isOperationalService,
-} from "../../src/modules/services/atendly-service-service.js";
+} from "../../src/modules/services/avenly-service-service.js";
 import { createDatabaseDouble } from "./support/database-double.js";
 
 const tenantId = "tenant-a";
@@ -12,7 +12,7 @@ const tenantId = "tenant-a";
 function service(database = createDatabaseDouble()) {
   return {
     database,
-    services: new AtendlyServiceService(database.client as never, tenantId),
+    services: new AvenlyServiceService(database.client as never, tenantId),
   };
 }
 
@@ -355,8 +355,8 @@ describe("service catalog: recurrenceIntervalDays reaches the /internal/services
 describe("service catalog: does not leak across tenants", () => {
   it("keeps operational services scoped to the tenant", async () => {
     const database = createDatabaseDouble();
-    const a = new AtendlyServiceService(database.client as never, "tenant-a");
-    const b = new AtendlyServiceService(database.client as never, "tenant-b");
+    const a = new AvenlyServiceService(database.client as never, "tenant-a");
+    const b = new AvenlyServiceService(database.client as never, "tenant-b");
     await a.create({
       name: "Corte A",
       durationMinutes: 30,

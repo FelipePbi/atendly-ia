@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { AtendlyCustomerService } from "../../src/modules/customers/atendly-customer-service.js";
+import { AvenlyCustomerService } from "../../src/modules/customers/avenly-customer-service.js";
 import { AppError } from "../../src/shared/errors/app-error.js";
 import {
   BRAZILIAN_DDDS,
@@ -140,7 +140,7 @@ describe("phoneEquivalenceCandidates (Goal062, WU-02)", () => {
 
 describe("findCandidatesByPhone por equivalência (Goal062, WU-02)", () => {
   function customers(tenantId = "tenant-a") {
-    return new AtendlyCustomerService(
+    return new AvenlyCustomerService(
       createDatabaseDouble().client as never,
       tenantId,
     );
@@ -171,7 +171,7 @@ describe("findCandidatesByPhone por equivalência (Goal062, WU-02)", () => {
         normalizedPhone: "11966665555",
       },
     });
-    const service = new AtendlyCustomerService(
+    const service = new AvenlyCustomerService(
       database.client as never,
       "tenant-a",
     );
@@ -190,8 +190,8 @@ describe("findCandidatesByPhone por equivalência (Goal062, WU-02)", () => {
 
   it("não mistura correspondência por equivalência entre tenants", async () => {
     const database = createDatabaseDouble();
-    const a = new AtendlyCustomerService(database.client as never, "tenant-a");
-    const b = new AtendlyCustomerService(database.client as never, "tenant-b");
+    const a = new AvenlyCustomerService(database.client as never, "tenant-a");
+    const b = new AvenlyCustomerService(database.client as never, "tenant-b");
     await a.create({ name: "Maria", phone: "5511966665555" });
     await b.create({ name: "Outra Maria", phone: "5511966665555" });
 

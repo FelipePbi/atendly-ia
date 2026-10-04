@@ -283,18 +283,18 @@ describe("§4.6 a frase 'A IA responde' por tipo de preço", () => {
 });
 
 describe("§4.7 (formulário) sem copy técnica", () => {
-  test("'Gerenciado pela', 'Controle completo' e a origem 'Agenda Atendly' não aparecem em /servicos/novo", async () => {
+  test("'Gerenciado pela', 'Controle completo' e a origem 'Agenda Avenly' não aparecem em /servicos/novo", async () => {
     await renderNewForm();
 
     expect(screen.queryByText(/Gerenciado pela/)).toBeNull();
     expect(screen.queryByText(/Controle completo/)).toBeNull();
-    expect(screen.queryByText("Agenda Atendly")).toBeNull();
+    expect(screen.queryByText("Agenda Avenly")).toBeNull();
     expect(
       screen.queryByText(/podem ser criados, editados e desativados aqui/),
     ).toBeNull();
   });
 
-  test("'Gerenciado pela', 'Controle completo' e a origem 'Agenda Atendly' não aparecem em /servicos/editar", async () => {
+  test("'Gerenciado pela', 'Controle completo' e a origem 'Agenda Avenly' não aparecem em /servicos/editar", async () => {
     serviceCatalogList.mockResolvedValue({
       editable: true,
       items: [serviceFixture()],
@@ -309,7 +309,7 @@ describe("§4.7 (formulário) sem copy técnica", () => {
 
     expect(screen.queryByText(/Gerenciado pela/)).toBeNull();
     expect(screen.queryByText(/Controle completo/)).toBeNull();
-    expect(screen.queryByText("Agenda Atendly")).toBeNull();
+    expect(screen.queryByText("Agenda Avenly")).toBeNull();
     expect(
       screen.queryByText(/podem ser criados, editados e desativados aqui/),
     ).toBeNull();

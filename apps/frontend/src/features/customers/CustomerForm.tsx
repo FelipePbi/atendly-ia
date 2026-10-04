@@ -151,7 +151,7 @@ export function CustomerForm() {
               : "cadastros com o telefone"}{" "}
             {displayPhone(pending.phone, "")}. O mesmo número pode pertencer a mais de uma
             pessoa: escolha um cadastro existente ou confirme que é uma
-            pessoa nova. A Atendly não junta cadastros automaticamente.
+            pessoa nova. A Avenly não junta cadastros automaticamente.
           </p>
           <div aria-label="Cadastros com este telefone" className="list" role="list">
             {candidates.map((candidate) => (
@@ -284,7 +284,7 @@ export function CustomerForm() {
 function requestError(error: unknown, fallback: string): string {
   if (!(error instanceof BffHttpError)) return fallback;
   const messages: Record<string, string> = {
-    NETWORK_ERROR: "Não foi possível acessar a Atendly. Confira sua conexão.",
+    NETWORK_ERROR: "Não foi possível acessar a Avenly. Confira sua conexão.",
   };
   const message = messages[error.code] ?? fallback;
   return `${message} Referência: ${error.requestId}`;

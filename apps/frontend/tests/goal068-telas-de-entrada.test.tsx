@@ -42,7 +42,7 @@ const cssPath = path.join(
   "src",
   "shared",
   "styles",
-  "atendly.css",
+  "avenly.css",
 );
 const css = readFileSync(cssPath, "utf8");
 

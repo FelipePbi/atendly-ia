@@ -90,7 +90,7 @@ function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState 
   };
 }
 
-describe("hub com fonte de agenda Atendly", () => {
+describe("hub com fonte de agenda Avenly", () => {
   test("lista as oito linhas, cada uma apontando para a rota certa", () => {
     render(<SettingsHub settings={settingsFixture()} />);
 

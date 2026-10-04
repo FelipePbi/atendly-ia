@@ -14,7 +14,7 @@ import {
 /**
  * Goal075/WU-02 — teste §6.4: `GET /v1/customers` e `GET /v1/customers/:id`
  * passam `nextAppointment`, `lastAppointment` e `appointmentStats` pelo
- * schema do contrato (`@atendly-ia/public-api-contract`), e a verificação de
+ * schema do contrato (`@avenly-ia/public-api-contract`), e a verificação de
  * contrato de resposta (Goal036) reprova qualquer campo que o contrato não
  * declare dentro desses três objetos novos.
  */

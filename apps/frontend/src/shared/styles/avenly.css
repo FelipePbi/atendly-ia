@@ -1,7 +1,7 @@
 /*
  * Paleta, tipografia, espaçamento e movimento vêm de src/shared/styles/tokens.css
  * (direção Recepção). Os nomes abaixo são mantidos para não quebrar o CSS por
- * módulo (atendly-*.css) e as telas existentes, que continuam consumindo-os.
+ * módulo (avenly-*.css) e as telas existentes, que continuam consumindo-os.
  */
 :root {
   --bg: var(--at-color-canvas);
@@ -3426,7 +3426,7 @@ p {
   font-size: 15px;
 }
 /* Importar agora ou depois (quadro 2.2): ilustração "Minha Agenda → uma vez
-   → Atendly", ações empilhadas em largura total e a nota abaixo delas. */
+   → Avenly", ações empilhadas em largura total e a nota abaixo delas. */
 [data-step="quando-importar"] .onboarding-content {
   gap: 24px;
 }
@@ -3469,14 +3469,14 @@ p {
   display: block;
   background: var(--at-color-surface-active);
 }
-.import-card.is-atendly {
+.import-card.is-avenly {
   border: 1.5px solid var(--accent);
   box-shadow: 0 12px 30px rgba(15, 95, 99, 0.12);
 }
-.import-card.is-atendly .import-card-label {
+.import-card.is-avenly .import-card-label {
   color: var(--accent);
 }
-.import-card.is-atendly .import-bar {
+.import-card.is-avenly .import-bar {
   background: var(--at-color-primary-tint-strong);
 }
 .import-arrow {

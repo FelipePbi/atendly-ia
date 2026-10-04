@@ -140,7 +140,7 @@ function fakePrisma() {
 /**
  * Porta de sessao em dobro.
  *
- * O envio pela Atendly assume a sessao antes do transporte; aqui o dobro so
+ * O envio pela Avenly assume a sessao antes do transporte; aqui o dobro so
  * registra a chamada para que a suite prove a ordem sem precisar de banco.
  */
 function fakeSessions() {

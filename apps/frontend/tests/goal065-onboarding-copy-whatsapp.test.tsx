@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Goal065/WU-04 — "IA" nomeia a automação nos textos das etapas (Atendly
+ * Goal065/WU-04 — "IA" nomeia a automação nos textos das etapas (Avenly
  * fica só como plataforma), a introdução do WhatsApp explica "um número por
  * negócio", e contatos ignorados troca "Tente novamente" por formato
  * esperado em erro de validação, mantendo a mensagem de tentar de novo só
@@ -91,23 +91,23 @@ const COPY_STEPS = [
   "servicos-adicionais",
   "dias-de-atendimento",
   "horarios",
-  "agenda-atendly-pronta",
+  "agenda-avenly-pronta",
   "whatsapp",
   "tom-da-ia",
 ] as const;
 
-// "Atendly" como nome da plataforma ou do produto, nunca como quem conversa,
+// "Avenly" como nome da plataforma ou do produto, nunca como quem conversa,
 // informa ou decide: o que sobra depois de tirar estes usos não pode citar
-// "Atendly".
+// "Avenly".
 const PLATFORM_USES = [
-  "Configure sua Atendly em poucos passos.",
-  "Sua Agenda Atendly está pronta",
-  "A Atendly organiza todas as suas conversas automaticamente.",
+  "Configure sua Avenly em poucos passos.",
+  "Sua Agenda Avenly está pronta",
+  "A Avenly organiza todas as suas conversas automaticamente.",
 ];
 
 describe("textos das etapas: a automação se chama IA em todas as etapas do gate", () => {
   test.each(COPY_STEPS)(
-    "%s não chama a automação de Atendly nem mostra termo técnico",
+    "%s não chama a automação de Avenly nem mostra termo técnico",
     async (scenario) => {
       const { container } = await renderStep(scenario, emptyState());
       await screen.findByRole("heading", { level: 1 });
@@ -116,7 +116,7 @@ describe("textos das etapas: a automação se chama IA em todas as etapas do gat
         (remaining, use) => remaining.split(use).join(""),
         content?.textContent ?? "",
       );
-      expect(text).not.toMatch(/Atendly/);
+      expect(text).not.toMatch(/Avenly/);
       expect(text).not.toMatch(/\btoken\b|\bAPI\b|\bHTTP\b|VALIDATION_ERROR/);
     },
   );
@@ -134,8 +134,8 @@ describe("textos das etapas: a automação se chama IA em todas as etapas do gat
   });
 });
 
-describe("tom-da-ia: automação chamada de IA, Atendly só como plataforma", () => {
-  test("o título pergunta pela IA, não pela Atendly", async () => {
+describe("tom-da-ia: automação chamada de IA, Avenly só como plataforma", () => {
+  test("o título pergunta pela IA, não pela Avenly", async () => {
     const { container } = await renderStep("tom-da-ia", emptyState());
     expect(
       await screen.findByRole("heading", {
@@ -143,7 +143,7 @@ describe("tom-da-ia: automação chamada de IA, Atendly só como plataforma", ()
       }),
     ).toBeVisible();
     const stepBody = container.querySelector(".onboarding-content");
-    expect(stepBody?.textContent).not.toMatch(/Atendly/);
+    expect(stepBody?.textContent).not.toMatch(/Avenly/);
   });
 });
 

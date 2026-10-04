@@ -1,13 +1,13 @@
 @import "../shared/styles/tokens.css";
-@import "../shared/styles/atendly.css";
-@import "../shared/styles/atendly-conversations.css";
-@import "../shared/styles/atendly-agenda.css";
-@import "../shared/styles/atendly-customers.css";
-@import "../shared/styles/atendly-services.css";
-@import "../shared/styles/atendly-settings.css";
-@import "../shared/styles/atendly-imports.css";
-@import "../shared/styles/atendly-notifications.css";
-@import "../shared/styles/atendly-system.css";
+@import "../shared/styles/avenly.css";
+@import "../shared/styles/avenly-conversations.css";
+@import "../shared/styles/avenly-agenda.css";
+@import "../shared/styles/avenly-customers.css";
+@import "../shared/styles/avenly-services.css";
+@import "../shared/styles/avenly-settings.css";
+@import "../shared/styles/avenly-imports.css";
+@import "../shared/styles/avenly-notifications.css";
+@import "../shared/styles/avenly-system.css";
 
 .onboarding-shell {
   background: var(--surface);

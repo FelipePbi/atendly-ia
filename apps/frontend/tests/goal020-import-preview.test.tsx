@@ -223,7 +223,7 @@ describe("análise e preview por categoria", () => {
       await screen.findByRole("heading", { name: "Analisando seus dados…" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Nada muda na Atendly até você confirmar."),
+      screen.getByText("Nada muda na Avenly até você confirmar."),
     ).toBeInTheDocument();
 
     resolvePreview(previewFixture());

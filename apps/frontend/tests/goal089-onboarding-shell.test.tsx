@@ -236,7 +236,7 @@ describe("1. nenhuma etapa renderiza barra superior", () => {
       const { container } = renderStep(scenario, state);
       await findStepHeading();
 
-      const brands = screen.getAllByRole("link", { name: /Atendly/ });
+      const brands = screen.getAllByRole("link", { name: /Avenly/ });
       expect(brands).toHaveLength(1);
       expect(sidebar()).toContainElement(brands[0]);
       expect(brands[0].closest("header")).toBeNull();
@@ -246,7 +246,7 @@ describe("1. nenhuma etapa renderiza barra superior", () => {
       expect(exit.closest("nav")).toBeNull();
 
       for (const header of container.querySelectorAll("header")) {
-        expect(within(header).queryByRole("link", { name: /Atendly/ })).toBeNull();
+        expect(within(header).queryByRole("link", { name: /Avenly/ })).toBeNull();
         expect(within(header).queryByRole("button", { name: "Sair" })).toBeNull();
       }
     },

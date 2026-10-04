@@ -23,7 +23,7 @@ const item = {
   label: "Corte — 2026-10-01 09:00",
   status: "NEEDS_REVIEW" as const,
   reasonCode: "APPOINTMENT_SLOT_TAKEN",
-  reasonDetail: "O horário já está ocupado por um atendimento da Atendly.",
+  reasonDetail: "O horário já está ocupado por um atendimento da Avenly.",
   entityType: null,
   internalId: null,
   attemptCount: 1,

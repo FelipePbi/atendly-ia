@@ -42,7 +42,7 @@ test("a command that cannot be executed is a failure", () => {
   const outcome = runStep({
     name: "missing-binary",
     cwd: ".",
-    command: "atendly-command-that-does-not-exist",
+    command: "avenly-command-that-does-not-exist",
     args: [],
   });
   assert.equal(outcome.status, STATUS.failed);

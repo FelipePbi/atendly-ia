@@ -6,14 +6,14 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { AtendlyCustomerService } from "../../src/modules/customers/atendly-customer-service.js";
+import { AvenlyCustomerService } from "../../src/modules/customers/avenly-customer-service.js";
 import { createDatabaseDouble } from "./support/database-double.js";
 
 const tenantId = "tenant-a";
 const DAY_MS = 24 * 60 * 60_000;
 
 function customersService(database = createDatabaseDouble(), tenant = tenantId) {
-  return new AtendlyCustomerService(database.client as never, tenant);
+  return new AvenlyCustomerService(database.client as never, tenant);
 }
 
 async function seedAppointment(
@@ -251,7 +251,7 @@ describe("list com timezone (Goal075, WU-01)", () => {
         ];
       },
     };
-    const service = new AtendlyCustomerService(fakeDatabase as never, tenantId);
+    const service = new AvenlyCustomerService(fakeDatabase as never, tenantId);
     const [item] = await service.list({}, { timezone, now });
     expect(item.nextAppointment).toEqual({
       date: "2026-06-14",
@@ -281,7 +281,7 @@ describe("list com timezone (Goal075, WU-01)", () => {
       },
       $queryRaw: async () => [],
     };
-    const service = new AtendlyCustomerService(fakeDatabase as never, tenantId);
+    const service = new AvenlyCustomerService(fakeDatabase as never, tenantId);
     const [item] = await service.list({}, { timezone: "America/Sao_Paulo" });
     expect(item.nextAppointment).toBeNull();
     expect(item.lastAppointment).toBeNull();
@@ -315,7 +315,7 @@ describe("appointmentHighlights (Goal075, blocker 1 da rodada 1)", () => {
         ];
       },
     };
-    const service = new AtendlyCustomerService(fakeDatabase as never, tenantId);
+    const service = new AvenlyCustomerService(fakeDatabase as never, tenantId);
     const highlights = await service.appointmentHighlights(customerId, {
       timezone: "America/Sao_Paulo",
       now,
@@ -341,7 +341,7 @@ describe("appointmentHighlights (Goal075, blocker 1 da rodada 1)", () => {
 
   it("sem agendamento, os dois ficam null", async () => {
     const fakeDatabase = { $queryRaw: async () => [] };
-    const service = new AtendlyCustomerService(fakeDatabase as never, tenantId);
+    const service = new AvenlyCustomerService(fakeDatabase as never, tenantId);
     await expect(
       service.appointmentHighlights("customer-1", {
         timezone: "America/Sao_Paulo",

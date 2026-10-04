@@ -1,4 +1,4 @@
-import { findPublicApiRoute } from "@atendly-ia/public-api-contract";
+import { findPublicApiRoute } from "@avenly-ia/public-api-contract";
 import { z } from "zod";
 
 const errorEnvelopeSchema = z.object({
@@ -40,7 +40,7 @@ export interface BffRequestOptions<TSchema extends z.ZodType> {
 
 /**
  * Schema de `data` da rota pública, lido da tabela em
- * `@atendly-ia/public-api-contract` em vez de importado solto. `T` é o tipo
+ * `@avenly-ia/public-api-contract` em vez de importado solto. `T` é o tipo
  * de saída esperado (o mesmo que a validação da tabela já produz); a tabela
  * é dona do schema, aqui só se recupera a instância pelo par método/padrão.
  */
@@ -83,7 +83,7 @@ const LEGACY_CSRF_COOKIE_NAME = "atendly_csrf";
 /**
  * Adapter HTTP do frontend contra o BFF.
  *
- * Sobre o token de CSRF: a Atendly publica frontend e BFF em hosts distintos,
+ * Sobre o token de CSRF: a Avenly publica frontend e BFF em hosts distintos,
  * sob um sufixo público, e o cookie legível `avenly_csrf` é gravado no host do
  * BFF. `document.cookie` do frontend nunca enxerga esse cookie, então lê-lo não
  * funciona no ambiente publicado — só em desenvolvimento, onde os dois estão em
@@ -185,7 +185,7 @@ export class BffHttpClient {
       throw new BffHttpError({
         code: "NETWORK_ERROR",
         details: error instanceof Error ? { name: error.name } : undefined,
-        message: "Não foi possível acessar a Atendly.",
+        message: "Não foi possível acessar a Avenly.",
         requestId,
         status: 0,
       });
@@ -226,7 +226,7 @@ export class BffHttpClient {
       throw new BffHttpError({
         code: "INVALID_RESPONSE",
         details: parsedEnvelope.error.flatten(),
-        message: "A Atendly retornou uma resposta inválida.",
+        message: "A Avenly retornou uma resposta inválida.",
         requestId: responseRequestId,
         status: response.status,
       });
@@ -237,7 +237,7 @@ export class BffHttpClient {
       throw new BffHttpError({
         code: "INVALID_RESPONSE",
         details: parsedData.error.flatten(),
-        message: "A Atendly retornou dados inválidos.",
+        message: "A Avenly retornou dados inválidos.",
         requestId: parsedEnvelope.data.requestId,
         status: response.status,
       });
@@ -285,7 +285,7 @@ export class BffHttpClient {
       throw new BffHttpError({
         code: "NETWORK_ERROR",
         details: error instanceof Error ? { name: error.name } : undefined,
-        message: "Não foi possível acessar a Atendly.",
+        message: "Não foi possível acessar a Avenly.",
         requestId,
         status: 0,
       });
@@ -370,7 +370,7 @@ async function parseJson(
   } catch {
     throw new BffHttpError({
       code: "INVALID_JSON",
-      message: "A Atendly retornou uma resposta inválida.",
+      message: "A Avenly retornou uma resposta inválida.",
       requestId,
       status: response.status,
     });

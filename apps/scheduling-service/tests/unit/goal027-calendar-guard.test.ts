@@ -5,7 +5,7 @@
  * Os dois guards retirados — um em `internal-api/routes.ts`, outro em
  * `calendar/routes.ts` — somavam **duas** exigencias na mesma chamada: ter
  * `CalendarSettings`
- * (`404 CALENDAR_SETTINGS_NOT_FOUND`) e a fonte ser a Agenda Atendly
+ * (`404 CALENDAR_SETTINGS_NOT_FOUND`) e a fonte ser a Agenda Avenly
  * (`409`). So a segunda deixou de fazer sentido. Este arquivo existe porque
  * o risco da simplificacao e exatamente perder a primeira junto com a
  * segunda — e um tenant sem calendario configurado passar a receber `200`

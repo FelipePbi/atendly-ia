@@ -5853,3 +5853,262 @@ O deploy real no Render e a medida das janelas W6 e W7 de D-121 (d). Uma sessão
 - **Conferência do Tech Lead.** Nas rodadas 1 e 3, ele reexecutou as provas 1 a 3: 9/9, 11/11 e 5/5. Na rodada 1, refez os inventários (A) e (B): 144 e 40 linhas, as mesmas daqui. Na rodada 2, conferiu o sha256 dos cinco arquivos de produção e das quatro provas contra esta seção. Na rodada 3, conferiu a janela da Ordem C contra `git show 2d1410c~1` (`schemas.ts:3` e `BffHttpClient.ts:226`). A prova 4, o vermelho da baseline e os seis controles foram aceitos pelo registro acima, não reexecutados pelo Tech Lead.
 - **Observação.** Na W6, o sweep de expurgo de conta (`apps/bff/src/modules/account/purge.ts`) também chama a IA e o Scheduling e recebe `401`. Não é blocker: a janela continua declarada, não medida.
 - **Aceito sem prova completa.** O deploy real e a duração das janelas W6, W7 e as de D-120 (h); uma sessão anterior ao deploy num navegador real; as credenciais explícitas reais do ambiente de deploy; a prova 4 fora de `validate:integration`, contra o cluster temporário da WU-08. Detalhe no [review110](reviews/110-review.md).
+
+## O produto passa a se chamar Avenly no código, nas telas e no protótipo, do Goal102
+
+Texto do Goal102 ([D-122](DECISIONS.md), `PROPOSED`), escrito pela FIX-001 da rodada 2, por acréscimo, depois da execução final. Toda contagem diz a execução que a sustenta. A recontagem da baseline é da WU-01 da rodada 1; o resto é da FIX-001 da rodada 2. Nenhuma seção de outro Goal foi editada.
+
+### Recontagem da baseline (WU-01, rodada 1, `HEAD` `d5c2fd5`, árvore limpa, antes de qualquer edição)
+
+- `validate:core`: saída 0, 17 passos, 15 passaram e 2 pulados (`test:bff` e `test:health-worker`). `test:ai-orchestrator` `Test Files 95 passed | 14 skipped (109)` e `Tests 1199 passed | 101 skipped (1300)`; `test:scheduling-service` 40 arquivos e 543 testes; `test:frontend` 149 arquivos e 1840 testes; `test:gate-scripts` `tests 242`, `pass 242`; `audit:static` 34 checks, 33 passaram, 1 pulado (`production_health`); `repro:a03-contract-drift` "A-03 não reproduz"; `test:evolution-go` com todos os pacotes `ok`.
+- `validate:integration`: saída 0, 36 de 36 passos. `test:bff-integration` 68 arquivos e 515 testes; `test:scheduling-integration` 20 arquivos e 152 testes; `test:ai-orchestrator-transport-durability` 11 arquivos e 77 testes; `test:ai-orchestrator-content-purge` 3 arquivos e 24 testes; gate autenticado 275 passed e "authenticated gate retries: 0". Rodado num PostgreSQL 18 temporário em `127.0.0.1:55433`.
+- `validate:ui`: saída 0, 168 passed e 1 flaky (169 `passed` no total), 21 pulados. A retentativa foi `tablet-768 › recuperar-senha › nothing overflows sideways` (retry #1, passou na segunda), na árvore da baseline, antes de qualquer edição.
+
+### Prova da substituição inversa (§4 e escolha (e))
+
+Script em Python, rodado na FIX-001 sobre `git diff --cached --name-status -M d5c2fd5 -- docs/design-reference` (com `docs/design-reference/` no index): para cada entrada `M` ou `R`, aplica `Avenly→Atendly`, `avenly→atendly` e `AVENLY→ATENDLY` ao blob do caminho novo (`git show :<novo>`) e compara byte a byte com `git show d5c2fd5:<antigo>`. A comparação é feita entre blobs, e não com o arquivo da worktree, porque `core.autocrlf=true` grava CRLF na worktree e LF no index.
+
+```
+entries: {'M': 48, 'R': 4} identical after inverse: 52 mismatch/unexpected: 0
+R100  claude-design/assets/uploads/atendly-logo-icon.png -> assets/uploads/avenly-logo-icon.png
+R087  claude-design/prototype/Atendly-standalone.html -> prototype/Avenly-standalone.html
+R099  claude-design/prototype/project/Atendly.dc.html -> prototype/project/Avenly.dc.html
+R100  claude-design/prototype/project/uploads/atendly-logo-icon.png -> prototype/project/uploads/avenly-logo-icon.png
+```
+
+O sha256 do blob invertido é igual ao da baseline nos quatro renomeados (`3fe6570d…`, `96b717c2…`, `c4e4ace4…` e `3fe6570d…`). Os dois `.zip` não mudaram. Ficaram com o nome antigo, por desenho, as 7 linhas de texto que citam os `.zip` e as 2 URLs externas do Claude Design (D-122, ponto de julgamento 1). `inventory.json` não tinha o nome e não mudou. Dos 51 arquivos de texto com o nome antigo, 50 mudaram; `handoff/README.md` só cita o `.zip` e ficou igual.
+
+### `visual:compare` (FIX-001, depois da última edição de código)
+
+`npm run visual:compare -- --target L1,L3,L4,L5,L8,L9,H1,A1,NT1,0,2.1,2.2,2.I1,4.2,4.6,I1,I2,Mais-WhatsApp:C1`, saída 0 em 181 s, 72 capturas. O BFF, o Scheduling e a IA eram os da worktree, contra bancos descartáveis num PostgreSQL 18 temporário (`visual_bff_test`, `visual_scheduling_test` e `visual_ai_test` em `127.0.0.1:55433`), com a IA sem laços de fundo e com o LLM e o Evolution apontados para endereços mortos; a conta visual foi criada e semeada ali. O motivo: o banco de desenvolvimento do Scheduling não tem a migration do Goal109 (`Value 'ATENDLY' not found in enum 'CalendarSource'` na primeira tentativa) e o `.env` local da IA aponta para serviços reais. Diff por quadro (%):
+
+| Quadro | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| L1 | 4,8 | 1,0 | 1,0 | 1,0 |
+| L3 | 1,7 | 1,1 | 1,6 | 0,9 |
+| L4 | 2,2 | 1,5 | 1,4 | 1,6 |
+| L5 | 12,8 | 10,5 | 5,3 | 4,3 |
+| L8 | 9,3 | 8,6 | 6,8 | 5,3 |
+| L9 | 9,0 | 7,9 | 7,5 | 5,6 |
+| H1 | 12,7 | 7,4 | 8,3 | 7,1 |
+| A1 | 10,4 | 4,8 | 5,4 | 4,3 |
+| NT1 | 9,8 | 4,2 | 49,0 | 60,1 |
+| 0 | 1,2 | 0,5 | 0,9 | 0,6 |
+| 2.1 | 2,4 | 0,8 | 0,9 | 0,8 |
+| 2.2 | 1,1 | 0,4 | 0,7 | 0,7 |
+| 2.I1 | 2,7 | 1,8 | 2,1 | 1,6 |
+| 4.2 | 8,9 | 5,1 | 5,3 | 3,9 |
+| 4.6 | 5,4 | 2,3 | 2,7 | 1,9 |
+| I1 | 10,0 | 4,4 | 6,7 | 5,6 |
+| I2 | 16,0 | 11,3 | 12,2 | 10,8 |
+| Mais-WhatsApp:C1 | 5,1 | 2,4 | 4,9 | 4,2 |
+
+Os `side-by-side.png` foram abertos. Avenly aparece nos dois lados: a marca do desktop e do onboarding, "Configure sua Avenly", "agendamentos para a Avenly", o cartão "AVENLY" de 2.2 e I2, "Avenly · Teste" de 4.6 e "Avenly · versão 1.0" de C1. Nenhuma divergência envolve o nome. As que restam são as já registradas pelos Goals que portaram cada quadro, e os números ficam na mesma faixa: L1 a L9 iguais aos da tabela do Goal091 (diferença de no máximo 0,1 ponto), H1 12,7 / 7,4 / 8,3 / 7,1 (antes 12,6 / 7,4 / 8,4 / 7,1), A1 igual (10,4 / 4,8 / 5,4 / 4,3), 2.1, 2.2, 2.I1 e I1 iguais, I2 16,0 / 11,3 / 12,2 / 10,8 (antes 16,1 no mobile), NT1 9,8 / 4,2 / 49,0 / 60,1 (antes 10,4 / 4,4 / 49,2 / 60,2). O que difere é estado da conta de teste, como `targets.json` declara: WhatsApp desconectado e IA não ativada (faixa "Atendimento automático parado", "Ative sua IA", "WhatsApp desconectado" na casca), data e dados semeados, notificações e e-mail da conta; e, em 4.2 e 4.6, o estado inicial e os textos já aceitos no porte (consentimento desmarcado, "Fazer isso depois"). Nenhuma divergência nova. Limite: das 72 capturas, as de L1 a L9 e duas de H1 foram abertas, mas a imagem saiu do contexto de trabalho antes da redação; para elas vale a comparação de números acima com as tabelas aceitas.
+
+### Inventário do §6 (FIX-001, depois da execução final)
+
+`git grep -n -i atendly -- ':!docs' ':!graphify-out'`: **444** linhas, **0** sem classe: (i) 65, (ii) 22, (iii) 117, (v) 10, (vi) 3, (viii) 181, (ix) 46. `git grep -n -i atendly -- docs/design-reference`: **11** linhas: (x) 9, (viii) 2. A classificação é de um script que aplica regras por caminho e por texto e sai com erro se sobrar linha; a lista abaixo é a saída dele, agrupada por arquivo quando todas as linhas do arquivo têm a mesma classe.
+
+**Fora de `docs/`:**
+
+- `.env.example` — (viii) — 6 linha(s): 2,3,7,8,11,31
+- `.github/workflows/validate.yml` — (viii) — 3 linha(s): 92,96,101
+- `apps/ai-orchestrator/.env.example` — (viii) — 1 linha(s): 137
+- `apps/ai-orchestrator/prisma.config.ts` — (viii) — 1 linha(s): 13
+- `apps/ai-orchestrator/prisma/migrations/20260908120000_goal005_contact_session_human_control/migration.sql` — (i) — 1 linha(s): 24
+- `apps/ai-orchestrator/prisma/migrations/20261003120000_goal109_avenly_human_control_source/migration.sql` — (i) — 3 linha(s): 6,19,21
+- `apps/ai-orchestrator/src/lib/internal-credentials.ts` — (vi) — 1 linha(s): 27
+- `apps/ai-orchestrator/tests/activation-test/activation-test-service.test.ts` — (viii) — 1 linha(s): 22
+- `apps/ai-orchestrator/tests/channel/platform-sender.test.ts` — (viii) — 1 linha(s): 9
+- `apps/ai-orchestrator/tests/integration/goal109-avenly-human-control-source.test.ts` — (iii) — 12 linha(s): 15,20,21,22,39,118,186,198,200,206,209,219
+- `apps/ai-orchestrator/tests/security/goal110-internal-credential-label.test.ts` — (iii) — 2 linha(s): 21,25
+- `apps/ai-orchestrator/tests/security/platform-credential-isolation.test.ts` — (viii) — 1 linha(s): 14
+- `apps/bff/.env.example:5` — (viii)
+- `apps/bff/.env.example:9` — (viii)
+- `apps/bff/.env.example:14` — (ii)
+- `apps/bff/PUBLIC_API_V1.md:46` — (ii)
+- `apps/bff/PUBLIC_API_V1.md:48` — (ii)
+- `apps/bff/PUBLIC_API_V1.md:50` — (ii)
+- `apps/bff/PUBLIC_API_V1.md:107` — (v)
+- `apps/bff/PUBLIC_API_V1.md:111` — (ii)
+- `apps/bff/prisma.config.ts` — (viii) — 1 linha(s): 13
+- `apps/bff/src/lib/auth.ts` — (ii) — 2 linha(s): 39,40
+- `apps/bff/src/lib/calendar-source.ts` — (ii) — 1 linha(s): 8
+- `apps/bff/src/lib/session.ts` — (vi) — 1 linha(s): 35
+- `apps/bff/tests/customer-identity.integration.test.ts` — (iii) — 1 linha(s): 131
+- `apps/bff/tests/goal018-onboarding-complete.integration.test.ts` — (iii) — 6 linha(s): 25,32,215,235,309,347
+- `apps/bff/tests/goal019-ai-activation-reconciliation.integration.test.ts` — (iii) — 1 linha(s): 157
+- `apps/bff/tests/goal022-notification-center.integration.test.ts` — (iii) — 2 linha(s): 84,171
+- `apps/bff/tests/goal022-notification-engine.test.ts` — (iii) — 1 linha(s): 48
+- `apps/bff/tests/goal022-notification-rules.test.ts` — (iii) — 1 linha(s): 272
+- `apps/bff/tests/goal027-onboarding-issues.test.ts` — (iii) — 4 linha(s): 14,48,52,82
+- `apps/bff/tests/goal029-timezone-contract.integration.test.ts` — (iii) — 2 linha(s): 104,148
+- `apps/bff/tests/goal029-timezone-propagation.integration.test.ts` — (iii) — 2 linha(s): 51,111
+- `apps/bff/tests/goal029-timezone-read-reconciliation.integration.test.ts` — (iii) — 3 linha(s): 83,87,283
+- `apps/bff/tests/goal036-response-contract-undeclared-key.test.ts` — (iii) — 2 linha(s): 38,118
+- `apps/bff/tests/goal036-wu02-declared-fields.test.ts` — (iii) — 1 linha(s): 110
+- `apps/bff/tests/goal059-whatsapp-status.integration.test.ts` — (iii) — 1 linha(s): 53
+- `apps/bff/tests/goal060-integration-connect.test.ts` — (iii) — 1 linha(s): 62
+- `apps/bff/tests/goal063-ai-activation.integration.test.ts` — (iii) — 1 linha(s): 101
+- `apps/bff/tests/goal065-onboarding.integration.test.ts` — (iii) — 1 linha(s): 58
+- `apps/bff/tests/goal067-pause-and-profile.integration.test.ts` — (iii) — 1 linha(s): 81
+- `apps/bff/tests/goal073-settings-policy-and-agenda-view.integration.test.ts` — (iii) — 1 linha(s): 48
+- `apps/bff/tests/goal075-customers-contract.integration.test.ts` — (iii) — 2 linha(s): 39,255
+- `apps/bff/tests/goal077-ai-activated-notification.integration.test.ts` — (iii) — 1 linha(s): 77
+- `apps/bff/tests/goal109-avenly-calendar-source.test.ts` — (iii) — 7 linha(s): 24,31,51,145,168,234,277
+- `apps/bff/tests/goal109-legacy-session-cookie.integration.test.ts` — (iii) — 5 linha(s): 21,29,30,85,102
+- `apps/bff/tests/goal110-csrf-label.integration.test.ts` — (iii) — 2 linha(s): 22,29
+- `apps/bff/tests/goal110-internal-credential-label.test.ts` — (iii) — 1 linha(s): 23
+- `apps/frontend/.env.example` — (ii) — 1 linha(s): 5
+- `apps/frontend/AGENTS.md` — (viii) — 1 linha(s): 250
+- `apps/frontend/scripts/check-legal-config.mjs` — (ii) — 2 linha(s): 16,21
+- `apps/frontend/src/app/onboarding/[step]/page.tsx` — (ix) — 4 linha(s): 13,15,16,17
+- `apps/frontend/src/config/legal-details.ts` — (ii) — 2 linha(s): 31,36
+- `apps/frontend/src/data/http/BffHttpClient.ts` — (ii) — 2 linha(s): 81,94
+- `apps/frontend/src/shared/ui/Brand.tsx` — (ii) — 2 linha(s): 16,17
+- `apps/frontend/tests/goal018-onboarding-reachability.test.tsx` — (ix) — 6 linha(s): 248,354,355,364,366,368
+- `apps/frontend/tests/goal066-onboarding-sistema-atual.test.tsx` — (ix) — 7 linha(s): 4,101,102,110,114,126,127
+- `apps/frontend/tests/goal068-marca.test.tsx` — (ix) — 5 linha(s): 74,82,83,84,85
+- `apps/frontend/tests/goal109-avenly-values.test.tsx` — (iii) — 18 linha(s): 8,75,196,203,222,223,227,233,241,243,249,250,267,285,298,319,323,331
+- `apps/frontend/tests/goal109-csrf-cookie.test.ts` — (iii) — 5 linha(s): 9,17,65,66,72
+- `apps/frontend/tests/service-schema.test.ts` — (iii) — 1 linha(s): 64
+- `apps/health-worker/.env.example` — (viii) — 1 linha(s): 1
+- `apps/health-worker/README.md` — (viii) — 1 linha(s): 30
+- `apps/scheduling-service/.env.example` — (viii) — 1 linha(s): 5
+- `apps/scheduling-service/prisma.config.ts` — (viii) — 1 linha(s): 13
+- `apps/scheduling-service/prisma/migrations/20260828175825_init/migration.sql` — (i) — 1 linha(s): 2
+- `apps/scheduling-service/prisma/migrations/20260910100000_goal010_import_session/migration.sql` — (i) — 2 linha(s): 140,364
+- `apps/scheduling-service/prisma/migrations/20260919120000_goal027_calendar_source_atendly/migration.sql` — (i) — 12 linha(s): 2,6,14,15,20,25,28,36,42,44,51,52
+- `apps/scheduling-service/prisma/migrations/20261003120000_goal109_avenly_calendar_source/migration.sql` — (i) — 5 linha(s): 5,27,29,39,42
+- `apps/scheduling-service/prisma/schema.prisma` — (ii) — 2 linha(s): 17,19
+- `apps/scheduling-service/src/modules/internal-api/routes.ts:113` — (ii)
+- `apps/scheduling-service/src/modules/internal-api/routes.ts:116` — (ii)
+- `apps/scheduling-service/src/modules/internal-api/routes.ts:1945` — (v)
+- `apps/scheduling-service/src/shared/auth/internal-credentials.ts` — (vi) — 1 linha(s): 19
+- `apps/scheduling-service/tests/integration/goal010-import-completion.test.ts` — (v) — 2 linha(s): 34,35
+- `apps/scheduling-service/tests/integration/goal010-import.test.ts` — (v) — 2 linha(s): 211,212
+- `apps/scheduling-service/tests/integration/goal109-avenly-calendar-source.test.ts` — (iii) — 17 linha(s): 31,37,49,127,153,154,157,158,175,177,187,210,211,243,319,320,328
+- `apps/scheduling-service/tests/unit/goal027-calendar-guard.test.ts` — (v) — 1 linha(s): 20
+- `apps/scheduling-service/tests/unit/goal029-calendar-timezone.test.ts` — (iii) — 10 linha(s): 6,7,105,106,142,147,162,178,197,220
+- `apps/scheduling-service/tests/unit/goal110-internal-credential-label.test.ts` — (iii) — 2 linha(s): 3,28
+- `packages/public-api-contract/src/schemas.ts` — (ii) — 1 linha(s): 5
+- `render.yaml` — (viii) — 24 linha(s): 3,19,21,24,50,66,72,79,92,99,125,132,141,161,182,187,205,229,244,246,250,255,258,259
+- `scripts/final-production-audit.mjs:21` — (viii)
+- `scripts/final-production-audit.mjs:22` — (viii)
+- `scripts/final-production-audit.mjs:23` — (viii)
+- `scripts/final-production-audit.mjs:24` — (viii)
+- `scripts/final-production-audit.mjs:25` — (viii)
+- `scripts/final-production-audit.mjs:26` — (viii)
+- `scripts/final-production-audit.mjs:55` — (viii)
+- `scripts/final-production-audit.mjs:262` — (ix)
+- `scripts/final-production-audit.mjs:263` — (ix)
+- `scripts/final-production-audit.mjs:265` — (ix)
+- `scripts/final-production-audit.mjs:266` — (ix)
+- `scripts/final-production-audit.mjs:267` — (ix)
+- `scripts/final-production-audit.mjs:268` — (ix)
+- `scripts/final-production-audit.mjs:269` — (ix)
+- `scripts/final-production-audit.mjs:311` — (viii)
+- `scripts/final-production-audit.mjs:312` — (viii)
+- `scripts/final-production-audit.mjs:313` — (viii)
+- `scripts/final-production-audit.mjs:318` — (viii)
+- `scripts/final-production-audit.mjs:319` — (viii)
+- `scripts/final-production-audit.mjs:320` — (viii)
+- `scripts/final-production-audit.mjs:595` — (ix)
+- `scripts/final-production-audit.mjs:597` — (ix)
+- `scripts/final-production-audit.mjs:598` — (ix)
+- `scripts/final-production-audit.mjs:599` — (ix)
+- `scripts/final-production-audit.mjs:600` — (ix)
+- `scripts/final-production-audit.mjs:748` — (viii)
+- `scripts/final-production-audit.mjs:749` — (viii)
+- `scripts/final-production-audit.mjs:750` — (viii)
+- `scripts/final-production-audit.mjs:751` — (viii)
+- `scripts/final-production-audit.mjs:752` — (viii)
+- `scripts/final-production-audit.mjs:868` — (viii)
+- `scripts/final-production-audit.mjs:869` — (viii)
+- `scripts/final-production-audit.mjs:870` — (viii)
+- `scripts/final-production-audit.mjs:928` — (viii)
+- `scripts/final-production-audit.mjs:934` — (viii)
+- `scripts/goal006-ai-migration-rehearsal.mjs` — (i) — 1 linha(s): 93
+- `scripts/goal009-migration-rehearsal.mjs` — (i) — 3 linha(s): 95,222,223
+- `scripts/goal010-migration-rehearsal.mjs` — (i) — 7 linha(s): 117,205,206,207,208,209,210
+- `scripts/goal027-calendar-source-migration-rehearsal.mjs` — (i) — 26 linha(s): 4,24,25,73,77,125,191,197,198,199,359,391,415,423,424,427,430,431,432,438,439,494,525,535,584,587
+- `scripts/goal074-human-takeover-migration-rehearsal.mjs` — (i) — 4 linha(s): 26,112,250,329
+- `scripts/tests/final-production-audit-legacy-regression.test.mjs` — (ix) — 12 linha(s): 22,319,326,329,334,337,340,344,347,352,356,359
+- `scripts/tests/goal011-ai-style-migration-rehearsal.test.mjs` — (viii) — 6 linha(s): 9,22,23,26,27,50
+- `scripts/tests/goal012-knowledge-memory-migration-rehearsal.test.mjs` — (viii) — 4 linha(s): 9,14,15,37
+- `scripts/tests/goal013-media-migration-rehearsal.test.mjs` — (viii) — 4 linha(s): 9,14,15,37
+- `scripts/tests/goal019-activation-test-migration-rehearsal.test.mjs` — (viii) — 4 linha(s): 9,14,15,37
+- `scripts/tests/goal028-production-config.test.mjs` — (viii) — 43 linha(s): 45,51,60,78,90,100,121,138,147,159,186,187,188,197,198,199,204,216,217,218,223,232,233,234,239,247,248,249,254,264,265,266,271,294,297,298,299,312,313,314,318,341,357
+- `scripts/tests/goal028-release-rehearsal.test.mjs` — (viii) — 12 linha(s): 23,49,50,51,57,58,59,78,79,85,251,261
+- `scripts/tests/goal028-restore-rehearsal.test.mjs` — (viii) — 12 linha(s): 24,86,87,88,94,95,96,116,118,135,149,170
+- `scripts/tests/goal029-goal030-rehearsal-guards.test.mjs` — (viii) — 3 linha(s): 22,24,26
+- `scripts/tests/goal032-auto-reply-rehearsal.test.mjs` — (viii) — 4 linha(s): 25,27,29,72
+- `scripts/tests/goal033-authenticated-ui-rehearsal.test.mjs` — (viii) — 5 linha(s): 26,55,62,63,64
+- `scripts/tests/validate-integration.test.mjs` — (viii) — 14 linha(s): 18,46,64,65,136,137,205,216,224,239,271,272,298,299
+- `scripts/validate-integration.mjs:78` — (viii)
+- `scripts/validate-integration.mjs:470` — (v)
+- `scripts/validate-integration.mjs:473` — (v)
+- `scripts/validate-integration.mjs:477` — (v)
+
+**Em `docs/design-reference/`** (a classe `viii*` da saída do script é (viii), o ponto de julgamento 1 de D-122):
+
+- `docs/design-reference/claude-design/README.md:7` — (viii*)
+- `docs/design-reference/claude-design/README.md:52` — (x)
+- `docs/design-reference/claude-design/README.md:56` — (x)
+- `docs/design-reference/claude-design/README.md:66` — (x)
+- `docs/design-reference/claude-design/README.md:68` — (x)
+- `docs/design-reference/claude-design/README.md:120` — (x)
+- `docs/design-reference/claude-design/README.md:126` — (x)
+- `Binary file docs/design-reference/claude-design/handoff/Atendly-Stage-1-delivery-handoff.zip matches` — (x) — 1 linha(s)
+- `docs/design-reference/claude-design/handoff/README.md` — (x) — 1 linha(s): 5
+- `docs/design-reference/claude-design/handoff/claude-code-prompt.md` — (viii*) — 1 linha(s): 9
+- `Binary file docs/design-reference/claude-design/prototype/Atendly-Stage-1-delivery.zip matches` — (x) — 1 linha(s)
+
+**Contra as listas herdadas.** O comando de D-120 (i) passa de **144** linhas (baseline `d5c2fd5`) para **138**: saíram só as **6** de (iv) (`scripts/lib/visual-seed.mjs` 2, `scripts/goal033-authenticated-ui-rehearsal.mjs` 2, `scripts/goal030-mvp-journey-rehearsal.mjs` 1 e a fixture de `scripts/tests/final-production-audit-legacy-regression.test.mjs` 1, que agora dizem `"AVENLY"`); as **30** de (i), as 19 de (ii), as 86 de (iii) e as 3 de (v) continuam, com o mesmo arquivo e texto (comparação por `comm` sobre arquivo e texto, sem o número da linha). O comando (B) de D-121 (e) passa de **40** para **16**: saíram as **24** de (vii), e continuam as 12 de (ii), a 1 de (v) e as 3 de (vi). Nenhuma linha de (iv) ou (vii) sobra.
+
+`git ls-files | grep -i atendly`:
+
+```
+apps/scheduling-service/prisma/migrations/20260828233000_add_atendly_calendar_provider/migration.sql
+apps/scheduling-service/prisma/migrations/20260919120000_goal027_calendar_source_atendly/migration.sql
+docs/astra_goal_0_auditoria_arquitetura_roadmap_atendly.md
+docs/design-reference/claude-design/handoff/Atendly-Stage-1-delivery-handoff.zip
+docs/design-reference/claude-design/prototype/Atendly-Stage-1-delivery.zip
+```
+
+Os dois diretórios de migration são (i) e os dois `.zip` são (x). `docs/astra_goal_0_auditoria_arquitetura_roadmap_atendly.md` é um `.md` solto de `docs/`, que este Goal não pode tocar: fica como **pendência do Goal111**, sem renomear.
+
+### Execução final (FIX-001, rodada 2, depois da última edição de código)
+
+A última edição de código foi a devolução de `source: "ATENDLY"` em `apps/frontend/tests/service-schema.test.ts:64` (D-122, ponto de julgamento 4). Os passos abaixo rodaram depois dela, nesta ordem, salvo as provas da primeira linha.
+
+| Passo | Resultado |
+| --- | --- |
+| Provas `goal109-*` e `goal110-*`, num banco à parte do mesmo cluster | frontend 2 arquivos e 21 testes, BFF 4 e 38, Scheduling 2 e 16 (unitário 9 e integração 7), IA 2 e 14: **89** de 89, as 61 do Goal109 e as 28 do Goal110. Rodadas antes da devolução do `service-schema.test.ts`, que não é prova nem é importado por elas; as provas do frontend rodaram de novo dentro do `validate:core` abaixo, e as do BFF, do Scheduling e da IA dentro do `validate:integration` |
+| Typecheck (`npm run typecheck`) de `apps/bff`, `apps/ai-orchestrator`, `apps/scheduling-service` e `apps/frontend` | saída 0 nos quatro |
+| `validate:core` | saída 0 em 128172 ms; 17 passos, 15 passaram e 2 pulados; IA `95 passed \| 14 skipped (109)` e `1199 passed \| 101 skipped (1300)`; Scheduling 40 e 543; frontend **149 e 1841**; `test:gate` **242** (`pass 242`, `fail 0`); `audit:static` 33 de 34 e 1 pulado |
+| `validate:ui` | saída 0 em 53630 ms; **169** passed, 21 pulados, "retries: 0" |
+| `validate:integration`, num cluster PostgreSQL 18 recém-criado (`initdb` novo, banco `atendly_bff_test` vazio em `127.0.0.1:55433`) | saída 0 em 750874 ms; **36** de 36 passos; integração do BFF **68 e 515**; Scheduling 20 e 152; durabilidade da IA 11 e 77; expurgo 3 e 24; gate autenticado **275** passed e "authenticated gate retries: 0" |
+| `visual:compare` (acima) | saída 0, 72 capturas |
+| `git diff --check` | saída 0 |
+
+Execução anterior, que não vale como veredito: na mesma rodada, antes da devolução do `service-schema.test.ts`, `validate:core` (frontend 1841, `test:gate` 242), `validate:ui` (169, 0 retentativas) e `validate:integration` (36 de 36, 747 s, BFF 515, gate autenticado 275 e 0 retentativas) já tinham passado; foram repetidos acima.
+
+A suíte do frontend passa de 1840 para **1841** testes por causa do teste novo do alias `agenda-atendly-pronta` (D-122 (d)). Nenhuma suíte tem teste a menos que a recontagem da baseline, e nenhum teste foi pulado nem removido.
+
+### Estado da árvore
+
+`git diff --stat d5c2fd5` não mostra migration, `vitest.config.*` nem `playwright*.config.*`. `apps/frontend/next.config.ts` muda só as duas strings de `transpilePackages`. Os dois `schema.prisma` mudam só linhas `///` (0 linhas fora de `///` no `git diff -U0`). Fora de `docs/`, cada linha mudada difere da baseline só pela troca do nome, salvo a entrada nova de `legacyStepRedirects`, o comentário dela e o teste novo de (d), conferido linha a linha por script. Os lockfiles mudam só nomes, e `node_modules/@avenly-ia/` existe em `apps/bff` e `apps/frontend`, sem nenhum `node_modules/@atendly-ia`. Nos `goal109-*` e `goal110-*` mudaram só 2 arquivos e 3 linhas (D-122, ponto de julgamento 5). Em `docs/` mudam só `docs/design-reference/` e os três documentos desta seção (`DECISIONS.md`, `CURRENT_STATE.md` e este). `graphify-out/` não está no diff. O cluster temporário e os bancos descartáveis ficaram fora da worktree e foram parados no fim; o banco de desenvolvimento não foi migrado nem semeado.
+
+### Não feito
+
+O deploy real e a janela de D-122 (c). A troca dos nomes de ambiente (viii). A documentação e os registros fora de `docs/design-reference/` (Goal111), incluindo `docs/astra_goal_0_auditoria_arquitetura_roadmap_atendly.md`. Os quadros sem alvo em `targets.json`, conferidos só pelo texto e pelos testes. A conferência humana num aparelho real.
+
+**Nota de fechamento — review102, 2026-10-04.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima:
+
+- **Decisão.** D-122 ACCEPTED na rodada 2, sem blocker, depois de 7 blockers na rodada 1: protótipo intocado, WU-03 do frontend `FAILED` sem relatório, os dois `goal109-*` editados sem declaração, e a falta do inventário, de `visual:compare`, da execução final sobre a árvore completa e de D-122. Os cinco pontos de julgamento de D-122 ficam aceitos como propostos.
+- **Gates da rodada 1, que não valem como veredito.** Typecheck (WU-06 a WU-09), `validate:core` (WU-10, 116817 ms), `validate:ui` (WU-11, 49929 ms), `validate:integration` (WU-12, 725283 ms) e `git diff --check` (WU-14) passaram com exit 0, mas sobre a árvore sem o §4. A WU-03 terminou `FAILED` e a WU-13 (`visual:compare`) ficou `BLOCKED`.
+- **Gates do IA Loop na rodada 2,** depois da FIX-001, todos com exit 0: typecheck de `apps/bff`, `apps/ai-orchestrator`, `apps/scheduling-service` e `apps/frontend` (WU-06 a WU-09), `validate:core` (WU-10, 122152 ms), `validate:ui` (WU-11, 52354 ms), `validate:integration` (WU-12, 733288 ms) e `git diff --check` (WU-14). As contagens da tabela "Execução final" acima são da corrida da FIX-001; o IA Loop registra só o exit e a duração das suas. Snapshot aceito: 286 arquivos, hash do diff `509dfb4b…`.
+- **Conferência do Tech Lead na rodada 2.** Refez a comparação linha a linha fora de `docs/` contra `d5c2fd5`, a substituição inversa em `docs/design-reference/` (byte a byte, 4 `R`, `.zip` intactos), o inventário (444 e 11 linhas, sem resto) e o estado da árvore (`schema.prisma` só `///`, `next.config.ts` só `transpilePackages`, nenhuma migration nem configuração de gate, `node_modules/@avenly-ia` sem `@atendly-ia`). Não reexecutou os gates.
+- **`visual:compare`.** Na conferência do Tech Lead, o comando saiu com "BFF local indisponível" (porta 3002), por isso não houve corrida própria. Ele abriu os `side-by-side.png` da corrida da FIX-001, 72 capturas geradas depois de toda edição do frontend e do protótipo: 0, 2.1, 2.2, 2.I1, 4.2, 4.6, I1, I2, C1, A1 e NT1 nos 4 devices; L1 a L9 e H1 no mobile e no desktop; H1 também no tablet retrato. Avenly aparece nos dois lados, sem divergência nova. Os tablets de L1 a L9 e o tablet paisagem de H1 não foram vistos e ficam aceitos pelos números da tabela acima, iguais aos do Goal091.
+- **Aceito sem prova completa.** O deploy real e a janela de D-122 (c); os quadros sem alvo em `targets.json`; a conferência humana num aparelho real. Detalhe no [review102](reviews/102-review.md).

@@ -208,7 +208,7 @@ describe("Conta mostra e edita o nome (Goal067)", () => {
     await user.click(row);
     const nameField = await screen.findByRole("textbox", { name: "Nome" });
     expect(nameField).toHaveValue("Maria Clara");
-    expect(screen.getByText("Como a Atendly chama você.")).toBeVisible();
+    expect(screen.getByText("Como a Avenly chama você.")).toBeVisible();
   });
 
   test("com nome nulo, mostra o convite a informá-lo", async () => {
@@ -221,7 +221,7 @@ describe("Conta mostra e edita o nome (Goal067)", () => {
     expect(nameField).toHaveValue("");
     expect(
       screen.getByText(
-        "Adicione seu nome para a Atendly usar no cumprimento.",
+        "Adicione seu nome para a Avenly usar no cumprimento.",
       ),
     ).toBeVisible();
   });

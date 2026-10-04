@@ -3,7 +3,7 @@ import { normalizePhone } from "../lib/phone.js";
 import { env } from "./env.js";
 
 /**
- * Numero oficial da Atendly: configuracao do servico, nunca vinculo de tenant.
+ * Numero oficial da Avenly: configuracao do servico, nunca vinculo de tenant.
  *
  * `ChannelConnection` e unica por `(tenantId, provider)` e por
  * `(provider, externalInstanceId)`; a instancia da plataforma nao tem dono e
@@ -75,7 +75,7 @@ export function requirePlatformWhatsAppConfig(): PlatformWhatsAppConfig {
   const missing = missingKeys();
   if (missing.length > 0) {
     throw new AppError(
-      "Atendly platform WhatsApp number is not configured for this environment.",
+      "Avenly platform WhatsApp number is not configured for this environment.",
       {
         statusCode: 503,
         code: PLATFORM_NUMBER_NOT_CONFIGURED,

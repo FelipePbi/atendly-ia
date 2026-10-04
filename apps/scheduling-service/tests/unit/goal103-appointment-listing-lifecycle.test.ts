@@ -8,8 +8,8 @@ import { describe, expect, it } from "vitest";
 import { parseCalendarAppointment } from "../../src/modules/calendar/calendar-service.js";
 import {
   type AppointmentRecord,
-  toAtendlyAppointment,
-} from "../../src/modules/integrations/atendly/provider.js";
+  toAvenlyAppointment,
+} from "../../src/modules/integrations/avenly/provider.js";
 
 const LIFECYCLE_FIELDS = [
   "completedAt",
@@ -50,9 +50,9 @@ function record(overrides: Record<string, unknown> = {}): AppointmentRecord {
   } as unknown as AppointmentRecord;
 }
 
-describe("toAtendlyAppointment (Goal103)", () => {
+describe("toAvenlyAppointment (Goal103)", () => {
   it("mapeia os seis campos de ciclo de vida de um concluído com valor registrado", () => {
-    const dto = toAtendlyAppointment(
+    const dto = toAvenlyAppointment(
       record({
         status: "COMPLETED",
         completedAt: new Date("2026-10-10T13:00:00.000Z"),
@@ -74,7 +74,7 @@ describe("toAtendlyAppointment (Goal103)", () => {
   });
 
   it("mapeia a falta com nota", () => {
-    const dto = toAtendlyAppointment(
+    const dto = toAvenlyAppointment(
       record({
         status: "NO_SHOW",
         noShowAt: new Date("2026-10-10T13:00:00.000Z"),
@@ -88,14 +88,14 @@ describe("toAtendlyAppointment (Goal103)", () => {
   });
 
   it("agendamento sem ciclo devolve os seis como null", () => {
-    const dto = toAtendlyAppointment(record(), "America/Sao_Paulo");
+    const dto = toAvenlyAppointment(record(), "America/Sao_Paulo");
     for (const field of LIFECYCLE_FIELDS) {
       expect(dto[field], field).toBeNull();
     }
   });
 
   it("não expõe finalValueSetAt nem finalValueSetBy", () => {
-    const dto = toAtendlyAppointment(
+    const dto = toAvenlyAppointment(
       record({ finalValueSetAt: new Date(), finalValueSetBy: "owner-1" }),
       "America/Sao_Paulo",
     );

@@ -1,1 +1,1 @@
-export * from "./atendly-availability.js";
+export * from "./avenly-availability.js";

@@ -260,7 +260,7 @@ const serviceInstructionBodySchema = z
   .strict();
 
 // Numero do WhatsApp do negocio, projetado por quem pede o teste: e para ele
-// que o numero oficial da Atendly manda a conversa de teste. Nao ha default e
+// que o numero oficial da Avenly manda a conversa de teste. Nao ha default e
 // nao ha descoberta por busca — sem numero valido a execucao e recusada.
 const startActivationTestSchema = z
   .object({ tenantPhone: z.string().trim().min(8).max(20) })

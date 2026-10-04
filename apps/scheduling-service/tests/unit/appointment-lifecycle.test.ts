@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { listAppointmentEvents } from "../../src/modules/appointments/appointment-event-service.js";
-import { AtendlyAppointmentLifecycleService } from "../../src/modules/appointments/appointment-lifecycle-service.js";
+import { AvenlyAppointmentLifecycleService } from "../../src/modules/appointments/appointment-lifecycle-service.js";
 import { runAutoCompleteSweep } from "../../src/modules/appointments/auto-complete-loop.js";
 import { CalendarService } from "../../src/modules/calendar/calendar-service.js";
 import { createDatabaseDouble } from "./support/database-double.js";
@@ -70,7 +70,7 @@ function setup() {
   return {
     database,
     calendar: new CalendarService(database.client as never),
-    lifecycle: new AtendlyAppointmentLifecycleService(
+    lifecycle: new AvenlyAppointmentLifecycleService(
       database.client as never,
       tenantId,
       context.userId,

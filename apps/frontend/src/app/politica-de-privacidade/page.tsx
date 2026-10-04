@@ -8,9 +8,9 @@ import {
 import { createPrivacyPolicy } from "@/content/legal/privacy-policy.pt-BR";
 
 export const metadata: Metadata = {
-  title: "Política de Privacidade | Atendly",
+  title: "Política de Privacidade | Avenly",
   description:
-    "Saiba como a Atendly trata dados pessoais e como exercer direitos previstos na LGPD.",
+    "Saiba como a Avenly trata dados pessoais e como exercer direitos previstos na LGPD.",
   robots: {
     index: legalDocumentsAreIndexable(),
     follow: legalDocumentsAreIndexable(),

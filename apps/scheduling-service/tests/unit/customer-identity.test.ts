@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AtendlyCustomerService } from "../../src/modules/customers/atendly-customer-service.js";
+import { AvenlyCustomerService } from "../../src/modules/customers/avenly-customer-service.js";
 import { AppError } from "../../src/shared/errors/app-error.js";
 import { createDatabaseDouble } from "./support/database-double.js";
 
@@ -9,7 +9,7 @@ const tenantId = "tenant-a";
 function service(database = createDatabaseDouble()) {
   return {
     database,
-    customers: new AtendlyCustomerService(
+    customers: new AvenlyCustomerService(
       database.client as never,
       tenantId,
     ),
@@ -80,8 +80,8 @@ describe("customer identity", () => {
 
   it("does not leak customers across tenants", async () => {
     const database = createDatabaseDouble();
-    const a = new AtendlyCustomerService(database.client as never, "tenant-a");
-    const b = new AtendlyCustomerService(database.client as never, "tenant-b");
+    const a = new AvenlyCustomerService(database.client as never, "tenant-a");
+    const b = new AvenlyCustomerService(database.client as never, "tenant-b");
     const inA = await a.create({ name: "Maria", phone: "5511900000001" });
     await b.create({ name: "Maria", phone: "5511900000001" });
 

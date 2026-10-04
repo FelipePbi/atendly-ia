@@ -187,8 +187,8 @@ describe("agenda libera o ciclo de vida com AVENLY", () => {
     ).toBeVisible();
   });
 
-  test("a fonte AVENLY continua com o texto 'Agenda Atendly'", () => {
-    expect(sourceLabel("AVENLY")).toBe("Agenda Atendly");
+  test("a fonte AVENLY continua com o texto 'Agenda Avenly'", () => {
+    expect(sourceLabel("AVENLY")).toBe("Agenda Avenly");
     expect(sourceLabel(null)).toBe("Não configurada");
   });
 });

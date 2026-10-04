@@ -82,7 +82,7 @@ func (r *Routes) AssignRoutes(eng *gin.Engine) {
 	healthHandler := func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":    "ok",
-			"service":   "atendly-ia-evolution-go",
+			"service":   "avenly-ia-evolution-go",
 			"requestId": c.GetString("requestId"),
 		})
 	}

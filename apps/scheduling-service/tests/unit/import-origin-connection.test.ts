@@ -3,7 +3,7 @@
  * §6), agora com o corpo de e-mail e senha do Goal060 (§2).
  *
  * O que está em prova aqui é **alcançabilidade**: depois do corte do writer
- * remoto todo negócio opera na Agenda Atendly, e era exatamente isso que o
+ * remoto todo negócio opera na Agenda Avenly, e era exatamente isso que o
  * `connect` recusava. Sem esta correção, nenhum negócio conseguiria conectar
  * a origem — e sem `IntegrationConnection` nenhuma sessão de importação
  * começa, o que deixaria o ciclo novo inteiro inalcançável na fiação real.
@@ -54,8 +54,8 @@ function headers(extra: Record<string, string> = {}) {
   };
 }
 
-/** O negócio que o corte produziu: agenda operacional é a Atendly. */
-function seedAtendlyCalendar(db: Database) {
+/** O negócio que o corte produziu: agenda operacional é a Avenly. */
+function seedAvenlyCalendar(db: Database) {
   db.client.calendarSettings.rows.push({
     id: "settings-1",
     tenantId,
@@ -122,8 +122,8 @@ describe("integração Minha Agenda reescopada para a importação (Goal010 §6,
     vi.unstubAllGlobals();
   });
 
-  it("conecta a origem com a agenda operacional na Atendly e abre caminho para a importação", async () => {
-    seedAtendlyCalendar(db);
+  it("conecta a origem com a agenda operacional na Avenly e abre caminho para a importação", async () => {
+    seedAvenlyCalendar(db);
     fetchMock
       .mockResolvedValueOnce(tokenResponse())
       .mockResolvedValueOnce(professionalsResponse([42]));
@@ -171,7 +171,7 @@ describe("integração Minha Agenda reescopada para a importação (Goal010 §6,
   });
 
   it("desconectar a origem não desativa a agenda operacional", async () => {
-    seedAtendlyCalendar(db);
+    seedAvenlyCalendar(db);
     fetchMock
       .mockResolvedValueOnce(tokenResponse())
       .mockResolvedValueOnce(professionalsResponse([1]));

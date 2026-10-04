@@ -6,9 +6,9 @@ import { ProductRuntimeProvider } from "@/shared/runtime/ProductRuntime";
 import { RouteAnnouncer } from "@/shared/ui/RouteAnnouncer";
 
 export const metadata: Metadata = {
-  title: { default: "Atendly", template: "%s — Atendly" },
+  title: { default: "Avenly", template: "%s — Avenly" },
   description: "Atendimento e agendamento pelo WhatsApp, com apoio de IA.",
-  icons: [{ rel: "icon", url: "/brand/atendly-icon.svg", type: "image/svg+xml" }],
+  icons: [{ rel: "icon", url: "/brand/avenly-icon.svg", type: "image/svg+xml" }],
 };
 
 export const viewport: Viewport = {

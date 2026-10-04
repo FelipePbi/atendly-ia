@@ -428,7 +428,7 @@ export function WhatsAppConnectionPanel({
           <span className="whatsapp-consent-copy">
             <span id="whatsapp-consent-text">
               Entendo que as conversas deste número poderão ser processadas e
-              armazenadas para oferecer os recursos da Atendly.
+              armazenadas para oferecer os recursos da Avenly.
             </span>{" "}
             <Link
               className="whatsapp-consent-link"
@@ -518,7 +518,7 @@ export function WhatsAppConnectionPanel({
       title="Desconectar WhatsApp?"
     >
       <p className="settings-modal-copy">
-        A Atendly deixará de responder automaticamente assim que a desconexão
+        A Avenly deixará de responder automaticamente assim que a desconexão
         for concluída.
       </p>
       <div className="modal-actions">
@@ -705,7 +705,7 @@ export function WhatsAppConnectionPanel({
               <strong>Conectar dispositivo</strong> ›{" "}
               <strong>Conectar com número de telefone</strong>.
             </li>
-            <li>Digite o código e volte para a Atendly.</li>
+            <li>Digite o código e volte para a Avenly.</li>
           </ol>
           <div className="settings-waiting-row">
             <span aria-hidden="true" className="settings-waiting-dot" />
@@ -744,7 +744,7 @@ export function WhatsAppConnectionPanel({
               <span aria-hidden="true" className="check-box" />
               <span>
                 Entendo que as conversas deste número poderão ser processadas
-                e armazenadas para oferecer os recursos da Atendly.
+                e armazenadas para oferecer os recursos da Avenly.
               </span>
             </label>
             <Link

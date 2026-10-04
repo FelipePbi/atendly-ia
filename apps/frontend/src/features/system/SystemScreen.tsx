@@ -53,7 +53,7 @@ export function SystemScreen({ scenario }: { scenario: SystemScenario }) {
         [
           "x",
           "Novos agendamentos estão bloqueados.",
-          " A Atendly não consegue confirmar disponibilidade nem persistência agora.",
+          " A Avenly não consegue confirmar disponibilidade nem persistência agora.",
         ],
         [
           "info",
@@ -84,7 +84,7 @@ export function SystemScreen({ scenario }: { scenario: SystemScenario }) {
         <div>
           <strong>
             {scenario === "offline"
-              ? "Atendly está offline"
+              ? "Avenly está offline"
               : "A última ação não foi concluída"}
           </strong>
           <p>

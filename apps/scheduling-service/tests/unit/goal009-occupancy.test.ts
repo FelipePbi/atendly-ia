@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { AtendlyAppointmentSeriesService } from "../../src/modules/appointments/appointment-series-service.js";
-import { AtendlyAvailability } from "../../src/modules/availability/atendly-availability.js";
+import { AvenlyAppointmentSeriesService } from "../../src/modules/appointments/appointment-series-service.js";
+import { AvenlyAvailability } from "../../src/modules/availability/avenly-availability.js";
 import {
   createExtraAvailability,
   createUnavailability,
@@ -104,7 +104,7 @@ describe("Goal009: regras de oferta", () => {
   it("nao oferece slot antes da antecedencia minima", async () => {
     const { database } = setup({ minLeadMinutes: 24 * 60 });
     const date = futureDate(0);
-    const slots = await new AtendlyAvailability(
+    const slots = await new AvenlyAvailability(
       database.client as never,
       tenantId,
       timeZone,
@@ -121,7 +121,7 @@ describe("Goal009: regras de oferta", () => {
   it("nao oferece slot depois da antecedencia maxima", async () => {
     const { database } = setup({ maxLeadDays: 1 });
     const farDate = futureDate(10);
-    const slots = await new AtendlyAvailability(
+    const slots = await new AvenlyAvailability(
       database.client as never,
       tenantId,
       timeZone,
@@ -137,7 +137,7 @@ describe("Goal009: regras de oferta", () => {
   it("usa o passo da granularidade do negocio, ignorando stepMinutes do chamador", async () => {
     const { database } = setup({ granularityMinutes: 45 });
     const date = futureDate(7);
-    const slots = await new AtendlyAvailability(
+    const slots = await new AvenlyAvailability(
       database.client as never,
       tenantId,
       timeZone,
@@ -221,7 +221,7 @@ describe("Goal009: buffers como ocupacao externa", () => {
     // Catalogo muda depois da confirmacao.
     database.tables.service.rows[0].bufferAfterMinutes = 0;
 
-    const slots = await new AtendlyAvailability(
+    const slots = await new AvenlyAvailability(
       database.client as never,
       tenantId,
       timeZone,
@@ -252,7 +252,7 @@ describe("Goal009: buffers como ocupacao externa", () => {
       // bufferBeforeMinutesSnapshot/After ausentes de proposito: e o que a
       // migration aditiva deixa para linha legada.
     });
-    const slots = await new AtendlyAvailability(
+    const slots = await new AvenlyAvailability(
       database.client as never,
       tenantId,
       timeZone,
@@ -304,7 +304,7 @@ describe("Goal009: buffers como ocupacao externa", () => {
       bufferAfterMinutesSnapshot: 30,
     });
 
-    const availability = new AtendlyAvailability(
+    const availability = new AvenlyAvailability(
       database.client as never,
       tenantId,
       timeZone,
@@ -352,7 +352,7 @@ describe("Goal009: buffers como ocupacao externa", () => {
       bufferAfterMinutesSnapshot: 0,
     });
 
-    const availability = new AtendlyAvailability(
+    const availability = new AvenlyAvailability(
       database.client as never,
       tenantId,
       timeZone,
@@ -383,7 +383,7 @@ describe("Goal009: excecoes de disponibilidade", () => {
     // Fecha o dia inteiro removendo a regra ativa; simula dia sem grade.
     database.tables.availabilityRule.rows.length = 0;
 
-    const before = await new AtendlyAvailability(
+    const before = await new AvenlyAvailability(
       database.client as never,
       tenantId,
       timeZone,
@@ -403,7 +403,7 @@ describe("Goal009: excecoes de disponibilidade", () => {
       endTime: "10:00",
     });
 
-    const after = await new AtendlyAvailability(
+    const after = await new AvenlyAvailability(
       database.client as never,
       tenantId,
       timeZone,
@@ -702,7 +702,7 @@ describe("Goal009: series de bloqueio/compromisso", () => {
 describe("Goal009: serie de atendimento", () => {
   it("preview cria um hold por ocorrencia e confirmacao cria tudo com seriesId, em uma transacao", async () => {
     const { database } = setup();
-    const service = new AtendlyAppointmentSeriesService(
+    const service = new AvenlyAppointmentSeriesService(
       database.client as never,
       tenantId,
       timeZone,
@@ -762,7 +762,7 @@ describe("Goal009: serie de atendimento", () => {
     // integração do Goal008 para o mesmo mecanismo (hold único) e é o
     // padrão que a série reutiliza.
     const { database } = setup();
-    const service = new AtendlyAppointmentSeriesService(
+    const service = new AvenlyAppointmentSeriesService(
       database.client as never,
       tenantId,
       timeZone,
@@ -803,7 +803,7 @@ describe("Goal009: serie de atendimento", () => {
 
   it("respeita o teto de ocorrencias configurado", async () => {
     const { database } = setup();
-    const service = new AtendlyAppointmentSeriesService(
+    const service = new AvenlyAppointmentSeriesService(
       database.client as never,
       tenantId,
       timeZone,
@@ -832,7 +832,7 @@ describe("Goal009: source derivado do chamador", () => {
 describe("Goal009: serie de atendimento — falha identificada e idempotencia", () => {
   it("identifica a ocorrencia que falhou e devolve alternativas", async () => {
     const { database } = setup();
-    const service = new AtendlyAppointmentSeriesService(
+    const service = new AvenlyAppointmentSeriesService(
       database.client as never,
       tenantId,
       timeZone,
@@ -910,7 +910,7 @@ describe("Goal009: serie de atendimento — falha identificada e idempotencia", 
 
   it("retentativa com a mesma Idempotency-Key faz replay em vez de criar de novo", async () => {
     const { database } = setup();
-    const service = new AtendlyAppointmentSeriesService(
+    const service = new AvenlyAppointmentSeriesService(
       database.client as never,
       tenantId,
       timeZone,
@@ -952,7 +952,7 @@ describe("Goal009: serie de atendimento — falha identificada e idempotencia", 
 
   it("recusa na confirmacao uma lista de ocorrencias acima do teto", async () => {
     const { database } = setup();
-    const service = new AtendlyAppointmentSeriesService(
+    const service = new AvenlyAppointmentSeriesService(
       database.client as never,
       tenantId,
       timeZone,
@@ -1042,7 +1042,7 @@ describe("Goal009: isolamento por tenant das entidades novas", () => {
     settingsB!.maxLeadDays = 1;
 
     const date = futureDate(7);
-    const slots = await new AtendlyAvailability(
+    const slots = await new AvenlyAvailability(
       database.client as never,
       tenantId,
       timeZone,
@@ -1085,7 +1085,7 @@ describe("Goal009: isolamento por tenant das entidades novas", () => {
     });
 
     // A grade de A no dia continua inteira.
-    const slots = await new AtendlyAvailability(
+    const slots = await new AvenlyAvailability(
       database.client as never,
       tenantId,
       timeZone,
@@ -1099,7 +1099,7 @@ describe("Goal009: isolamento por tenant das entidades novas", () => {
     expect(slots.length).toBeGreaterThan(0);
 
     // E o inverso: B esta fechado o dia inteiro por causa da propria excecao.
-    const slotsB = await new AtendlyAvailability(
+    const slotsB = await new AvenlyAvailability(
       database.client as never,
       otherTenant,
       timeZone,
@@ -1192,7 +1192,7 @@ describe("Goal009: isolamento por tenant das entidades novas", () => {
     const { database } = setup();
     seedOtherTenant(database);
     const firstDate = futureDate(7);
-    const seriesB = new AtendlyAppointmentSeriesService(
+    const seriesB = new AvenlyAppointmentSeriesService(
       database.client as never,
       otherTenant,
       timeZone,
@@ -1209,7 +1209,7 @@ describe("Goal009: isolamento por tenant das entidades novas", () => {
     expect(previewB.every((occurrence) => occurrence.holdId)).toBe(true);
 
     // Os holds de B nao ocupam nada em A.
-    const slots = await new AtendlyAvailability(
+    const slots = await new AvenlyAvailability(
       database.client as never,
       tenantId,
       timeZone,
@@ -1222,7 +1222,7 @@ describe("Goal009: isolamento por tenant das entidades novas", () => {
     expect(slots.some((slot) => slot.startTime === "09:00")).toBe(true);
 
     // E A nao confirma a serie de B nem tendo os ids dos holds.
-    const seriesA = new AtendlyAppointmentSeriesService(
+    const seriesA = new AvenlyAppointmentSeriesService(
       database.client as never,
       tenantId,
       timeZone,

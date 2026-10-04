@@ -194,7 +194,7 @@ describe("a grade consulta a fonte oficial antes de ler", () => {
     expect(listAvailabilityExceptions).not.toHaveBeenCalled();
   });
 
-  test("na Agenda Atendly a janela inteira é lida, bloqueios e exceções inclusive", async () => {
+  test("na Agenda Avenly a janela inteira é lida, bloqueios e exceções inclusive", async () => {
     renderPage(<AgendaPage />);
 
     expect(await screen.findByText("Nenhum atendimento neste dia.")).toBeVisible();

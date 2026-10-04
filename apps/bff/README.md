@@ -1,6 +1,6 @@
-# Atendly BFF
+# Avenly BFF
 
-Backend público consumido pela aplicação web Atendly.
+Backend público consumido pela aplicação web Avenly.
 
 ## Referências
 

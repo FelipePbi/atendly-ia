@@ -64,7 +64,7 @@ function connectErrorMessage(error: unknown): string {
         case "MINHA_AGENDA_PROFESSIONAL_NOT_FOUND":
           return "Não encontramos nenhum profissional cadastrado nessa conta do Minha Agenda.";
         case "MINHA_AGENDA_MULTIPLE_PROFESSIONALS":
-          return "Encontramos mais de um profissional cadastrado nessa conta do Minha Agenda. Por enquanto, a Atendly importa a agenda de um profissional só.";
+          return "Encontramos mais de um profissional cadastrado nessa conta do Minha Agenda. Por enquanto, a Avenly importa a agenda de um profissional só.";
         case "MINHA_AGENDA_TIMEOUT":
         case "MINHA_AGENDA_UNREACHABLE":
         case "MINHA_AGENDA_HTTP_ERROR":
@@ -73,7 +73,7 @@ function connectErrorMessage(error: unknown): string {
         case "MINHA_AGENDA_NOT_CONFIGURED":
         case "MINHA_AGENDA_CLIENT_REJECTED":
         case "INTEGRATION_CONFIGURATION_INVALID":
-          return "A importação está indisponível agora por uma falha da Atendly, não por causa dos dados informados. Tente novamente mais tarde.";
+          return "A importação está indisponível agora por uma falha da Avenly, não por causa dos dados informados. Tente novamente mais tarde.";
         default:
           return "Não foi possível conectar ao Minha Agenda agora. Tente novamente.";
       }
@@ -142,7 +142,7 @@ export function ConnectSourceScreen({
 
   return (
     <ImportsPage
-      description="Copie seus dados do Minha Agenda uma única vez. Nada muda na Atendly até você confirmar."
+      description="Copie seus dados do Minha Agenda uma única vez. Nada muda na Avenly até você confirmar."
       title={replace ? "Conectar outra conta do Minha Agenda" : "Importar do Minha Agenda"}
     >
       <form

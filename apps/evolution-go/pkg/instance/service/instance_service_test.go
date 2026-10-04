@@ -17,7 +17,7 @@ func TestStatusStructSerializesConnectedPhoneJID(t *testing.T) {
 		Connected: true,
 		LoggedIn:  true,
 		MyJid:     "5511999999999@s.whatsapp.net",
-		Name:      "Atendly",
+		Name:      "Avenly",
 	}
 
 	payload, err := json.Marshal(status)

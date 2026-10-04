@@ -11,7 +11,7 @@ export function createTermsOfUse(details: LegalDetails): LegalDocumentContent {
   return {
     title: "Termos de Uso",
     intro:
-      "Estes Termos apresentam as regras para criação da conta e uso da Atendly, plataforma de atendimento automatizado por inteligência artificial integrada ao WhatsApp.",
+      "Estes Termos apresentam as regras para criação da conta e uso da Avenly, plataforma de atendimento automatizado por inteligência artificial integrada ao WhatsApp.",
     version: TERMS_VERSION,
     effectiveDate: TERMS_EFFECTIVE_DATE,
     lastUpdatedDate: TERMS_LAST_UPDATED_DATE,
@@ -20,14 +20,14 @@ export function createTermsOfUse(details: LegalDetails): LegalDocumentContent {
         id: "identificacao",
         title: "1. Identificação da responsável",
         paragraphs: [
-          `A Atendly é disponibilizada por ${details.legalName}, nome fantasia ${details.tradeName}, inscrita no CNPJ sob nº ${details.cnpj}, com endereço em ${details.address}.`,
+          `A Avenly é disponibilizada por ${details.legalName}, nome fantasia ${details.tradeName}, inscrita no CNPJ sob nº ${details.cnpj}, com endereço em ${details.address}.`,
         ],
       },
       {
         id: "definicoes",
         title: "2. Definições",
         bullets: [
-          "Atendly ou Plataforma: solução tecnológica descrita nestes Termos.",
+          "Avenly ou Plataforma: solução tecnológica descrita nestes Termos.",
           "Usuário ou Cliente: pessoa que cria e administra uma conta para seu negócio.",
           "Contato: pessoa que se comunica com o Cliente por canais conectados à Plataforma.",
           "Conteúdo: mensagens, instruções, arquivos e demais informações processadas no uso do serviço.",
@@ -36,7 +36,7 @@ export function createTermsOfUse(details: LegalDetails): LegalDocumentContent {
       },
       {
         id: "servicos",
-        title: "3. A Atendly e os serviços oferecidos",
+        title: "3. A Avenly e os serviços oferecidos",
         paragraphs: [
           "A Plataforma auxilia pequenos negócios a organizar conversas, configurar atendimento automatizado por IA, realizar transição para atendimento humano e, quando habilitado, consultar ou executar fluxos de agenda.",
           "Funcionalidades disponíveis podem variar por plano, estágio do produto, integrações contratadas e disponibilidade técnica dos Serviços de Terceiros.",
@@ -54,7 +54,7 @@ export function createTermsOfUse(details: LegalDetails): LegalDocumentContent {
         id: "credenciais",
         title: "5. Responsabilidades do Usuário e credenciais",
         paragraphs: [
-          "O Usuário é responsável pela confidencialidade de suas credenciais, pelos dispositivos autorizados e pelas ações realizadas em sua conta, salvo falha comprovadamente atribuível à Atendly.",
+          "O Usuário é responsável pela confidencialidade de suas credenciais, pelos dispositivos autorizados e pelas ações realizadas em sua conta, salvo falha comprovadamente atribuível à Avenly.",
           `Suspeitas de acesso indevido devem ser comunicadas imediatamente pelo canal ${details.supportEmail}.`,
         ],
       },
@@ -63,7 +63,7 @@ export function createTermsOfUse(details: LegalDetails): LegalDocumentContent {
         title: "6. WhatsApp e Serviços de Terceiros",
         paragraphs: [
           "O uso de WhatsApp, Meta e outras integrações está sujeito também aos contratos, políticas, limites e decisões desses terceiros. O Cliente deve manter contas e autorizações válidas e cumprir as regras aplicáveis ao canal.",
-          "Mudanças, indisponibilidades, bloqueios ou restrições impostas por terceiros podem afetar funcionalidades sem controle direto da Atendly.",
+          "Mudanças, indisponibilidades, bloqueios ou restrições impostas por terceiros podem afetar funcionalidades sem controle direto da Avenly.",
         ],
       },
       {
@@ -71,7 +71,7 @@ export function createTermsOfUse(details: LegalDetails): LegalDocumentContent {
         title: "7. Limitações das respostas geradas por IA",
         paragraphs: [
           `A Plataforma pode usar modelos fornecidos por ${details.aiProvider}. Respostas de IA são probabilísticas: podem conter imprecisões, omissões, vieses ou conteúdo inadequado ao contexto.`,
-          "A Atendly não substitui aconselhamento médico, jurídico, financeiro ou outro serviço profissional regulado. O Cliente não deve configurar a IA para decisões de alto impacto sem controles humanos adequados.",
+          "A Avenly não substitui aconselhamento médico, jurídico, financeiro ou outro serviço profissional regulado. O Cliente não deve configurar a IA para decisões de alto impacto sem controles humanos adequados.",
         ],
       },
       {
@@ -79,7 +79,7 @@ export function createTermsOfUse(details: LegalDetails): LegalDocumentContent {
         title: "8. Revisão de configurações e respostas",
         paragraphs: [
           "O Cliente deve revisar identidade, instruções, integrações, disponibilidade de agenda, políticas comerciais e respostas automáticas antes e durante o uso, além de manter um canal de supervisão humana.",
-          "O Cliente responde pelas informações de seu negócio e pelas decisões tomadas com base nas respostas geradas, observados os limites legais de responsabilidade da Atendly.",
+          "O Cliente responde pelas informações de seu negócio e pelas decisões tomadas com base nas respostas geradas, observados os limites legais de responsabilidade da Avenly.",
         ],
       },
       {
@@ -113,7 +113,7 @@ export function createTermsOfUse(details: LegalDetails): LegalDocumentContent {
         id: "propriedade-intelectual",
         title: "12. Propriedade intelectual",
         paragraphs: [
-          "A Atendly e seus licenciadores mantêm os direitos sobre software, marcas, interfaces, documentação e demais elementos da Plataforma. Estes Termos concedem apenas direito limitado, revogável, não exclusivo e intransferível de uso durante a relação contratual.",
+          "A Avenly e seus licenciadores mantêm os direitos sobre software, marcas, interfaces, documentação e demais elementos da Plataforma. Estes Termos concedem apenas direito limitado, revogável, não exclusivo e intransferível de uso durante a relação contratual.",
           "O Cliente mantém os direitos que possuir sobre seu Conteúdo e concede as permissões estritamente necessárias para operar, proteger e melhorar o serviço dentro da legislação e da Política de Privacidade.",
         ],
       },
@@ -138,14 +138,14 @@ export function createTermsOfUse(details: LegalDetails): LegalDocumentContent {
         title: "15. Limitações de responsabilidade",
         paragraphs: [
           "Cada parte responde pelos danos diretos que causar conforme sua atuação e a legislação aplicável. Limitações contratuais não se aplicam quando proibidas por lei, nem afastam responsabilidade por dolo, fraude ou outras hipóteses inderrogáveis.",
-          "A Atendly não responde por decisões autônomas do Cliente, conteúdo inserido por ele ou atos de terceiros fora de seu controle, sem prejuízo de responsabilidade legal por falhas próprias.",
+          "A Avenly não responde por decisões autônomas do Cliente, conteúdo inserido por ele ou atos de terceiros fora de seu controle, sem prejuízo de responsabilidade legal por falhas próprias.",
         ],
       },
       {
         id: "alteracoes",
         title: "16. Alterações, versões e nova aceitação",
         paragraphs: [
-          "Mudanças materiais serão identificadas por nova versão e data. Quando necessário, a Atendly solicitará nova aceitação antes da continuidade do uso.",
+          "Mudanças materiais serão identificadas por nova versão e data. Quando necessário, a Avenly solicitará nova aceitação antes da continuidade do uso.",
           "Versões anteriores e registros de aceite serão mantidos pelo período necessário para demonstrar a relação contratual e cumprir obrigações legais.",
         ],
       },

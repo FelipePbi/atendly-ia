@@ -158,7 +158,7 @@ function stubUpstream(perTenant: Record<string, TenantUpstream> = {}): {
         });
       }
       // `settingsState` lê a disponibilidade na resposta de sucesso de
-      // qualquer PATCH de configurações quando a agenda é da Atendly.
+      // qualquer PATCH de configurações quando a agenda é da Avenly.
       if (url.pathname === "/internal/availability-settings") {
         return jsonResponse({
           data: { timezone: "America/Sao_Paulo", rules: [] },

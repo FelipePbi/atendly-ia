@@ -2,7 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { PrismaClient } from "../../src/generated/prisma/client.js";
-import { AtendlyCalendarProvider } from "../../src/modules/integrations/atendly/provider.js";
+import { AvenlyCalendarProvider } from "../../src/modules/integrations/avenly/provider.js";
 import {
   claimDueNotificationIntents,
   listAppointmentNotifications,
@@ -103,8 +103,8 @@ async function configureReminders(
   await new ReminderService(prisma, tenantId).set({ rules });
 }
 
-function providerFor(fixture: TenantFixture): AtendlyCalendarProvider {
-  return new AtendlyCalendarProvider(
+function providerFor(fixture: TenantFixture): AvenlyCalendarProvider {
+  return new AvenlyCalendarProvider(
     prisma,
     fixture.tenantId,
     "user-1",

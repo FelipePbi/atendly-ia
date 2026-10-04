@@ -481,7 +481,7 @@ describe("ImportExecutionService: falha parcial e contagens reais", () => {
 });
 
 describe("ImportExecutionService: idempotência por origem/item", () => {
-  it("reexecutar a mesma sessão não cria segundo registro na Atendly", async () => {
+  it("reexecutar a mesma sessão não cria segundo registro na Avenly", async () => {
     const { database, preview, execution } = setup();
     const snapshot = buildSnapshot({
       services: category("SERVICE", [
@@ -536,7 +536,7 @@ describe("ImportExecutionService: idempotência por origem/item", () => {
 
     // Cenário do casamento entre checkpoint e idempotência: o efeito e o mapa
     // de origem estão gravados, mas o checkpoint do item se perdeu. Reexecutar
-    // não pode criar um segundo registro na Atendly.
+    // não pode criar um segundo registro na Avenly.
     for (const row of database.tables.importItem.rows) {
       row.status = "PENDING";
       row.internalId = null;

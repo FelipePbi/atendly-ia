@@ -223,7 +223,7 @@ export class MinhaAgendaClient implements MinhaAgendaSourceClient {
         }
         throw new AppError(
           "MINHA_AGENDA_CLIENT_REJECTED",
-          "Minha Agenda rejected the Atendly application credential.",
+          "Minha Agenda rejected the Avenly application credential.",
           503,
           { originStatus: response.status },
         );

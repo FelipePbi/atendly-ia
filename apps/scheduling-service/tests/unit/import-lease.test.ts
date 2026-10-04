@@ -206,7 +206,7 @@ describe("Lease da importação: dois starts simultâneos", () => {
       statusCode: 409,
     });
 
-    // Uma só execução: cada registro da origem virou um registro da Atendly,
+    // Uma só execução: cada registro da origem virou um registro da Avenly,
     // e a origem foi lida uma vez só — quem perdeu o lease desistiu antes.
     expect(database.tables.service.rows).toHaveLength(2);
     expect(database.tables.customer.rows).toHaveLength(1);

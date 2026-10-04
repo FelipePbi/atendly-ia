@@ -215,7 +215,7 @@ describe("onboarding: bloco WhatsApp", () => {
     );
     await screen.findByRole("heading", {
       level: 1,
-      name: "Sua Atendly está configurada.",
+      name: "Sua Avenly está configurada.",
     });
     await expectNoA11yViolations(container);
   });

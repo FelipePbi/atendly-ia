@@ -4,7 +4,7 @@
  * de revisão, Ativos, Inativos), a linha "duração · preço", o filete na cor
  * de `colorToken`, "Corrigir" nas pendências, ativar/desativar e a ausência
  * da copy técnica ("Gerenciado pela", "Controle completo", origem "Agenda
- * Atendly" por linha).
+ * Avenly" por linha).
  */
 
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -130,7 +130,7 @@ describe("§4.1 a linha mostra duração · preço, com recorrência e sem ofert
     expect(
       screen.getByText("2 h · R$ 250 · a IA não oferece"),
     ).toBeVisible();
-    expect(screen.queryByText("Agenda Atendly")).toBeNull();
+    expect(screen.queryByText("Agenda Avenly")).toBeNull();
   });
 });
 
@@ -265,12 +265,12 @@ describe("§4.4 ativar e desativar", () => {
 });
 
 describe("§4.7 (lista) sem copy técnica", () => {
-  test("'Gerenciado pela', 'Controle completo' e a origem 'Agenda Atendly' não aparecem em /servicos", async () => {
+  test("'Gerenciado pela', 'Controle completo' e a origem 'Agenda Avenly' não aparecem em /servicos", async () => {
     await renderList([serviceFixture()]);
 
     expect(screen.queryByText(/Gerenciado pela/)).toBeNull();
     expect(screen.queryByText(/Controle completo/)).toBeNull();
-    expect(screen.queryByText("Agenda Atendly")).toBeNull();
+    expect(screen.queryByText("Agenda Avenly")).toBeNull();
     expect(
       screen.queryByText(/podem ser criados, editados e desativados aqui/),
     ).toBeNull();

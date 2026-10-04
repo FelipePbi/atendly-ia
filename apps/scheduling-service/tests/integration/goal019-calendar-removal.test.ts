@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { PrismaClient } from "../../src/generated/prisma/client.js";
 import { CalendarRemovalService } from "../../src/modules/calendar/removal.js";
-import { AtendlyCalendarProvider } from "../../src/modules/integrations/atendly/provider.js";
+import { AvenlyCalendarProvider } from "../../src/modules/integrations/avenly/provider.js";
 import { resetTenant } from "./support/reset-tenant.js";
 import { upcomingDate } from "./support/test-date.js";
 
@@ -62,14 +62,14 @@ async function seedTenant() {
     },
   });
   const customer = await prisma.customer.create({
-    data: { tenantId, name: "Atendly (teste)", phone: "5511911112222" },
+    data: { tenantId, name: "Avenly (teste)", phone: "5511911112222" },
   });
   return { serviceId: service.id, customerId: customer.id };
 }
 
 /** Atendimento criado pelo caminho normal: com item e com evento `CREATED`. */
 async function scheduleAppointment(startTime: string, idempotencyKey: string) {
-  return new AtendlyCalendarProvider(
+  return new AvenlyCalendarProvider(
     prisma,
     tenantId,
     "user-1",

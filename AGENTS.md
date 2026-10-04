@@ -1,10 +1,10 @@
-# AGENTS.md — Atendly monorepo
+# AGENTS.md — Avenly monorepo
 
 ## Missão
 
-Atendly é uma plataforma de atendimento por IA para profissionais autônomos de serviços. A proposta central é transformar conversas do WhatsApp em atendimentos resolvidos e agendamentos válidos, usando a **Agenda Atendly como única agenda operacional oficial**.
+Avenly é uma plataforma de atendimento por IA para profissionais autônomos de serviços. A proposta central é transformar conversas do WhatsApp em atendimentos resolvidos e agendamentos válidos, usando a **Agenda Avenly como única agenda operacional oficial**.
 
-A IA é parte da plataforma Atendly; não é uma persona chamada “Atendly”.
+A IA é parte da plataforma Avenly; não é uma persona chamada “Avenly”.
 
 ## Fonte soberana de produto
 
@@ -30,7 +30,7 @@ Arquivos em `docs/design-reference/**/handoff/` e prompts copiados do Claude Des
 
 ### Agenda
 
-- A Agenda Atendly é a única fonte oficial da operação.
+- A Agenda Avenly é a única fonte oficial da operação.
 - Minha Agenda existe apenas como **fonte opcional de uma única importação**.
 - Não há sincronização contínua, troca de “fonte ativa”, reimportação ou modo híbrido.
 - Depois de `Concluir importação`, não existe nova importação para aquele negócio.
@@ -117,7 +117,7 @@ Ao tocar qualquer `.md` anterior ao product vault:
 - remover fluxos de sincronização/reimportação;
 - remover dois tons antigos de IA;
 - remover navegação desktop-first ou mobile com Clientes escondido em Mais;
-- remover “Atendly” como nome da IA;
+- remover “Avenly” como nome da IA;
 - remover métricas não aprovadas como “horas economizadas” ou receita estimada como requisito principal;
 - atualizar referências de fonte de verdade para `docs/product-vault/`.
 

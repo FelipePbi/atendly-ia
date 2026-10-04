@@ -15,7 +15,7 @@ import {
 } from "vitest";
 
 import { PrismaClient } from "../../src/generated/prisma/client.js";
-import { AtendlyCustomerService } from "../../src/modules/customers/atendly-customer-service.js";
+import { AvenlyCustomerService } from "../../src/modules/customers/avenly-customer-service.js";
 import type { MinhaAgendaSourceClient } from "../../src/modules/integrations/minha-agenda/client.js";
 import type { MinhaAgendaConnectionConfig } from "../../src/modules/integrations/minha-agenda/config.js";
 import { MinhaAgendaImportSourceReader } from "../../src/modules/integrations/minha-agenda/import-source-reader.js";
@@ -67,7 +67,7 @@ describeWithDatabase(
     });
 
     it("acha o cliente gravado com o 9º dígito consultando sem ele, e vice-versa", async () => {
-      const customers = new AtendlyCustomerService(prisma, tenantA);
+      const customers = new AvenlyCustomerService(prisma, tenantA);
       const maria = await customers.create({
         name: "Maria",
         // Celular já com o 9º dígito: forma canônica 5511966665555.
@@ -97,13 +97,13 @@ describeWithDatabase(
         },
       });
 
-      const customers = new AtendlyCustomerService(prisma, tenantA);
+      const customers = new AvenlyCustomerService(prisma, tenantA);
       const found = await customers.findCandidatesByPhone("5511966665555");
       expect(found.map((c) => c.id)).toEqual([legacy.id]);
     });
 
     it("records phone as + followed by the canonical form when the number is recognised", async () => {
-      const customers = new AtendlyCustomerService(prisma, tenantA);
+      const customers = new AvenlyCustomerService(prisma, tenantA);
       const maria = await customers.create({
         name: "Maria",
         phone: "11966665555",
@@ -116,8 +116,8 @@ describeWithDatabase(
     });
 
     it("does not leak phone-equivalence matches across tenants", async () => {
-      const a = new AtendlyCustomerService(prisma, tenantA);
-      const b = new AtendlyCustomerService(prisma, tenantB);
+      const a = new AvenlyCustomerService(prisma, tenantA);
+      const b = new AvenlyCustomerService(prisma, tenantB);
       await a.create({ name: "Maria", phone: "5511966665555" });
       await b.create({ name: "Outra Maria", phone: "5511966665555" });
 

@@ -126,9 +126,9 @@ export function Brand({
   signature?: BrandSignature;
 }) {
   return (
-    <Link className="brand" href={href} aria-label="Atendly — Início">
+    <Link className="brand" href={href} aria-label="Avenly — Início">
       <BrandMark signature={signature} />
-      {!compact && <span>Atendly</span>}
+      {!compact && <span>Avenly</span>}
     </Link>
   );
 }

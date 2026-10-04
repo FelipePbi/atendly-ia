@@ -868,10 +868,10 @@ export async function persistScheduleStep(
         },
       });
       await ctx.refresh();
-      ctx.go("agenda-atendly-pronta");
+      ctx.go("agenda-avenly-pronta");
       return;
     }
-    case "agenda-atendly-pronta":
+    case "agenda-avenly-pronta":
       ctx.go("demonstracao-da-ia");
       return;
     default:

@@ -66,7 +66,7 @@ import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
 import { WhatsAppSettings } from "@/features/settings/WhatsAppSettings";
 
 const CONSENT_TEXT =
-  "Entendo que as conversas deste número poderão ser processadas e armazenadas para oferecer os recursos da Atendly.";
+  "Entendo que as conversas deste número poderão ser processadas e armazenadas para oferecer os recursos da Avenly.";
 
 function settingsFixture(): SettingsState {
   return {

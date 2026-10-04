@@ -113,7 +113,7 @@ export function resolveDiscoveredEmployeeId(
   if (professionals.length > 1) {
     throw new AppError(
       "MINHA_AGENDA_MULTIPLE_PROFESSIONALS",
-      "The Minha Agenda account has more than one professional; Atendly imports a single professional's calendar for now.",
+      "The Minha Agenda account has more than one professional; Avenly imports a single professional's calendar for now.",
       422,
     );
   }

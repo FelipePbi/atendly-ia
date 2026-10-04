@@ -60,7 +60,7 @@ test("no_calendar_migration_service_reference: passes on a tree that only mentio
     {
       path: "apps/scheduling-service/src/modules/migrations/import-execution-service.ts",
       content:
-        "/**\n * Substitui a transacao monolitica de `CalendarMigrationService.importToAtendly`.\n */\nexport function run() {}",
+        "/**\n * Substitui a transacao monolitica de `CalendarMigrationService.importToAvenly`.\n */\nexport function run() {}",
     },
   ];
   assert.deepEqual(findCalendarMigrationServiceReferences(files), []);
@@ -211,7 +211,7 @@ test("no_external_calendar_source_comparison: passes when nothing compares sourc
     {
       path: "apps/scheduling-service/src/modules/calendar/routes.ts",
       content:
-        'if (settings.source !== "ATENDLY") { throw new Error("unreachable"); }',
+        'if (settings.source !== "AVENLY") { throw new Error("unreachable"); }',
     },
   ];
   assert.deepEqual(findCalendarSourceExternalComparisons(files), []);
@@ -234,7 +234,7 @@ test("no_external_calendar_source_comparison: fails when a UI label compares sou
     {
       path: "apps/frontend/src/features/settings/shared/labels.ts",
       content:
-        'export function sourceLabel(source) { return source === "EXTERNAL" ? "Minha Agenda" : "Agenda Atendly"; }',
+        'export function sourceLabel(source) { return source === "EXTERNAL" ? "Minha Agenda" : "Agenda Avenly"; }',
     },
   ];
   assert.deepEqual(findCalendarSourceExternalComparisons(files), [
@@ -455,12 +455,12 @@ test("frontend_has_no_dark_theme_css: fails when prefers-color-scheme comes back
 test("frontend_has_no_dark_theme_css: fails when a manual dark theme selector comes back", () => {
   const files = [
     {
-      path: "apps/frontend/src/shared/styles/atendly.css",
+      path: "apps/frontend/src/shared/styles/avenly.css",
       content: "html.dark {\n  --at-color-canvas: #111;\n}",
     },
   ];
   assert.deepEqual(findDarkThemeCssReferences(files), [
-    "apps/frontend/src/shared/styles/atendly.css",
+    "apps/frontend/src/shared/styles/avenly.css",
   ]);
 });
 
@@ -884,7 +884,7 @@ test("public_api_response_schema_single_source: passes when the frontend only re
   const frontendFiles = [
     {
       path: "apps/frontend/src/data/mappers/publicApiSchemas.ts",
-      content: 'export * from "@atendly-ia/public-api-contract";',
+      content: 'export * from "@avenly-ia/public-api-contract";',
     },
     {
       path: "apps/frontend/src/data/services/BffCalendarService.ts",

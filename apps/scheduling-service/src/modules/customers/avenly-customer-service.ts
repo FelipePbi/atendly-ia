@@ -11,12 +11,12 @@ type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
 export type CustomerRelationActor = "AI" | "PROFESSIONAL" | "CUSTOMER";
 
-export interface CreateAtendlyCustomerInput {
+export interface CreateAvenlyCustomerInput {
   name?: string | null;
   phone?: string | null;
 }
 
-export interface UpdateAtendlyCustomerInput {
+export interface UpdateAvenlyCustomerInput {
   name?: string | null;
   phone?: string | null;
 }
@@ -76,7 +76,7 @@ interface AppointmentRow {
  * nenhum caminho aqui renomeia, funde ou deduplica pessoas (D-005) — nome e
  * telefone só mudam por `update`, que é uma operação explícita.
  */
-export class AtendlyCustomerService {
+export class AvenlyCustomerService {
   constructor(
     private readonly database: DatabaseClient,
     private readonly tenantId: string,
@@ -254,7 +254,7 @@ export class AtendlyCustomerService {
   }
 
   /** Criação explícita. Nome e telefone são opcionais, mas não os dois. */
-  async create(input: CreateAtendlyCustomerInput) {
+  async create(input: CreateAvenlyCustomerInput) {
     const name = normalizeName(input.name);
     const phone = normalizeOptionalPhone(input.phone);
     if (!name && !phone) {
@@ -281,7 +281,7 @@ export class AtendlyCustomerService {
    * Atualização explícita de nome e telefone. Campo ausente não muda; `null`
    * limpa. Nenhuma outra operação pode renomear uma pessoa.
    */
-  async update(customerId: string, input: UpdateAtendlyCustomerInput) {
+  async update(customerId: string, input: UpdateAvenlyCustomerInput) {
     const current = await this.get(customerId);
     const data: Prisma.CustomerUpdateInput = {};
     if (input.name !== undefined) data.name = normalizeName(input.name);

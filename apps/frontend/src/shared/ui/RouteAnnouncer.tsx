@@ -25,10 +25,10 @@ const routeTitles: [RegExp, string][] = [
 export function RouteAnnouncer() {
   const pathname = usePathname();
   const title =
-    routeTitles.find(([pattern]) => pattern.test(pathname))?.[1] ?? "Atendly";
+    routeTitles.find(([pattern]) => pattern.test(pathname))?.[1] ?? "Avenly";
 
   useEffect(() => {
-    document.title = title === "Atendly" ? title : `${title} — Atendly`;
+    document.title = title === "Avenly" ? title : `${title} — Avenly`;
   }, [title]);
 
   return (

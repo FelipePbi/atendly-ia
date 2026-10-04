@@ -330,7 +330,7 @@ export async function registerV1SettingsRoutes(
   );
 
   // --- Preferencia de visualizacao da agenda (Goal073) --------------------
-  // So do BFF: a Agenda Atendly nao tem noticao de "vista", entao nao existe
+  // So do BFF: a Agenda Avenly nao tem noticao de "vista", entao nao existe
   // rota interna correspondente no Scheduling. Ausencia de linha e o default
   // do produto (nada oculto, sem vista inicial escolhida), nunca gravada por
   // esta leitura.

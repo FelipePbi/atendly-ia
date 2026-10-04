@@ -6,7 +6,7 @@ Leia `../../docs/product-vault/01-Regras/02-Agenda-e-Agendamentos.md` e `06-Impo
 
 ## Premissa central
 
-**Agenda Atendly é a única agenda operacional oficial.**
+**Agenda Avenly é a única agenda operacional oficial.**
 
 Minha Agenda não é uma alternativa de runtime. Ela existe apenas como origem de uma importação concluída uma única vez por negócio.
 
@@ -16,7 +16,7 @@ Não trate como requisito atual:
 - provider ativo por tenant;
 - sincronização;
 - reimportação;
-- Agenda Atendly → Minha Agenda.
+- Agenda Avenly → Minha Agenda.
 
 Se o código atual ainda possui abstrações antigas para esses conceitos, sua remoção/refatoração é decisão técnica separada; não continue expandindo a premissa antiga por necessidade de produto.
 

@@ -12,7 +12,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-const spritePath = resolve(process.cwd(), "public/icons/atendly-icons.svg");
+const spritePath = resolve(process.cwd(), "public/icons/avenly-icons.svg");
 const iconSourcePath = resolve(process.cwd(), "src/shared/icons/Icon.tsx");
 
 function iconNames(): string[] {

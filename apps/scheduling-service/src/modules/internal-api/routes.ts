@@ -58,8 +58,8 @@ import {
 import { databaseNow } from "../calendar/write-policy.js";
 import {
   type AppointmentSummary,
-  AtendlyCustomerService,
-} from "../customers/atendly-customer-service.js";
+  AvenlyCustomerService,
+} from "../customers/avenly-customer-service.js";
 import { encryptIntegrationCredentials } from "../integrations/credentials.js";
 import { createMinhaAgendaClient } from "../integrations/minha-agenda/client.js";
 import {
@@ -103,7 +103,7 @@ import {
   MAX_REMINDER_LEAD_MINUTES,
   ReminderService,
 } from "../reminders/reminder-service.js";
-import { AtendlyServiceService } from "../services/atendly-service-service.js";
+import { AvenlyServiceService } from "../services/avenly-service-service.js";
 import {
   TENANT_PURGE_MAX_ROWS_LIMIT,
   TenantPurgeService,
@@ -596,7 +596,7 @@ export async function registerManagementRoutes(
     const context = currentInternalContext(request);
     await requireCalendar(prisma, context.tenantId);
     const services = (
-      await new AtendlyServiceService(prisma, context.tenantId).list()
+      await new AvenlyServiceService(prisma, context.tenantId).list()
     ).map(serviceDto);
     return data(request, services);
   });
@@ -607,7 +607,7 @@ export async function registerManagementRoutes(
     async (request, reply) => {
       const context = currentInternalContext(request);
       await requireCalendar(prisma, context.tenantId);
-      const service = await new AtendlyServiceService(
+      const service = await new AvenlyServiceService(
         prisma,
         context.tenantId,
       ).create(parse(serviceBodySchema, request.body));
@@ -620,7 +620,7 @@ export async function registerManagementRoutes(
     await requireCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
     const body = parse(servicePatchSchema, request.body);
-    const serviceManager = new AtendlyServiceService(prisma, context.tenantId);
+    const serviceManager = new AvenlyServiceService(prisma, context.tenantId);
     let service = await serviceManager.update(id, body);
     if (body.active !== undefined && body.active !== service.active) {
       service = await serviceManager.setActive(id, body.active);
@@ -632,7 +632,7 @@ export async function registerManagementRoutes(
     const context = currentInternalContext(request);
     const settings = await requireCalendar(prisma, context.tenantId);
     const query = parse(customerQuerySchema, request.query ?? {});
-    const customers = await new AtendlyCustomerService(
+    const customers = await new AvenlyCustomerService(
       prisma,
       context.tenantId,
     ).list({ phone: query.phone }, { timezone: settings.timezone });
@@ -650,7 +650,7 @@ export async function registerManagementRoutes(
     const context = currentInternalContext(request);
     const settings = await requireCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
-    const customers = new AtendlyCustomerService(prisma, context.tenantId);
+    const customers = new AvenlyCustomerService(prisma, context.tenantId);
     const [customer, guardian, notes, tags, appointmentStats, highlights] =
       await Promise.all([
         customers.get(id),
@@ -682,7 +682,7 @@ export async function registerManagementRoutes(
       const context = currentInternalContext(request);
       await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
-      const authorized = await new AtendlyCustomerService(
+      const authorized = await new AvenlyCustomerService(
         prisma,
         context.tenantId,
       ).aiAuthorizedContext(id);
@@ -698,7 +698,7 @@ export async function registerManagementRoutes(
   app.post("/internal/customers", internalOnly, async (request, reply) => {
     const context = currentInternalContext(request);
     await requireCalendar(prisma, context.tenantId);
-    const customer = await new AtendlyCustomerService(
+    const customer = await new AvenlyCustomerService(
       prisma,
       context.tenantId,
     ).create(parse(customerBodySchema, request.body));
@@ -711,7 +711,7 @@ export async function registerManagementRoutes(
     await requireCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
     const body = parse(customerPatchSchema, request.body);
-    const customer = await new AtendlyCustomerService(
+    const customer = await new AvenlyCustomerService(
       prisma,
       context.tenantId,
     ).update(id, body);
@@ -726,7 +726,7 @@ export async function registerManagementRoutes(
       await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const body = parse(primaryGuardianBodySchema, request.body);
-      const relation = await new AtendlyCustomerService(
+      const relation = await new AvenlyCustomerService(
         prisma,
         context.tenantId,
       ).setPrimaryGuardian(id, body);
@@ -742,7 +742,7 @@ export async function registerManagementRoutes(
       await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const body = parse(primaryGuardianConfirmSchema, request.body);
-      const relation = await new AtendlyCustomerService(
+      const relation = await new AvenlyCustomerService(
         prisma,
         context.tenantId,
       ).confirmPrimaryGuardian(id, {
@@ -762,7 +762,7 @@ export async function registerManagementRoutes(
       const { id } = parse(idParamsSchema, request.params);
       return data(
         request,
-        await new AtendlyCustomerService(
+        await new AvenlyCustomerService(
           prisma,
           context.tenantId,
         ).clearPrimaryGuardian(id),
@@ -774,7 +774,7 @@ export async function registerManagementRoutes(
     const context = currentInternalContext(request);
     await requireCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
-    const notes = await new AtendlyCustomerService(
+    const notes = await new AvenlyCustomerService(
       prisma,
       context.tenantId,
     ).listNotes(id);
@@ -789,7 +789,7 @@ export async function registerManagementRoutes(
       await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const body = parse(customerNoteBodySchema, request.body);
-      const note = await new AtendlyCustomerService(
+      const note = await new AvenlyCustomerService(
         prisma,
         context.tenantId,
       ).addNote(id, body);
@@ -805,7 +805,7 @@ export async function registerManagementRoutes(
       await requireCalendar(prisma, context.tenantId);
       const params = parse(customerChildParamsSchema, request.params);
       const body = parse(authorizationPatchSchema, request.body);
-      const note = await new AtendlyCustomerService(
+      const note = await new AvenlyCustomerService(
         prisma,
         context.tenantId,
       ).setNoteAuthorization(params.id, params.childId, body);
@@ -822,7 +822,7 @@ export async function registerManagementRoutes(
       const params = parse(customerChildParamsSchema, request.params);
       return data(
         request,
-        await new AtendlyCustomerService(prisma, context.tenantId).deleteNote(
+        await new AvenlyCustomerService(prisma, context.tenantId).deleteNote(
           params.id,
           params.childId,
         ),
@@ -834,7 +834,7 @@ export async function registerManagementRoutes(
     const context = currentInternalContext(request);
     await requireCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
-    const tags = await new AtendlyCustomerService(
+    const tags = await new AvenlyCustomerService(
       prisma,
       context.tenantId,
     ).listTags(id);
@@ -849,7 +849,7 @@ export async function registerManagementRoutes(
       await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const body = parse(customerTagBodySchema, request.body);
-      const tag = await new AtendlyCustomerService(
+      const tag = await new AvenlyCustomerService(
         prisma,
         context.tenantId,
       ).addTag(id, body);
@@ -865,7 +865,7 @@ export async function registerManagementRoutes(
       await requireCalendar(prisma, context.tenantId);
       const params = parse(customerChildParamsSchema, request.params);
       const body = parse(authorizationPatchSchema, request.body);
-      const tag = await new AtendlyCustomerService(
+      const tag = await new AvenlyCustomerService(
         prisma,
         context.tenantId,
       ).setTagAuthorization(params.id, params.childId, body);
@@ -882,7 +882,7 @@ export async function registerManagementRoutes(
       const params = parse(customerChildParamsSchema, request.params);
       return data(
         request,
-        await new AtendlyCustomerService(prisma, context.tenantId).deleteTag(
+        await new AvenlyCustomerService(prisma, context.tenantId).deleteTag(
           params.id,
           params.childId,
         ),
@@ -1343,12 +1343,12 @@ export async function registerManagementRoutes(
   // e o par `diagnose`/`migrations` abaixo continuam com o mesmo contrato
   // (enums, campos de `source`/`target`, respostas idempotentes ja gravadas),
   // mas nao habilitam operacao nenhuma no calendario operacional: a Agenda
-  // Atendly e a unica fonte que existe (Goal010; fonte externa retirada no
+  // Avenly e a unica fonte que existe (Goal010; fonte externa retirada no
   // Goal027) e `CalendarProviderFactory` nao instancia outra coisa. O papel
   // dessas rotas e so o ciclo da importacao unica: guardar/testar a
   // credencial e disparar a leitura da origem. `IntegrationProvider` e
   // `CalendarSource` sao enums diferentes — desconectar a integracao nunca
-  // desativa a Agenda Atendly, que nao depende de `IntegrationConnection`.
+  // desativa a Agenda Avenly, que nao depende de `IntegrationConnection`.
   app.post(
     "/internal/calendar/integration/connect",
     internalOnly,
@@ -1360,7 +1360,7 @@ export async function registerManagementRoutes(
       // agenda operacional e nao e mais exigida para operar a agenda.
       // Exigir aqui que `calendar.source` seja `MINHA_AGENDA` tornaria a
       // importacao inalcancavel depois do corte do writer remoto: o negocio
-      // que opera na Agenda Atendly — que e todo negocio novo — nunca
+      // que opera na Agenda Avenly — que e todo negocio novo — nunca
       // conseguiria conectar a origem que ele quer importar.
       await requireCalendar(prisma, context.tenantId);
       // Endereco e cliente OAuth do sistema (Goal060 §1): sem a chave de
@@ -1458,7 +1458,7 @@ export async function registerManagementRoutes(
     async (request) => {
       const context = currentInternalContext(request);
       // Desconectar a origem de importacao **nunca** desativa a agenda
-      // operacional: a Agenda Atendly nao depende de `IntegrationConnection`,
+      // operacional: a Agenda Avenly nao depende de `IntegrationConnection`,
       // e por isso desconectar deixou de exigir migracao previa. O que sai e
       // a credencial da origem; a agenda do negocio segue igual.
       await requireCalendar(prisma, context.tenantId);

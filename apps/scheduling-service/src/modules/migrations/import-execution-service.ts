@@ -20,7 +20,7 @@ import {
   lockCalendarDays,
   runCalendarWrite,
 } from "../calendar/write-policy.js";
-import { AtendlyCustomerService } from "../customers/atendly-customer-service.js";
+import { AvenlyCustomerService } from "../customers/avenly-customer-service.js";
 import { migrationAvailabilityRules } from "../integrations/minha-agenda/availability.js";
 import type {
   GetImportSnapshotInput,
@@ -38,7 +38,7 @@ import {
   workScheduleSchema,
 } from "../integrations/minha-agenda/types.js";
 import { recomputeAppointmentIntentsWithin } from "../reminders/notification-intent-service.js";
-import { AtendlyServiceService } from "../services/atendly-service-service.js";
+import { AvenlyServiceService } from "../services/avenly-service-service.js";
 import {
   acquireImportLease,
   type ImportLease,
@@ -207,7 +207,7 @@ const APPOINTMENT_CATEGORIES = new Set<ImportCategory>([
 
 /**
  * Categorias cuja importação ocupa a agenda daqui para a frente e, por isso,
- * disputa horário com o que o negócio confirma na Atendly. Histórico
+ * disputa horário com o que o negócio confirma na Avenly. Histórico
  * (passado, cancelado e falta) não entra: ele não ocupa agenda, e recusá-lo
  * por horário tomado apagaria registro real do que já aconteceu.
  */
@@ -250,7 +250,7 @@ interface ImportEnvironment {
   userId: string;
   provider: IntegrationProvider;
   timeZone: string;
-  /** `entityType:externalId` → id interno já criado na Atendly. */
+  /** `entityType:externalId` → id interno já criado na Avenly. */
   mapped: Map<string, string>;
   /**
    * Lease vivo da passada (WU-05). O laço de itens o consulta entre itens:
@@ -266,10 +266,10 @@ interface ImportEnvironment {
  * (Goal010, WU-04).
  *
  * Substitui a transação monolítica de
- * `CalendarMigrationService.importToAtendly`: aqui **não existe** transação
+ * `CalendarMigrationService.importToAvenly`: aqui **não existe** transação
  * cobrindo o lote. Cada item — ou grupo dependente, no caso da
  * disponibilidade — é uma transação própria que grava, no **mesmo commit**,
- * o registro criado na Atendly, a linha de `ExternalEntityMap` que o torna
+ * o registro criado na Avenly, a linha de `ExternalEntityMap` que o torna
  * idempotente por origem e o checkpoint do `ImportItem`. Daí decorrem as
  * três propriedades exigidas:
  *
@@ -277,7 +277,7 @@ interface ImportEnvironment {
  *   intocado, nunca meio gravado; a passada seguinte só olha o que sobrou.
  * - **Idempotência por origem/item**: reprocessar o mesmo registro encontra
  *   `ExternalEntityMap (tenantId, provider, entityType, externalId)` e
- *   apenas reconcilia o item, sem criar um segundo registro na Atendly. É o
+ *   apenas reconcilia o item, sem criar um segundo registro na Avenly. É o
  *   que cobre a janela entre o commit do efeito e um checkpoint perdido.
  * - **Falha parcial**: erro ou divergência de um item marca **aquele** item
  *   e o laço continua; a sessão termina `PARTIAL` com contagens relidas do
@@ -629,7 +629,7 @@ export class ImportExecutionService {
       );
       if (already) {
         // Idempotência por origem/item: este registro da origem já virou um
-        // registro da Atendly. O item é reconciliado e **nada** é criado.
+        // registro da Avenly. O item é reconciliado e **nada** é criado.
         await this.markAlreadyImported(environment, item, entityType, already);
         continue;
       }
@@ -879,7 +879,7 @@ export class ImportExecutionService {
     const durationMinutes = knownPositiveDuration(source.duration);
 
     const internalId = await this.prisma.$transaction(async (transaction) => {
-      const created = await new AtendlyServiceService(
+      const created = await new AvenlyServiceService(
         transaction,
         environment.tenantId,
       ).create({
@@ -918,7 +918,7 @@ export class ImportExecutionService {
     // telefone. Dois clientes externos com o mesmo número continuam sendo
     // duas pessoas, e nenhum cadastro existente é renomeado ou fundido.
     const internalId = await this.prisma.$transaction(async (transaction) => {
-      const created = await new AtendlyCustomerService(
+      const created = await new AvenlyCustomerService(
         transaction,
         environment.tenantId,
       ).create({
@@ -984,7 +984,7 @@ export class ImportExecutionService {
   }
 
   /**
-   * Agendamento importado é atendimento normal da Atendly: mesma tabela,
+   * Agendamento importado é atendimento normal da Avenly: mesma tabela,
    * snapshots do Goal007 nos itens do acordo e evento `CREATED` gravado na
    * mesma transação, sob `runCalendarWrite` com os dias travados em ordem
    * estável.
@@ -1079,7 +1079,7 @@ export class ImportExecutionService {
             kind: "NEEDS_REVIEW",
             reasonCode: "APPOINTMENT_SLOT_TAKEN",
             reasonDetail:
-              "O horário deste agendamento já está ocupado por um atendimento da Agenda Atendly; nada foi sobreposto e a decisão é do negócio.",
+              "O horário deste agendamento já está ocupado por um atendimento da Agenda Avenly; nada foi sobreposto e a decisão é do negócio.",
           };
         }
       }
@@ -1196,7 +1196,7 @@ export class ImportExecutionService {
    * O commit de um item: efeito, mapa de origem e checkpoint no **mesmo**
    * commit. É o casamento entre checkpoint por item e idempotência por
    * `ExternalEntityMap` — separá-los abriria exatamente a janela em que uma
-   * queda duplicaria o registro na Atendly.
+   * queda duplicaria o registro na Avenly.
    */
   private async commitItem(
     transaction: Prisma.TransactionClient,
@@ -1230,7 +1230,7 @@ export class ImportExecutionService {
     });
   }
 
-  /** Reconciliação sem escrita operacional: o registro já existe na Atendly. */
+  /** Reconciliação sem escrita operacional: o registro já existe na Avenly. */
   private async markAlreadyImported(
     environment: ImportEnvironment,
     item: ImportItemRow,
@@ -1501,7 +1501,7 @@ function tally(
 /**
  * O bruto da origem é `unknown` até aqui: um registro fora do contrato falha
  * **aquele** item, identificado pela categoria, e não vira registro na
- * Atendly.
+ * Avenly.
  */
 function parseRecord<TValue>(
   schema: {

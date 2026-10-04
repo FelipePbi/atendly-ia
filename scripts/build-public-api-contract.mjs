@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PACKAGE_DIR = path.join(ROOT, "packages", "public-api-contract");
-const PACKAGE_NAME = "@atendly-ia/public-api-contract";
+const PACKAGE_NAME = "@avenly-ia/public-api-contract";
 const CONSUMERS = ["apps/bff", "apps/frontend"];
 
 // No Windows `npm` é um arquivo .cmd e o Node recusa executá-lo sem shell

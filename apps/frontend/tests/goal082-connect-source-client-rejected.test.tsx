@@ -2,7 +2,7 @@
 /**
  * Goal082 (WU-02): para a pessoa, a identificação do app recusada pelo portal
  * (`MINHA_AGENDA_CLIENT_REJECTED`) é a mesma coisa que a configuração ausente:
- * falha da Atendly, não dos dados informados. Nenhum dos dois textos pede e-mail,
+ * falha da Avenly, não dos dados informados. Nenhum dos dois textos pede e-mail,
  * senha nem conferência. `MINHA_AGENDA_AUTH_FAILED` continua pedindo para
  * conferir e-mail e senha.
  */
@@ -24,7 +24,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 }));
 
 const UNAVAILABLE_TEXT =
-  "A importação está indisponível agora por uma falha da Atendly, não por causa dos dados informados. Tente novamente mais tarde.";
+  "A importação está indisponível agora por uma falha da Avenly, não por causa dos dados informados. Tente novamente mais tarde.";
 
 async function connectRejectedWith(code: string, status: number) {
   const user = userEvent.setup();
@@ -64,7 +64,7 @@ test("MINHA_AGENDA_CLIENT_REJECTED mostra o mesmo texto de MINHA_AGENDA_NOT_CONF
   expect(notConfigured).toBe(rejected);
 });
 
-test("nenhum dos dois textos de falha da Atendly cita senha, e-mail nem pede conferência", async () => {
+test("nenhum dos dois textos de falha da Avenly cita senha, e-mail nem pede conferência", async () => {
   const rejected = await connectRejectedWith("MINHA_AGENDA_CLIENT_REJECTED", 503);
   expect(rejected).not.toMatch(/senha|e-mail|Confira/i);
   expect(rejected).not.toMatch(/MINHA_AGENDA_|UPSTREAM_ERROR|\b\d{3}\b/);

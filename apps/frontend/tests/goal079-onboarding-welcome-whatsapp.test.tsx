@@ -238,7 +238,7 @@ describe("ordem de Tab da introdução do WhatsApp (observação 3 do review065)
 
   test("nenhuma regra de .onboarding-actions declara row-reverse, column-reverse ou order", () => {
     const css = readFileSync(
-      resolve(process.cwd(), "src/shared/styles/atendly.css"),
+      resolve(process.cwd(), "src/shared/styles/avenly.css"),
       "utf8",
     ).replace(/\/\*[\s\S]*?\*\//g, "");
     const offending: string[] = [];

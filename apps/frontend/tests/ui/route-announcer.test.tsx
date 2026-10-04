@@ -55,13 +55,13 @@ describe("RouteAnnouncer", () => {
     pathname.current = "/rota-que-nao-existe";
     render(<RouteAnnouncer />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("Página carregada: Atendly");
-    expect(document.title).toBe("Atendly");
+    expect(screen.getByRole("status")).toHaveTextContent("Página carregada: Avenly");
+    expect(document.title).toBe("Avenly");
   });
 
   test("the document title follows the route, which is what a tab shows", () => {
     pathname.current = "/agenda";
     render(<RouteAnnouncer />);
-    expect(document.title).toBe("Agenda — Atendly");
+    expect(document.title).toBe("Agenda — Avenly");
   });
 });

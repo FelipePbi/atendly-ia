@@ -10,7 +10,7 @@ As cópias do Product Vault e do Prompt Mestre usadas como material de entrada f
 
 Arquivos de imagem identificados:
 
-- `atendly-logo-icon.png`;
+- `avenly-logo-icon.png`;
 - `b1f4a19a-ea00-4b15-b504-598f5a1943e3.png`;
 - `cadastro-restaurado-6855016e.png`;
 - `cadastro-restaurado.png`;
@@ -26,4 +26,4 @@ Contém 35 imagens JPG de QA e `Probe-Larguras.dc.html`, usado pelo protótipo p
 
 Ícones e SVGs não aparecem como arquivos separados porque estão incorporados diretamente nos HTMLs. Regras de cor, tipografia, espaçamento, estados, animações e responsividade também permanecem nos estilos e scripts das páginas do projeto.
 
-Estes assets são referências de design. Confirme licenças, otimização, nomenclatura e adequação ao pipeline do Atendly antes de qualquer uso em produção.
+Estes assets são referências de design. Confirme licenças, otimização, nomenclatura e adequação ao pipeline do Avenly antes de qualquer uso em produção.

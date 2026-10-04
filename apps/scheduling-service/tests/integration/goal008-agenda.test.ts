@@ -3,11 +3,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { PrismaClient } from "../../src/generated/prisma/client.js";
 import { listAppointmentEvents } from "../../src/modules/appointments/appointment-event-service.js";
-import { AtendlyAppointmentLifecycleService } from "../../src/modules/appointments/appointment-lifecycle-service.js";
+import { AvenlyAppointmentLifecycleService } from "../../src/modules/appointments/appointment-lifecycle-service.js";
 import { runAutoCompleteSweep } from "../../src/modules/appointments/auto-complete-loop.js";
 import { CalendarService } from "../../src/modules/calendar/calendar-service.js";
 import { createTimeBlock } from "../../src/modules/calendar/time-blocks.js";
-import { AtendlyCalendarProvider } from "../../src/modules/integrations/atendly/provider.js";
+import { AvenlyCalendarProvider } from "../../src/modules/integrations/avenly/provider.js";
 import { resetTenant } from "./support/reset-tenant.js";
 import { upcomingDate } from "./support/test-date.js";
 
@@ -42,11 +42,11 @@ let customerIdA = "";
 let serviceIdB = "";
 
 function provider(tenantId: string, userId = "user-1") {
-  return new AtendlyCalendarProvider(prisma, tenantId, userId, timeZone);
+  return new AvenlyCalendarProvider(prisma, tenantId, userId, timeZone);
 }
 
 function providerOn(client: PrismaClient, tenantId: string, userId: string) {
-  return new AtendlyCalendarProvider(client, tenantId, userId, timeZone);
+  return new AvenlyCalendarProvider(client, tenantId, userId, timeZone);
 }
 
 function calendarContext(tenantId: string, requestId = "request-1") {
@@ -528,7 +528,7 @@ describeWithDatabase("goal008 agenda against PostgreSQL", () => {
       });
 
       const noShowId = await pastConfirmedAppointment(120);
-      await new AtendlyAppointmentLifecycleService(
+      await new AvenlyAppointmentLifecycleService(
         prisma,
         tenantA,
         "user-1",
@@ -699,7 +699,7 @@ describeWithDatabase("goal008 agenda against PostgreSQL", () => {
       const appointment = await provider(tenantA).createAppointment(
         scheduleInput("07:00", "idem-transitions"),
       );
-      const lifecycle = new AtendlyAppointmentLifecycleService(
+      const lifecycle = new AvenlyAppointmentLifecycleService(
         prisma,
         tenantA,
         "user-1",

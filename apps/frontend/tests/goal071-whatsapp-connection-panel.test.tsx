@@ -54,7 +54,7 @@ const PHONE_FORMAT_ERROR =
   "Digite o número com DDD, só com números. Exemplo: 11999990000.";
 
 const CONSENT_TEXT =
-  "Entendo que as conversas deste número poderão ser processadas e armazenadas para oferecer os recursos da Atendly.";
+  "Entendo que as conversas deste número poderão ser processadas e armazenadas para oferecer os recursos da Avenly.";
 
 async function acceptConsent(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("checkbox"));

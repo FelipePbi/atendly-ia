@@ -194,7 +194,7 @@ function formText(data: FormData, name: string): string {
 function requestError(error: unknown, fallback: string): string {
   if (!(error instanceof BffHttpError)) return fallback;
   const messages: Record<string, string> = {
-    NETWORK_ERROR: "Não foi possível acessar a Atendly. Confira sua conexão.",
+    NETWORK_ERROR: "Não foi possível acessar a Avenly. Confira sua conexão.",
   };
   const message = messages[error.code] ?? fallback;
   return `${message} Referência: ${error.requestId}`;

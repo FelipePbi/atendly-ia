@@ -121,7 +121,7 @@ describe("classes de erro do §4, por details.upstreamCode", () => {
     {
       code: "MINHA_AGENDA_MULTIPLE_PROFESSIONALS",
       expected:
-        "Encontramos mais de um profissional cadastrado nessa conta do Minha Agenda. Por enquanto, a Atendly importa a agenda de um profissional só.",
+        "Encontramos mais de um profissional cadastrado nessa conta do Minha Agenda. Por enquanto, a Avenly importa a agenda de um profissional só.",
       status: 422,
     },
     {
@@ -147,13 +147,13 @@ describe("classes de erro do §4, por details.upstreamCode", () => {
     {
       code: "MINHA_AGENDA_NOT_CONFIGURED",
       expected:
-        "A importação está indisponível agora por uma falha da Atendly, não por causa dos dados informados. Tente novamente mais tarde.",
+        "A importação está indisponível agora por uma falha da Avenly, não por causa dos dados informados. Tente novamente mais tarde.",
       status: 503,
     },
     {
       code: "INTEGRATION_CONFIGURATION_INVALID",
       expected:
-        "A importação está indisponível agora por uma falha da Atendly, não por causa dos dados informados. Tente novamente mais tarde.",
+        "A importação está indisponível agora por uma falha da Avenly, não por causa dos dados informados. Tente novamente mais tarde.",
       status: 500,
     },
   ])(

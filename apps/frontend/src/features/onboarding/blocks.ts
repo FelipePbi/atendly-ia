@@ -21,7 +21,7 @@ const blockScenarios: Record<OnboardingBlockId, readonly OnboardingScenario[]> =
       "servicos-adicionais",
       "dias-de-atendimento",
       "horarios",
-      "agenda-atendly-pronta",
+      "agenda-avenly-pronta",
     ],
     whatsapp: [
       "whatsapp",
@@ -64,7 +64,7 @@ export const onboardingFlow: OnboardingScenario[] = [
   "servicos-adicionais",
   "dias-de-atendimento",
   "horarios",
-  "agenda-atendly-pronta",
+  "agenda-avenly-pronta",
   "demonstracao-da-ia",
   "tom-da-ia",
   "whatsapp",

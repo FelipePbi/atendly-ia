@@ -328,7 +328,7 @@ describe("autorização de uso pela IA nasce negada e só muda por ação explí
   });
 });
 
-describe("na Agenda Atendly, a agenda do perfil pede por customerId", () => {
+describe("na Agenda Avenly, a agenda do perfil pede por customerId", () => {
   test("a requisição emitida carrega customerId e não carrega customerPhone", async () => {
     customersGet.mockResolvedValue(customerDetailFixture({ id: "c1" }));
     calendarGetCalendar.mockResolvedValue(calendarStateFixture());

@@ -482,7 +482,7 @@ export async function measureComposition(marker: Locator): Promise<CompositionRe
   }, { navigationSelector: SHELL_NAVIGATION_SELECTOR, chromeTolerance: CHROME_TOLERANCE });
 }
 
-/** Where the shell swaps the bottom bar for the sidebar (`atendly.css`), and the sidebar's width in the prototype's desktop frames. */
+/** Where the shell swaps the bottom bar for the sidebar (`avenly.css`), and the sidebar's width in the prototype's desktop frames. */
 export const SIDEBAR_BREAKPOINT = 1100;
 export const SIDEBAR_WIDTH = 232;
 /** Início, Conversas, Agenda, Clientes and Mais — in the mobile and the tablet frames alike. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AtendlyCustomerService } from "../../src/modules/customers/atendly-customer-service.js";
+import { AvenlyCustomerService } from "../../src/modules/customers/avenly-customer-service.js";
 import { CalendarRemovalService } from "../../src/modules/calendar/removal.js";
 import { AppError } from "../../src/shared/errors/app-error.js";
 import { createDatabaseDouble } from "./support/database-double.js";
@@ -11,14 +11,14 @@ function build() {
   const database = createDatabaseDouble();
   return {
     database,
-    customers: new AtendlyCustomerService(database.client as never, tenantId),
+    customers: new AvenlyCustomerService(database.client as never, tenantId),
     removal: new CalendarRemovalService(database.client as never, tenantId),
   };
 }
 
 async function personWithAppointment(harness: ReturnType<typeof build>) {
   const person = await harness.customers.create({
-    name: "Atendly (teste)",
+    name: "Avenly (teste)",
     phone: "5511911112222",
   });
   const created = await harness.database.client.appointment.create({

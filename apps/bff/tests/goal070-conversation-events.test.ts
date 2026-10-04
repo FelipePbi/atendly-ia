@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { conversationEventSchema } from "@atendly-ia/public-api-contract";
+import { conversationEventSchema } from "@avenly-ia/public-api-contract";
 import { AppError } from "../src/lib/errors.js";
 
 const ROOT = "root-internal-secret-with-32-chars-min";

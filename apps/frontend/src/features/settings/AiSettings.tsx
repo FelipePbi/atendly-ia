@@ -425,7 +425,7 @@ export function AiSettings({
         title="Pausar atendimento automático?"
       >
         <p className="settings-modal-copy">
-          A Atendly deixará de responder novas mensagens. Conversas em
+          A Avenly deixará de responder novas mensagens. Conversas em
           atendimento humano continuam disponíveis.
         </p>
         <div className="modal-actions">

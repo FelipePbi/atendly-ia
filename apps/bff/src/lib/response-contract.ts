@@ -1,7 +1,7 @@
 import {
   findPublicApiRoute,
   type HttpMethod,
-} from "@atendly-ia/public-api-contract";
+} from "@avenly-ia/public-api-contract";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import { env } from "../config/env.js";
@@ -13,7 +13,7 @@ import { env } from "../config/env.js";
  * profundidade.
  *
  * O BFF compara o `data` que acabou de serializar contra a entrada da rota em
- * `@atendly-ia/public-api-contract`, a mesma tabela que o frontend usa para
+ * `@avenly-ia/public-api-contract`, a mesma tabela que o frontend usa para
  * validar o que recebe. Divergência entre os dois lados (A-03) deixa de ser
  * descoberta na tela e passa a derrubar a suíte do BFF.
  *
@@ -78,7 +78,7 @@ interface ContractIssue {
  * mensagem do erro.
  */
 const UNDECLARED_KEY_MESSAGE =
-  "key is not declared by the public API contract, so the frontend never sees it. Declare it in @atendly-ia/public-api-contract or stop sending it";
+  "key is not declared by the public API contract, so the frontend never sees it. Declare it in @avenly-ia/public-api-contract or stop sending it";
 
 /**
  * Só percorremos objeto literal dos dois lados. `Date`, `Map` e qualquer

@@ -19,8 +19,8 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@atendly-ia/legal-contract": "file:../../packages/legal-contract",
-    "@atendly-ia/public-api-contract": "file:../../packages/public-api-contract",
+    "@avenly-ia/legal-contract": "file:../../packages/legal-contract",
+    "@avenly-ia/public-api-contract": "file:../../packages/public-api-contract",
     "clsx": "^2.1.1",
     "next": "^16.3.3",
     "react": "19.2.4",

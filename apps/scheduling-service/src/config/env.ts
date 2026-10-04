@@ -49,7 +49,7 @@ const envSchema = z.object({
   MINHA_AGENDA_API_BASE_URL: stringEnv("https://api.minhaagendaapp.com.br"),
   // Identificacao do app do portal Minha Agenda (Goal060 §1, Goal082): vai no
   // cabecalho `Authorization: Basic` do login, igual para todo negocio, fornecida
-  // pela operacao da Atendly e nunca pedida a pessoa. Aceita com ou sem o
+  // pela operacao da Avenly e nunca pedida a pessoa. Aceita com ou sem o
   // prefixo `Basic `. Sem valor, o servico sobe com um aviso no log e conectar
   // a Minha Agenda sai MINHA_AGENDA_NOT_CONFIGURED; se o portal a recusar, sai
   // MINHA_AGENDA_CLIENT_REJECTED.

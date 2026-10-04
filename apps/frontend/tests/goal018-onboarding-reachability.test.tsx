@@ -16,7 +16,7 @@
  * Cenários removidos (protótipo sem consumidor real): as 8 variações
  * `importar-*` (só existiam no fluxo do protótipo descontinuado; a
  * importação real é do Goal019) e as 13 variações `minha-agenda-*`, incluindo
- * `minha-agenda-conectar` (Goal027: a Atendly é a única fonte oficial, então
+ * `minha-agenda-conectar` (Goal027: a Avenly é a única fonte oficial, então
  * "Minha Agenda" deixou de ser uma escolha de agenda — só sobrevive como
  * importação única, hoje nas etapas `quando-importar` e `importacao` do
  * Goal066). `onboardingOrder` e
@@ -356,10 +356,10 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
   // cinco testes que cobriam essas três telas foram substituídos pela suíte
   // "goal066-onboarding-sistema-atual.test.tsx", que prova a mesma
   // alcançabilidade para as etapas novas:
-  // - "fonte-da-agenda com Agenda Atendly volta para modalidade…": "Voltar
+  // - "fonte-da-agenda com Agenda Avenly volta para modalidade…": "Voltar
   //   aponta para modalidade sem ON_SITE" e "'Não, começar do zero' grava
   //   calendar.source…";
-  // - "fonte-da-agenda sem escolher a Agenda Atendly bloqueia…": "não
+  // - "fonte-da-agenda sem escolher a Agenda Avenly bloqueia…": "não
   //   oferece Continuar" (não há mais escolha a esquecer: o card é a ação);
   // - "agenda-atendly-confirmar avança para agenda-atendly-metodo": "'Sim,
   //   quero importar' só navega para quando-importar…";
@@ -455,7 +455,7 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
     expect(push).toHaveBeenCalledWith("/onboarding/horarios");
   });
 
-  test("horarios salva a disponibilidade e avança para agenda-atendly-pronta", async () => {
+  test("horarios salva a disponibilidade e avança para agenda-avenly-pronta", async () => {
     const user = userEvent.setup();
     renderScreen(
       "horarios",
@@ -467,13 +467,13 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
       { availability: unknown },
     ];
     expect(patch.availability).toBeDefined();
-    expect(push).toHaveBeenCalledWith("/onboarding/agenda-atendly-pronta");
+    expect(push).toHaveBeenCalledWith("/onboarding/agenda-avenly-pronta");
   });
 
-  test("agenda-atendly-pronta avança para demonstracao-da-ia", async () => {
+  test("agenda-avenly-pronta avança para demonstracao-da-ia", async () => {
     const user = userEvent.setup();
     renderScreen(
-      "agenda-atendly-pronta",
+      "agenda-avenly-pronta",
       stateFixture({ ...businessDone, ...calendarDone, ...serviceDone }),
     );
     await user.click(await screen.findByRole("button", { name: "Continuar" }));
@@ -623,7 +623,7 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
     expect(
       await screen.findByRole("heading", {
         level: 1,
-        name: "Sua Atendly está configurada.",
+        name: "Sua Avenly está configurada.",
       }),
     ).toBeVisible();
     expect(

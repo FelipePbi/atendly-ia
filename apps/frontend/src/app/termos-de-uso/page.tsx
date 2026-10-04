@@ -8,9 +8,9 @@ import {
 import { createTermsOfUse } from "@/content/legal/terms-of-use.pt-BR";
 
 export const metadata: Metadata = {
-  title: "Termos de Uso | Atendly",
+  title: "Termos de Uso | Avenly",
   description:
-    "Termos que regem a criação da conta e o uso da plataforma Atendly.",
+    "Termos que regem a criação da conta e o uso da plataforma Avenly.",
   robots: {
     index: legalDocumentsAreIndexable(),
     follow: legalDocumentsAreIndexable(),

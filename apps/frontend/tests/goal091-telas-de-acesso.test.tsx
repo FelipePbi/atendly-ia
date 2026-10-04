@@ -212,7 +212,7 @@ const APP_SECTION_TITLES: Readonly<Record<string, readonly string[]>> = {
   "/termos-de-uso": [
     "1. Identificação da responsável",
     "2. Definições",
-    "3. A Atendly e os serviços oferecidos",
+    "3. A Avenly e os serviços oferecidos",
     "4. Criação e manutenção da conta",
     "5. Responsabilidades do Usuário e credenciais",
     "6. WhatsApp e Serviços de Terceiros",

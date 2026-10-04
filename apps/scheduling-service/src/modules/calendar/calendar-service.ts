@@ -9,13 +9,13 @@ import {
 } from "../appointments/appointment-event-service.js";
 import {
   type AppointmentLifecycleSnapshot,
-  AtendlyAppointmentLifecycleService,
+  AvenlyAppointmentLifecycleService,
 } from "../appointments/appointment-lifecycle-service.js";
 import {
   type AppointmentNotificationRecord,
   listAppointmentNotifications,
 } from "../reminders/notification-read-service.js";
-import { isOperationalService } from "../services/atendly-service-service.js";
+import { isOperationalService } from "../services/avenly-service-service.js";
 import type {
   CalendarAppointment,
   CalendarEffectEntityType,
@@ -143,7 +143,7 @@ export class CalendarService {
   /**
    * "Operacional" (Goal007): o mesmo predicado usado por `/internal/services`
    * (o que a IA pode oferecer) e pela capacidade de ativação lida pelo BFF.
-   * A Agenda Atendly já filtra em `listForScheduling`; o filtro daqui é o que
+   * A Agenda Avenly já filtra em `listForScheduling`; o filtro daqui é o que
    * torna o predicado explícito no contrato desta leitura.
    */
   async listOperationalServices(context: CalendarRequestContext) {
@@ -307,7 +307,7 @@ export class CalendarService {
 
   private async lifecycle(context: CalendarRequestContext) {
     await this.requireSettings(context);
-    return new AtendlyAppointmentLifecycleService(
+    return new AvenlyAppointmentLifecycleService(
       this.prisma,
       context.tenantId,
       context.userId,

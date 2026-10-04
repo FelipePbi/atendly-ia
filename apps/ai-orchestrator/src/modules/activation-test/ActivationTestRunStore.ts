@@ -312,7 +312,7 @@ export interface OpenedTestConversation {
 }
 
 /** Nome do contato de teste. Nao e heuristica de limpeza: a limpeza usa IDs. */
-export const ACTIVATION_TEST_CONTACT_NAME = "Atendly (teste)";
+export const ACTIVATION_TEST_CONTACT_NAME = "Avenly (teste)";
 
 export class ActivationTestRunStore implements ActivationTestRunRepository {
   constructor(private readonly prisma: PrismaClient) {}

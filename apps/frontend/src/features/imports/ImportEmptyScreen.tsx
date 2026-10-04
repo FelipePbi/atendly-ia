@@ -34,7 +34,7 @@ export function ImportEmptyScreen({
           <h2>Você ainda não importou do Minha Agenda</h2>
           <p>
             Traga serviços, clientes, horários e agendamentos de uma vez. Leva
-            alguns minutos e acontece uma única vez — depois, a Atendly é sua
+            alguns minutos e acontece uma única vez — depois, a Avenly é sua
             agenda oficial.
           </p>
         </div>

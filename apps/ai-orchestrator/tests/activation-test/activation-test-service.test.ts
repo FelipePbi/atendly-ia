@@ -46,7 +46,7 @@ function appointment(input: ScheduleAppointmentInput): SchedulingAppointment {
     endTime: "10:00",
     duration: 60,
     customerId: "customer-1",
-    customer: { id: "customer-1", name: "Atendly (teste)", phone: null },
+    customer: { id: "customer-1", name: "Avenly (teste)", phone: null },
     services: [],
     price: 120,
     totalPriceType: "FIXED",
@@ -55,7 +55,7 @@ function appointment(input: ScheduleAppointmentInput): SchedulingAppointment {
     serviceId: input.serviceId,
     serviceIds: [input.serviceId],
     serviceName: SERVICE.name,
-    customerName: "Atendly (teste)",
+    customerName: "Avenly (teste)",
   };
 }
 
@@ -379,7 +379,7 @@ describe("execucao do teste real: caminho feliz", () => {
     ).toEqual({ kind: "APPOINTMENT", id: "appointment-1" });
 
     // O aviso separado sai antes de qualquer demonstracao e nao vira marco.
-    expect(sender.sends[0]?.text).toContain("conversa de teste da Atendly");
+    expect(sender.sends[0]?.text).toContain("conversa de teste da Avenly");
     expect(sender.sends.every((send) => send.phone === TENANT_PHONE)).toBe(
       true,
     );

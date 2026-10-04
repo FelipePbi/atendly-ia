@@ -23,7 +23,7 @@ export interface BuildAppOptions {
 }
 
 // Recusas que a operacao precisa ver no log: a falha e da configuracao da
-// Atendly, nao dos dados da pessoa (Goal082 §2).
+// Avenly, nao dos dados da pessoa (Goal082 §2).
 const OPERATOR_VISIBLE_REFUSALS = new Set([
   "MINHA_AGENDA_NOT_CONFIGURED",
   "MINHA_AGENDA_CLIENT_REJECTED",

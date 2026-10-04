@@ -41,7 +41,7 @@ enum AppointmentSource {
 /// Tipo da entidade **de destino** de um mapa de origem, e a chave de
 /// idempotencia por item em `ExternalEntityMap`. `TIME_BLOCK` e
 /// `AVAILABILITY_EXCEPTION` sao aditivos do Goal010: a origem ja marca
-/// bloqueios (`isSlotBlocker`) e ausencias, que na Atendly viram `TimeBlock`
+/// bloqueios (`isSlotBlocker`) e ausencias, que na Avenly viram `TimeBlock`
 /// e `AvailabilityException`. Nenhum valor existente muda de significado.
 enum ExternalEntityType {
   SERVICE
@@ -940,7 +940,7 @@ model MigrationConflict {
 /// Categoria de importacao (Goal010). E o eixo do **preview**, nao o da
 /// entidade de destino: historico, cancelados e faltas sao categorias
 /// distintas para o usuario ("1.840 atendimentos anteriores", "12
-/// cancelamentos") e viram todos `Appointment` na Atendly. Por isso a
+/// cancelamentos") e viram todos `Appointment` na Avenly. Por isso a
 /// categoria e um enum proprio e nao reaproveita `ExternalEntityType`, que
 /// continua sendo o eixo da entidade criada e a chave de idempotencia por
 /// item em `ExternalEntityMap`.
@@ -1183,7 +1183,7 @@ model ImportSessionCategory {
 /// reanalise reconciliar decisoes por identificador de origem. Isso **nao**
 /// e uma chave de idempotencia paralela: a idempotencia da criacao continua
 /// sendo `ExternalEntityMap (tenantId, provider, entityType, externalId)`, e
-/// reprocessar o mesmo registro nao cria um segundo na Atendly.
+/// reprocessar o mesmo registro nao cria um segundo na Avenly.
 model ImportItem {
   id        String         @id @default(cuid())
   tenantId  String
@@ -1200,7 +1200,7 @@ model ImportItem {
   reasonCode   String?
   reasonDetail String?
 
-  /// Referencia ao registro criado na Atendly, quando houver. Preenchidos
+  /// Referencia ao registro criado na Avenly, quando houver. Preenchidos
   /// juntos e obrigatorios em `IMPORTED`
   /// (`ImportItem_status_consistency_check`).
   entityType ExternalEntityType?
@@ -1261,7 +1261,7 @@ model ImportDecision {
   previewVersion Int @default(0)
 
   /// Alvo escolhido quando a decisao resolve divergencia contra um registro
-  /// que ja existia na Atendly.
+  /// que ja existia na Avenly.
   targetInternalId String?
   /// Observacao sanitizada por codigo estavel.
   noteCode String?

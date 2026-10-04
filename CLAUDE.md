@@ -1,4 +1,4 @@
-# CLAUDE.md — Atendly
+# CLAUDE.md — Avenly
 
 Arquivo de **roteamento**, não base de conhecimento: diz onde procurar, não qual é a resposta.
 Guardrails de produto estão em `AGENTS.md`. Detalhe operacional em `docs/AI_WORKFLOW.md`.

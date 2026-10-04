@@ -83,7 +83,7 @@ function calendarStateFixture(overrides: Partial<CalendarState> = {}): CalendarS
       migrate: true,
     },
     integration: null,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: "America/Sao_Paulo",
     ...overrides,
   };
@@ -124,7 +124,7 @@ describe("ShellConfigProvider + tela real de Clientes não excede a profundidade
     customersList.mockResolvedValue({
       items: [customerFixture({ id: "c1" }), customerFixture({ id: "c2", name: "Bruno Alves" })],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     const user = userEvent.setup();
     render(
@@ -186,7 +186,7 @@ describe("ShellConfigProvider + tela real de Serviços não excede a profundidad
         serviceFixture({ id: "s1" }),
         serviceFixture({ active: false, id: "s2", name: "Escova" }),
       ],
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     const user = userEvent.setup();
     render(
@@ -201,7 +201,7 @@ describe("ShellConfigProvider + tela real de Serviços não excede a profundidad
   });
 
   test("formulário de novo serviço responde à troca repetida do tipo de preço", async () => {
-    serviceCatalogList.mockResolvedValue({ editable: true, items: [], source: "ATENDLY" });
+    serviceCatalogList.mockResolvedValue({ editable: true, items: [], source: "AVENLY" });
     const user = userEvent.setup();
     render(
       <ShellConfigProvider>
@@ -220,7 +220,7 @@ describe("ShellConfigProvider + tela real de Serviços não excede a profundidad
     serviceCatalogList.mockResolvedValue({
       editable: true,
       items: [serviceFixture({ id: "s1" })],
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     render(
       <ShellConfigProvider>

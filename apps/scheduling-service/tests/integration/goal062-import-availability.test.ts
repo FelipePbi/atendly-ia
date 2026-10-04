@@ -184,8 +184,8 @@ function databaseTime(value: string): Date {
 async function seedTenant(tenantId: string, grid: GridRule[]): Promise<void> {
   await prisma.calendarSettings.upsert({
     where: { tenantId },
-    create: { tenantId, source: "ATENDLY", timezone: timeZone },
-    update: { source: "ATENDLY", timezone: timeZone },
+    create: { tenantId, source: "AVENLY", timezone: timeZone },
+    update: { source: "AVENLY", timezone: timeZone },
   });
   if (grid.length > 0) {
     await prisma.availabilityRule.createMany({

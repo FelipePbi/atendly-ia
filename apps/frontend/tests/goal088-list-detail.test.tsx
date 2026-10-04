@@ -187,7 +187,7 @@ function settingsFixture(): SettingsState {
         migrate: true,
       },
       integration: null,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     },
   };
@@ -313,7 +313,7 @@ beforeEach(() => {
   customersList.mockResolvedValue({
     items: [{ id: "c1", name: "Ana Paula", phone: "11991234567" }],
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   calendarGetCalendar.mockResolvedValue(settingsFixture().calendar);
   conversationsList.mockResolvedValue([]);
@@ -321,7 +321,7 @@ beforeEach(() => {
     editable: true,
     items: [serviceFixture()],
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   serviceCatalogGetAiInstruction.mockResolvedValue({ content: "" });
   settingsGet.mockResolvedValue(settingsFixture());

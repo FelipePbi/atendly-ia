@@ -86,7 +86,7 @@ beforeEach(() => {
   listServiceCatalog.mockResolvedValue({
     editable: true,
     items: [],
-    source: "ATENDLY",
+    source: "AVENLY",
   });
 });
 
@@ -198,7 +198,7 @@ describe("servicos-adicionais: cria por POST /v1/services sem trocar o serviço 
         serviceFixture({ id: "svc-1", name: "Corte" }),
         serviceFixture({ id: "svc-2", name: "Barba", durationMinutes: 30, price: 40 }),
       ],
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     await renderStep(
       "servicos-adicionais",

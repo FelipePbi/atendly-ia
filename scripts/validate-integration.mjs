@@ -507,7 +507,7 @@ export function integrationSteps(target) {
     // contagem por tabela, `_prisma_migrations`, indices, constraints nomeadas
     // e enums. Depende do passo anterior de proposito: ele produz os bancos de
     // origem. Prova, por tentativa real de `UPDATE` contra o banco RESTAURADO,
-    // que `CalendarSettings_source_atendly_check` sobrevive ao restore e ainda
+    // que `CalendarSettings_source_avenly_check` sobrevive ao restore e ainda
     // recusa `MINHA_AGENDA` com `23514`. Ausencia de `pg_dump`/`pg_restore` no
     // PATH e recusa com exit 2, nunca skip.
     {

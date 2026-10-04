@@ -20,6 +20,7 @@ import {
   businessModalitySchema,
   resolveBusinessProfileFields,
 } from "../../lib/business-profile.js";
+import { CALENDAR_SOURCE } from "../../lib/calendar-source.js";
 import { AppError, toErrorMessage } from "../../lib/errors.js";
 import { dataResponse, parseBody } from "../../lib/http.js";
 import { getPrisma } from "../../lib/prisma.js";
@@ -441,7 +442,7 @@ async function settingsState(
         },
       );
   const availability =
-    calendar.source === "ATENDLY"
+    calendar.source === CALENDAR_SOURCE
       ? await scheduling.availabilitySettings(context)
       : null;
   return {
@@ -468,7 +469,7 @@ async function settingsState(
     },
     calendar: {
       ...calendar,
-      source: calendar.source === "ATENDLY" ? "ATENDLY" : null,
+      source: calendar.source === CALENDAR_SOURCE ? CALENDAR_SOURCE : null,
       // O fuso da replica **depois** desta passada. Convergiu: sai o fuso do
       // dono. Nao convergiu: sai o valor que continua gravado no Scheduling,
       // divergente de `business.timezone` na mesma resposta. Nenhum caminho

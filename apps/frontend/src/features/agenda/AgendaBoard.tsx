@@ -203,7 +203,7 @@ export function AgendaBoard() {
         setExceptions([]);
         return;
       }
-      const atendly = calendarResult.source === "ATENDLY";
+      const atendly = calendarResult.source === "AVENLY";
       const [appointmentResult, blockResult, exceptionResult] =
         await Promise.all([
           services.listAppointments(queryWindow, controller.signal),
@@ -457,7 +457,7 @@ export function AgendaBoard() {
                   {wideLayout && (
                     <DayDetailPanel
                       appointment={selectedAppointment}
-                      lifecycleAvailable={calendar.source === "ATENDLY"}
+                      lifecycleAvailable={calendar.source === "AVENLY"}
                       onUpdated={appointmentUpdated}
                     />
                   )}

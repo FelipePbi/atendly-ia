@@ -222,7 +222,7 @@ describe("sistema-atual: dois cards de ação, sem marcação e sem Continuar", 
 
     await waitFor(() =>
       expect(updateOnboarding).toHaveBeenCalledWith({
-        calendar: { source: "ATENDLY", timezone: "America/Sao_Paulo" },
+        calendar: { source: "AVENLY", timezone: "America/Sao_Paulo" },
       }),
     );
     expect(push).toHaveBeenCalledWith("/onboarding/servico-nome");
@@ -283,7 +283,7 @@ describe("sistema-atual: dois cards de ação, sem marcação e sem Continuar", 
 const calendarDone = {
   calendar: {
     integration: null,
-    source: "ATENDLY" as const,
+    source: "AVENLY" as const,
     timezone: "America/Sao_Paulo",
   },
 };
@@ -333,7 +333,7 @@ describe("quando-importar: Importar agora / Fazer depois gravam calendar.source"
 
     await waitFor(() =>
       expect(updateOnboarding).toHaveBeenCalledWith({
-        calendar: { source: "ATENDLY", timezone: "America/Sao_Paulo" },
+        calendar: { source: "AVENLY", timezone: "America/Sao_Paulo" },
       }),
     );
     expect(push).toHaveBeenCalledWith("/onboarding/importacao");
@@ -368,7 +368,7 @@ describe("quando-importar: Importar agora / Fazer depois gravam calendar.source"
 
     await waitFor(() =>
       expect(updateOnboarding).toHaveBeenCalledWith({
-        calendar: { source: "ATENDLY", timezone: "America/Sao_Paulo" },
+        calendar: { source: "AVENLY", timezone: "America/Sao_Paulo" },
       }),
     );
     expect(push).toHaveBeenCalledWith("/onboarding/servico-nome");

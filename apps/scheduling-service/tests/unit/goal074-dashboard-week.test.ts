@@ -67,7 +67,7 @@ function seedCalendar(database: Database) {
   database.tables.calendarSettings.rows.push({
     id: `settings-${tenantId}`,
     tenantId,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: timeZone,
     minLeadMinutes: 0,
     maxLeadDays: 90,

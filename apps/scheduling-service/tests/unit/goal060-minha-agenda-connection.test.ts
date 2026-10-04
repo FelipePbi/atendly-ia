@@ -59,7 +59,7 @@ function seedAtendlyCalendar(db: Database) {
   db.client.calendarSettings.rows.push({
     id: "settings-1",
     tenantId,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: "America/Sao_Paulo",
   } as never);
 }

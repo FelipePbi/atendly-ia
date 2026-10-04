@@ -77,17 +77,22 @@ export class BffHttpError extends Error {
   }
 }
 
+/** Nome do cookie de CSRF antes da troca de marca. Fixo, não configurável. */
+const LEGACY_CSRF_COOKIE_NAME = "atendly_csrf";
+
 /**
  * Adapter HTTP do frontend contra o BFF.
  *
  * Sobre o token de CSRF: a Atendly publica frontend e BFF em hosts distintos,
- * sob um sufixo público, e o cookie legível `atendly_csrf` é gravado no host do
+ * sob um sufixo público, e o cookie legível `avenly_csrf` é gravado no host do
  * BFF. `document.cookie` do frontend nunca enxerga esse cookie, então lê-lo não
  * funciona no ambiente publicado — só em desenvolvimento, onde os dois estão em
  * `localhost`. Por isso o canal primário aqui é o header `x-csrf-token` da
  * resposta, exposto pelo CORS apenas para a origem permitida: o adapter guarda
  * o valor **em memória** e o reenvia na mutação seguinte. O cookie continua
- * sendo lido como segunda opção, para o caso mesma origem.
+ * sendo lido como segunda opção, para o caso mesma origem; na falta dele vale
+ * `atendly_csrf`, o nome anterior, que uma sessão aberta antes da troca de
+ * marca ainda pode ter.
  *
  * O token não autoriza nada sozinho: o par esperado fica no servidor, ligado à
  * sessão, e é lá que a comparação acontece.
@@ -104,9 +109,13 @@ export class BffHttpClient {
     this.csrfHeaderName = options.csrfHeaderName ?? "x-csrf-token";
     this.fetchImplementation =
       options.fetchImplementation ?? globalThis.fetch.bind(globalThis);
-    const cookieName = options.csrfCookieName ?? "atendly_csrf";
+    const cookieName = options.csrfCookieName ?? "avenly_csrf";
     this.getCsrfToken =
-      options.getCsrfToken ?? (() => this.csrfToken ?? readCookie(cookieName));
+      options.getCsrfToken ??
+      (() =>
+        this.csrfToken ??
+        readCookie(cookieName) ??
+        readCookie(LEGACY_CSRF_COOKIE_NAME));
   }
 
   /**

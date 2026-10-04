@@ -29,6 +29,29 @@ export type AuthenticatedUser = {
  */
 export type AuthCredentialKind = "cookie" | "bearer";
 
+/**
+ * Nomes dos cookies antes da troca de marca (Goal109). Constantes fixas, não
+ * configuráveis: só servem para que uma sessão aberta antes do deploy continue
+ * valendo até expirar ou ser revogada, sem login novo e sem reemissão do cookie
+ * numa leitura comum. Quem grava cookie grava só os nomes configurados e apaga
+ * estes; o logout apaga os dois pares.
+ */
+export const LEGACY_SESSION_COOKIE_NAME = "atendly_session";
+export const LEGACY_CSRF_COOKIE_NAME = "atendly_csrf";
+
+/**
+ * Nomes antigos que ainda precisam ser apagados. Se o ambiente configurou o
+ * próprio nome antigo, apagá-lo desfaria o cookie que acabou de ser gravado.
+ */
+function legacyCookieNames(): string[] {
+  return [
+    [LEGACY_SESSION_COOKIE_NAME, env.SESSION_COOKIE_NAME],
+    [LEGACY_CSRF_COOKIE_NAME, env.CSRF_COOKIE_NAME],
+  ]
+    .filter(([legacy, configured]) => legacy !== configured)
+    .map(([legacy]) => legacy);
+}
+
 const secretKey = () => new TextEncoder().encode(env.JWT_SECRET);
 
 export async function signSession(
@@ -147,16 +170,26 @@ export async function establishSession(
   setSessionCookie(reply, await signSession(user, session.sessionId));
   setCsrfCookie(reply, session.csrfToken);
   sendCsrfToken(reply, session.csrfToken);
+  // A sessão nova vai pelos nomes configurados; o par antigo, se o navegador
+  // ainda o tiver, deixa de existir aqui em vez de conviver até expirar.
+  clearCookies(reply, legacyCookieNames());
 }
 
 export function clearSessionCookie(reply: FastifyReply): void {
+  clearCookies(reply, [
+    env.SESSION_COOKIE_NAME,
+    env.CSRF_COOKIE_NAME,
+    ...legacyCookieNames(),
+  ]);
+}
+
+function clearCookies(reply: FastifyReply, names: string[]): void {
   const options = {
     secure: env.COOKIE_SECURE || env.COOKIE_SAME_SITE === "none",
     sameSite: env.COOKIE_SAME_SITE,
     path: "/",
   } as const;
-  reply.clearCookie(env.SESSION_COOKIE_NAME, options);
-  reply.clearCookie(env.CSRF_COOKIE_NAME, options);
+  for (const name of names) reply.clearCookie(name, options);
 }
 
 export interface PresentedCredential {
@@ -173,7 +206,11 @@ export function presentedCredential(
     : "";
   if (bearerToken) return { token: bearerToken, kind: "bearer" };
 
-  const cookieToken = request.cookies[env.SESSION_COOKIE_NAME];
+  // Com os dois cookies presentes vale o nome configurado; o antigo só é lido
+  // na falta dele, e passa pela mesma verificação de sessão e de CSRF.
+  const cookieToken =
+    request.cookies[env.SESSION_COOKIE_NAME] ||
+    request.cookies[LEGACY_SESSION_COOKIE_NAME];
   if (cookieToken) return { token: cookieToken, kind: "cookie" };
 
   return null;

@@ -62,7 +62,7 @@ function seedCalendar(database: Database) {
   database.tables.calendarSettings.rows.push({
     id: `settings-${tenantId}`,
     tenantId,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: timeZone,
     minLeadMinutes: 0,
     maxLeadDays: 90,
@@ -144,10 +144,11 @@ describe("PATCH /internal/calendar continua com source travado em ATENDLY (Goal0
     });
 
     // O guard de fonte compara com o existing.source: como o corpo so aceita
-    // "ATENDLY", este caso prova que o guard continua ali, nao que ele
-    // dispare — a linha grava com o mesmo valor de sempre.
+    // a fonte unica (o nome legado "ATENDLY" vira "AVENLY", Goal109), este
+    // caso prova que o guard continua ali, nao que ele dispare — a linha
+    // grava com o mesmo valor de sempre.
     expect(response.statusCode).toBe(200);
-    expect(database.tables.calendarSettings.rows[0]?.source).toBe("ATENDLY");
+    expect(database.tables.calendarSettings.rows[0]?.source).toBe("AVENLY");
   });
 });
 
@@ -201,7 +202,7 @@ describe("PATCH /internal/calendar so atualiza timezone, nunca source (Goal029)"
     const row = database.tables.calendarSettings.rows[0];
     expect(row).toMatchObject({
       tenantId,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "Europe/Lisbon",
       minLeadMinutes: 0,
       maxLeadDays: 90,
@@ -224,7 +225,7 @@ describe("PATCH /internal/calendar so atualiza timezone, nunca source (Goal029)"
     expect(database.tables.calendarSettings.rows).toHaveLength(1);
     expect(database.tables.calendarSettings.rows[0]).toMatchObject({
       tenantId,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: timeZone,
     });
   });

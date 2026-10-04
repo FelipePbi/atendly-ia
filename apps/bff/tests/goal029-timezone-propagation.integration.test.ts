@@ -193,7 +193,7 @@ describe.skipIf(!RUN_INTEGRATION)("Goal029/WU-05: propagação do fuso do negóc
     const writes = configureCalendarCalls(calls);
     expect(writes).toHaveLength(1);
     expect(writes[0]?.body).toMatchObject({
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/New_York",
     });
   });

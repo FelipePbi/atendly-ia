@@ -132,7 +132,7 @@ function calendarFixture(overrides: Partial<CalendarState> = {}): CalendarState 
       migrate: true,
     },
     integration: null,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: "America/Sao_Paulo",
     ...overrides,
   };
@@ -273,11 +273,11 @@ describe("§6.8 — Conversa e Agendar no cabeçalho", () => {
 describe("§6.9 — /agenda/novo?customerId= começa com a pessoa escolhida", () => {
   test("o formulário abre com a pessoa pré-selecionada, e continua trocável", async () => {
     calendarGetCalendar.mockResolvedValue(calendarFixture());
-    serviceCatalogList.mockResolvedValue({ items: [], source: "ATENDLY" });
+    serviceCatalogList.mockResolvedValue({ items: [], source: "AVENLY" });
     customersList.mockResolvedValue({
       items: [customerFixture()],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
 
     render(

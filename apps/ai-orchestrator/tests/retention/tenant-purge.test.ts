@@ -137,7 +137,7 @@ describe.skipIf(!databaseUrl)("tenant purge against PostgreSQL", () => {
         tenantId,
         sessionId: session.id,
         conversationId,
-        source: "ATENDLY",
+        source: "AVENLY",
         actor: `owner-${tenantId}`,
       },
     });

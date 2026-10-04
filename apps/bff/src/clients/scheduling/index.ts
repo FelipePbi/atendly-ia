@@ -2,11 +2,15 @@ import { z } from "zod";
 
 import { env } from "../../config/env.js";
 import {
+  type CalendarSource,
+  calendarSourceSchema,
+} from "../../lib/calendar-source.js";
+import {
   InternalHttpClient,
   type InternalRequestContext,
 } from "../internal-http-client.js";
 
-const sourceSchema = z.enum(["ATENDLY"]);
+const sourceSchema = calendarSourceSchema;
 const priceTypeSchema = z.enum([
   "FIXED",
   "STARTING_AT",
@@ -618,7 +622,7 @@ export class SchedulingClient {
 
   async configureCalendar(
     context: InternalRequestContext,
-    input: { source: "ATENDLY"; timezone: string },
+    input: { source: CalendarSource; timezone: string },
   ) {
     return this.mutate(
       context,

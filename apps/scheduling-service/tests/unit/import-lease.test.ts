@@ -369,7 +369,7 @@ describe("Retomada por tenant e sob lease", () => {
         tenantId,
         requestedBy: "user-1",
         source: "MINHA_AGENDA",
-        target: "ATENDLY",
+        target: "AVENLY",
         status: "COMPLETED",
         summary: {
           imported: {

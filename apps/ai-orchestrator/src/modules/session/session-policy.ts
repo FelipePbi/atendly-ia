@@ -10,7 +10,7 @@
 
 export type SessionCategory = "COMMERCIAL" | "UNCLASSIFIED" | "PERSONAL";
 export type CategorySource = "AUTOMATIC" | "MANUAL";
-export type HumanControlSource = "WHATSAPP" | "ATENDLY" | "BACKFILL";
+export type HumanControlSource = "WHATSAPP" | "AVENLY" | "BACKFILL";
 
 /**
  * Fronteiras configuraveis da sessao. `inactivitySeconds` e a janela de

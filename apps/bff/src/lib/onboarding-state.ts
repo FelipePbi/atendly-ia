@@ -4,6 +4,7 @@ import type { SchedulingClient } from "../clients/scheduling/index.js";
 import { internalContext } from "../modules/tenant/context.js";
 import { normalizeStoredAiConversationStyle } from "./ai-conversation-style.js";
 import { businessContextProjectionState } from "./business-profile.js";
+import { CALENDAR_SOURCE } from "./calendar-source.js";
 import { phoneFromWhatsappJid } from "./phone.js";
 import { getPrisma } from "./prisma.js";
 import { currentTenantContext } from "./tenant-context.js";
@@ -59,7 +60,7 @@ export async function onboardingState(
         }
       : null,
     calendar: {
-      source: calendar.source === "ATENDLY" ? "ATENDLY" : null,
+      source: calendar.source === CALENDAR_SOURCE ? CALENDAR_SOURCE : null,
       timezone: calendar.timezone,
       integration: calendar.integration,
     },

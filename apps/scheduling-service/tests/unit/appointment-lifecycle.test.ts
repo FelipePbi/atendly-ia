@@ -36,7 +36,7 @@ function setup() {
   tables.calendarSettings.rows.push({
     id: tenantId,
     tenantId,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: timeZone,
   });
   for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek += 1) {

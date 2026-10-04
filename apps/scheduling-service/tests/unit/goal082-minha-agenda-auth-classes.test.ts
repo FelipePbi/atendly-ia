@@ -116,7 +116,7 @@ describe("Goal082: login da Minha Agenda diz de quem é a falha", () => {
     db.client.calendarSettings.rows.push({
       id: "settings-1",
       tenantId,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     } as never);
     env.CALENDAR_AUTO_COMPLETE_ENABLED = false;

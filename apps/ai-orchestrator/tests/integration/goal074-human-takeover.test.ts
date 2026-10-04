@@ -83,7 +83,7 @@ describe.skipIf(!databaseUrl)("HumanTakeover against PostgreSQL", () => {
     await sessions.assumeHumanControl({
       tenantId: TENANT,
       sessionId: opened.sessionId,
-      source: "ATENDLY",
+      source: "AVENLY",
       actor: "owner-1",
     });
 
@@ -95,7 +95,7 @@ describe.skipIf(!databaseUrl)("HumanTakeover against PostgreSQL", () => {
       tenantId: TENANT,
       sessionId: opened.sessionId,
       conversationId: CONVERSATION,
-      source: "ATENDLY",
+      source: "AVENLY",
       actor: "owner-1",
     });
   });
@@ -106,7 +106,7 @@ describe.skipIf(!databaseUrl)("HumanTakeover against PostgreSQL", () => {
     await sessions.assumeHumanControl({
       tenantId: TENANT,
       sessionId: opened.sessionId,
-      source: "ATENDLY",
+      source: "AVENLY",
       actor: "owner-1",
     });
     // Segunda mensagem manual enquanto o humano já está atendendo: mesma
@@ -122,7 +122,7 @@ describe.skipIf(!databaseUrl)("HumanTakeover against PostgreSQL", () => {
       where: { tenantId: TENANT, sessionId: opened.sessionId },
     });
     expect(rows).toHaveLength(1);
-    expect(rows[0].source).toBe("ATENDLY");
+    expect(rows[0].source).toBe("AVENLY");
   });
 
   it("never writes a row for BACKFILL", async () => {
@@ -147,7 +147,7 @@ describe.skipIf(!databaseUrl)("HumanTakeover against PostgreSQL", () => {
     await sessions.assumeHumanControl({
       tenantId: TENANT,
       sessionId: opened.sessionId,
-      source: "ATENDLY",
+      source: "AVENLY",
       actor: "owner-1",
     });
     await sessions.releaseToAi({ tenantId: TENANT, conversationId: CONVERSATION });
@@ -171,7 +171,7 @@ describe.skipIf(!databaseUrl)("HumanTakeover against PostgreSQL", () => {
     });
     expect(afterSecondTakeover).toHaveLength(2);
     expect(afterSecondTakeover.map((row) => row.source)).toEqual([
-      "ATENDLY",
+      "AVENLY",
       "WHATSAPP",
     ]);
   });
@@ -181,7 +181,7 @@ describe.skipIf(!databaseUrl)("HumanTakeover against PostgreSQL", () => {
     await sessions.assumeHumanControl({
       tenantId: TENANT,
       sessionId: opened.sessionId,
-      source: "ATENDLY",
+      source: "AVENLY",
       actor: "owner-1",
     });
     expect(

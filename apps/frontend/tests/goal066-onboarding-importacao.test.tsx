@@ -109,7 +109,7 @@ const businessDone: Partial<OnboardingState> = {
 const calendarDone: Partial<OnboardingState> = {
   calendar: {
     integration: null,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: "America/Sao_Paulo",
   },
 };
@@ -312,7 +312,7 @@ describe("'Importar agora' grava calendar.source antes de montar a importação"
       }),
     ).toBeVisible();
     expect(updateOnboarding).toHaveBeenCalledWith({
-      calendar: { source: "ATENDLY", timezone: "America/Sao_Paulo" },
+      calendar: { source: "AVENLY", timezone: "America/Sao_Paulo" },
     });
     expect(push).toHaveBeenCalledWith("/onboarding/importacao");
 

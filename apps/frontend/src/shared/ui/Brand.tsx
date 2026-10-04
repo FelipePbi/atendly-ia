@@ -6,6 +6,13 @@ import { useState, useSyncExternalStore } from "react";
 export type BrandSignature = "entry" | "check";
 
 const SIGNATURE_STORAGE_KEY: Record<BrandSignature, string> = {
+  entry: "avenly:brand-signature-entry",
+  check: "avenly:brand-signature-check",
+};
+
+// Chaves anteriores à troca de marca (Goal109): quem já viu a assinatura sob
+// elas não a vê de novo.
+const LEGACY_SIGNATURE_STORAGE_KEY: Record<BrandSignature, string> = {
   entry: "atendly:brand-signature-entry",
   check: "atendly:brand-signature-check",
 };
@@ -39,7 +46,10 @@ function resolveShouldAnimate(signature?: BrandSignature): boolean {
     return false;
   }
   const key = SIGNATURE_STORAGE_KEY[signature];
-  if (storage.getItem(key) === "1") {
+  if (
+    storage.getItem(key) === "1" ||
+    storage.getItem(LEGACY_SIGNATURE_STORAGE_KEY[signature]) === "1"
+  ) {
     return false;
   }
   storage.setItem(key, "1");

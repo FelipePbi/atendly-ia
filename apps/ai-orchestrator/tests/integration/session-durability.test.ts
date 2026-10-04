@@ -274,7 +274,7 @@ describe.skipIf(!databaseUrl)("contact and session against PostgreSQL", () => {
     await sessions.assumeHumanControl({
       tenantId: TENANT_A,
       sessionId: opened.sessionId,
-      source: "ATENDLY",
+      source: "AVENLY",
       actor: "owner-a",
       now: start,
     });
@@ -331,7 +331,7 @@ describe.skipIf(!databaseUrl)("contact and session against PostgreSQL", () => {
     await sessions.assumeHumanControl({
       tenantId: TENANT_A,
       sessionId: opened.sessionId,
-      source: "ATENDLY",
+      source: "AVENLY",
       now: start,
     });
 

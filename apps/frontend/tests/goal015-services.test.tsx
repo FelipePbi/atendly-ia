@@ -89,7 +89,7 @@ describe("as quatro semânticas de preço", () => {
           priceType: "NOT_INFORMED",
         }),
       ],
-      source: "ATENDLY",
+      source: "AVENLY",
     });
 
     render(
@@ -131,7 +131,7 @@ describe("pendência de revisão", () => {
           reviewOrigin: "MANUAL",
         }),
       ],
-      source: "ATENDLY",
+      source: "AVENLY",
     });
 
     render(
@@ -154,7 +154,7 @@ describe("pendência de revisão", () => {
 
 describe("recusa de salvar um serviço FIXED sem valor", () => {
   test("o formulário recusa o envio e não chama a criação", async () => {
-    serviceCatalogList.mockResolvedValue({ editable: true, items: [], source: "ATENDLY" });
+    serviceCatalogList.mockResolvedValue({ editable: true, items: [], source: "AVENLY" });
     const user = userEvent.setup();
     render(
       <ShellConfigProvider>
@@ -190,7 +190,7 @@ describe("acessibilidade das telas novas de Serviços", () => {
           reviewOrigin: "IMPORT",
         }),
       ],
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     const { container } = render(
       <ShellConfigProvider>
@@ -202,7 +202,7 @@ describe("acessibilidade das telas novas de Serviços", () => {
   });
 
   test("formulário de novo serviço não acusa violação de axe", async () => {
-    serviceCatalogList.mockResolvedValue({ editable: true, items: [], source: "ATENDLY" });
+    serviceCatalogList.mockResolvedValue({ editable: true, items: [], source: "AVENLY" });
     const { container } = render(
       <ShellConfigProvider>
         <ProductServicesScreen scenario="new" />
@@ -220,7 +220,7 @@ describe("erro de carregamento da lista de serviços", () => {
       .mockResolvedValueOnce({
         editable: true,
         items: [serviceFixture({ id: "s1", name: "Corte" })],
-        source: "ATENDLY",
+        source: "AVENLY",
       });
     const user = userEvent.setup();
     render(

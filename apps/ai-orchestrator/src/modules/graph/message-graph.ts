@@ -635,7 +635,7 @@ export class MessageGraphWorkflow {
    */
   private async assumeHumanControl(
     state: MessageGraphStateValue,
-    source: "WHATSAPP" | "ATENDLY",
+    source: "WHATSAPP" | "AVENLY",
   ): Promise<void> {
     const sessions = this.dependencies.sessions;
     if (sessions && state.session) {

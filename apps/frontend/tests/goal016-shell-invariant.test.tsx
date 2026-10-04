@@ -127,7 +127,7 @@ function calendarFixture(overrides: Partial<CalendarState> = {}): CalendarState 
       migrate: false,
     },
     integration: null,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: "America/Sao_Paulo",
     ...overrides,
   };
@@ -159,11 +159,11 @@ function customerFixture(overrides: Partial<Customer> = {}): Customer {
 }
 
 function customerListFixture(overrides: Partial<CustomerList> = {}): CustomerList {
-  return { items: [], managedExternally: false, source: "ATENDLY", ...overrides };
+  return { items: [], managedExternally: false, source: "AVENLY", ...overrides };
 }
 
 function serviceListFixture(overrides: Partial<ServiceList> = {}): ServiceList {
-  return { editable: true, items: [serviceFixture()], source: "ATENDLY", ...overrides };
+  return { editable: true, items: [serviceFixture()], source: "AVENLY", ...overrides };
 }
 
 function appointmentFixture(overrides: Partial<Appointment> = {}): Appointment {

@@ -80,7 +80,7 @@ function calendarFixture(
       migrate: false,
     },
     integration: null,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: "America/Sao_Paulo",
     ...overrides,
   };
@@ -113,12 +113,12 @@ beforeEach(() => {
   listCustomers.mockResolvedValue({
     items: [],
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   listServices.mockResolvedValue({
     editable: true,
     items: [],
-    source: "ATENDLY",
+    source: "AVENLY",
   });
 });
 

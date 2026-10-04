@@ -147,7 +147,7 @@ function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState 
         migrate: true,
       },
       integration: null,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     },
     ...overrides,
@@ -229,7 +229,7 @@ beforeEach(() => {
   serviceCatalogList.mockResolvedValue({
     editable: true,
     items: [serviceFixture()],
-    source: "ATENDLY",
+    source: "AVENLY",
   });
 });
 
@@ -422,7 +422,7 @@ describe("ShellConfigProvider + Agenda não excede a profundidade de atualizaç�
             migrate: true,
           },
           integration: null,
-          source: "ATENDLY",
+          source: "AVENLY",
           timezone: "America/Sao_Paulo",
         },
       }),

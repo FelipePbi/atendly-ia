@@ -37,7 +37,7 @@ function setup() {
   tables.calendarSettings.rows.push({
     id: tenantId,
     tenantId,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: timeZone,
   });
   // Regra para todo dia da semana: a política de escrita é o que está sob

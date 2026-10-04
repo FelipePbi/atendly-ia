@@ -71,7 +71,7 @@ function calendarFixture(overrides: Partial<CalendarState> = {}): CalendarState 
       migrate: false,
     },
     integration: null,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: "America/Sao_Paulo",
     ...overrides,
   };
@@ -196,12 +196,12 @@ beforeEach(() => {
   listServices.mockResolvedValue({
     editable: true,
     items: [serviceFixture()],
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   listCustomers.mockResolvedValue({
     items: [customerFixture()],
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   previewAppointmentSeries.mockResolvedValue(COMPLETE_PREVIEW);
   releaseHold.mockResolvedValue({ id: "hold-1", status: "RELEASED" });

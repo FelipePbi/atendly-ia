@@ -72,7 +72,7 @@ async function renderEditForm() {
   serviceCatalogList.mockResolvedValue({
     editable: true,
     items: [serviceFixture()],
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   render(
     <ShellConfigProvider>
@@ -90,7 +90,7 @@ async function renderNewForm() {
   serviceCatalogList.mockResolvedValue({
     editable: true,
     items: [],
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   render(
     <ShellConfigProvider>

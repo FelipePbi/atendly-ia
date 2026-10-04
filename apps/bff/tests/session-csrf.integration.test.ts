@@ -268,7 +268,7 @@ describe.skipIf(!RUN_INTEGRATION)("session identity, revocation and CSRF", () =>
   it("delivers the CSRF token by a channel the browser can read across hosts", async () => {
     const session = await business("csrf-cross-host");
 
-    // Em produção o cookie `atendly_csrf` é gravado no host do BFF e o script
+    // Em produção o cookie `avenly_csrf` é gravado no host do BFF e o script
     // do frontend, servido de outro host, não o enxerga. O header da resposta é
     // o canal que funciona — e carrega o mesmo token da sessão.
     const login = await app.inject({

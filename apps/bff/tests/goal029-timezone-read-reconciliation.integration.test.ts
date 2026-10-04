@@ -212,7 +212,7 @@ describe.skipIf(!RUN_INTEGRATION)(
       const writes = calendarWrites(upstream.calls);
       expect(writes).toHaveLength(1);
       expect(writes[0]?.body).toEqual({
-        source: "ATENDLY",
+        source: "AVENLY",
         timezone: "America/Bahia",
       });
       // A réplica do dublê realmente mudou de valor: a convergência é efeito
@@ -334,7 +334,7 @@ describe.skipIf(!RUN_INTEGRATION)(
       const writes = calendarWrites(upstream.calls);
       expect(writes).toHaveLength(1);
       expect(writes[0]?.body).toEqual({
-        source: "ATENDLY",
+        source: "AVENLY",
         timezone: "America/Manaus",
       });
       expect(upstream.replicaTimezone()).toBe("America/Manaus");

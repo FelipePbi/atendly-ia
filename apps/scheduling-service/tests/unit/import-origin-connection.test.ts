@@ -59,7 +59,7 @@ function seedAtendlyCalendar(db: Database) {
   db.client.calendarSettings.rows.push({
     id: "settings-1",
     tenantId,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: "America/Sao_Paulo",
   } as never);
 }
@@ -138,7 +138,7 @@ describe("integração Minha Agenda reescopada para a importação (Goal010 §6,
     expect(connected.statusCode).toBe(200);
     // A agenda operacional não muda de fonte por conectar a origem.
     expect(connected.json().data).toMatchObject({
-      source: "ATENDLY",
+      source: "AVENLY",
       integration: { status: "CONNECTED" },
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -192,14 +192,14 @@ describe("integração Minha Agenda reescopada para a importação (Goal010 §6,
     expect(response.json().error ?? null).toBeNull();
     expect(response.statusCode).toBe(200);
     expect(response.json().data).toMatchObject({
-      source: "ATENDLY",
+      source: "AVENLY",
       integration: null,
       capabilities: { createAppointments: true, manageServices: true },
     });
     expect(db.client.integrationConnection.rows).toHaveLength(0);
     // A agenda do negócio continua lá, com a mesma fonte e o mesmo fuso.
     expect(db.client.calendarSettings.rows[0]).toMatchObject({
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     });
   });

@@ -48,8 +48,8 @@ function provider(tenantId: string, userId = "user-1") {
 async function seedTenant(tenantId: string) {
   await prisma.calendarSettings.upsert({
     where: { tenantId },
-    create: { tenantId, source: "ATENDLY", timezone: timeZone },
-    update: { source: "ATENDLY", timezone: timeZone },
+    create: { tenantId, source: "AVENLY", timezone: timeZone },
+    update: { source: "AVENLY", timezone: timeZone },
   });
   for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek += 1) {
     await prisma.availabilityRule.create({

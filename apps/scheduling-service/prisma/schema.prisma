@@ -9,12 +9,14 @@ datasource db {
 
 /// Fonte da agenda do negocio.
 ///
-/// `ATENDLY` e a UNICA fonte que o produto honra. Desde o Goal027 a constraint
-/// SQL `CalendarSettings_source_atendly_check` recusa qualquer outro valor em
-/// `CalendarSettings`, e a migration daquele Goal reescreveu para `ATENDLY` as
-/// linhas legadas que ainda diziam `MINHA_AGENDA` — negocios que, desde o
+/// `AVENLY` e a UNICA fonte que o produto honra. Desde o Goal027 a constraint
+/// SQL `CalendarSettings_source_avenly_check` recusa qualquer outro valor em
+/// `CalendarSettings`, e a migration daquele Goal reescreveu para a fonte unica
+/// as linhas legadas que ainda diziam `MINHA_AGENDA` — negocios que, desde o
 /// corte do Goal010, recebiam `409` em toda escrita, oferta e leitura
-/// operacional.
+/// operacional. O Goal109 renomeou o rotulo `ATENDLY` para `AVENLY` e a
+/// constraint para o nome atual, sem reescrever linha; a fronteira HTTP ainda
+/// aceita `ATENDLY` na entrada e grava `AVENLY`.
 ///
 /// `MINHA_AGENDA` sobrevive no enum EXCLUSIVAMENTE por causa de
 /// `MigrationJob.source` e `MigrationJob.target`, que sao historico preservado
@@ -22,7 +24,7 @@ datasource db {
 /// importacao foi, e remover o valor reescreveria esse historico. O valor nao
 /// e mais alcancavel como fonte de agenda de negocio nenhum.
 enum CalendarSource {
-  ATENDLY
+  AVENLY
   MINHA_AGENDA
 }
 
@@ -244,7 +246,7 @@ enum AppointmentNotificationReason {
 
 model CalendarSettings {
   tenantId  String         @id
-  /// Sempre `ATENDLY`: a constraint SQL `CalendarSettings_source_atendly_check`
+  /// Sempre `AVENLY`: a constraint SQL `CalendarSettings_source_avenly_check`
   /// (Goal027) recusa qualquer outro valor. O campo sobrevive porque o enum
   /// sobrevive por `MigrationJob`; ele nao e mais uma escolha do negocio.
   source    CalendarSource

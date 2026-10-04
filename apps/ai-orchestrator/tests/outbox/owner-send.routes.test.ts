@@ -237,7 +237,7 @@ describe("owner outbound message", () => {
     // Enviar assume: a conversa nao estava em handoff e o envio nao foi
     // recusado com HUMAN_HANDOFF_REQUIRED.
     expect(sessions.assumed).toEqual([
-      { sessionId: "session-a", source: "ATENDLY" },
+      { sessionId: "session-a", source: "AVENLY" },
     ]);
   });
 

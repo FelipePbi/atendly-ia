@@ -6215,13 +6215,13 @@ describe("Goal046 / WU-04 — o conjunto de categorias de recusa é conferido co
 });
 
 describe("Goal046 / WU-04 — a árvore real produz os números desta rodada, e as invariantes de reconhecimento não são vácuas", () => {
-  it("1 superfície, 4 ligações resolvidas, 10 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — os mesmos números da baseline do Goal045, exceto o de arquivos varridos pela resolução de instanciação: com o modelo AgendaViewPreference do Goal073 gerado em apps/bff/src/generated/prisma, o modelo HumanTakeover do Goal074 gerado em apps/ai-orchestrator/src/generated/prisma e modules/prompts/service-instructions.ts do Goal078, elas somam hoje 209 arquivos .ts (121 em apps/ai-orchestrator/src, 88 em apps/bff/src) — o número computado pelo AST (209) prevalece sobre qualquer contagem anterior capturada antes desse arquivo existir na árvore", () => {
+  it("1 superfície, 4 ligações resolvidas, 10 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — os mesmos números da baseline do Goal045, exceto o de arquivos varridos pela resolução de instanciação: com o modelo AgendaViewPreference do Goal073 gerado em apps/bff/src/generated/prisma, o modelo HumanTakeover do Goal074 gerado em apps/ai-orchestrator/src/generated/prisma modules/prompts/service-instructions.ts do Goal078 e lib/calendar-source.ts do Goal109, elas somam hoje 210 arquivos .ts (121 em apps/ai-orchestrator/src, 89 em apps/bff/src) — o número computado pelo AST (210) prevalece sobre qualquer contagem anterior capturada antes desse arquivo existir na árvore", () => {
     const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
 
     expect(internalClientSurfaces).toHaveLength(1);
     expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
-    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(209);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(210);
     expect(requests).toHaveLength(10);
     expect(nonGoBoundInstantiations).toHaveLength(2);
     expect(nonTransportMemberCalls).toHaveLength(0);
@@ -11899,13 +11899,13 @@ describe("Goal047 / WU-04 (§5) — as categorias de recusa deste caminho existe
 });
 
 describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta rodada, e as 45 ocorrências de this.http. são classificadas sem recusa alguma", () => {
-  it("1 superfície, 4 ligações, 209 arquivos varridos, 10 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal, exceto o de arquivos varridos, pelo modelo AgendaViewPreference do Goal073, pelo modelo HumanTakeover do Goal074 e por modules/prompts/service-instructions.ts do Goal078", () => {
+  it("1 superfície, 4 ligações, 210 arquivos varridos, 10 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal, exceto o de arquivos varridos, pelo modelo AgendaViewPreference do Goal073, pelo modelo HumanTakeover do Goal074, por modules/prompts/service-instructions.ts do Goal078 e por lib/calendar-source.ts do Goal109", () => {
     const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
 
     expect(internalClientSurfaces).toHaveLength(1);
     expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
-    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(209);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(210);
     expect(requests).toHaveLength(10);
     expect(nonGoBoundInstantiations).toHaveLength(2);
     expect(nonTransportMemberCalls).toHaveLength(0);

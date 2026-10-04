@@ -88,7 +88,7 @@ const businessDone = {
 const calendarDone = {
   calendar: {
     integration: null,
-    source: "ATENDLY" as const,
+    source: "AVENLY" as const,
     timezone: "America/Sao_Paulo",
   },
 };

@@ -41,6 +41,14 @@ O portador continua sendo o JWT, no cookie de sessão ou em `Authorization: Bear
 - um JWT emitido antes desta identidade não tem `sid` e devolve `401 SESSION_REAUTH_REQUIRED`: é preciso autenticar de novo, e nenhuma sessão é criada a partir dele;
 - `POST /v1/auth/logout` revoga a sessão no servidor; `PATCH /v1/auth/password` e `POST /v1/auth/reset-password` revogam **todas** as sessões do usuário, cookie e Bearer.
 
+### Nomes dos cookies
+
+O cookie de sessão se chama `avenly_session` e o cookie legível de CSRF, `avenly_csrf` (padrões de `SESSION_COOKIE_NAME` e `CSRF_COOKIE_NAME`). Os nomes anteriores, `atendly_session` e `atendly_csrf`, continuam reconhecidos durante a troca de marca, como constantes fixas e não configuráveis:
+
+- o BFF lê a sessão pelo nome configurado e, na falta dele, por `atendly_session`; com os dois presentes, vale o configurado. Uma sessão aberta antes da troca continua válida até expirar ou ser revogada, sem login novo, e passa pelas mesmas verificações de sessão e de CSRF;
+- nenhuma leitura comum devolve `Set-Cookie` por causa do nome: o cookie antigo não é reemitido com o nome novo;
+- quem estabelece sessão (register, login, troca de senha) grava só os nomes novos e apaga `atendly_session` e `atendly_csrf`; `POST /v1/auth/logout` e `POST /v1/auth/logout-all` apagam os quatro.
+
 Mutações autenticadas por cookie exigem duas provas, ambas verificadas antes de qualquer efeito:
 
 | Prova | Como é enviada | Recusa |
@@ -56,7 +64,7 @@ O BFF devolve o token vigente em **duas** formas, com o mesmo valor:
 
 | Canal | Quando | Para quem serve |
 | --- | --- | --- |
-| Cookie legível `atendly_csrf` | ao estabelecer sessão (register, login, troca de senha) | cliente na mesma origem do BFF |
+| Cookie legível `avenly_csrf` | ao estabelecer sessão (register, login, troca de senha) | cliente na mesma origem do BFF |
 | Header de resposta `x-csrf-token` | ao estabelecer sessão **e** em toda resposta autenticada por cookie, inclusive de erro | cliente em outra origem, que é o caso do ambiente publicado |
 
 O header existe porque o cookie legível é gravado no host do BFF. Quando frontend e BFF estão em hosts distintos sob um sufixo público, `document.cookie` do frontend nunca enxerga esse cookie e ler dali devolveria sempre vazio — toda mutação por cookie cairia em `403 CSRF_TOKEN_REJECTED`, inclusive `POST /v1/auth/logout`. O header é exposto no CORS apenas para `FRONTEND_ORIGIN`; uma página de outra origem não consegue lê-lo, exatamente como não consegue ler o corpo da resposta.
@@ -97,6 +105,10 @@ As três rotas do protocolo de migração bidirecional pré-Goal010 — `POST /v
 ### `calendar.source` perde `EXTERNAL` (Goal027, 2026-09-19)
 
 **Segunda remoção subtrativa do contrato público**, no mesmo sentido da anterior — não a retirada de uma rota, mas a redução do domínio de um campo que continua existindo. `calendar.source`, em toda rota que o expõe (`GET/PATCH /v1/onboarding`, `GET /v1/calendar`, `GET/PATCH /v1/settings`, `GET /v1/dashboard`), é agora `"ATENDLY" | null`; `EXTERNAL` não é mais um valor possível de leitura. Em `PATCH /v1/onboarding`, `calendar.source` continua aceito na escrita, mas só `"ATENDLY"` é válido — qualquer outro valor é recusado com `400`. O campo não desapareceu: o domínio dele encolheu, porque a agenda externa deixou de ser fonte operacional (D-043).
+
+### `calendar.source` passa a `"AVENLY"` (Goal109, 2026-10-03)
+
+O único valor de `calendar.source` é agora `"AVENLY" | null`, em toda rota que o expõe (`GET/PATCH /v1/onboarding`, `GET /v1/calendar`, `GET/PATCH /v1/settings`, `GET /v1/dashboard`) e em `source` de `GET /v1/services` e `GET /v1/customers`. Em `PATCH /v1/onboarding`, `calendar.source` aceita `"AVENLY"` e `"ATENDLY"` (valor anterior à troca de marca) e ambos chegam ao Scheduling como `AVENLY`; qualquer outro valor segue recusado com `400`. A resposta nunca devolve `"ATENDLY"`, mesmo que o Scheduling responda com ele durante a transição. O trecho do Goal027 acima descreve o domínio da época (`"ATENDLY" | null`) e fica como histórico.
 
 ### `calendar.timezone` e `availability.timezone` seguem `business.timezone` (Goal029, 2026-09-20)
 

@@ -158,7 +158,7 @@ function calendarFixture(): CalendarState {
       migrate: false,
     },
     integration: null,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: "America/Sao_Paulo",
   };
 }
@@ -303,7 +303,7 @@ beforeEach(() => {
       }),
     ],
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   customersList.mockResolvedValue({
     items: [
@@ -311,7 +311,7 @@ beforeEach(() => {
       customerFixture({ id: "cus-bia", name: "Bia Castro", phone: null }),
     ],
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   listAppointments.mockImplementation(
     (query: { endDate: string; startDate: string }) =>

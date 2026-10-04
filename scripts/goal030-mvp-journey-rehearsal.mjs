@@ -2707,8 +2707,8 @@ function assertStage2(stage) {
     "stage 2: the chosen modality must be persisted",
   );
   assert(
-    database.calendarSettings?.source === "ATENDLY",
-    "stage 2: the calendar block must persist the ATENDLY source in the Scheduling database",
+    database.calendarSettings?.source === "AVENLY",
+    "stage 2: the calendar block must persist the AVENLY source in the Scheduling database",
   );
   assert(
     database.calendarSettings?.timezone === JOURNEY.timezone,
@@ -2990,7 +2990,7 @@ function assertStage6(stage) {
   );
   assert(
     database.session?.humanHandling === true &&
-      database.session?.humanHandlingSource === "ATENDLY",
+      database.session?.humanHandlingSource === "AVENLY",
     "stage 6: the session must record that a human took over from the panel",
   );
 }
@@ -3109,8 +3109,8 @@ function assertStage9(stage) {
     `stage 9: the replica in the Scheduling database must follow the owner to ${stage.expectedTimezone}, found ${database.replica}`,
   );
   assert(
-    database.replicaSource === "ATENDLY",
-    `stage 9: the calendar source must stay ATENDLY (D-043), found ${database.replicaSource}`,
+    database.replicaSource === "AVENLY",
+    `stage 9: the calendar source must stay AVENLY (D-043), found ${database.replicaSource}`,
   );
   assert(
     http.settingsBusinessTimezone === stage.expectedTimezone &&

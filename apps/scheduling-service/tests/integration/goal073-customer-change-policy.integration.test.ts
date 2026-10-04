@@ -105,11 +105,11 @@ async function seedTenant(
     where: { tenantId },
     create: {
       tenantId,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: timeZone,
       customerChangeMinNoticeMinutes,
     },
-    update: { source: "ATENDLY", timezone: timeZone, customerChangeMinNoticeMinutes },
+    update: { source: "AVENLY", timezone: timeZone, customerChangeMinNoticeMinutes },
   });
   await prisma.availabilityRule.deleteMany({ where: { tenantId } });
   for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek += 1) {

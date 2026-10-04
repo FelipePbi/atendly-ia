@@ -152,11 +152,11 @@ describe("Brand — assinatura animada", () => {
     expect(svg!.querySelectorAll("path.brand-mark-leg-rest")).toHaveLength(0);
     expect(svg!.querySelector("path.brand-mark-check")).not.toBeNull();
 
-    expect(window.sessionStorage.getItem("atendly:brand-signature-check")).toBe(
+    expect(window.sessionStorage.getItem("avenly:brand-signature-check")).toBe(
       "1",
     );
     expect(
-      window.sessionStorage.getItem("atendly:brand-signature-entry"),
+      window.sessionStorage.getItem("avenly:brand-signature-entry"),
     ).toBeNull();
   });
 
@@ -195,7 +195,7 @@ describe("Brand — assinatura animada", () => {
     expect(svg).not.toHaveClass("brand-mark--entry");
     expect(svg!.querySelectorAll("path")).toHaveLength(3);
     expect(
-      window.sessionStorage.getItem("atendly:brand-signature-entry"),
+      window.sessionStorage.getItem("avenly:brand-signature-entry"),
     ).toBeNull();
   });
 
@@ -251,7 +251,7 @@ describe("AppShell — a sidebar de verdade passa signature=\"check\" para Brand
     expect(sidebarBrand).not.toBeNull();
     expect(sidebarBrand).toHaveClass("brand-mark--check");
     expect(
-      window.sessionStorage.getItem("atendly:brand-signature-check"),
+      window.sessionStorage.getItem("avenly:brand-signature-check"),
     ).toBe("1");
   });
 

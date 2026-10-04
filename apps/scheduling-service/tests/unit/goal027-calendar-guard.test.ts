@@ -77,7 +77,7 @@ function seedCalendar(database: Database) {
   database.tables.calendarSettings.rows.push({
     id: `settings-${tenantId}`,
     tenantId,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: timeZone,
     minLeadMinutes: 0,
     maxLeadDays: 90,
@@ -241,7 +241,7 @@ describe("capabilities dependem de haver CalendarSettings (Goal027)", () => {
 
     const data = await overview();
 
-    expect(data.source).toBe("ATENDLY");
+    expect(data.source).toBe("AVENLY");
     expect(data.capabilities).toEqual({
       manageAvailability: true,
       manageServices: true,

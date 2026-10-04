@@ -165,8 +165,8 @@ describeWithDatabase(
       await resetTenant(prisma, tenantA);
       await prisma.calendarSettings.upsert({
         where: { tenantId: tenantA },
-        create: { tenantId: tenantA, source: "ATENDLY", timezone: timeZone },
-        update: { source: "ATENDLY", timezone: timeZone },
+        create: { tenantId: tenantA, source: "AVENLY", timezone: timeZone },
+        update: { source: "AVENLY", timezone: timeZone },
       });
       app = await buildApp();
     });

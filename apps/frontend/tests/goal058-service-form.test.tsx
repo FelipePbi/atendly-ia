@@ -73,7 +73,7 @@ beforeEach(() => {
 
 describe("duração aceita qualquer minuto a partir de 1", () => {
   test("40, 45, 60 e 41 são válidos; 0 é recusado; vazio continua válido", async () => {
-    serviceCatalogList.mockResolvedValue({ editable: true, items: [], source: "ATENDLY" });
+    serviceCatalogList.mockResolvedValue({ editable: true, items: [], source: "AVENLY" });
     render(
       <ShellConfigProvider>
         <ProductServicesScreen scenario="new" />
@@ -102,7 +102,7 @@ describe("duração aceita qualquer minuto a partir de 1", () => {
   });
 
   test("não pede número negativo", async () => {
-    serviceCatalogList.mockResolvedValue({ editable: true, items: [], source: "ATENDLY" });
+    serviceCatalogList.mockResolvedValue({ editable: true, items: [], source: "AVENLY" });
     render(
       <ShellConfigProvider>
         <ProductServicesScreen scenario="new" />
@@ -121,7 +121,7 @@ describe("duração aceita qualquer minuto a partir de 1", () => {
 
 describe("preço do serviço", () => {
   test("serviço novo nasce com o campo de preço vazio", async () => {
-    serviceCatalogList.mockResolvedValue({ editable: true, items: [], source: "ATENDLY" });
+    serviceCatalogList.mockResolvedValue({ editable: true, items: [], source: "AVENLY" });
     render(
       <ShellConfigProvider>
         <ProductServicesScreen scenario="new" />
@@ -138,7 +138,7 @@ describe("preço do serviço", () => {
     serviceCatalogList.mockResolvedValue({
       editable: true,
       items: [serviceFixture({ id: "s1", price: 80, priceType: "FIXED" })],
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     render(
       <ShellConfigProvider>
@@ -162,7 +162,7 @@ describe("preço do serviço", () => {
           priceType: "STARTING_AT",
         }),
       ],
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     render(
       <ShellConfigProvider>
@@ -338,7 +338,7 @@ describe("CurrencyInput recebe reais e deixa o texto onde a pessoa digitou", () 
 
 describe("intervalos antes/depois do atendimento não mudam", () => {
   test("min 0 e step 5 continuam nos campos de buffer", async () => {
-    serviceCatalogList.mockResolvedValue({ editable: true, items: [], source: "ATENDLY" });
+    serviceCatalogList.mockResolvedValue({ editable: true, items: [], source: "AVENLY" });
     render(
       <ShellConfigProvider>
         <ProductServicesScreen scenario="new" />

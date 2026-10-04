@@ -104,7 +104,7 @@ describe("§6.6 texto de próximo, último e sem atendimentos na linha", () => {
         }),
       ],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
 
     renderList();
@@ -139,7 +139,7 @@ describe("§6.7 separadores por letra em ordem pt-BR", () => {
         customerFixture({ id: "c4", name: null, phone: null }),
       ],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
 
     renderList();
@@ -169,7 +169,7 @@ describe("§6.7 separadores por letra em ordem pt-BR", () => {
         customerFixture({ id: "c2", name: "Ana Souza" }),
       ],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
 
     renderList();
@@ -217,7 +217,7 @@ describe("§6.6 'hoje' no fuso do calendário do negócio", () => {
         }),
       ],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
 
     renderList();
@@ -252,7 +252,7 @@ describe("§6.6 'hoje' no fuso do calendário do negócio", () => {
         }),
       ],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
 
     renderList();
@@ -286,7 +286,7 @@ describe("§6.6 'hoje' no fuso do calendário do negócio", () => {
         }),
       ],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
 
     renderList();

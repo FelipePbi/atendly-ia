@@ -1,5 +1,6 @@
 import type { InternalRequestContext } from "../clients/internal-http-client.js";
 import type { SchedulingClient } from "../clients/scheduling/index.js";
+import { CALENDAR_SOURCE } from "./calendar-source.js";
 import { toErrorMessage } from "./errors.js";
 
 /**
@@ -108,7 +109,7 @@ export function businessTimezoneOwner(
  *    linha não seria replicar. Criar seria escrever dado novo que o Goal não
  *    autoriza ("o único dado que muda de valor é `CalendarSettings.timezone`,
  *    e só quando ele divergia do dono") e, pior, mudaria a resposta de rota
- *    pública: a linha é o que faz `calendar.source` virar `ATENDLY` e as
+ *    pública: a linha é o que faz `calendar.source` virar `AVENLY` e as
  *    `capabilities` de agenda virarem `true`. Uma leitura passaria a ligar
  *    agenda para um negócio que nunca a escolheu.
  *
@@ -186,10 +187,10 @@ async function reconcile(
     };
   }
 
-  // A única escrita desta passada. `source` vai `ATENDLY` e nada mais: o valor
-  // está travado pela `CalendarSettings_source_atendly_check` (Goal027).
+  // A única escrita desta passada. `source` vai `AVENLY` e nada mais: o valor
+  // está travado pela constraint de fonte do Scheduling (Goal027, renomeada no Goal109).
   const calendar = await deps.scheduling.configureCalendar(context, {
-    source: "ATENDLY",
+    source: CALENDAR_SOURCE,
     timezone: businessTimezone,
   });
   const converged = calendar.timezone === businessTimezone;

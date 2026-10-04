@@ -97,7 +97,7 @@ function AgendaGroup({
 
 export function CalendarSettings({ settings }: { settings: SettingsState }) {
   const availability = settings.availability;
-  const availabilityRoute = settings.calendar.source === "ATENDLY";
+  const availabilityRoute = settings.calendar.source === "AVENLY";
 
   const [hiddenDays, setHiddenDays] = useState<Set<number>>(new Set());
   const [initialView, setInitialView] = useState<AgendaInitialView | null>(null);

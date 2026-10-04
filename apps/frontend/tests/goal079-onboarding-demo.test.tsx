@@ -82,7 +82,7 @@ function readyState(): OnboardingState {
     },
     calendar: {
       integration: null,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     },
     service: {
@@ -162,7 +162,7 @@ beforeEach(() => {
   serviceCatalogList.mockResolvedValue({
     editable: true,
     items: [],
-    source: "ATENDLY",
+    source: "AVENLY",
   });
 });
 

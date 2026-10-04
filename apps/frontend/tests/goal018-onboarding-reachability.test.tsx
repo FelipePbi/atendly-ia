@@ -147,7 +147,7 @@ const businessDone: Partial<OnboardingState> = {
 const calendarDone = {
   calendar: {
     integration: null,
-    source: "ATENDLY" as const,
+    source: "AVENLY" as const,
     timezone: "America/Sao_Paulo",
   },
 };
@@ -202,7 +202,7 @@ beforeEach(() => {
   listServiceCatalog.mockResolvedValue({
     editable: true,
     items: [],
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   getImportState.mockResolvedValue({
     history: null,

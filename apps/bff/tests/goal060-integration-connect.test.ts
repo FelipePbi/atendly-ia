@@ -117,7 +117,7 @@ describe.skipIf(!RUN_INTEGRATION)(
 
       expect(response.statusCode).toBe(200);
       expect(response.json().data).toMatchObject({
-        source: "ATENDLY",
+        source: "AVENLY",
         capabilities: { manageAvailability: true },
       });
       expect(upstream).toHaveLength(1);

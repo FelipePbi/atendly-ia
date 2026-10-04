@@ -27,7 +27,8 @@
 //       que volta com um valor a menos quebra INSERT muito depois do restore.
 //
 // E prova a trava do Goal027 por TENTATIVA REAL contra o banco RESTAURADO,
-// nao por leitura do dump: `CalendarSettings_source_atendly_check` precisa
+// nao por leitura do dump: `CalendarSettings_source_avenly_check` (o nome que
+// a cadeia completa deixa desde o Goal109) precisa
 // existir no destino e precisa recusar `UPDATE ... SET "source" =
 // 'MINHA_AGENDA'` com `check_violation` (SQLSTATE 23514), sobre uma linha
 // semeada que existe de fato — um UPDATE que nao alcanca linha nenhuma nao
@@ -78,7 +79,7 @@ const repositoryRoot = path.resolve(
 
 const DISPOSABLE_NAME = /(?:^|[_-])test(?:[_-]|$)/iu;
 
-const CONSTRAINT_NAME = "CalendarSettings_source_atendly_check";
+const CONSTRAINT_NAME = "CalendarSettings_source_avenly_check";
 const CHECK_VIOLATION = "23514";
 
 export class RestoreRehearsalError extends Error {
@@ -239,7 +240,7 @@ export const SEEDS = Object.freeze({
       {
         table: "CalendarSettings",
         sql: `INSERT INTO "CalendarSettings" ("tenantId", "source", "timezone", "createdAt", "updatedAt")
-              VALUES ('goal028-tenant', 'ATENDLY', 'America/Sao_Paulo', now(), now())`,
+              VALUES ('goal028-tenant', 'AVENLY', 'America/Sao_Paulo', now(), now())`,
       },
       {
         table: "Customer",
@@ -796,7 +797,7 @@ export async function main() {
       "\ngoal028:restore-rehearsal PASSED — for the BFF, the AI orchestrator and the Scheduling service, a chain of seeded rows " +
         "survives pg_dump in custom format and pg_restore into a brand new database: every base table of schema public holds the " +
         "same number of rows on both sides, _prisma_migrations comes back row by row, and no index, named constraint or enum value " +
-        "is lost or invented. In the restored Scheduling database, CalendarSettings_source_atendly_check still refuses " +
+        "is lost or invented. In the restored Scheduling database, CalendarSettings_source_avenly_check still refuses " +
         "MINHA_AGENDA with SQLSTATE 23514 over a row that really exists.",
     );
   }

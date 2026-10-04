@@ -226,7 +226,7 @@ describe("2. serviço novo", () => {
     serviceCatalogList.mockResolvedValue({
       editable: true,
       items: [],
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     serviceCatalogCreate.mockResolvedValue(serviceFixture({ id: "novo" }));
     render(
@@ -259,7 +259,7 @@ describe("3. edição de serviço", () => {
     serviceCatalogList.mockResolvedValue({
       editable: true,
       items: [serviceFixture({ id: "s1", price: 60 })],
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     serviceCatalogUpdate.mockResolvedValue(serviceFixture({ price: 75.5 }));
     render(

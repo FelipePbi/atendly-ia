@@ -8,6 +8,10 @@ import {
   activationTestCompleted,
   reconcileAiActivation,
 } from "../../lib/ai-activation.js";
+import {
+  CALENDAR_SOURCE,
+  type CalendarSource,
+} from "../../lib/calendar-source.js";
 import { AppError } from "../../lib/errors.js";
 import { dataResponse } from "../../lib/http.js";
 import { phoneFromWhatsappJid } from "../../lib/phone.js";
@@ -69,14 +73,14 @@ export async function registerV1DashboardRoutes(
 
 function publicSchedulingDashboard<
   T extends {
-    calendar: { source: "ATENDLY" | "MINHA_AGENDA" | null };
+    calendar: { source: CalendarSource | "MINHA_AGENDA" | null };
   },
 >(dashboard: T) {
   return {
     ...dashboard,
     calendar: {
       ...dashboard.calendar,
-      source: dashboard.calendar.source === "ATENDLY" ? "ATENDLY" : null,
+      source: dashboard.calendar.source === CALENDAR_SOURCE ? CALENDAR_SOURCE : null,
     },
   };
 }

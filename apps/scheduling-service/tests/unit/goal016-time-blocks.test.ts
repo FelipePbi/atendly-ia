@@ -83,7 +83,7 @@ function seedCalendar(database: Database, scope: string) {
   database.client.calendarSettings.rows.push({
     id: `settings-${scope}`,
     tenantId: scope,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: timeZone,
   } as never);
 }

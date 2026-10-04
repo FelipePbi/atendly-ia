@@ -71,7 +71,7 @@ describe("Goal029/WU-05: reconcileBusinessTimezone", () => {
     expect(configureCalendar).not.toHaveBeenCalled();
   });
 
-  it("divergência aciona exatamente uma escrita, com source ATENDLY e o fuso do dono", async () => {
+  it("divergência aciona exatamente uma escrita, com source AVENLY e o fuso do dono", async () => {
     const configureCalendar = vi.fn(async () => ({
       timezone: "America/Sao_Paulo",
     }));
@@ -86,7 +86,7 @@ describe("Goal029/WU-05: reconcileBusinessTimezone", () => {
     expect(result.converged).toBe(true);
     expect(configureCalendar).toHaveBeenCalledTimes(1);
     expect(configureCalendar).toHaveBeenCalledWith(context, {
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     });
   });

@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-export const calendarSourceSchema = z.enum(["ATENDLY"]);
+// Único ponto do pacote que ainda conhece o valor anterior à troca de marca
+// (Goal109): decodifica como `AVENLY` e nunca é devolvido.
+const LEGACY_CALENDAR_SOURCE = "ATENDLY";
+export const calendarSourceSchema = z
+  .enum(["AVENLY", LEGACY_CALENDAR_SOURCE])
+  .transform((): "AVENLY" => "AVENLY");
 // Modalidades de atendimento do negócio (Goal018/WU-01), seleção múltipla.
 export const businessModalitySchema = z.enum(["ON_SITE", "AT_HOME", "ONLINE"]);
 // Estado de projeção do contexto de negócio para a IA (Goal018/WU-03):

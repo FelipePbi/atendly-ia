@@ -737,7 +737,7 @@ export async function registerInternalRoutes(
     await sessions.assumeHumanControl({
       tenantId,
       sessionId: session.sessionId,
-      source: "ATENDLY",
+      source: "AVENLY",
       actor: userId,
     });
 
@@ -857,7 +857,7 @@ export async function registerInternalRoutes(
     await sessions.assumeHumanControl({
       tenantId,
       sessionId: takenOver.sessionId,
-      source: "ATENDLY",
+      source: "AVENLY",
       actor: userId,
     });
     return internalData(

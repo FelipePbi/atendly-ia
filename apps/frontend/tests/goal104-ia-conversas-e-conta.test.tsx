@@ -219,7 +219,7 @@ function settingsFixture(
         migrate: true,
       },
       integration: null,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     },
   };
@@ -301,7 +301,7 @@ beforeEach(() => {
     editable: true,
     items: [{ active: true, needsReview: false }],
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   migrationGetImportState.mockResolvedValue({ history: null, session: null });
   retentionGet.mockResolvedValue(retentionFixture());

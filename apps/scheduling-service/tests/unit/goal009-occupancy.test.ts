@@ -45,7 +45,7 @@ function setup(offerRules: Partial<{
   tables.calendarSettings.rows.push({
     id: tenantId,
     tenantId,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: timeZone,
     minLeadMinutes: offerRules.minLeadMinutes ?? 0,
     maxLeadDays: offerRules.maxLeadDays ?? 90,
@@ -992,7 +992,7 @@ describe("Goal009: isolamento por tenant das entidades novas", () => {
     database.tables.calendarSettings.rows.push({
       id: otherTenant,
       tenantId: otherTenant,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: timeZone,
       minLeadMinutes: 0,
       maxLeadDays: 90,

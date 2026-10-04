@@ -124,7 +124,7 @@ function state(overrides: Partial<OnboardingState> = {}): OnboardingState {
     },
     calendar: {
       integration: null,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     },
     completed: false,
@@ -175,7 +175,7 @@ function settingsFixture(): SettingsState {
         migrate: true,
       },
       integration: null,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     },
   };
@@ -236,7 +236,7 @@ beforeEach(() => {
   serviceCatalogList.mockResolvedValue({
     editable: true,
     items: [],
-    source: "ATENDLY",
+    source: "AVENLY",
   });
 });
 

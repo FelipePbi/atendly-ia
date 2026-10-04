@@ -68,7 +68,7 @@ describe("CalendarService: nenhuma operação instancia o provider remoto (Goal0
       database.tables.calendarSettings.rows.push({
         id: tenantId,
         tenantId,
-        source: "ATENDLY",
+        source: "AVENLY",
         timezone: "America/Sao_Paulo",
       });
     }

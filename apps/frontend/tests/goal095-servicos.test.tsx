@@ -193,7 +193,7 @@ function catalog(items: Service[], editable = true) {
     editable,
     items,
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
 }
 

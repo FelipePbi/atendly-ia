@@ -105,7 +105,7 @@ beforeEach(() => {
   serviceCatalogList.mockResolvedValue({
     editable: true,
     items: [serviceFixture()],
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   knowledgeGetOtherInfo.mockResolvedValue({ content: "" });
 });

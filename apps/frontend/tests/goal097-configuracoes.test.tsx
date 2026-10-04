@@ -217,7 +217,7 @@ function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState 
         migrate: true,
       },
       integration: null,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     },
     ...overrides,
@@ -281,7 +281,7 @@ beforeEach(() => {
       { active: false, needsReview: false },
     ],
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   migrationGetImportState.mockResolvedValue({ history: null, session: null });
   retentionGet.mockResolvedValue({
@@ -438,7 +438,7 @@ describe("Goal097 prova 1: hub M1", () => {
         { active: true, needsReview: true },
       ],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     renderHub();
 

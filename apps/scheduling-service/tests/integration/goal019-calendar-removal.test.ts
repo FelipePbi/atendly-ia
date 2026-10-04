@@ -36,8 +36,8 @@ let customerId = "";
 async function seedTenant() {
   await prisma.calendarSettings.upsert({
     where: { tenantId },
-    create: { tenantId, source: "ATENDLY", timezone: timeZone },
-    update: { source: "ATENDLY", timezone: timeZone },
+    create: { tenantId, source: "AVENLY", timezone: timeZone },
+    update: { source: "AVENLY", timezone: timeZone },
   });
   await prisma.availabilityRule.deleteMany({ where: { tenantId } });
   for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek += 1) {

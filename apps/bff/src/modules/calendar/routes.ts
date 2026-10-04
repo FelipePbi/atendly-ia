@@ -2,6 +2,10 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
 import { SchedulingClient } from "../../clients/scheduling/index.js";
+import {
+  CALENDAR_SOURCE,
+  type CalendarSource,
+} from "../../lib/calendar-source.js";
 import { AppError } from "../../lib/errors.js";
 import {
   dataResponse,
@@ -763,13 +767,13 @@ function idempotencyKey(request: FastifyRequest): string {
 }
 
 function publicCalendar(calendar: {
-  source: "ATENDLY" | "MINHA_AGENDA" | null;
+  source: CalendarSource | "MINHA_AGENDA" | null;
   timezone: string | null;
   integration: unknown;
   capabilities: unknown;
 }) {
   return {
     ...calendar,
-    source: calendar.source === "ATENDLY" ? "ATENDLY" : null,
+    source: calendar.source === CALENDAR_SOURCE ? CALENDAR_SOURCE : null,
   };
 }

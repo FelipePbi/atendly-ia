@@ -107,7 +107,7 @@ describe.skipIf(!connectionString)("tenant purge against PostgreSQL", () => {
     const dayEnd = new Date("1970-01-01T10:00:00.000Z");
 
     await prisma.calendarSettings.create({
-      data: { tenantId, source: "ATENDLY", timezone: "America/Sao_Paulo" },
+      data: { tenantId, source: "AVENLY", timezone: "America/Sao_Paulo" },
     });
     await prisma.reminderSettings.create({ data: { tenantId } });
     await prisma.reminderRule.create({
@@ -279,7 +279,7 @@ describe.skipIf(!connectionString)("tenant purge against PostgreSQL", () => {
         tenantId,
         requestedBy: "tester",
         source: "MINHA_AGENDA",
-        target: "ATENDLY",
+        target: "AVENLY",
         status: "PENDING",
       },
     });

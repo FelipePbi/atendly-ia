@@ -60,11 +60,11 @@ const ISO_TODAY = `${today.getFullYear()}-${String(today.getMonth() + 1).padStar
 function calendarFixture(
   overrides: Partial<CalendarState> = {},
 ): CalendarState {
-  const source = overrides.source ?? "ATENDLY";
+  const source = overrides.source ?? "AVENLY";
   return {
     capabilities: {
       createAppointments: true,
-      manageAvailability: source === "ATENDLY",
+      manageAvailability: source === "AVENLY",
       manageCustomers: true,
       manageServices: true,
       migrate: false,
@@ -384,7 +384,7 @@ describe("sourceGuard: guard explícito por calendar.source e calendar.capabilit
     expect(operationLabel("createAppointments")).toBe("criar agendamentos");
   });
 
-  test("personAgendaGuard recusa ausência de fonte e permite ATENDLY", () => {
+  test("personAgendaGuard recusa ausência de fonte e permite AVENLY", () => {
     expect(personAgendaGuard(calendarFixture()).allowed).toBe(true);
     expect(personAgendaGuard(calendarFixture()).reason).toBeNull();
 

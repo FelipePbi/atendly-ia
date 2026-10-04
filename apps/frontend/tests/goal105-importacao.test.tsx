@@ -200,7 +200,7 @@ function settingsFixture(timezone: string | null = "America/Sao_Paulo"): Setting
         migrate: true,
       },
       integration: null,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     },
   };
@@ -308,7 +308,7 @@ function onboardingFixture(
     },
     calendar: {
       integration: null,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     },
     completed: false,
@@ -375,7 +375,7 @@ beforeEach(() => {
     editable: true,
     items: [{ active: true, needsReview: false }],
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   retentionGet.mockResolvedValue({
     appliesFrom: "NEXT_SWEEP",

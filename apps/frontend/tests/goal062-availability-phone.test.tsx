@@ -73,7 +73,7 @@ function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState 
         migrate: true,
       },
       integration: null,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     },
     ...overrides,
@@ -108,7 +108,7 @@ function calendarStateFixture(overrides: Partial<CalendarState> = {}): CalendarS
       migrate: true,
     },
     integration: null,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: "America/Sao_Paulo",
     ...overrides,
   };
@@ -184,7 +184,7 @@ describe("telefone brasileiro reconhecido aparece formatado", () => {
     customersList.mockResolvedValue({
       items: [customerFixture()],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     render(
       <ShellConfigProvider>
@@ -215,7 +215,7 @@ describe("telefone brasileiro reconhecido aparece formatado", () => {
     customersList.mockResolvedValue({
       items: [customerFixture({ phone: "12025550123" })],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     render(
       <ShellConfigProvider>

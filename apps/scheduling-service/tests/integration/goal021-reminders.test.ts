@@ -53,8 +53,8 @@ async function seedTenant(
   const tz = options.timezone ?? timeZone;
   await prisma.calendarSettings.upsert({
     where: { tenantId },
-    create: { tenantId, source: "ATENDLY", timezone: tz },
-    update: { source: "ATENDLY", timezone: tz },
+    create: { tenantId, source: "AVENLY", timezone: tz },
+    update: { source: "AVENLY", timezone: tz },
   });
   await prisma.availabilityRule.deleteMany({ where: { tenantId } });
   for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek += 1) {

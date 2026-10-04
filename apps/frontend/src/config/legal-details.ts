@@ -14,30 +14,37 @@ export type LegalDetails = {
 };
 
 const legalDetailSources = {
-  legalName: ["ATENDLY_LEGAL_NAME", "[RAZÃO SOCIAL]"],
-  tradeName: ["ATENDLY_TRADE_NAME", "[NOME FANTASIA]"],
-  cnpj: ["ATENDLY_CNPJ", "[CNPJ]"],
-  address: ["ATENDLY_LEGAL_ADDRESS", "[ENDEREÇO]"],
-  supportEmail: ["ATENDLY_SUPPORT_EMAIL", "[E-MAIL DE SUPORTE]"],
-  privacyEmail: ["ATENDLY_PRIVACY_EMAIL", "[E-MAIL DE PRIVACIDADE]"],
-  privacyOfficer: ["ATENDLY_PRIVACY_OFFICER", "[RESPONSÁVEL OU ENCARREGADO]"],
-  aiProvider: ["ATENDLY_AI_PROVIDER", "[FORNECEDOR DE IA]"],
-  hostingProvider: ["ATENDLY_HOSTING_PROVIDER", "[PROVEDOR DE HOSPEDAGEM]"],
-  analyticsProviders: [
-    "ATENDLY_ANALYTICS_PROVIDERS",
-    "[PROVEDORES DE ANALYTICS]",
-  ],
-  retentionPeriod: ["ATENDLY_RETENTION_PERIOD", "[PRAZO DE RETENÇÃO]"],
-  applicableForum: ["ATENDLY_APPLICABLE_FORUM", "[FORO APLICÁVEL]"],
+  legalName: ["LEGAL_NAME", "[RAZÃO SOCIAL]"],
+  tradeName: ["TRADE_NAME", "[NOME FANTASIA]"],
+  cnpj: ["CNPJ", "[CNPJ]"],
+  address: ["LEGAL_ADDRESS", "[ENDEREÇO]"],
+  supportEmail: ["SUPPORT_EMAIL", "[E-MAIL DE SUPORTE]"],
+  privacyEmail: ["PRIVACY_EMAIL", "[E-MAIL DE PRIVACIDADE]"],
+  privacyOfficer: ["PRIVACY_OFFICER", "[RESPONSÁVEL OU ENCARREGADO]"],
+  aiProvider: ["AI_PROVIDER", "[FORNECEDOR DE IA]"],
+  hostingProvider: ["HOSTING_PROVIDER", "[PROVEDOR DE HOSPEDAGEM]"],
+  analyticsProviders: ["ANALYTICS_PROVIDERS", "[PROVEDORES DE ANALYTICS]"],
+  retentionPeriod: ["RETENTION_PERIOD", "[PRAZO DE RETENÇÃO]"],
+  applicableForum: ["APPLICABLE_FORUM", "[FORO APLICÁVEL]"],
 } as const;
+
+// O deploy ainda tem os valores sob `ATENDLY_*` (Goal109): o nome novo vale
+// primeiro e o antigo cobre a falta dele.
+function readLegalEnvironment(suffix: string): string | undefined {
+  return (
+    process.env[`AVENLY_${suffix}`]?.trim() ||
+    process.env[`ATENDLY_${suffix}`]?.trim() ||
+    undefined
+  );
+}
 
 export function getLegalDetails(): LegalDetails {
   const missing: string[] = [];
   const details = Object.fromEntries(
     Object.entries(legalDetailSources).map(
-      ([key, [environmentKey, placeholder]]) => {
-        const configured = process.env[environmentKey]?.trim();
-        if (!configured) missing.push(environmentKey);
+      ([key, [suffix, placeholder]]) => {
+        const configured = readLegalEnvironment(suffix);
+        if (!configured) missing.push(`AVENLY_${suffix}`);
         return [key, configured || placeholder];
       },
     ),
@@ -52,7 +59,7 @@ export function getLegalDetails(): LegalDetails {
 
 export function legalDocumentsAreIndexable(): boolean {
   return (
-    process.env.ATENDLY_LEGAL_REVIEW_APPROVED === "true" &&
-    process.env.ATENDLY_LEGAL_INDEXABLE === "true"
+    readLegalEnvironment("LEGAL_REVIEW_APPROVED") === "true" &&
+    readLegalEnvironment("LEGAL_INDEXABLE") === "true"
   );
 }

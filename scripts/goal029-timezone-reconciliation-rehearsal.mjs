@@ -369,7 +369,7 @@ async function seedScheduling(url, fixtures) {
       if (fixture.replicaTimezone === null) continue;
       await client.query(
         `INSERT INTO "CalendarSettings" ("tenantId", "source", "timezone", "updatedAt")
-         VALUES ($1, 'ATENDLY', $2, now())`,
+         VALUES ($1, 'AVENLY', $2, now())`,
         [fixture.tenantId, fixture.replicaTimezone],
       );
     }

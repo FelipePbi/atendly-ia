@@ -119,7 +119,7 @@ beforeEach(() => {
   listServiceCatalog.mockResolvedValue({
     editable: true,
     items: [],
-    source: "ATENDLY",
+    source: "AVENLY",
   });
 });
 
@@ -230,7 +230,7 @@ describe("2. quando-importar: ilustração, ordem das ações e gravação", () 
     );
     await waitFor(() =>
       expect(updateOnboarding).toHaveBeenCalledWith({
-        calendar: { source: "ATENDLY", timezone: "America/Sao_Paulo" },
+        calendar: { source: "AVENLY", timezone: "America/Sao_Paulo" },
       }),
     );
     await waitFor(() => expect(push).toHaveBeenCalledWith("/onboarding/importacao"));
@@ -244,7 +244,7 @@ describe("2. quando-importar: ilustração, ordem das ações e gravação", () 
     );
     await waitFor(() =>
       expect(updateOnboarding).toHaveBeenCalledWith({
-        calendar: { source: "ATENDLY", timezone: "America/Sao_Paulo" },
+        calendar: { source: "AVENLY", timezone: "America/Sao_Paulo" },
       }),
     );
     await waitFor(() =>
@@ -276,7 +276,7 @@ describe("3. servicos-adicionais: a lista traz o serviço do rascunho e os adici
         }),
         serviceFixture({ active: false, id: "svc-4", name: "Antigo" }),
       ],
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     await renderStep(
       "servicos-adicionais",
@@ -318,7 +318,7 @@ describe("3. servicos-adicionais: a lista traz o serviço do rascunho e os adici
           priceType: "NOT_INFORMED",
         }),
       ],
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     await renderStep(
       "servicos-adicionais",

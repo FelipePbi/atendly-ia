@@ -228,12 +228,12 @@ test("the deparse/reparse round trip of pg_dump is not a lost constraint", () =>
 });
 
 test("normalisation still separates a constraint that really changed", () => {
-  const atSource = 'CHECK ((source = \'ATENDLY\'::"CalendarSource"))';
+  const atSource = 'CHECK ((source = \'AVENLY\'::"CalendarSource"))';
 
   for (const changed of [
     'CHECK ((source = \'MINHA_AGENDA\'::"CalendarSource"))',
-    'CHECK ((source <> \'ATENDLY\'::"CalendarSource"))',
-    'CHECK ((target = \'ATENDLY\'::"CalendarSource"))',
+    'CHECK ((source <> \'AVENLY\'::"CalendarSource"))',
+    'CHECK ((target = \'AVENLY\'::"CalendarSource"))',
   ]) {
     assert.notEqual(
       normalizeConstraintDefinition(atSource),
@@ -442,7 +442,7 @@ test("the script declares the Evolution Go exclusion in its own comment", () => 
 test("the script proves the Goal027 lock against the RESTORED database", () => {
   const source = readFileSync(script, "utf8");
 
-  assert.match(source, /CalendarSettings_source_atendly_check/u);
+  assert.match(source, /CalendarSettings_source_avenly_check/u);
   assert.match(source, /23514/u);
   // A tentativa e um UPDATE real, e a linha alvo precisa existir no destino.
   assert.match(source, /UPDATE "CalendarSettings" SET "source" = 'MINHA_AGENDA'/u);

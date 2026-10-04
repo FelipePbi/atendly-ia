@@ -196,7 +196,7 @@ function AgendaDayColumnContent({
       endDate: isoDate(addDays(start, 6)),
       startDate: weekStart,
     };
-    const atendly = source === "ATENDLY";
+    const atendly = source === "AVENLY";
     Promise.all([
       services.listAppointments(queryWindow, controller.signal),
       atendly

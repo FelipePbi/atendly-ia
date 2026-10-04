@@ -109,7 +109,14 @@ import {
   TenantPurgeService,
 } from "./tenantPurge.js";
 
-const sourceSchema = z.enum(["ATENDLY"]);
+// Fonte da agenda (Goal109): `AVENLY` e o unico valor gravado e devolvido.
+// `ATENDLY` e o nome legado do mesmo valor e continua aceito na entrada, para
+// que um BFF ainda na versao anterior durante o deploy continue gravando a
+// fonte; ele e gravado como `AVENLY`.
+const LEGACY_CALENDAR_SOURCE = "ATENDLY";
+const sourceSchema = z
+  .enum(["AVENLY", LEGACY_CALENDAR_SOURCE])
+  .transform(() => "AVENLY" as const);
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const idParamsSchema = z.object({ id: z.string().trim().min(1).max(128) });
@@ -1937,7 +1944,7 @@ async function calendarOverview(
       // Retirada da fonte externa (Goal027): as quatro capacidades abaixo
       // eram `source === "ATENDLY"` e passam a ser "tem calendario
       // configurado". Nao e afrouxamento: `CalendarSettings.source` so
-      // admite `ATENDLY` (constraint `CHECK` no banco), entao haver a linha
+      // admite `AVENLY` (constraint `CHECK` no banco), entao haver a linha
       // e exatamente o que a comparacao por fonte ja significava. Nenhuma
       // capability muda de nome nem entra ou sai do payload.
       manageAvailability: hasCalendar,
@@ -1961,7 +1968,7 @@ async function calendarOverview(
 async function countOperationalServices(
   prisma: PrismaClient,
   context: CalendarRequestContext,
-  source: "ATENDLY" | "MINHA_AGENDA" | null,
+  source: "AVENLY" | "MINHA_AGENDA" | null,
 ): Promise<number> {
   if (source === null) return 0;
   try {

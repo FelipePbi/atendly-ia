@@ -209,7 +209,7 @@ function settingsFixture(
         migrate: true,
       },
       integration: null,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     },
   };
@@ -232,7 +232,7 @@ function onboardingFixture(): OnboardingState {
     },
     calendar: {
       integration: null,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     },
     completed: false,
@@ -306,7 +306,7 @@ beforeEach(() => {
     editable: true,
     items: [{ active: true, needsReview: false }],
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   migrationGetImportState.mockResolvedValue({ history: null, session: null });
   retentionGet.mockResolvedValue({

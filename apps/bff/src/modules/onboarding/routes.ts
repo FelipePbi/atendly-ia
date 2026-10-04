@@ -14,6 +14,7 @@ import {
   businessModalitySchema,
   resolveBusinessProfileFields,
 } from "../../lib/business-profile.js";
+import { calendarSourceSchema } from "../../lib/calendar-source.js";
 import { AppError } from "../../lib/errors.js";
 import { dataResponse } from "../../lib/http.js";
 import {
@@ -27,7 +28,7 @@ import {
 } from "../../lib/tenant-context.js";
 import { internalContext } from "../tenant/context.js";
 
-const sourceSchema = z.enum(["ATENDLY"]);
+const sourceSchema = calendarSourceSchema;
 // Os tres estilos do produto e os dois valores antigos como alias declarado
 // (Goal011); a resposta sempre devolve o vocabulario novo.
 const toneSchema = aiConversationStyleSchema;

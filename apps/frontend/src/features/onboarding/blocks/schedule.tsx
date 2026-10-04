@@ -816,7 +816,7 @@ export async function persistScheduleStep(
     // `calendar.source` antes de seguir para a importação.
     case "quando-importar":
       await onboarding.update({
-        calendar: { source: "ATENDLY", timezone: ctx.draft.timezone },
+        calendar: { source: "AVENLY", timezone: ctx.draft.timezone },
       });
       await ctx.refresh();
       ctx.go("importacao");
@@ -889,7 +889,7 @@ export async function skipImportAndGoToScratch(
   ctx: OnboardingStepContext,
 ): Promise<void> {
   await getProductServices().onboarding.update({
-    calendar: { source: "ATENDLY", timezone: ctx.draft.timezone },
+    calendar: { source: "AVENLY", timezone: ctx.draft.timezone },
   });
   await ctx.refresh();
   ctx.go("servico-nome");

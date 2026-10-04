@@ -313,7 +313,7 @@ describe("service catalog: recurrenceIntervalDays reaches the /internal/services
     database.tables.calendarSettings.rows.push({
       id: tenantId,
       tenantId,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     });
     const withRecurrence = await services.create({

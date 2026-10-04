@@ -89,7 +89,7 @@ function settingsFixture(): SettingsState {
         migrate: true,
       },
       integration: null,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     },
   };
@@ -108,7 +108,7 @@ function emptyState(): OnboardingState {
     },
     calendar: {
       integration: null,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     },
     completed: false,

@@ -5458,3 +5458,176 @@ A conferência humana da tela num aparelho real. Uma nova medida do I2 com o ban
 - **Conferência do Tech Lead na rodada 4.** Os 11 sha256 da seção dos controles batem com a árvore aceita. O único diff de `atendly.css` é `text-align: left` em `.import-card`. Depois da comparação, `git status` lista os mesmos 36 arquivos, e `apps/frontend/AGENTS.md` difere da base só na linha de (f). O Tech Lead rodou `npm run visual:compare -- --target I1,I2,2.I1` nas rodadas 1 a 4 (exit 0; a 2.2 também na rodada 3) e abriu os doze `side-by-side.png` em cada rodada. Os números da rodada 4 são os da execução 3. O vermelho da baseline e os controles foram aceitos pelo registro acima, não reexecutados pelo Tech Lead.
 - **Gates do IA Loop na rodada 4.** São os da rodada 3 (WU-05 a WU-11), reaproveitados porque a impressão digital de código continua `code-v1:a698f84c…`. Todos têm exit 0, com as contagens da tabela "Execuções que sustentam cada contagem".
 - **Aceito sem prova completa.** O histórico de uma importação real, só em jsdom (o I1 usa resposta fixa); I1 e 2.I1 sem diff zero e o I2 pior pelo diff que na execução 1, aceitos pela vista dos `side-by-side.png` e pela causa medida; o vermelho da baseline e os controles de antes da edição de CSS. Detalhe no [review105](reviews/105-review.md).
+
+## Valores gravados e contratos passam a Avenly, do Goal109
+
+Texto do Goal109 ([D-120](DECISIONS.md), `PROPOSED`), escrito pela WU-14 da rodada 1, por acréscimo, depois da execução final. Toda contagem diz a execução que a sustenta. A recontagem da baseline, o vermelho das provas e os resultados de typecheck, `test:gate`, `validate:core`, `validate:ui` e `validate:integration` são das WU-01 a WU-13, lidos do resultado delas em `tools/ia-loop/.state/results/work_unit/`. Os controles do §8, o inventário do §7, a suíte completa do frontend e a prova 7 medida de novo contra a baseline são da WU-14. Nenhuma seção de outro Goal foi editada.
+
+### Recontagem da baseline (WU-01, `HEAD` `27ede84`, sem edição)
+
+`test:gate`: 242 testes, `pass 242`. `test:ai-orchestrator` sem banco: `Test Files 94 passed | 13 skipped (107)` e `Tests 1188 passed | 98 skipped (1286)`. Scheduling, unitários: 39 arquivos e 534 testes. `test:scheduling-integration`: 19 arquivos e 145 testes. `test:bff-integration`: 64 arquivos e 477 testes. Frontend: 147 arquivos e 1819 testes (fim do Goal105, em D-119).
+
+### As oito provas e o vermelho da baseline
+
+Vermelho: os arquivos de produção da baseline (`git show HEAD:`) com só as provas novas presentes, medido pela unidade que escreveu cada prova (WU-01 a WU-04). A prova 7 foi medida de novo na WU-14, com `BffHttpClient.ts` de `HEAD`, e a restauração foi conferida por sha256 (`a62ef333`, igual antes e depois). Dos 61 testes novos (52 da rodada 1 e 9 da FIX-001, rodada 2), **38 reprovam** contra a baseline e **23 passam**. Na rodada 2, o vermelho dos 9 testes novos da prova 4 foi medido com `schemas.ts` de `HEAD` (sha256 restaurado depois); o caso novo do dashboard, na prova 5, está dentro de um teste que já reprovava na baseline, e a prova 5 não foi medida de novo contra a baseline. Os que passam protegem comportamento de hoje ou uma pré-condição; os nomeados abaixo vêm dos relatórios das WU-01 a WU-04 e da medida da WU-14.
+
+| Prova | Arquivo | Com o código final | Contra a baseline | O que passa na baseline |
+| --- | --- | --- | --- | --- |
+| 1 (migration do Scheduling, PostgreSQL real) e 3 (rota interna do Scheduling) | `apps/scheduling-service/tests/integration/goal109-avenly-calendar-source.test.ts` | 7 de 7 | `5 failed \| 2 passed` | "starts from the state the previous migrations leave" (pré-condição) e "refuses any other value as before, without writing" (comportamento de hoje) |
+| 2 (migration da IA, PostgreSQL real) | `apps/ai-orchestrator/tests/integration/goal109-avenly-human-control-source.test.ts` | 3 de 3 | `2 failed \| 1 passed` | a pré-condição (o estado que as migrations anteriores deixam) |
+| 4 (contrato) e 5 (BFF, fonte da agenda) | `apps/bff/tests/goal109-avenly-calendar-source.test.ts` | 23 de 23 (rodada 2; eram 14 de 14) | `14 failed \| 9 passed` (10 da prova 4 e 4 da prova 5; eram `6 failed \| 8 passed`) | os 9 casos de recusa, que são comportamento antigo: os 7 valores recusados por `calendarSourceSchema`, a recusa de `EXTERNAL` pelos quatro schemas e o `PATCH /v1/onboarding` que recusa outra fonte |
+| 6 (BFF, sessão por HTTP) | `apps/bff/tests/goal109-legacy-session-cookie.integration.test.ts` | 7 de 7 | `4 failed \| 3 passed` | leitura só com `atendly_session`, mutação com CSRF e sessão revogada recusada |
+| 7 (`BffHttpClient`, CSRF) | `apps/frontend/tests/goal109-csrf-cookie.test.ts` | 4 de 4 | `2 failed \| 2 passed` (WU-03; de novo na WU-14) | "falls back to atendly_csrf when avenly_csrf is absent" e "sends no token when neither cookie is present" |
+| 8 (frontend, demais valores) | `apps/frontend/tests/goal109-avenly-values.test.tsx` | 17 de 17 | `11 failed \| 6 passed` | `legal-details` só com nome antigo; valor novo em branco cai para o antigo; `check-legal-config` só com nomes antigos; `check-legal-config` sem aprovação jurídica falha nos dois prefixos; `Brand` com só a chave antiga em `entry`; `Brand` com só a chave antiga em `check` |
+
+Total: 7 + 3 + 23 + 7 + 4 + 17 = 61 testes novos (Scheduling 7, IA 3, BFF 23 e 7, frontend 4 e 17); a rodada 1 tinha 52, com 14 no arquivo do BFF da prova 4 e 5. A prova 2 está sob `tests/integration` da IA, que o passo `test:ai-orchestrator-transport-durability` de `validate:integration` roda (`vitest run tests/integration`). O relatório desse passo traz só "passed", sem contagem por arquivo, então a execução da prova 2 dentro dele **não** é conferida por contagem. Na WU-14 a prova 2 rodou à parte, contra um PostgreSQL com `pgvector`: 3 de 3.
+
+### Testes existentes que mudaram
+
+Mudou só onde o teste afirmava `"ATENDLY"` como valor gravado (o Prisma e o `tsc` recusam o valor antigo) ou o nome antigo do cookie ou da constraint como padrão. Arquivos existentes modificados na árvore: **38** em `apps/scheduling-service/tests`, **7** em `apps/ai-orchestrator/tests` (seis da WU-01 e `assistant.service.test.ts`, da `DIAG-001`), **5** em `apps/bff/tests` (`goal029-timezone-owner`, `goal029-timezone-propagation.integration`, `goal029-timezone-read-reconciliation.integration`, `goal060-integration-connect`, `session-csrf.integration`), **76** em `apps/frontend/tests` e **1** em `scripts/tests`. Os testes que **enviam** `"ATENDLY"` como entrada do decodificador não mudaram de valor e passam a provar (b); em `goal029-calendar-timezone.test.ts` do Scheduling os payloads HTTP seguem `"ATENDLY"`. Nenhum teste foi removido, pulado ou marcado como `todo`, e nenhuma asserção foi afrouxada.
+
+### Os controles negativos do §8 (WU-14, depois da última edição de código)
+
+Cada controle copia o arquivo, aplica o defeito, roda a prova com `npx vitest run` e restaura o arquivo da cópia. O sha256 (oito primeiros caracteres) é conferido antes e depois e é **igual** em todos. Os controles 1 e 12 recompilam o contrato (`npx tsc -p tsconfig.json`) e copiam o `dist` para `apps/bff/node_modules/@atendly-ia/public-api-contract` e `apps/frontend/node_modules/@atendly-ia/public-api-contract`; depois da restauração e de nova recompilação, o `dist` das três pastas tem os mesmos hashes de antes. O controle 5 rodou contra um PostgreSQL com `pgvector`. Saída real, linhas decisivas:
+
+| # | Defeito | Arquivo (sha256) | Com o defeito | Sem o defeito |
+| --- | --- | --- | --- | --- |
+| 1 | tirar `"ATENDLY"` de `calendarSourceSchema` do contrato (`.enum(["AVENLY"])`) | `packages/public-api-contract/src/schemas.ts` (`2d299647`) | saída 1, `5 failed` (rodada 2, FIX-001, de 23): "decodifica ATENDLY como AVENLY" e, na prova 4 dos quatro schemas com a fonte `ATENDLY`, `calendarStateSchema`, `onboardingStateSchema`, `customerListSchema` e `serviceListSchema` (a rodada 1 tinha `1 failed \| 13 passed (14)`) | saída 0, `23 passed (23)` |
+| 2 | tirar a leitura de `atendly_session` em `presentedCredential` | `apps/bff/src/lib/auth.ts` (`db80c6de`) | saída 1, `5 failed \| 2 passed (7)`: leitura só com `atendly_session`, mutação com CSRF, logout dos quatro cookies, sessão revogada com o nome antigo, login e troca de senha gravando os nomes novos (prova 6) | saída 0, `7 passed (7)` |
+| 3 | trocar `RENAME VALUE` por `ADD VALUE 'AVENLY'` | migration do Scheduling (`a9c88efd`) | saída 1, `3 failed \| 4 passed (7)`: "is a no-op when applied again", "keeps refusing MINHA_AGENDA in CalendarSettings through the renamed constraint", "renames the value and the constraint without rewriting a row" (prova 1) | saída 0, `7 passed (7)` |
+| 4 | tirar o `RENAME CONSTRAINT` | mesma migration do Scheduling (`a9c88efd`) | saída 1, `3 failed \| 4 passed (7)`: os mesmos três casos (prova 1) | saída 0, `7 passed (7)` |
+| 5 | tirar o `RENAME VALUE` da IA | migration da IA (`6e0b2f18`) | saída 1, `2 failed \| 1 passed (3)`: "reads AVENLY where ATENDLY was, and leaves WHATSAPP and BACKFILL alone" e "lets the current client read the renamed value and is a no-op when applied again" (prova 2) | saída 0, `3 passed (3)` |
+| 6 | tirar a reserva `atendly_csrf` do `BffHttpClient` | `apps/frontend/src/data/http/BffHttpClient.ts` (`a62ef333`) | saída 1, `1 failed \| 3 passed (4)`: "falls back to atendly_csrf when avenly_csrf is absent" (prova 7) | saída 0, `4 passed (4)` |
+| 7 | tirar a reserva `ATENDLY_*` de `readLegalEnvironment` | `apps/frontend/src/config/legal-details.ts` (`321d5f24`) | saída 1, `3 failed \| 14 passed (17)`: "só o nome antigo configurado ainda vale", "um valor novo em branco cai para o antigo", "a indexação dos documentos lê o nome novo e o antigo" (prova 8) | saída 0, `17 passed (17)` |
+| 11 | tirar `"ATENDLY"` do `calendarSourceSchema` do **BFF** | `apps/bff/src/lib/calendar-source.ts` (`df9a43c6`) | saída 1, `2 failed` (rodada 2, FIX-001, de 23): "PATCH /v1/onboarding com ATENDLY chega ao Scheduling como AVENLY" e "as leituras devolvem AVENLY" com o Scheduling respondendo `ATENDLY`, que agora também cobre `GET /v1/dashboard` (prova 5) | saída 0, `23 passed (23)` |
+| 12 | os controles 1 e 11 juntos | `schemas.ts` (`2d299647`) e `calendar-source.ts` (`df9a43c6`) | saída 1, `7 failed` (rodada 2, FIX-001, de 23): os 5 casos do controle 1 e os 2 do controle 11 | saída 0, `23 passed (23)` |
+
+**O controle 1 do Goal diz "as provas 4 e 5 reprovam", mas feito só no contrato ele reprova só a prova 4.** O BFF tem o seu próprio `calendarSourceSchema` (`apps/bff/src/lib/calendar-source.ts`) e não importa o do pacote, então tirar `"ATENDLY"` só do contrato não mexe na prova 5. Os controles 11 e 12 foram acrescentados para cobrir a prova 5; os dois reprovam com o defeito e passam sem ele. Cabe ao Tech Lead decidir se isso basta ou se o controle 1 é reescrito para tocar os dois schemas.
+
+**Rodada 2 (FIX-001), controles 1, 11 e 12 refeitos depois da edição do teste.** O arquivo `apps/bff/tests/goal109-avenly-calendar-source.test.ts` passou de 14 para 23 testes: a prova 4 agora faz o parse com os quatro schemas do contrato que usam `calendarSourceSchema` (`calendarStateSchema`, `onboardingStateSchema`, `customerListSchema` e `serviceListSchema`), com as fontes `ATENDLY` e `AVENLY`, e confere `AVENLY`; um caso recusa `EXTERNAL` nos quatro. A prova 5 passou a cobrir `GET /v1/dashboard` (caminho `data.scheduling.data.calendar.source`). Os três controles rodaram com sha256 conferido antes e depois (`2d299647` para `schemas.ts`, `df9a43c6` para `calendar-source.ts`, os dois iguais), com recompilação e cópia do `dist` do contrato nos controles 1 e 12. Resultado: controle 1 com 5 falhas, controle 11 com 2 e controle 12 com 7; sem o defeito, 23 passam. Portanto o controle 1 agora reprova também os casos novos da prova 4, e não só o decodificador isolado.
+
+### Inventário do §7 (WU-14)
+
+Comando: `git grep -n --untracked -e '"ATENDLY"' -e "'ATENDLY'" -e 'atendly_session' -e 'atendly_csrf' -e 'ATENDLY_' -e 'atendly:brand' -- apps packages scripts`, na árvore da WU-14, refeito na rodada 2 (FIX-001) depois de acrescentar ao teste do BFF os casos da prova 4 (a rodada 1 tinha **143** linhas, com **85** em (iii)). A saída tem **144** linhas (90 em arquivos rastreados e 54 em arquivos novos, ainda não rastreados, do Goal109), **todas classificadas, sem resto**: **30** em (i), **19** em (ii), **86** em (iii), **6** em (iv) e **3** em (v) (30 + 19 + 86 + 6 + 3 = 144). As colunas dizem arquivo, números de linha e motivo. Os pontos de julgamento estão em D-120. Esta é a lista de exceções que o 102 herda para o critério `git grep -i atendly`.
+
+**Classe (i) migration antiga, que não pode mudar (ou ensaio que monta o estado legado que ela lê): 30 linhas em 10 arquivos.**
+
+| Arquivo | Linhas | Motivo |
+| --- | --- | --- |
+| `apps/ai-orchestrator/prisma/migrations/20260908120000_goal005_contact_session_human_control/migration.sql` | 24 | migration antiga (Goal005) |
+| `apps/ai-orchestrator/prisma/migrations/20261003120000_goal109_avenly_human_control_source/migration.sql` | 19, 21 | migration deste Goal: o RENAME precisa nomear o rótulo antigo e ela é imutável depois de aplicada |
+| `apps/scheduling-service/prisma/migrations/20260828175825_init/migration.sql` | 2 | migration antiga (init) |
+| `apps/scheduling-service/prisma/migrations/20260919120000_goal027_calendar_source_atendly/migration.sql` | 36, 42, 44, 52 | migration antiga (Goal027) |
+| `apps/scheduling-service/prisma/migrations/20261003120000_goal109_avenly_calendar_source/migration.sql` | 27, 29 | migration deste Goal: o RENAME precisa nomear o rótulo antigo e ela é imutável depois de aplicada |
+| `scripts/goal006-ai-migration-rehearsal.mjs` | 93 | ensaio de migration antiga: monta o estado legado que a migration antiga lê |
+| `scripts/goal009-migration-rehearsal.mjs` | 95, 222, 223 | ensaio de migration antiga: monta o estado legado que a migration antiga lê |
+| `scripts/goal010-migration-rehearsal.mjs` | 117, 205, 206, 207, 208, 209, 210 | ensaio de migration antiga: monta o estado legado que a migration antiga lê |
+| `scripts/goal027-calendar-source-migration-rehearsal.mjs` | 125, 191, 197, 198, 199, 423, 438 | ensaio de migration antiga: monta o estado legado que a migration antiga lê |
+| `scripts/goal074-human-takeover-migration-rehearsal.mjs` | 112, 250 | ensaio de migration antiga: monta o estado legado que a migration antiga lê |
+
+**Classe (ii) constante ou ramo de legado de (b), (d), (e) ou (f): 19 linhas em 11 arquivos.**
+
+| Arquivo | Linhas | Motivo |
+| --- | --- | --- |
+| `apps/bff/.env.example` | 14 | (d) documenta a leitura dos nomes antigos |
+| `apps/bff/PUBLIC_API_V1.md` | 46, 48, 50, 111 | (b) e (d) documentam a aceitação do valor e dos nomes antigos |
+| `apps/bff/src/lib/auth.ts` | 39, 40 | (d) constantes legadas dos nomes de cookie |
+| `apps/bff/src/lib/calendar-source.ts` | 8 | (b) constante legada do BFF |
+| `apps/frontend/.env.example` | 5 | (e) documenta a leitura dos nomes ATENDLY_* |
+| `apps/frontend/scripts/check-legal-config.mjs` | 16, 21 | (e) reserva ATENDLY_* no verificador .mjs e comentário dela |
+| `apps/frontend/src/config/legal-details.ts` | 31, 36 | (e) reserva ATENDLY_* e comentário dela |
+| `apps/frontend/src/data/http/BffHttpClient.ts` | 81, 94 | (d) constante e docstring do nome legado do cookie CSRF |
+| `apps/frontend/src/shared/ui/Brand.tsx` | 16, 17 | (f) chaves legadas do localStorage |
+| `apps/scheduling-service/src/modules/internal-api/routes.ts` | 116 | (b) constante legada do Scheduling |
+| `packages/public-api-contract/src/schemas.ts` | 5 | (b) constante legada do contrato |
+
+**Classe (iii) teste que prova a compatibilidade: 86 linhas em 28 arquivos.**
+
+| Arquivo | Linhas | Motivo |
+| --- | --- | --- |
+| `apps/ai-orchestrator/tests/integration/goal109-avenly-human-control-source.test.ts` | 39, 186, 198, 200, 209, 219 | prova nova do Goal109 |
+| `apps/bff/tests/customer-identity.integration.test.ts` | 131 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal018-onboarding-complete.integration.test.ts` | 25, 32, 215, 235, 309, 347 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal019-ai-activation-reconciliation.integration.test.ts` | 157 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal022-notification-center.integration.test.ts` | 84, 171 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal022-notification-engine.test.ts` | 48 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal022-notification-rules.test.ts` | 272 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal027-onboarding-issues.test.ts` | 52, 82 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal029-timezone-contract.integration.test.ts` | 104, 148 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal029-timezone-propagation.integration.test.ts` | 51 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal029-timezone-read-reconciliation.integration.test.ts` | 87 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal036-response-contract-undeclared-key.test.ts` | 38, 118 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal036-wu02-declared-fields.test.ts` | 110 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal059-whatsapp-status.integration.test.ts` | 53 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal060-integration-connect.test.ts` | 62 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal063-ai-activation.integration.test.ts` | 101 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal065-onboarding.integration.test.ts` | 58 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal067-pause-and-profile.integration.test.ts` | 81 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal073-settings-policy-and-agenda-view.integration.test.ts` | 48 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal075-customers-contract.integration.test.ts` | 39, 255 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal077-ai-activated-notification.integration.test.ts` | 77 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal109-avenly-calendar-source.test.ts` | 31, 51, 145, 168, 234, 277 | prova nova do Goal109 |
+| `apps/bff/tests/goal109-legacy-session-cookie.integration.test.ts` | 21, 29, 30, 85, 102 | prova nova do Goal109 |
+| `apps/frontend/tests/goal109-avenly-values.test.tsx` | 8, 75, 196, 203, 222, 223, 233, 241, 249, 250, 267, 285, 298, 319, 323, 331 | prova nova do Goal109 |
+| `apps/frontend/tests/goal109-csrf-cookie.test.ts` | 9, 17, 65, 66, 72 | prova nova do Goal109 |
+| `apps/frontend/tests/service-schema.test.ts` | 64 | teste existente que envia ATENDLY ao schema do contrato e passa a provar (b) |
+| `apps/scheduling-service/tests/integration/goal109-avenly-calendar-source.test.ts` | 153, 154, 157, 158, 177, 187, 210, 211, 243, 320, 328 | prova nova do Goal109 |
+| `apps/scheduling-service/tests/unit/goal029-calendar-timezone.test.ts` | 142, 147, 162, 178, 197, 220 | teste existente que envia ATENDLY à rota interna e passa a provar (b) |
+
+**Classe (iv) script que segue enviando o valor antigo por (g): 6 linhas em 4 arquivos.**
+
+| Arquivo | Linhas | Motivo |
+| --- | --- | --- |
+| `scripts/goal030-mvp-journey-rehearsal.mjs` | 1336 | mesmo papel de (g): ensaio que segue enviando ATENDLY em PATCH /v1/onboarding |
+| `scripts/goal033-authenticated-ui-rehearsal.mjs` | 1279, 1611 | (g) envia ATENDLY no gate autenticado |
+| `scripts/lib/visual-seed.mjs` | 102, 244 | (g) envia ATENDLY no visual:compare |
+| `scripts/tests/final-production-audit-legacy-regression.test.mjs` | 214 | fixture textual de teste do audit estático, sem decodificar nada; segue com o valor antigo até o 102 |
+
+**Classe (v) comentário histórico que descreve o que uma migração antiga fez: 3 linhas em 3 arquivos.**
+
+| Arquivo | Linhas | Motivo |
+| --- | --- | --- |
+| `apps/bff/PUBLIC_API_V1.md` | 107 | texto histórico do Goal027 sobre calendar.source, mantido e marcado como histórico |
+| `apps/scheduling-service/src/modules/internal-api/routes.ts` | 1945 | comentário histórico: o que o Goal027 fez nas capabilities |
+| `apps/scheduling-service/tests/unit/goal027-calendar-guard.test.ts` | 20 | comentário histórico: o que o Goal027 fez nas capabilities |
+
+### Execuções que sustentam cada contagem
+
+| Contagem | Execução |
+| --- | --- |
+| Baseline: `test:gate` 242, IA sem banco 1188 passaram e 98 pulados, Scheduling unitários 534, integração do Scheduling 145 e do BFF 477 | WU-01 (`HEAD` `27ede84`) |
+| Vermelho das provas: 30 reprovam e 22 passam de 52 | WU-01 a WU-04; a prova 7 de novo na WU-14 |
+| Vermelho das provas na rodada 2: 38 reprovam e 23 passam de 61 (os 9 testes novos da prova 4: 8 reprovam e 1 passa) | FIX-001, `schemas.ts` de `HEAD` |
+| Typecheck de `apps/scheduling-service`, `apps/ai-orchestrator`, `apps/bff` e `apps/frontend`: saída 0 | WU-05 a WU-08 (`code-v1:5dabbe93…`) |
+| `vitest run goal109` em `apps/frontend`: 2 arquivos e 21 testes, saída 0 | WU-09 (`5dabbe93…`) |
+| `test:gate`: 242 testes, `pass 242` | WU-10 (`5dabbe93…`) |
+| `validate:core`, primeira execução: saída 1, `assistant.service.test.ts` com 2 testes reprovados (`expected [ …(210) ] to have a length of 209 but got 210`) | WU-11 (`5dabbe93…`) |
+| `validate:core`: saída 0, 17 passos, 15 passaram, 2 pulados (`test:bff`, `test:health-worker`), em 102984 ms | WU-11, segunda execução (`code-v1:8c0dd57d…`, depois da `DIAG-001`) |
+| `validate:ui`: saída 0, 169 passaram, 21 pulados, 0 retentativas | WU-12 (`8c0dd57d…`); `results.json` com `expected` 169, `skipped` 21, `unexpected` 0, `flaky` 0 |
+| `validate:integration`: saída 0 em 717054 ms, 36 de 36 passos; gate autenticado 275 passaram, 0 retentativas | WU-13 (`8c0dd57d…`); `results.json` com `expected` 275, `unexpected` 0, `flaky` 0 |
+| Suíte do frontend: 149 arquivos e 1840 testes | WU-04 e WU-14 (`npx vitest run`) |
+| Os controles 1 a 7, 11 e 12 e o inventário de 143 linhas | WU-14 (rodada 1); controles 1, 11 e 12 e o inventário, agora de 144 linhas, refeitos na FIX-001 (rodada 2) |
+| `vitest run goal109-avenly-calendar-source` em `apps/bff`, contra um PostgreSQL de teste local: 23 passaram de 23 | FIX-001 (rodada 2), árvore final |
+| Typecheck de `apps/bff` depois da edição do teste: saída 0 | FIX-001 (rodada 2) |
+| `validate:core`: saída 0, 17 passos, 15 passaram, 2 pulados; suíte do frontend com 149 arquivos e 1840 testes | FIX-001 (rodada 2), depois da edição do teste e dos documentos |
+| `validate:integration`: saída 0 em 711 s, 36 de 36 passos; integração do BFF com 507 testes; gate autenticado com 275 passaram, sem retentativa nem teste instável | FIX-001 (rodada 2), depois da edição do teste e dos documentos |
+
+`DIAG-001`: a primeira execução de `validate:core` falhou porque as duas asserções "209 arquivos `.ts`" de `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` não contavam o arquivo novo `apps/bff/src/lib/calendar-source.ts`. A correção trocou 209 por 210 nas duas e atualizou os títulos, sem tocar `scripts/validate-core.mjs`, sem remover nem afrouxar asserção. Os dois resultados de `validate:core` ficam registrados acima; o primeiro não foi apagado.
+
+### Estado da árvore
+
+O `git status --porcelain=v1 -uall` da WU-14, antes e depois dos controles, tem o mesmo md5 (`87ea5ece…`) e 172 entradas: 163 modificadas e 9 novas, sem resto de controle negativo. Na rodada 2 (FIX-001), a árvore tem 175 entradas: 166 modificadas e 9 novas. As 3 a mais que na WU-14 são os 3 documentos desta seção (`DECISIONS.md`, `CURRENT_STATE.md` e este arquivo); o arquivo de teste do BFF já era uma das 9 novas. Sem resto de controle negativo. Nenhuma migration existente, nenhum CSS, nenhum arquivo de `e2e/` e nenhuma configuração de gate (`vitest.config.*`, `playwright.config.*`, `playwright.authenticated.config.ts`, `next.config.ts`) aparece como modificado. Os documentos desta WU entram por acréscimo: `docs/migration/DECISIONS.md` (D-120), `CURRENT_STATE.md` e este arquivo.
+
+Ambiente da rodada 2: `validate:integration` precisa de um PostgreSQL nativo, em loopback, com nome de banco com "test" e com a extensão `vector` (o ensaio `rehearse:goal028-release-migrations` recusa um servidor sem ela). O PostgreSQL de `C:\Program Files\PostgreSQL8` não tem `vector`; foi usado o de `AppData\Local\Programs\PostgreSQL8\pgsql`, em cluster temporário numa porta própria. Um contêiner Docker com porta mapeada não serve: o servidor reporta um endereço que não é loopback. O banco de desenvolvimento `atendly_postgres_dev` (porta 5555) não foi tocado.
+
+### Não feito
+
+O deploy real no Render e a medida da janela de D-120 (h). O texto legal com os valores reais do ambiente de deploy. Um navegador real com um cookie `atendly_session` emitido antes do deploy. A troca de nome em texto, identificador, arquivo e documentação (102). Remover o valor antigo de vez.
+
+**Nota de fechamento — review109, 2026-10-03.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima:
+
+- **Decisão.** D-120 ACCEPTED na rodada 3, sem blocker, depois de 4 blockers na rodada 1 (provas 4 e 5 incompletas, evidência a refazer e a janela de escrita) e 3 na rodada 2 (documento). A rodada 3 (FIX-001) mudou só D-120 e a seção do Goal109 de CURRENT_STATE.
+- **Gates do IA Loop na rodada 2,** reaproveitados na rodada 3 porque nenhum arquivo fora de `docs/` mudou e a impressão digital de código continua `code-v1:2d3cbafe…`. Todos com exit 0: typecheck de `apps/scheduling-service`, `apps/ai-orchestrator`, `apps/bff` e `apps/frontend` (WU-05 a WU-08), testes dirigidos do frontend (WU-09), `test:gate` (WU-10), `validate:core` (WU-11, 102479 ms), `validate:ui` (WU-12, 49089 ms) e `validate:integration` (WU-13, 716049 ms). Na rodada 3, só `git diff --check` (WU-15) rodou de novo, com exit 0. A execução de 711 s da tabela acima é a da FIX-001 da rodada 2, na mesma árvore de código.
+- **Conferência do Tech Lead.** Na rodada 2, ele reexecutou `apps/bff/tests/goal109-avenly-calendar-source.test.ts` sem banco: 18 passam e 5 de integração ficam pulados, de 23. Na rodada 3, refez o `git grep` do inventário: 90 linhas em arquivos rastreados e 54 em arquivos novos, total **144**, igual ao registrado. Conferiu também a janela de escrita contra `git show HEAD` (`internal-api/routes.ts:112`). O vermelho da baseline e os controles foram aceitos pelo registro acima, não reexecutados pelo Tech Lead.
+- **Controle 1.** O Tech Lead aceita o controle 1 como o Goal o escreve. Ele não alcança a prova 5 porque o BFF tem schema próprio, e os controles 11 e 12 a cobrem.
+- **Aceito sem prova completa.** O deploy real e a duração das janelas; uma sessão anterior ao deploy num navegador real; o texto legal com os valores reais do ambiente; os controles 2 a 7 e o vermelho das provas 1 a 3 e 5 a 8, que são da rodada 1; a contagem por arquivo da prova 2 dentro de `validate:integration`. Detalhe no [review109](reviews/109-review.md).

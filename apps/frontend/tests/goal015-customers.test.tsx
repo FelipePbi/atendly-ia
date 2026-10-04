@@ -102,7 +102,7 @@ function calendarStateFixture(overrides: Partial<CalendarState> = {}): CalendarS
       migrate: true,
     },
     integration: null,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: "America/Sao_Paulo",
     ...overrides,
   };
@@ -134,7 +134,7 @@ describe("cliente sem nome e sem telefone não vira dado inventado", () => {
     customersList.mockResolvedValue({
       items: [customerFixture({ name: null, phone: null })],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     render(
       <ShellConfigProvider>
@@ -401,7 +401,7 @@ describe("número compartilhado no cadastro exige escolha explícita", () => {
         customerFixture({ id: "c2", name: "Bruno Alves", phone: "11999990000" }),
       ],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     customersCreate.mockResolvedValue(
       customerFixture({ id: "c3", name: "Cliente Novo", phone: "11999990000" }),
@@ -445,7 +445,7 @@ describe("número compartilhado no cadastro exige escolha explícita", () => {
         customerFixture({ id: "c1", name: "Marina Duarte", phone: "11999990000" }),
       ],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
 
     const user = userEvent.setup();
@@ -475,7 +475,7 @@ describe("acessibilidade das telas novas de Clientes", () => {
         customerFixture({ id: "c2", name: null, phone: null }),
       ],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     const { container } = render(
       <ShellConfigProvider>
@@ -572,7 +572,7 @@ describe("itens de lista continuam sendo link e botão para o leitor de tela", (
         customerFixture({ id: "c2", name: "Bruno Alves" }),
       ],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     render(
       <ShellConfigProvider>
@@ -597,7 +597,7 @@ describe("itens de lista continuam sendo link e botão para o leitor de tela", (
     customersList.mockResolvedValue({
       items: [customerFixture({ id: "c2", name: "Bruno Alves" })],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     const user = userEvent.setup();
     render(

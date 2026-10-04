@@ -4,6 +4,7 @@ import { z } from "zod";
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import type { InternalRequestContext } from "../../clients/internal-http-client.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
+import { CALENDAR_SOURCE } from "../../lib/calendar-source.js";
 import { AppError } from "../../lib/errors.js";
 import { dataResponse, parseBody, parseParams } from "../../lib/http.js";
 import { requireTenantContext } from "../../lib/tenant-context.js";
@@ -78,7 +79,7 @@ export async function registerV1ServiceRoutes(
       ]);
       return dataResponse(request, {
         items,
-        source: "ATENDLY" as const,
+        source: CALENDAR_SOURCE,
         editable: calendar.capabilities.manageServices,
       });
     },

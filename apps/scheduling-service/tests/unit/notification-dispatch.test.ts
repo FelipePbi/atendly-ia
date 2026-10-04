@@ -44,7 +44,7 @@ function seedTenant(
   database.tables.calendarSettings.rows.push({
     id: tenantId,
     tenantId,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: options.timezone ?? timeZone,
   });
   if (

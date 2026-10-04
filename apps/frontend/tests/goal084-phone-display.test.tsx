@@ -78,7 +78,7 @@ function calendarFixture(): CalendarState {
       migrate: false,
     },
     integration: null,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: "America/Sao_Paulo",
   };
 }
@@ -143,7 +143,7 @@ beforeEach(() => {
   listAppointmentEvents.mockResolvedValue([]);
   listAppointmentNotifications.mockResolvedValue([]);
   customersListMemory.mockResolvedValue([]);
-  listServices.mockResolvedValue({ editable: true, items: [], source: "ATENDLY" });
+  listServices.mockResolvedValue({ editable: true, items: [], source: "AVENLY" });
 });
 
 describe("prova 5 — formatBrazilianPhone reconhece a forma nacional", () => {
@@ -173,7 +173,7 @@ describe("prova 6 — telefone nacional formatado em toda tela", () => {
     customersList.mockResolvedValue({
       items: [customerFixture()],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     render(
       <ShellConfigProvider>
@@ -205,7 +205,7 @@ describe("prova 6 — telefone nacional formatado em toda tela", () => {
         customerFixture({ id: "c3", name: null, phone: RAW }),
       ],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     render(
       <ShellConfigProvider>
@@ -256,7 +256,7 @@ describe("prova 6 — telefone nacional formatado em toda tela", () => {
     customersListCandidatesByPhone.mockResolvedValue({
       items: [customerFixture()],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     render(
       <ShellConfigProvider>

@@ -103,7 +103,7 @@ function dashboardFixture(overrides: Partial<Dashboard> = {}): Dashboard {
         calendar: {
           capabilities: calendarCapabilitiesFixture(),
           integration: null,
-          source: "ATENDLY",
+          source: "AVENLY",
           timezone: "America/Sao_Paulo",
         },
         estimatedRevenueToday: null,
@@ -183,7 +183,7 @@ describe("checklist pós-onboarding da Home", () => {
                 hoursConfigured: false,
               }),
               integration: null,
-              source: "ATENDLY",
+              source: "AVENLY",
               timezone: "America/Sao_Paulo",
             },
             estimatedRevenueToday: null,

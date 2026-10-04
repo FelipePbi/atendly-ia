@@ -94,7 +94,7 @@ function dashboardFixture(
             ...capabilities,
           },
           integration: null,
-          source: "ATENDLY",
+          source: "AVENLY",
           timezone: "America/Sao_Paulo",
         },
         estimatedRevenueToday: null,

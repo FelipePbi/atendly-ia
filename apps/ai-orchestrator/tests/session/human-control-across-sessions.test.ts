@@ -235,7 +235,7 @@ describe("controle humano entre sessoes", () => {
     await subject.sessions.assumeHumanControl({
       tenantId: TENANT,
       sessionId: takenOver.sessionId,
-      source: "ATENDLY",
+      source: "AVENLY",
       actor: "user-1",
     });
 

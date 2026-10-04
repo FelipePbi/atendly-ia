@@ -21,6 +21,11 @@
 //      expandido desde), sem o qual `SessionService.assumeHumanControl`
 //      falha com "the table HumanTakeover does not exist" na suite de
 //      persistencia — a falha que este ensaio existe para fechar.
+//   5. ultimo ensaio antes da suite de persistencia, ele tambem leva o mesmo
+//      banco ao rotulo `AVENLY` de `HumanControlSource` (Goal109). Sem isto
+//      a suite grava `AVENLY` num enum que so conhece `ATENDLY` e falha com
+//      "invalid input value for enum". O ensaio proprio daquele rename e a
+//      prova 2 do Goal109, na propria suite de integracao da IA.
 //
 // Nenhuma credencial aparece na saida: so contagens e rotulos. Sondas
 // (`probe-%`) nunca entram nas contagens de fixture.
@@ -52,6 +57,16 @@ const MIGRATION_SQL = path.join(
   "prisma",
   "migrations",
   "20260929120000_goal074_human_takeover",
+  "migration.sql",
+);
+
+const GOAL109_MIGRATION_SQL = path.join(
+  repositoryRoot,
+  "apps",
+  "ai-orchestrator",
+  "prisma",
+  "migrations",
+  "20261003120000_goal109_avenly_human_control_source",
   "migration.sql",
 );
 
@@ -309,11 +324,59 @@ async function prepareAiDurabilityTarget(target) {
   }
 }
 
+/**
+ * Leva o banco de durabilidade da IA ao rotulo `AVENLY` (Goal109). A migration
+ * daquele Goal so renomeia enquanto `ATENDLY` existe, entao reaplicar sobre
+ * banco ja alinhado nao muda nada.
+ */
+async function alignAiDurabilityTargetWithGoal109(target) {
+  const database = decodeURIComponent(
+    target.maintenance.pathname.replace(/^\//u, ""),
+  );
+  const durability = new URL(target.maintenance.href);
+  durability.pathname = `/${database}_goal004`;
+
+  const client = new Client({ connectionString: durability.href });
+  try {
+    await client.connect();
+  } catch {
+    console.log(
+      "durability target not provisioned yet — skipping the Goal109 enum rename",
+    );
+    return;
+  }
+  try {
+    const enumType = await client.query(
+      `SELECT to_regtype('"HumanControlSource"') AS present`,
+    );
+    if (!enumType.rows[0].present) {
+      console.log(
+        "durability target has no HumanControlSource type yet — skipping the Goal109 enum rename",
+      );
+      return;
+    }
+    const applied = await applyMigrationFile(client, GOAL109_MIGRATION_SQL);
+    if (applied !== true) {
+      console.error(
+        `goal074:human-takeover-migration-rehearsal FAILED — durability target rename failed applying ${GOAL109_MIGRATION_SQL}: ${applied}`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    console.log(
+      `durability target aligned with the Goal109 HumanControlSource rename: ${database}_goal004`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
 export async function main() {
   const target = rehearsalTarget(process.env);
 
   await rehearse(target);
   await prepareAiDurabilityTarget(target);
+  await alignAiDurabilityTargetWithGoal109(target);
 
   if (process.exitCode) {
     console.error(

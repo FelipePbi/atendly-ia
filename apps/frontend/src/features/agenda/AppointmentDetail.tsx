@@ -93,7 +93,7 @@ export function AppointmentDetail({ appointmentId }: { appointmentId?: string })
     appointment ? isActiveAppointmentStatus(appointment.status) : false,
   );
   // Ciclo de vida e histórico exigem fonte configurada (Goal016).
-  const lifecycleAvailable = calendar?.source === "ATENDLY";
+  const lifecycleAvailable = calendar?.source === "AVENLY";
 
   function applyLifecycle(lifecycle: AppointmentLifecycle) {
     setAppointment(

@@ -176,7 +176,7 @@ const readyState: OnboardingState = {
     name: "Studio Aurora",
     timezone: "America/Sao_Paulo",
   },
-  calendar: { integration: null, source: "ATENDLY", timezone: "America/Sao_Paulo" },
+  calendar: { integration: null, source: "AVENLY", timezone: "America/Sao_Paulo" },
   completed: false,
   completedAt: null,
   service: {

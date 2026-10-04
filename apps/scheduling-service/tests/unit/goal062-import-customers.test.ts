@@ -359,7 +359,7 @@ describe("Preço 0 da origem vira NOT_INFORMED/null, sem bloquear a análise", (
     const execution = new ImportExecutionService(database.client as never);
     const session = await seedSession(database);
     await database.client.calendarSettings.create({
-      data: { tenantId, source: "ATENDLY", timezone: "America/Sao_Paulo" },
+      data: { tenantId, source: "AVENLY", timezone: "America/Sao_Paulo" },
     });
     const snapshot = buildSnapshot({
       services: category("SERVICE", [
@@ -395,7 +395,7 @@ describe("Preço 0 da origem vira NOT_INFORMED/null, sem bloquear a análise", (
     const execution = new ImportExecutionService(database.client as never);
     const session = await seedSession(database);
     await database.client.calendarSettings.create({
-      data: { tenantId, source: "ATENDLY", timezone: "America/Sao_Paulo" },
+      data: { tenantId, source: "AVENLY", timezone: "America/Sao_Paulo" },
     });
     const snapshot = buildSnapshot({
       services: category("SERVICE", [

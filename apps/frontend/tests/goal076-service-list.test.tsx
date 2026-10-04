@@ -67,7 +67,7 @@ beforeEach(() => {
 });
 
 async function renderList(items: Service[], editable = true) {
-  serviceCatalogList.mockResolvedValue({ editable, items, source: "ATENDLY" });
+  serviceCatalogList.mockResolvedValue({ editable, items, source: "AVENLY" });
   render(
     <ShellConfigProvider>
       <ProductServicesScreen scenario="list" />
@@ -239,7 +239,7 @@ describe("§4.4 ativar e desativar", () => {
     serviceCatalogList.mockResolvedValue({
       editable: true,
       items: [service],
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     serviceCatalogUpdate.mockResolvedValue({ ...service, active: false });
     render(

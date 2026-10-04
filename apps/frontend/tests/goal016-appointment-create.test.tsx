@@ -107,7 +107,7 @@ function calendarFixture(overrides: Partial<CalendarState> = {}): CalendarState 
       migrate: false,
     },
     integration: null,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: "America/Sao_Paulo",
     ...overrides,
   };
@@ -256,12 +256,12 @@ beforeEach(() => {
         priceType: "FIXED",
       }),
     ],
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   listCustomers.mockResolvedValue({
     items: [customerFixture()],
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   getAvailability.mockResolvedValue([
     { date: ISO_TODAY, endTime: "10:00", startTime: "09:00" },
@@ -334,7 +334,7 @@ describe("identidade por customerId", () => {
     listCustomers.mockResolvedValue({
       items: [customerFixture({ id: "cus-sem-fone", name: "Bia", phone: null })],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
 
     const user = await pickService(/Corte feminino/);
@@ -403,7 +403,7 @@ describe("múltiplos serviços e o total do acordo", () => {
           priceType: "NOT_INFORMED",
         }),
       ],
-      source: "ATENDLY",
+      source: "AVENLY",
     });
 
     const user = await pickService(/Corte feminino/);

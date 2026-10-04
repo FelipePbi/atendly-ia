@@ -20,7 +20,7 @@
  * 5. cancelar é um passo: a sheet é a confirmação e um toque envia uma vez;
  * 6. remarcar mostra "Horário atual" e "Novo horário" conforme a escolha e
  *    envia o mesmo pedido de sempre, com `notifyCustomer` marcado;
- * 7. fonte que não é `ATENDLY`, ou agendamento cancelado, não oferece
+ * 7. fonte que não é `AVENLY`, ou agendamento cancelado, não oferece
  *    Remarcar, Cancelar nem as ações do menu.
  *
  * Fidelidade visual não é provada aqui: jsdom não tem layout. Ela é decidida
@@ -176,7 +176,7 @@ function calendarFixture(overrides: Partial<CalendarState> = {}): CalendarState 
       migrate: false,
     },
     integration: null,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: "America/Sao_Paulo",
     ...overrides,
   };
@@ -377,7 +377,7 @@ beforeEach(() => {
     editable: true,
     items: [],
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   statusGet.mockResolvedValue({
     accountDeletion: { dueAt: null, status: "NONE" },
@@ -841,7 +841,7 @@ describe("6. remarcar (A9)", () => {
 });
 
 describe("7. sem Remarcar, Cancelar nem ações do menu fora do que a agenda permite", () => {
-  test("fonte que não é ATENDLY não oferece Remarcar, Cancelar nem menu", async () => {
+  test("fonte que não é AVENLY não oferece Remarcar, Cancelar nem menu", async () => {
     getCalendar.mockResolvedValue(
       calendarFixture({
         capabilities: {

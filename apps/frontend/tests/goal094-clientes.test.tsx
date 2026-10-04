@@ -185,7 +185,7 @@ function calendarFixture(): CalendarState {
       migrate: true,
     },
     integration: null,
-    source: "ATENDLY",
+    source: "AVENLY",
     timezone: "America/Sao_Paulo",
   };
 }
@@ -310,14 +310,14 @@ beforeEach(() => {
   customersList.mockResolvedValue({
     items: [customerFixture()],
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   customersGet.mockResolvedValue(detailFixture());
   customersListMemory.mockResolvedValue([]);
   customersListCandidatesByPhone.mockResolvedValue({
     items: [],
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   calendarGetCalendar.mockResolvedValue(calendarFixture());
   calendarListAppointments.mockResolvedValue([]);
@@ -326,7 +326,7 @@ beforeEach(() => {
     editable: true,
     items: [],
     managedExternally: false,
-    source: "ATENDLY",
+    source: "AVENLY",
   });
   vi.setSystemTime(new Date("2026-09-29T12:00:00Z"));
   window.history.pushState({}, "", "/");
@@ -381,7 +381,7 @@ describe("Goal094 prova 1 (CL1): a linha da lista", () => {
         }),
       ],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     render(
       <ShellConfigProvider>
@@ -418,7 +418,7 @@ describe("Goal094 prova 1 (CL1): a linha da lista", () => {
         customerFixture({ id: "c9", name: null, phone: "11976543210" }),
       ],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     render(
       <ShellConfigProvider>
@@ -568,7 +568,7 @@ describe("Goal094 prova 3 (CL6): Atendimentos", () => {
         },
       ],
       managedExternally: false,
-      source: "ATENDLY",
+      source: "AVENLY",
     });
     renderProfile("atendimentos");
 

@@ -105,8 +105,8 @@ function appointmentWithCarla() {
 async function seedTenant(id: string = tenantId) {
   await prisma.calendarSettings.upsert({
     where: { tenantId: id },
-    create: { tenantId: id, source: "ATENDLY", timezone: timeZone },
-    update: { source: "ATENDLY", timezone: timeZone },
+    create: { tenantId: id, source: "AVENLY", timezone: timeZone },
+    update: { source: "AVENLY", timezone: timeZone },
   });
 }
 

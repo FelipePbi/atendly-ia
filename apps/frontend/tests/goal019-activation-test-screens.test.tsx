@@ -131,7 +131,7 @@ function onboardingFixture(): OnboardingState {
       name: "Studio Aurora",
       timezone: "America/Sao_Paulo",
     },
-    calendar: { integration: null, source: "ATENDLY", timezone: "America/Sao_Paulo" },
+    calendar: { integration: null, source: "AVENLY", timezone: "America/Sao_Paulo" },
     completed: true,
     completedAt: "2026-09-14T11:00:00.000Z",
     service: null,

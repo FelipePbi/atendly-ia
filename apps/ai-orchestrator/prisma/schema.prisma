@@ -92,7 +92,7 @@ enum CategorySource {
 /// explicar o estado, nunca para mudar a decisao.
 enum HumanControlSource {
   WHATSAPP
-  ATENDLY
+  AVENLY
   BACKFILL
 }
 
@@ -380,7 +380,7 @@ model ConversationSession {
 /// Registro durável de cada passagem de IA para humano (Goal074).
 ///
 /// `assumeHumanControl` grava uma linha aqui só na transição real (a sessão
-/// não estava em atendimento humano) e só para `WHATSAPP`/`ATENDLY`:
+/// não estava em atendimento humano) e só para `WHATSAPP`/`AVENLY`:
 /// `BACKFILL` reconstrói estado passado, não uma tomada que aconteceu agora.
 /// `releaseToAi` nunca apaga linha — o registro é histórico, não espelho do
 /// estado corrente da sessão.

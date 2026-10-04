@@ -66,7 +66,7 @@ beforeEach(() => {
   listServiceCatalog.mockResolvedValue({
     editable: true,
     items: [],
-    source: "ATENDLY",
+    source: "AVENLY",
   });
 });
 

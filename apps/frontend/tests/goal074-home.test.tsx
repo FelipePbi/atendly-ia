@@ -136,7 +136,7 @@ function dashboardFixture(overrides: Partial<Dashboard> = {}): Dashboard {
         calendar: {
           capabilities: calendarCapabilitiesFixture(),
           integration: null,
-          source: "ATENDLY",
+          source: "AVENLY",
           timezone: "America/Sao_Paulo",
         },
         estimatedRevenueToday: null,
@@ -374,7 +374,7 @@ describe("Goal074/WU-04: 'Hoje' vazio e marcador 'agora'", () => {
             calendar: {
               capabilities: calendarCapabilitiesFixture(),
               integration: null,
-              source: "ATENDLY",
+              source: "AVENLY",
               timezone: "America/Sao_Paulo",
             },
             estimatedRevenueToday: null,
@@ -431,7 +431,7 @@ describe("Goal074/WU-04: 'Hoje' vazio e marcador 'agora'", () => {
             calendar: {
               capabilities: calendarCapabilitiesFixture(),
               integration: null,
-              source: "ATENDLY",
+              source: "AVENLY",
               timezone: "America/Sao_Paulo",
             },
             estimatedRevenueToday: null,
@@ -483,7 +483,7 @@ describe("Goal074/WU-04: 'Hoje' vazio e marcador 'agora'", () => {
             calendar: {
               capabilities: calendarCapabilitiesFixture(),
               integration: null,
-              source: "ATENDLY",
+              source: "AVENLY",
               timezone: "America/Sao_Paulo",
             },
             estimatedRevenueToday: null,

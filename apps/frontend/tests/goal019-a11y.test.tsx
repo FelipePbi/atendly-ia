@@ -121,7 +121,7 @@ function onboardingFixture(): OnboardingState {
     },
     calendar: {
       integration: null,
-      source: "ATENDLY",
+      source: "AVENLY",
       timezone: "America/Sao_Paulo",
     },
     completed: true,

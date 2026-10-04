@@ -275,7 +275,7 @@ describe.skipIf(!databaseUrl)("human control across sessions against PostgreSQL"
     await sessions.assumeHumanControl({
       tenantId: TENANT,
       sessionId: takenOver.sessionId,
-      source: "ATENDLY",
+      source: "AVENLY",
       actor: "owner",
     });
 

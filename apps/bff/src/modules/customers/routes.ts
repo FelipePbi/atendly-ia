@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
+import { CALENDAR_SOURCE } from "../../lib/calendar-source.js";
 import {
   dataResponse,
   parseBody,
@@ -102,7 +103,7 @@ export async function registerV1CustomerRoutes(
     );
     return dataResponse(request, {
       ...result,
-      source: "ATENDLY" as const,
+      source: CALENDAR_SOURCE,
     });
   });
 

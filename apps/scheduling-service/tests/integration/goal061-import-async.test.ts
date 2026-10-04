@@ -186,8 +186,8 @@ function headers(tenantId: string, key?: string) {
 async function seedTenant(tenantId: string): Promise<string> {
   await prisma.calendarSettings.upsert({
     where: { tenantId },
-    create: { tenantId, source: "ATENDLY", timezone: timeZone },
-    update: { source: "ATENDLY", timezone: timeZone },
+    create: { tenantId, source: "AVENLY", timezone: timeZone },
+    update: { source: "AVENLY", timezone: timeZone },
   });
   // O leitor da origem é trocado pelo de teste: a credencial nunca é
   // decifrada, então basta que a conexão exista.

@@ -21,7 +21,7 @@ import {
   resolveIntegrationTarget,
 } from "../validate-integration.mjs";
 
-const validUrl = "postgresql://pgtest:pgtest@127.0.0.1:55432/atendly_bff_test";
+const validUrl = "postgresql://pgtest:pgtest@127.0.0.1:55432/avenly_bff_test";
 const script = path.join(
   repositoryRoot,
   "scripts",
@@ -83,17 +83,17 @@ test("derives one disposable restore database per service from the source databa
   assert.deepEqual(
     plan.services.map((service) => service.source.database),
     [
-      "atendly_bff_test_goal028_bff",
-      "atendly_bff_test_goal028_ai",
-      "atendly_bff_test_goal028_scheduling",
+      "avenly_bff_test_goal028_bff",
+      "avenly_bff_test_goal028_ai",
+      "avenly_bff_test_goal028_scheduling",
     ],
   );
   assert.deepEqual(
     plan.services.map((service) => service.restore.database),
     [
-      "atendly_bff_test_goal028_bff_restore",
-      "atendly_bff_test_goal028_ai_restore",
-      "atendly_bff_test_goal028_scheduling_restore",
+      "avenly_bff_test_goal028_bff_restore",
+      "avenly_bff_test_goal028_ai_restore",
+      "avenly_bff_test_goal028_scheduling_restore",
     ],
   );
   // O destino do restore nunca e o banco de origem: sobrescrever a origem
@@ -113,9 +113,9 @@ test("the maintenance connection never points at a service database", () => {
 });
 
 test("restoreDatabaseName keeps the disposable marker of the source database", () => {
-  const derived = restoreDatabaseName("atendly_bff_test_goal028_bff");
+  const derived = restoreDatabaseName("avenly_bff_test_goal028_bff");
 
-  assert.equal(derived, "atendly_bff_test_goal028_bff_restore");
+  assert.equal(derived, "avenly_bff_test_goal028_bff_restore");
   assert.ok(/(?:^|[_-])test(?:[_-]|$)/iu.test(derived));
 });
 
@@ -132,7 +132,7 @@ test("refuses a destination that is not recognised as disposable", () => {
   assert.throws(
     () =>
       resolveRestorePlan({
-        BFF_TEST_DATABASE_URL: "postgresql://user:pw@127.0.0.1:5432/atendly_bff",
+        BFF_TEST_DATABASE_URL: "postgresql://user:pw@127.0.0.1:5432/avenly_bff",
       }),
     (error) =>
       error instanceof RestoreRehearsalError &&
@@ -146,7 +146,7 @@ test("refuses a destination that is not loopback", () => {
     () =>
       resolveRestorePlan({
         BFF_TEST_DATABASE_URL:
-          "postgresql://user:pw@db.example.com:5432/atendly_bff_test",
+          "postgresql://user:pw@db.example.com:5432/avenly_bff_test",
       }),
     (error) =>
       error instanceof RestoreRehearsalError &&
@@ -167,7 +167,7 @@ test("the script exits 2 — never 0 and never skip — when the target is refus
 
   const notDisposable = run({
     ...process.env,
-    BFF_TEST_DATABASE_URL: "postgresql://user:pw@127.0.0.1:5432/atendly_bff",
+    BFF_TEST_DATABASE_URL: "postgresql://user:pw@127.0.0.1:5432/avenly_bff",
   });
   assert.equal(notDisposable.status, 2);
   assert.match(notDisposable.stderr, /goal028:restore-rehearsal REFUSED — /u);

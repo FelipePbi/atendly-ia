@@ -23,7 +23,7 @@ import {
 } from "../goal033-authenticated-ui-rehearsal.mjs";
 
 const validUrl =
-  "postgresql://pgtest:pgtest@127.0.0.1:55432/atendly_bff_test";
+  "postgresql://pgtest:pgtest@127.0.0.1:55432/avenly_bff_test";
 
 function refusal(environment) {
   try {
@@ -52,16 +52,16 @@ test("refuses a non-loopback host", () => {
 
 test("refuses a database that is not recognised as disposable", () => {
   const error = refusal({
-    BFF_TEST_DATABASE_URL: "postgresql://user:pw@127.0.0.1:5432/atendly_bff",
+    BFF_TEST_DATABASE_URL: "postgresql://user:pw@127.0.0.1:5432/avenly_bff",
   });
   assert.match(error.message, /not recognised as disposable/u);
 });
 
 test("accepts a loopback, disposable target and derives its own three databases", () => {
   const plan = resolveRehearsalPlan({ BFF_TEST_DATABASE_URL: validUrl });
-  assert.equal(plan.bff.database, "atendly_bff_test_goal033_bff");
-  assert.equal(plan.scheduling.database, "atendly_bff_test_goal033_scheduling");
-  assert.equal(plan.ai.database, "atendly_bff_test_goal033_ai");
+  assert.equal(plan.bff.database, "avenly_bff_test_goal033_bff");
+  assert.equal(plan.scheduling.database, "avenly_bff_test_goal033_scheduling");
+  assert.equal(plan.ai.database, "avenly_bff_test_goal033_ai");
 });
 
 // Goal058 (QA SV-01): o gate salva 45 minutos pelo formulário num serviço

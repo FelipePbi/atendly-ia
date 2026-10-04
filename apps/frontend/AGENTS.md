@@ -247,7 +247,7 @@ Para rodar só este gate, com um PostgreSQL descartável em loopback (receita
 em `docs/migration/VALIDATION_GATE.md`):
 
 ```bash
-BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" \
+BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/avenly_bff_test" \
   node scripts/goal033-authenticated-ui-rehearsal.mjs
 ```
 

@@ -6,7 +6,7 @@ import test from "node:test";
 import { repositoryRoot } from "../lib/gate.mjs";
 import { BACKFILL_MAP, rehearsalTarget } from "../goal011-ai-style-migration-rehearsal.mjs";
 
-const validUrl = "postgresql://pgtest:pgtest@127.0.0.1:55432/atendly_bff_test";
+const validUrl = "postgresql://pgtest:pgtest@127.0.0.1:55432/avenly_bff_test";
 
 test("the backfill map is the one declared in the migration headers, and CASUAL is untouched", () => {
   assert.deepEqual(BACKFILL_MAP, {
@@ -19,12 +19,12 @@ test("derives two distinct disposable databases for the AI and BFF rehearsals", 
   const ai = rehearsalTarget({ BFF_TEST_DATABASE_URL: validUrl }, "ai");
   const bff = rehearsalTarget({ BFF_TEST_DATABASE_URL: validUrl }, "bff");
 
-  assert.equal(ai.name, "atendly_bff_test_goal011_ai");
-  assert.equal(bff.name, "atendly_bff_test_goal011_bff");
+  assert.equal(ai.name, "avenly_bff_test_goal011_ai");
+  assert.equal(bff.name, "avenly_bff_test_goal011_bff");
   assert.notEqual(ai.name, bff.name);
 
-  assert.equal(ai.label, "127.0.0.1:55432/atendly_bff_test_goal011_ai");
-  assert.equal(bff.label, "127.0.0.1:55432/atendly_bff_test_goal011_bff");
+  assert.equal(ai.label, "127.0.0.1:55432/avenly_bff_test_goal011_ai");
+  assert.equal(bff.label, "127.0.0.1:55432/avenly_bff_test_goal011_bff");
   // Nenhum rotulo carrega usuario ou senha.
   assert.ok(!ai.label.includes("pgtest"));
   assert.ok(!bff.label.includes("pgtest"));
@@ -47,7 +47,7 @@ test("refuses a database that is not recognised as disposable", () => {
     [path.join(repositoryRoot, "scripts", "goal011-ai-style-migration-rehearsal.mjs")],
     {
       cwd: repositoryRoot,
-      env: { BFF_TEST_DATABASE_URL: "postgresql://user:pw@127.0.0.1:5432/atendly_bff" },
+      env: { BFF_TEST_DATABASE_URL: "postgresql://user:pw@127.0.0.1:5432/avenly_bff" },
       encoding: "utf8",
     },
   );

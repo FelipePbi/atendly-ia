@@ -10,6 +10,6 @@ export default defineConfig({
   datasource: {
     url:
       process.env.DATABASE_URL ??
-      "postgresql://app:app@localhost:5434/atendly_scheduling",
+      "postgresql://app:app@localhost:5434/avenly_scheduling",
   },
 });

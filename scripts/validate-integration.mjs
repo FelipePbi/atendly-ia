@@ -75,7 +75,7 @@ export function resolveIntegrationTarget(environment = process.env) {
   }
   if (!DISPOSABLE_NAME.test(database)) {
     throw new IntegrationTargetError(
-      `Database "${database}" is not recognised as disposable. Provision a dedicated database whose name contains "test" (for example atendly_bff_test); this gate drops and recreates rows and must never touch a shared or product database.`,
+      `Database "${database}" is not recognised as disposable. Provision a dedicated database whose name contains "test" (for example avenly_bff_test); this gate drops and recreates rows and must never touch a shared or product database.`,
     );
   }
 

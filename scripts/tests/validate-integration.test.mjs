@@ -15,7 +15,7 @@ import {
   resolveIntegrationTarget,
 } from "../validate-integration.mjs";
 
-const validUrl = "postgresql://pgtest:pgtest@127.0.0.1:55432/atendly_bff_test";
+const validUrl = "postgresql://pgtest:pgtest@127.0.0.1:55432/avenly_bff_test";
 
 function refusal(environment) {
   try {
@@ -43,7 +43,7 @@ test("refuses an inherited DATABASE_URL as a substitute", () => {
 
 test("refuses a database that is not marked as disposable", () => {
   const error = refusal({
-    BFF_TEST_DATABASE_URL: "postgresql://user:pw@127.0.0.1:5432/atendly_bff",
+    BFF_TEST_DATABASE_URL: "postgresql://user:pw@127.0.0.1:5432/avenly_bff",
   });
   assert.match(error.message, /not recognised as disposable/u);
 });
@@ -61,8 +61,8 @@ test("refuses a non-postgres protocol", () => {
 
 test("accepts a disposable loopback database without leaking credentials", () => {
   const target = resolveIntegrationTarget({ BFF_TEST_DATABASE_URL: validUrl });
-  assert.equal(target.database, "atendly_bff_test");
-  assert.equal(target.label, "127.0.0.1:55432/atendly_bff_test");
+  assert.equal(target.database, "avenly_bff_test");
+  assert.equal(target.label, "127.0.0.1:55432/avenly_bff_test");
   assert.ok(!target.label.includes("pgtest"), "label must not carry credentials");
 });
 
@@ -133,8 +133,8 @@ test("derives the Evolution rehearsal database from the validated target", () =>
 
   assert.equal(derived.hostname, "127.0.0.1");
   assert.equal(derived.port, "55432");
-  assert.equal(derived.pathname, "/atendly_bff_test_evolution");
-  assert.ok(/(?:^|[_-])test(?:[_-]|$)/iu.test("atendly_bff_test_evolution"));
+  assert.equal(derived.pathname, "/avenly_bff_test_evolution");
+  assert.ok(/(?:^|[_-])test(?:[_-]|$)/iu.test("avenly_bff_test_evolution"));
 
   const steps = integrationSteps(target);
   const evolutionSteps = steps.filter((step) =>
@@ -202,7 +202,7 @@ test("the reported bypass really moves the driver, and is now refused", () => {
   const resolved = driverDestination(exploit);
   assert.equal(resolved.host, "outside.invalid");
   assert.equal(resolved.port, "6432");
-  assert.equal(resolved.database, "atendly_bff_test");
+  assert.equal(resolved.database, "avenly_bff_test");
 
   refusal({ BFF_TEST_DATABASE_URL: exploit });
 });
@@ -213,7 +213,7 @@ test("the effective destination is compared against the validated one", () => {
       assertDriverResolvesSameDestination(validUrl, {
         host: "127.0.0.1",
         port: "9999",
-        database: "atendly_bff_test",
+        database: "avenly_bff_test",
       }),
     IntegrationTargetError,
   );
@@ -221,7 +221,7 @@ test("the effective destination is compared against the validated one", () => {
     assertDriverResolvesSameDestination(validUrl, {
       host: "127.0.0.1",
       port: "55432",
-      database: "atendly_bff_test",
+      database: "avenly_bff_test",
     }),
   );
 });
@@ -236,7 +236,7 @@ test("keeps accepting harmless connection options", () => {
     const target = resolveIntegrationTarget({
       BFF_TEST_DATABASE_URL: `${validUrl}?${query}`,
     });
-    assert.equal(target.label, "127.0.0.1:55432/atendly_bff_test");
+    assert.equal(target.label, "127.0.0.1:55432/avenly_bff_test");
   }
 });
 
@@ -268,8 +268,8 @@ test("derives the Goal004 transport rehearsal database from the validated target
 
   assert.equal(derived.hostname, "127.0.0.1");
   assert.equal(derived.port, "55432");
-  assert.equal(derived.pathname, "/atendly_bff_test_goal004");
-  assert.ok(/(?:^|[_-])test(?:[_-]|$)/iu.test("atendly_bff_test_goal004"));
+  assert.equal(derived.pathname, "/avenly_bff_test_goal004");
+  assert.ok(/(?:^|[_-])test(?:[_-]|$)/iu.test("avenly_bff_test_goal004"));
 
   const steps = integrationSteps(target);
   for (const step of steps) {
@@ -295,8 +295,8 @@ test("derives the Scheduling identity database from the validated target", () =>
 
   assert.equal(derived.hostname, "127.0.0.1");
   assert.equal(derived.port, "55432");
-  assert.equal(derived.pathname, "/atendly_bff_test_scheduling");
-  assert.ok(/(?:^|[_-])test(?:[_-]|$)/iu.test("atendly_bff_test_scheduling"));
+  assert.equal(derived.pathname, "/avenly_bff_test_scheduling");
+  assert.ok(/(?:^|[_-])test(?:[_-]|$)/iu.test("avenly_bff_test_scheduling"));
 
   const steps = integrationSteps(target);
   for (const step of steps) {

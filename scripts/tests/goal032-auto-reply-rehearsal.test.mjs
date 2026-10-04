@@ -22,11 +22,11 @@ const script = path.join(
   "goal032-auto-reply-rehearsal.mjs",
 );
 
-const validUrl = "postgresql://pgtest:pgtest@127.0.0.1:55432/atendly_ai_test";
+const validUrl = "postgresql://pgtest:pgtest@127.0.0.1:55432/avenly_ai_test";
 const notLoopbackUrl =
-  "postgresql://pgtest:pgtest@db.example.com:55432/atendly_ai_test";
+  "postgresql://pgtest:pgtest@db.example.com:55432/avenly_ai_test";
 const notDisposableUrl =
-  "postgresql://pgtest:pgtest@127.0.0.1:55432/atendly_ai";
+  "postgresql://pgtest:pgtest@127.0.0.1:55432/avenly_ai";
 
 function run(extraEnv) {
   return spawnSync(process.execPath, [script], {
@@ -69,7 +69,7 @@ test("refuses a database name that is not recognised as disposable", () => {
 test("accepts a loopback, disposable target and derives its own database", () => {
   const plan = resolveRehearsalPlan({ AI_TEST_DATABASE_URL: validUrl });
   assert.equal(plan.host, "127.0.0.1");
-  assert.equal(plan.ai.database, "atendly_ai_test_goal032");
+  assert.equal(plan.ai.database, "avenly_ai_test_goal032");
 });
 
 test("the script exits 2 — never 0 and never skip — with its own message, and prints no credential", () => {

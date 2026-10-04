@@ -10,6 +10,6 @@ export default defineConfig({
     url:
       process.env.DIRECT_DATABASE_URL?.trim() ||
       process.env.DATABASE_URL ||
-      "postgresql://user:password@localhost:5432/atendly_bff",
+      "postgresql://user:password@localhost:5432/avenly_bff",
   },
 });

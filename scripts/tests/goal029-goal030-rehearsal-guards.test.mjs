@@ -19,11 +19,11 @@ import {
   resolveRehearsalPlan as resolveGoal030Plan,
 } from "../goal030-mvp-journey-rehearsal.mjs";
 
-const validUrl = "postgresql://pgtest:pgtest@127.0.0.1:55432/atendly_bff_test";
+const validUrl = "postgresql://pgtest:pgtest@127.0.0.1:55432/avenly_bff_test";
 const notLoopbackUrl =
-  "postgresql://pgtest:pgtest@db.example.com:55432/atendly_bff_test";
+  "postgresql://pgtest:pgtest@db.example.com:55432/avenly_bff_test";
 const notDisposableUrl =
-  "postgresql://pgtest:pgtest@127.0.0.1:55432/atendly_bff";
+  "postgresql://pgtest:pgtest@127.0.0.1:55432/avenly_bff";
 
 const rehearsals = [
   {

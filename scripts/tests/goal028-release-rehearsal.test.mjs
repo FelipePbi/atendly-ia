@@ -20,7 +20,7 @@ import {
 } from "../goal028-release-rehearsal.mjs";
 import { integrationSteps, resolveIntegrationTarget } from "../validate-integration.mjs";
 
-const validUrl = "postgresql://pgtest:pgtest@127.0.0.1:55432/atendly_bff_test";
+const validUrl = "postgresql://pgtest:pgtest@127.0.0.1:55432/avenly_bff_test";
 const script = path.join(repositoryRoot, "scripts", "goal028-release-rehearsal.mjs");
 
 function run(env) {
@@ -46,17 +46,17 @@ test("derives one disposable database per service from the validated target", ()
   assert.deepEqual(
     plan.services.map((service) => service.database),
     [
-      "atendly_bff_test_goal028_bff",
-      "atendly_bff_test_goal028_ai",
-      "atendly_bff_test_goal028_scheduling",
+      "avenly_bff_test_goal028_bff",
+      "avenly_bff_test_goal028_ai",
+      "avenly_bff_test_goal028_scheduling",
     ],
   );
   assert.deepEqual(
     plan.services.map((service) => service.label),
     [
-      "127.0.0.1:55432/atendly_bff_test_goal028_bff",
-      "127.0.0.1:55432/atendly_bff_test_goal028_ai",
-      "127.0.0.1:55432/atendly_bff_test_goal028_scheduling",
+      "127.0.0.1:55432/avenly_bff_test_goal028_bff",
+      "127.0.0.1:55432/avenly_bff_test_goal028_ai",
+      "127.0.0.1:55432/avenly_bff_test_goal028_scheduling",
     ],
   );
   // Nenhum rotulo carrega usuario ou senha, e nenhum banco de ensaio anterior
@@ -75,14 +75,14 @@ test("the maintenance connection never points at a service database", () => {
 
 test("serviceDatabaseName keeps the disposable marker of the base database", () => {
   assert.equal(
-    serviceDatabaseName("atendly_bff_test", "goal028_bff"),
-    "atendly_bff_test_goal028_bff",
+    serviceDatabaseName("avenly_bff_test", "goal028_bff"),
+    "avenly_bff_test_goal028_bff",
   );
 });
 
 test("redactConnectionStrings strips credentials from anything printed", () => {
   const output = redactConnectionStrings(
-    'Datasource "db" at postgresql://pgtest:s3cret@127.0.0.1:55432/atendly_bff_test',
+    'Datasource "db" at postgresql://pgtest:s3cret@127.0.0.1:55432/avenly_bff_test',
   );
 
   assert.ok(!output.includes("s3cret"));
@@ -248,7 +248,7 @@ test("refuses to run without an explicit test database URL", () => {
 
 test("refuses a destination that is not recognised as disposable", () => {
   const outcome = run({
-    BFF_TEST_DATABASE_URL: "postgresql://user:pw@127.0.0.1:5432/atendly_bff",
+    BFF_TEST_DATABASE_URL: "postgresql://user:pw@127.0.0.1:5432/avenly_bff",
   });
 
   assert.equal(outcome.status, 2);
@@ -258,7 +258,7 @@ test("refuses a destination that is not recognised as disposable", () => {
 
 test("refuses a destination that is not loopback", () => {
   const outcome = run({
-    BFF_TEST_DATABASE_URL: "postgresql://user:pw@db.example.com:5432/atendly_bff_test",
+    BFF_TEST_DATABASE_URL: "postgresql://user:pw@db.example.com:5432/avenly_bff_test",
   });
 
   assert.equal(outcome.status, 2);

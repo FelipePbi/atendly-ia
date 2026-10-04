@@ -128,7 +128,7 @@ PGDIR=/c/tmp/atendly-pgtest
 
 "$PGBIN/initdb.exe" -D "$PGDIR/data" -U pgtest -A trust -E UTF8 --locale=C
 "$PGBIN/pg_ctl.exe" -D "$PGDIR/data" -l "$PGDIR/server.log" -o "-p 55432 -c listen_addresses=127.0.0.1 -c timezone=UTC" start
-psql -h 127.0.0.1 -p 55432 -U pgtest -d postgres -c "CREATE DATABASE atendly_bff_test;"
+psql -h 127.0.0.1 -p 55432 -U pgtest -d postgres -c "CREATE DATABASE avenly_bff_test;"
 ```
 
 O cluster usa autenticação `trust` em loopback e existe apenas para teste;
@@ -169,7 +169,7 @@ PostgreSQL; é reversível apagando esses arquivos.
 
 ```bash
 npm ci --prefix apps/bff
-BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" npm run validate:integration
+BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/avenly_bff_test" npm run validate:integration
 ```
 
 São 33 passos. A lista abaixo enumera o núcleo, na ordem em que roda — o item

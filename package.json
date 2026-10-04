@@ -2,9 +2,6 @@
   "name": "atendly-ia",
   "version": "0.1.0",
   "private": true,
-  "dependencies": {
-    "picocolors": "^1.1.1"
-  },
   "scripts": {
     "dev:frontend": "cd apps/frontend && npm run dev",
     "dev:bff": "cd apps/bff && npm run dev",

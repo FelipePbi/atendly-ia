@@ -10,7 +10,13 @@ import { env } from "../../config/env.js";
  * raiz para a derivação combinada por (chamador, audiência, uso), idêntica do
  * lado de quem chama.
  */
-export const INTERNAL_DERIVATION_PREFIX = "atendly:internal:v1";
+export const INTERNAL_DERIVATION_PREFIX = "avenly:internal:v1";
+/**
+ * Rótulo anterior à troca de marca. Só o verificador o usa, para aceitar o
+ * chamador ainda na versão anterior durante o deploy; nada deriva com ele para
+ * apresentar.
+ */
+export const LEGACY_INTERNAL_DERIVATION_PREFIX = "atendly:internal:v1";
 export const SERVICE_AUDIENCE = "scheduling-service";
 
 export type InternalUse = "command";
@@ -31,23 +37,48 @@ export function deriveInternalToken(
   audience: string,
   use: InternalUse,
 ): string {
+  return deriveWithPrefix(
+    INTERNAL_DERIVATION_PREFIX,
+    rootSecret,
+    caller,
+    audience,
+    use,
+  );
+}
+
+function deriveWithPrefix(
+  prefix: string,
+  rootSecret: string,
+  caller: string,
+  audience: string,
+  use: InternalUse,
+): string {
   return createHmac("sha256", rootSecret)
-    .update(`${INTERNAL_DERIVATION_PREFIX}:${caller}:${audience}:${use}`)
+    .update(`${prefix}:${caller}:${audience}:${use}`)
     .digest("base64url");
 }
 
-export function expectedToken(client: InternalClient): string {
+/**
+ * Credenciais aceitas para o chamador. Com valor explícito no ambiente, só ele
+ * vale; sem ele, vale o derivado com o rótulo novo e com o legado, ambos para o
+ * mesmo chamador, audiência e uso.
+ */
+export function expectedTokens(client: InternalClient): string[] {
   const explicit =
     client.callerId === "bff"
       ? env.BFF_COMMAND_TOKEN
       : env.AI_ORCHESTRATOR_COMMAND_TOKEN;
-  if (explicit) return explicit;
-  if (!env.INTERNAL_SERVICE_TOKEN) return "";
-  return deriveInternalToken(
-    env.INTERNAL_SERVICE_TOKEN,
-    client.callerId,
-    SERVICE_AUDIENCE,
-    client.use,
+  if (explicit) return [explicit];
+  if (!env.INTERNAL_SERVICE_TOKEN) return [];
+  return [INTERNAL_DERIVATION_PREFIX, LEGACY_INTERNAL_DERIVATION_PREFIX].map(
+    (prefix) =>
+      deriveWithPrefix(
+        prefix,
+        env.INTERNAL_SERVICE_TOKEN,
+        client.callerId,
+        SERVICE_AUDIENCE,
+        client.use,
+      ),
   );
 }
 
@@ -57,15 +88,22 @@ export function identifyInternalClient(
 ): InternalClient | null {
   if (!presentedToken) return null;
   return (
-    CLIENTS.find((client) => {
-      const expected = expectedToken(client);
-      return Boolean(expected) && constantTimeEquals(presentedToken, expected);
-    }) ?? null
+    CLIENTS.find((client) =>
+      matchesAny(presentedToken, expectedTokens(client)),
+    ) ?? null
   );
 }
 
 export function internalAuthConfigured(): boolean {
-  return CLIENTS.some((client) => Boolean(expectedToken(client)));
+  return CLIENTS.some((client) => expectedTokens(client).length > 0);
+}
+
+function matchesAny(presented: string, expected: readonly string[]): boolean {
+  let matched = false;
+  for (const candidate of expected) {
+    matched = constantTimeEquals(presented, candidate) || matched;
+  }
+  return matched;
 }
 
 function constantTimeEquals(left: string, right: string): boolean {

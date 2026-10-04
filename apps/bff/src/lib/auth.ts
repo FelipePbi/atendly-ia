@@ -6,9 +6,9 @@ import { assertAllowedOrigin, assertCsrfToken, isSafeMethod } from "./csrf.js";
 import { AppError } from "./errors.js";
 import {
   type ActiveSession,
-  deriveCsrfToken,
   type IssuedSession,
   loadActiveSession,
+  sessionCsrfTokenFor,
   sessionTtlSeconds,
 } from "./session.js";
 
@@ -158,8 +158,11 @@ export function sendCsrfToken(reply: FastifyReply, csrfToken: string): void {
 }
 
 /** Token de CSRF vigente de uma sessão já carregada e verificada. */
-export function sessionCsrfToken(session: { id: string }): string {
-  return deriveCsrfToken(session.id);
+export function sessionCsrfToken(session: {
+  id: string;
+  csrfTokenHash: string;
+}): string {
+  return sessionCsrfTokenFor(session);
 }
 
 export async function establishSession(

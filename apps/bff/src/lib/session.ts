@@ -31,6 +31,9 @@ export interface ActiveSession {
   expiresAt: Date;
 }
 
+const CSRF_LABEL = "avenly:csrf:";
+const LEGACY_CSRF_LABEL = "atendly:csrf:";
+
 export function sessionTtlSeconds(): number {
   return env.SESSION_TTL_HOURS * 60 * 60;
 }
@@ -51,7 +54,31 @@ export function hashCsrfToken(token: string): string {
  */
 export function deriveCsrfToken(sessionId: string): string {
   return createHmac("sha256", env.JWT_SECRET)
-    .update(`atendly:csrf:${sessionId}`)
+    .update(`${CSRF_LABEL}${sessionId}`)
+    .digest("base64url");
+}
+
+/**
+ * Sessão aberta antes da troca do rótulo tem gravado o hash do token do rótulo
+ * antigo. O token que ela recebe de volta é o do rótulo cujo hash é o gravado:
+ * o novo se bater, senão o antigo se bater. Nada é reescrito na sessão.
+ */
+export function sessionCsrfTokenFor(session: {
+  id: string;
+  csrfTokenHash: string;
+}): string {
+  const current = deriveCsrfToken(session.id);
+  if (csrfTokenMatches(current, session.csrfTokenHash)) return current;
+
+  const legacy = deriveLegacyCsrfToken(session.id);
+  if (csrfTokenMatches(legacy, session.csrfTokenHash)) return legacy;
+
+  return current;
+}
+
+function deriveLegacyCsrfToken(sessionId: string): string {
+  return createHmac("sha256", env.JWT_SECRET)
+    .update(`${LEGACY_CSRF_LABEL}${sessionId}`)
     .digest("base64url");
 }
 

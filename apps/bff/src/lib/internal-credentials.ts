@@ -14,7 +14,7 @@ import { AppError } from "./errors.js";
  *
  * O mesmo módulo existe, com a mesma derivação, do lado de quem verifica.
  */
-export const INTERNAL_DERIVATION_PREFIX = "atendly:internal:v1";
+export const INTERNAL_DERIVATION_PREFIX = "avenly:internal:v1";
 
 /** Identidade deste chamador no contrato de credenciais internas. */
 export const CALLER_ID = "bff";

@@ -5631,3 +5631,225 @@ O deploy real no Render e a medida da janela de D-120 (h). O texto legal com os 
 - **Conferência do Tech Lead.** Na rodada 2, ele reexecutou `apps/bff/tests/goal109-avenly-calendar-source.test.ts` sem banco: 18 passam e 5 de integração ficam pulados, de 23. Na rodada 3, refez o `git grep` do inventário: 90 linhas em arquivos rastreados e 54 em arquivos novos, total **144**, igual ao registrado. Conferiu também a janela de escrita contra `git show HEAD` (`internal-api/routes.ts:112`). O vermelho da baseline e os controles foram aceitos pelo registro acima, não reexecutados pelo Tech Lead.
 - **Controle 1.** O Tech Lead aceita o controle 1 como o Goal o escreve. Ele não alcança a prova 5 porque o BFF tem schema próprio, e os controles 11 e 12 a cobrem.
 - **Aceito sem prova completa.** O deploy real e a duração das janelas; uma sessão anterior ao deploy num navegador real; o texto legal com os valores reais do ambiente; os controles 2 a 7 e o vermelho das provas 1 a 3 e 5 a 8, que são da rodada 1; a contagem por arquivo da prova 2 dentro de `validate:integration`. Detalhe no [review109](reviews/109-review.md).
+
+## As credenciais derivadas passam a Avenly, do Goal110
+
+Texto do Goal110 ([D-121](DECISIONS.md), `PROPOSED`), escrito pela WU-08 da rodada 1, por acréscimo, depois da execução final. Toda contagem diz a execução que a sustenta. A recontagem da baseline, o vermelho das provas e os resultados de typecheck, `validate:core` e `validate:integration` são das WU-01 a WU-07, lidos do resultado delas no armazenamento do IA Loop (os relatórios guardados vêm truncados, e por isso as contagens finais foram medidas de novo na WU-08). Os controles do §5, os inventários do §4 e a recontagem final são da WU-08. Nenhuma seção de outro Goal foi editada.
+
+### Recontagem da baseline (WU-01, `HEAD` `23dd6e7`, antes de editar código de produção)
+
+`test:ai-orchestrator` sem banco: `Test Files 94 passed | 14 skipped (108)` e `Tests 1188 passed | 101 skipped (1289)`. `test:scheduling-service` (unitários): 39 arquivos e 534 testes. `test:bff`: passo pulado no `validate:core` ("only the integration suite exists"). `test:bff-integration`: 66 arquivos e 507 testes, igual ao review109. `test:scheduling-integration`: 20 arquivos e 152 testes. Frontend: 149 arquivos e 1840 testes e `test:gate` 242 (D-120, medidos de novo na WU-08, abaixo).
+
+### As quatro provas e o vermelho da baseline
+
+Quatro provas, 28 testes, todas em arquivos novos `goal110-…`. Nenhum teste existente foi alterado. O vermelho vem do código de produção intocado (WU-01 para as provas 1 a 3; WU-02, com `session.ts` e `auth.ts` de `HEAD`, para a prova 4). **15 reprovam e 13 passam.**
+
+| Prova | Arquivo | Testes | Na baseline | Partes que passam na baseline, e por quê |
+| --- | --- | --- | --- | --- |
+| 1, Scheduling | `apps/scheduling-service/tests/unit/goal110-internal-credential-label.test.ts` | 9 | 3 reprovam, 6 passam | Passam as que protegem o comportamento de hoje: token antigo para outra audiência, para outro uso e para chamador desconhecido (`401`), rótulo sem relação (`401`), segredo bruto (`401`) e a credencial explícita do BFF exclusiva. Reprovam "derives with the new label by default" e as duas de "identifies … by the new and the old label" (`avenly:internal:v1: expected 401 to be 200`). |
+| 2, IA, e o lado da IA da prova 3 | `apps/ai-orchestrator/tests/security/goal110-internal-credential-label.test.ts` | 11 | 5 reprovam, 6 passam | Passam: `401` para o token antigo de outro chamador, de outra audiência e sem o uso, `403` para audiência declarada divergente, `401` para o segredo bruto e "keeps the old label only in the verifier's credential module" (o rótulo antigo já está só em `lib/internal-credentials.ts`). Reprovam: a derivação com o rótulo novo por padrão, "accepts provisioning and command tokens derived with either label" (`401` em vez de `200`), "answers 403 for the provisioning token on a command route and the reverse, with either label" (`401` em vez de `403`), "keeps an explicit credential exclusive for its use" e "sends the scheduling-service/command credential with the new label". |
+| 3, BFF | `apps/bff/tests/goal110-internal-credential-label.test.ts` | 5 | 5 reprovam | Nenhuma parte passa: a derivação, os três pares captados no `fetch` simulado (ai-orchestrator/provisioning, ai-orchestrator/command, scheduling-service/command) e a varredura "has no production code in the BFF that derives with the old label" (`expected [ 'lib\internal-credentials.ts' ] to deeply equal []`). |
+| 4, CSRF, PostgreSQL real | `apps/bff/tests/goal110-csrf-label.integration.test.ts` | 3 | 2 reprovam, 1 passa | Reprovam "stores the hash of the avenly:csrf: token on login" e "refuses an old-label token on a new session" (`expected 200 to be 403`). Passa "hands an old-label session its old token on a read, without Set-Cookie or any change to the row, and accepts it on a mutation", porque o comportamento de hoje já devolve o token antigo; o teste existe para a mudança não quebrá-lo. |
+
+Depois da implementação: prova 1 `9 passed (9)`, prova 2 `11 passed (11)`, prova 3 `5 passed (5)` e prova 4 `3 passed (3)` (WU-01, WU-02 e WU-08).
+
+### Os seis controles negativos do §5 (WU-08, depois da última edição de código)
+
+Cada controle copia o arquivo, muda **uma linha**, roda a prova com `npx vitest run`, restaura o arquivo da cópia e confere o sha256. O sha256 (oito primeiros caracteres) é **igual** antes e depois em todos. A prova 4 (controles 5 e 6) rodou contra um PostgreSQL 18 nativo, temporário, em `127.0.0.1:5558`, com as migrations do BFF aplicadas. Saída real, linhas de relatório do vitest.
+
+| # | Defeito | Arquivo (sha256) | Com o defeito | Sem o defeito |
+| --- | --- | --- | --- | --- |
+| 1 | tirar o rótulo antigo da lista de candidatos do Scheduling (`[INTERNAL_DERIVATION_PREFIX].map(`) | `apps/scheduling-service/src/shared/auth/internal-credentials.ts` (`4579fe17`) | prova 1, saída 1, `3 failed \| 6 passed (9)`: "identifies bff by the new and the old label", "identifies ai-orchestrator by the new and the old label" (`atendly:internal:v1: expected 401 to be 200`) e "keeps an explicit BFF credential exclusive for the BFF" | `9 passed (9)` |
+| 2 | tirar o rótulo antigo da lista de candidatos da IA | `apps/ai-orchestrator/src/lib/internal-credentials.ts` (`aa6d5b51`) | prova 2, saída 1, `3 failed \| 8 passed (11)`: "accepts provisioning and command tokens derived with either label", "answers 403 for the provisioning token on a command route and the reverse, with either label" e "keeps an explicit credential exclusive for its use" | `11 passed (11)` |
+| 3 | derivar o token legado da IA sem o uso (`${prefix}:${caller}:${audience}` só para o rótulo antigo) | `apps/ai-orchestrator/src/lib/internal-credentials.ts` (`aa6d5b51`) | prova 2, saída 1, `4 failed \| 7 passed (11)`: os três casos do controle 2 e "answers 401 for the old-label token derived without the use" (`expected 403 to be 401`) | `11 passed (11)` |
+| 4 | voltar o prefixo do BFF para `atendly:internal:v1` | `apps/bff/src/lib/internal-credentials.ts` (`570c818a`) | prova 3, saída 1, `5 failed (5)`: a derivação, os três pares no `fetch` simulado e a varredura de `src` | `5 passed (5)` |
+| 5 | o token devolvido à sessão sempre do rótulo novo (`if (current) return current;`) | `apps/bff/src/lib/session.ts` (`907ad52a`) | prova 4, saída 1, `1 failed \| 2 passed (3)`: "hands an old-label session its old token…" (`expected 'CPBw86Cd…' to be 'EohRFGT1…'`) | `3 passed (3)` |
+| 6 | regravar `csrfTokenHash` com o hash do rótulo novo na leitura (`sessionCsrfToken` atualiza a linha de `UserSession`) | `apps/bff/src/lib/auth.ts` (`8d6562b0`) | prova 4, saída 1, `1 failed \| 2 passed (3)`: o mesmo teste, em `expected { …(8) } to deeply equal { …(8) }`, a igualdade da linha antes e depois | `3 passed (3)` |
+
+**Variante do controle 3.** O Goal diz "sem o uso (ou sem a audiência)". A tabela traz a variante "sem o uso". A variante "sem a audiência" (`${prefix}:${caller}:${use}` só para o rótulo antigo), medida à parte, reprova a prova 2 em `3 failed | 8 passed (11)`: os três casos de aceitação do controle 2, porque o token legado derivado sem a audiência deixa de ser o que a IA espera. Os dois arquivos voltaram ao sha256 `aa6d5b51` depois de cada variante.
+
+**Restauração.** Os cinco arquivos de produção tocados pelos controles (`4579fe17`, `aa6d5b51`, `570c818a`, `907ad52a` e `8d6562b0`; o da IA, `aa6d5b51`, nos controles 2 e 3) voltaram ao sha256 de antes de cada controle. O sha256 dos nove arquivos de código e de teste do Goal (cinco de produção e quatro provas) foi calculado antes e depois dos controles e é idêntico (`aa6d5b51`, `8d6562b0`, `570c818a`, `907ad52a` e `4579fe17` nos de produção; `a51f69b8`, `2af81d4d`, `f78f3eb0` e `97e51d3e` nas provas, na ordem dos arquivos do `git status`). O defeito do controle 6 grava a linha por um `import()` dinâmico, sem esperar a escrita (a função que ele altera é síncrona); a escrita terminou antes da asserção nas duas execuções, e a prova reprova na igualdade da linha, não por erro de importação.
+
+### Inventário (A) do §4: o comando de D-120 (i)
+
+Comando: `git grep -n -e '"ATENDLY"' -e "'ATENDLY'" -e 'atendly_session' -e 'atendly_csrf' -e 'ATENDLY_' -e 'atendly:brand' -- apps packages scripts`, na árvore da WU-08, com e sem `--untracked`. A saída tem **144** linhas, todas rastreadas (o Goal109 foi commitado), **todas classificadas, sem resto**: **30** em (i), **19** em (ii), **86** em (iii), **6** em (iv) e **3** em (v) (30 + 19 + 86 + 6 + 3 = 144).
+
+**Diferença em relação às 144 linhas do Goal109: nenhuma.** Comparada com a saída do mesmo comando no commit `2d1410c` (`git grep … 2d1410c -- apps packages scripts`), a lista tem os mesmos 144 pares arquivo e linha e o mesmo texto de cada linha (a comparação ignora o fim de linha). Nenhuma das 28 provas novas nem os cinco arquivos de produção alterados contém um dos seis padrões, então nada entrou nem saiu. A classificação é a do Goal109, copiada abaixo, sem mudança de classe.
+
+**Classe (i) migration antiga, que não pode mudar (ou ensaio que monta o estado legado que ela lê): 30 linhas em 10 arquivos.**
+
+| Arquivo | Linhas | Motivo |
+| --- | --- | --- |
+| `apps/ai-orchestrator/prisma/migrations/20260908120000_goal005_contact_session_human_control/migration.sql` | 24 | migration antiga (Goal005) |
+| `apps/ai-orchestrator/prisma/migrations/20261003120000_goal109_avenly_human_control_source/migration.sql` | 19, 21 | migration deste Goal: o RENAME precisa nomear o rótulo antigo e ela é imutável depois de aplicada |
+| `apps/scheduling-service/prisma/migrations/20260828175825_init/migration.sql` | 2 | migration antiga (init) |
+| `apps/scheduling-service/prisma/migrations/20260919120000_goal027_calendar_source_atendly/migration.sql` | 36, 42, 44, 52 | migration antiga (Goal027) |
+| `apps/scheduling-service/prisma/migrations/20261003120000_goal109_avenly_calendar_source/migration.sql` | 27, 29 | migration deste Goal: o RENAME precisa nomear o rótulo antigo e ela é imutável depois de aplicada |
+| `scripts/goal006-ai-migration-rehearsal.mjs` | 93 | ensaio de migration antiga: monta o estado legado que a migration antiga lê |
+| `scripts/goal009-migration-rehearsal.mjs` | 95, 222, 223 | ensaio de migration antiga: monta o estado legado que a migration antiga lê |
+| `scripts/goal010-migration-rehearsal.mjs` | 117, 205, 206, 207, 208, 209, 210 | ensaio de migration antiga: monta o estado legado que a migration antiga lê |
+| `scripts/goal027-calendar-source-migration-rehearsal.mjs` | 125, 191, 197, 198, 199, 423, 438 | ensaio de migration antiga: monta o estado legado que a migration antiga lê |
+| `scripts/goal074-human-takeover-migration-rehearsal.mjs` | 112, 250 | ensaio de migration antiga: monta o estado legado que a migration antiga lê |
+
+**Classe (ii) constante ou ramo de legado de (b), (d), (e) ou (f): 19 linhas em 11 arquivos.**
+
+| Arquivo | Linhas | Motivo |
+| --- | --- | --- |
+| `apps/bff/.env.example` | 14 | (d) documenta a leitura dos nomes antigos |
+| `apps/bff/PUBLIC_API_V1.md` | 46, 48, 50, 111 | (b) e (d) documentam a aceitação do valor e dos nomes antigos |
+| `apps/bff/src/lib/auth.ts` | 39, 40 | (d) constantes legadas dos nomes de cookie |
+| `apps/bff/src/lib/calendar-source.ts` | 8 | (b) constante legada do BFF |
+| `apps/frontend/.env.example` | 5 | (e) documenta a leitura dos nomes ATENDLY_* |
+| `apps/frontend/scripts/check-legal-config.mjs` | 16, 21 | (e) reserva ATENDLY_* no verificador .mjs e comentário dela |
+| `apps/frontend/src/config/legal-details.ts` | 31, 36 | (e) reserva ATENDLY_* e comentário dela |
+| `apps/frontend/src/data/http/BffHttpClient.ts` | 81, 94 | (d) constante e docstring do nome legado do cookie CSRF |
+| `apps/frontend/src/shared/ui/Brand.tsx` | 16, 17 | (f) chaves legadas do localStorage |
+| `apps/scheduling-service/src/modules/internal-api/routes.ts` | 116 | (b) constante legada do Scheduling |
+| `packages/public-api-contract/src/schemas.ts` | 5 | (b) constante legada do contrato |
+
+**Classe (iii) teste que prova a compatibilidade: 86 linhas em 28 arquivos.**
+
+| Arquivo | Linhas | Motivo |
+| --- | --- | --- |
+| `apps/ai-orchestrator/tests/integration/goal109-avenly-human-control-source.test.ts` | 39, 186, 198, 200, 209, 219 | prova nova do Goal109 |
+| `apps/bff/tests/customer-identity.integration.test.ts` | 131 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal018-onboarding-complete.integration.test.ts` | 25, 32, 215, 235, 309, 347 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal019-ai-activation-reconciliation.integration.test.ts` | 157 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal022-notification-center.integration.test.ts` | 84, 171 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal022-notification-engine.test.ts` | 48 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal022-notification-rules.test.ts` | 272 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal027-onboarding-issues.test.ts` | 52, 82 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal029-timezone-contract.integration.test.ts` | 104, 148 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal029-timezone-propagation.integration.test.ts` | 51 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal029-timezone-read-reconciliation.integration.test.ts` | 87 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal036-response-contract-undeclared-key.test.ts` | 38, 118 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal036-wu02-declared-fields.test.ts` | 110 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal059-whatsapp-status.integration.test.ts` | 53 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal060-integration-connect.test.ts` | 62 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal063-ai-activation.integration.test.ts` | 101 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal065-onboarding.integration.test.ts` | 58 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal067-pause-and-profile.integration.test.ts` | 81 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal073-settings-policy-and-agenda-view.integration.test.ts` | 48 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal075-customers-contract.integration.test.ts` | 39, 255 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal077-ai-activated-notification.integration.test.ts` | 77 | teste existente que envia ATENDLY como entrada do decodificador e passa a provar (b) |
+| `apps/bff/tests/goal109-avenly-calendar-source.test.ts` | 31, 51, 145, 168, 234, 277 | prova nova do Goal109 |
+| `apps/bff/tests/goal109-legacy-session-cookie.integration.test.ts` | 21, 29, 30, 85, 102 | prova nova do Goal109 |
+| `apps/frontend/tests/goal109-avenly-values.test.tsx` | 8, 75, 196, 203, 222, 223, 233, 241, 249, 250, 267, 285, 298, 319, 323, 331 | prova nova do Goal109 |
+| `apps/frontend/tests/goal109-csrf-cookie.test.ts` | 9, 17, 65, 66, 72 | prova nova do Goal109 |
+| `apps/frontend/tests/service-schema.test.ts` | 64 | teste existente que envia ATENDLY ao schema do contrato e passa a provar (b) |
+| `apps/scheduling-service/tests/integration/goal109-avenly-calendar-source.test.ts` | 153, 154, 157, 158, 177, 187, 210, 211, 243, 320, 328 | prova nova do Goal109 |
+| `apps/scheduling-service/tests/unit/goal029-calendar-timezone.test.ts` | 142, 147, 162, 178, 197, 220 | teste existente que envia ATENDLY à rota interna e passa a provar (b) |
+
+**Classe (iv) script que segue enviando o valor antigo por (g): 6 linhas em 4 arquivos.**
+
+| Arquivo | Linhas | Motivo |
+| --- | --- | --- |
+| `scripts/goal030-mvp-journey-rehearsal.mjs` | 1336 | mesmo papel de (g): ensaio que segue enviando ATENDLY em PATCH /v1/onboarding |
+| `scripts/goal033-authenticated-ui-rehearsal.mjs` | 1279, 1611 | (g) envia ATENDLY no gate autenticado |
+| `scripts/lib/visual-seed.mjs` | 102, 244 | (g) envia ATENDLY no visual:compare |
+| `scripts/tests/final-production-audit-legacy-regression.test.mjs` | 214 | fixture textual de teste do audit estático, sem decodificar nada; segue com o valor antigo até o 102 |
+
+**Classe (v) comentário histórico que descreve o que uma migração antiga fez: 3 linhas em 3 arquivos.**
+
+| Arquivo | Linhas | Motivo |
+| --- | --- | --- |
+| `apps/bff/PUBLIC_API_V1.md` | 107 | texto histórico do Goal027 sobre calendar.source, mantido e marcado como histórico |
+| `apps/scheduling-service/src/modules/internal-api/routes.ts` | 1945 | comentário histórico: o que o Goal027 fez nas capabilities |
+| `apps/scheduling-service/tests/unit/goal027-calendar-guard.test.ts` | 20 | comentário histórico: o que o Goal027 fez nas capabilities |
+
+### Inventário (B) do §4: o código de produção
+
+Comando: `git grep -n --untracked -i -e 'atendly:' -e '"atendly' -e "'atendly" -e '`atendly' -- 'apps/*/src/**' 'apps/evolution-go/**' 'packages/**' ':!**/*.test.*' ':!**/*_test.go' ':!**/tests/**' ':!**/*.md'`, na árvore da WU-08. A saída tem **40** linhas (a mesma com e sem `--untracked`: os quatro arquivos novos do Goal estão sob `tests/`, excluídos pelo comando), **todas classificadas, sem resto**: **12** em (ii), **1** em (v), **3** em (vi) e **24** em (vii) (12 + 1 + 3 + 24 = 40). Nenhuma linha está em (i), (iii) ou (iv), que são classes de migration, de teste e de script, fora do alcance do comando. **(vi)** é a constante de rótulo legado deste Goal, no máximo uma por app; **(vii)** é o literal que não é gravado como chave, não entra em cálculo e não é conferido por outro serviço.
+
+| Classe | Arquivo | Linha | Motivo |
+| --- | --- | --- | --- |
+| (vii) | `apps/ai-orchestrator/src/config/platform-whatsapp.ts` | 6 | comentário da configuração do número oficial |
+| (vii) | `apps/ai-orchestrator/src/config/platform-whatsapp.ts` | 78 | mensagem de erro de configuração |
+| (vi) | `apps/ai-orchestrator/src/lib/internal-credentials.ts` | 27 | `LEGACY_INTERNAL_DERIVATION_PREFIX` da IA, a constante de rótulo legado do verificador |
+| (vii) | `apps/ai-orchestrator/src/modules/activation-test/ActivationTestAiDriver.ts` | 245 | nome do cliente do teste de ativação; enviado como `customerName`, não é chave |
+| (vii) | `apps/ai-orchestrator/src/modules/activation-test/ActivationTestRunStore.ts` | 315 | nome do contato do teste de ativação; gravado como `displayName`, não é chave |
+| (vii) | `apps/ai-orchestrator/src/modules/scheduling-service/types.ts` | 419 | comentário que cita `AtendlyCalendarProvider` |
+| (ii) | `apps/bff/src/lib/auth.ts` | 39 | (d) constante legada do nome do cookie de sessão (D-120) |
+| (ii) | `apps/bff/src/lib/auth.ts` | 40 | (d) constante legada do nome do cookie de CSRF (D-120) |
+| (ii) | `apps/bff/src/lib/calendar-source.ts` | 8 | (b) constante legada do BFF (D-120) |
+| (vi) | `apps/bff/src/lib/session.ts` | 35 | `LEGACY_CSRF_LABEL` do BFF, o rótulo legado do token de CSRF |
+| (vii) | `apps/bff/src/modules/whatsapp/routes.ts` | 221 | prefixo de reserva do nome da instância (mais 4 bytes aleatórios), não é chave |
+| (vii) | `apps/bff/src/modules/whatsapp/routes.ts` | 431 | mesmo prefixo de reserva, no `slug`, não é chave |
+| (vii) | `apps/bff/src/routes/health.ts` | 12 | rótulo de saúde `service`, não gravado nem lido por consumidor |
+| (vii) | `apps/evolution-go/pkg/routes/routes.go` | 85 | rótulo de saúde `service`, não gravado nem lido por consumidor |
+| (vii) | `apps/frontend/src/app/(platform)/layout.tsx` | 39 | título de tela |
+| (vii) | `apps/frontend/src/app/health/route.ts` | 10 | rótulo de saúde `service`, não gravado nem lido por consumidor |
+| (vii) | `apps/frontend/src/app/layout.tsx` | 9 | título de página |
+| (ii) | `apps/frontend/src/config/legal-details.ts` | 31 | (e) comentário da reserva `ATENDLY_*` (D-120) |
+| (ii) | `apps/frontend/src/config/legal-details.ts` | 36 | (e) reserva `ATENDLY_*` (D-120) |
+| (vii) | `apps/frontend/src/content/legal/terms-of-use.pt-BR.ts` | 30 | texto legal visível |
+| (ii) | `apps/frontend/src/data/http/BffHttpClient.ts` | 81 | (d) constante legada do cookie de CSRF do frontend (D-120) |
+| (ii) | `apps/frontend/src/data/http/BffHttpClient.ts` | 94 | (d) docstring do nome legado do cookie de CSRF (D-120) |
+| (vii) | `apps/frontend/src/features/auth/AuthScreen.tsx` | 76 | `aria-label` de tela |
+| (vii) | `apps/frontend/src/features/system/SystemScreen.tsx` | 87 | texto de tela |
+| (vii) | `apps/frontend/src/shared/layout/AppShell.tsx` | 121 | título do documento |
+| (vii) | `apps/frontend/src/shared/styles/atendly-imports.css` | 3 | comentário de CSS |
+| (ii) | `apps/frontend/src/shared/ui/Brand.tsx` | 16 | (f) chave legada do `localStorage` (D-120) |
+| (ii) | `apps/frontend/src/shared/ui/Brand.tsx` | 17 | (f) chave legada do `localStorage` (D-120) |
+| (vii) | `apps/frontend/src/shared/ui/Brand.tsx` | 129 | `aria-label` de tela |
+| (vii) | `apps/frontend/src/shared/ui/RouteAnnouncer.tsx` | 28 | título de rota anunciado |
+| (vii) | `apps/frontend/src/shared/ui/RouteAnnouncer.tsx` | 31 | título do documento anunciado |
+| (vii) | `apps/scheduling-service/src/modules/appointments/appointment-series-service.ts` | 42 | comentário que cita um nome de classe |
+| (vii) | `apps/scheduling-service/src/modules/calendar/calendar-provider.ts` | 314 | comentário |
+| (vii) | `apps/scheduling-service/src/modules/calendar/provider-factory.ts` | 8 | comentário que cita um nome de classe |
+| (ii) | `apps/scheduling-service/src/modules/internal-api/routes.ts` | 113 | (b) comentário da constante legada do Scheduling (D-120) |
+| (ii) | `apps/scheduling-service/src/modules/internal-api/routes.ts` | 116 | (b) constante legada do Scheduling (D-120) |
+| (v) | `apps/scheduling-service/src/modules/internal-api/routes.ts` | 1945 | comentário histórico: o que o Goal027 fez nas capabilities (também em (A)) |
+| (vii) | `apps/scheduling-service/src/modules/migrations/import-execution-service.ts` | 987 | comentário |
+| (vi) | `apps/scheduling-service/src/shared/auth/internal-credentials.ts` | 19 | `LEGACY_INTERNAL_DERIVATION_PREFIX` do Scheduling, a constante de rótulo legado do verificador |
+| (ii) | `packages/public-api-contract/src/schemas.ts` | 5 | (b) constante legada do contrato (D-120) |
+
+**Linhas de (vii) gravadas no banco, e se alguma consulta as usa como chave.**
+
+- `ACTIVATION_TEST_CONTACT_NAME` (`ActivationTestRunStore.ts:315`, "Atendly (teste)") é gravada como `displayName` (linha 541) e como `customerName` (linha 552). **Nenhuma consulta a usa como chave:** o único `select` de `displayName` (linha 326) lê a coluna sem filtrar por ela, e `activation-test-cleanup.ts` diz que não usa `pattern` nem `displayName` para achar o que apagar.
+- `ACTIVATION_TEST_CLIENT_NAME` (`ActivationTestAiDriver.ts:245`, o mesmo texto) é enviada como `customerName` (linhas 155 e 174) e não aparece em nenhuma condição de busca.
+- O nome de reserva `"atendly"` das duas linhas de `whatsapp/routes.ts` (221 e 431) vira o prefixo do nome da instância, seguido de `_` e de 4 bytes aleatórios em hexadecimal; nenhuma busca compara o nome com esse prefixo (a busca `git grep` não acha `startsWith` nem comparação com o literal nos arquivos de produção).
+- Os rótulos de saúde (`atendly-ia-bff`, `atendly-ia-frontend`, `atendly-ia-evolution-go`) e os textos de tela não são gravados. Nenhum consumidor que a busca achou em `apps/health-worker/src` e nos scripts de gate lê o campo `service` dos três.
+
+Como nenhuma linha de (vii) é chave de consulta, **nenhuma linha volta ao Tech Lead.**
+
+### A soma de (A) e (B)
+
+(A) tem 144 linhas, (B) tem 40, e **12** estão nas duas (`apps/bff/src/lib/auth.ts:39` e `:40`, `calendar-source.ts:8`, `legal-details.ts:31` e `:36`, `BffHttpClient.ts:81` e `:94`, `Brand.tsx:16` e `:17`, `scheduling-service/.../internal-api/routes.ts:116` e `:1945`, `public-api-contract/src/schemas.ts:5`). A união tem **172** linhas distintas (144 + 40 − 12), conferida por `sort -u` sobre os pares arquivo e linha das duas saídas. É a lista de exceções que o 102 herda para o critério `git grep -i atendly`, somada, nas classes de migration, de teste e de script, à de D-120 (i). O restante de `git grep -i atendly` (texto de tela, documentação, identificadores) é do 102 e não está nesta lista.
+
+### Execuções que sustentam cada contagem
+
+| Contagem | Execução |
+| --- | --- |
+| Baseline: IA sem banco 1188 passaram e 101 pulados, Scheduling unitários 534, integração do BFF 507 (66 arquivos) e do Scheduling 152 (20 arquivos) | WU-01 (`HEAD` `23dd6e7`) |
+| Vermelho das provas 1 a 3: BFF 5 de 5, IA 5 de 11, Scheduling 3 de 9 | WU-01 |
+| Vermelho da prova 4: 2 de 3 (`session.ts` e `auth.ts` de `HEAD`) | WU-02 |
+| Depois da implementação: IA 1199, Scheduling 543, integração do BFF 512 em 67 arquivos (WU-01), depois 515 em 68 (WU-02) | WU-01 e WU-02 |
+| Typecheck dos três apps (`npx tsc --noEmit`), saída 0 | WU-03, WU-04 e WU-05 |
+| `validate:core`: saída 0, 129016 ms, 17 passos, 15 passaram, 2 pulados | WU-06 |
+| `validate:integration`: saída 0, 716226 ms, 36 de 36 passos, gate autenticado 275 passaram, 0 retentativas | WU-07 |
+| Os seis controles e as duas variantes do controle 3 | WU-08 |
+| Inventários (A) e (B), a comparação com o Goal109 e a união de 172 linhas | WU-08 |
+| `test:gate`: 242 testes, `pass 242`, 0 falha, 0 pulado (`npm run test:gate`, saída 0) | WU-08, depois dos controles |
+| Frontend: 149 arquivos e 1840 testes (`npx vitest run` em `apps/frontend`) | WU-08, depois dos controles |
+| IA sem banco: 95 arquivos passaram e 14 pulados (109), 1199 testes passaram e 101 pulados (1300) | WU-08, depois dos controles |
+| Scheduling unitários: 40 arquivos e 543 testes | WU-08, depois dos controles |
+| Integração do BFF: 68 arquivos e 515 testes, contra um PostgreSQL de teste local | WU-08, depois dos controles |
+
+Os relatórios guardados das WU-03 a WU-07 não trazem a contagem por arquivo (o do `validate:integration` traz só "passed", 36 de 36), então a integração do BFF, a IA, o Scheduling, o frontend e o `test:gate` foram medidos de novo na WU-08 sobre a mesma árvore. A WU-08 não repetiu o `validate:core` nem o `validate:integration` inteiros: eles não mudaram de causa depois da WU-07, porque a WU-08 só acrescentou documentos.
+
+### Estado da árvore
+
+O sha256 dos nove arquivos de código e de teste do Goal é o mesmo antes e depois dos controles e das variantes (ver "Restauração"). O `git status --porcelain=v1 -uall` da WU-08, antes dos documentos, tem 9 entradas: 5 modificadas (os cinco arquivos de produção) e 4 novas (as provas). Com os três documentos desta seção (`DECISIONS.md`, `CURRENT_STATE.md` e este arquivo), a árvore tem 12 entradas: 8 modificadas e 4 novas, sem resto de controle negativo. Nenhuma migration, nenhum `schema.prisma`, nenhum CSS, nenhum arquivo de `e2e/`, nenhum script, nenhum arquivo de `render.yaml`, `.github/` ou `.env.example`, nenhum arquivo do frontend e nenhuma configuração de gate mudou. Ambiente: o PostgreSQL de teste dos controles 5 e 6 e da recontagem do BFF é um cluster nativo temporário em `127.0.0.1:5558`, criado no diretório de trabalho da WU-08 e parado ao final; o banco de desenvolvimento não foi tocado.
+
+### Não feito
+
+O deploy real no Render e a medida das janelas W6 e W7 de D-121 (d). Uma sessão aberta antes do deploy num navegador real. O `validate:ui`, porque nenhum arquivo do frontend mudou. O `validate:core` e o `validate:integration` não foram repetidos na WU-08. A troca de nome em texto, identificador, arquivo e documentação (102). Remover os rótulos antigos.
+
+**Nota de fechamento — review110, 2026-10-03.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima:
+
+- **Decisão.** D-121 ACCEPTED na rodada 3, sem blocker, depois de 2 blockers na rodada 1 (dois deploys recomendados e janelas de cada ordem ausentes) e 1 na rodada 2 (janela de leitura do frontend antigo na Ordem C), todos de documento. As rodadas 2 e 3 (FIX-001) mudaram só D-121 e a seção do Goal110 de CURRENT_STATE.
+- **Gates do IA Loop na rodada 1,** reaproveitados nas rodadas 2 e 3 porque nenhum arquivo fora de `docs/` mudou. Todos com exit 0: typecheck de `apps/bff`, `apps/ai-orchestrator` e `apps/scheduling-service` (WU-03 a WU-05), `validate:core` (WU-06, 129016 ms) e `validate:integration` (WU-07, 716226 ms). Na rodada 3, só `git diff --check` (WU-09) rodou de novo, com exit 0. Snapshot aceito: 12 arquivos, hash do diff `b623aef5…`, com o sha256 das quatro provas igual ao da seção acima (`a51f69b8`, `2af81d4d`, `f78f3eb0` e `97e51d3e`).
+- **Conferência do Tech Lead.** Nas rodadas 1 e 3, ele reexecutou as provas 1 a 3: 9/9, 11/11 e 5/5. Na rodada 1, refez os inventários (A) e (B): 144 e 40 linhas, as mesmas daqui. Na rodada 2, conferiu o sha256 dos cinco arquivos de produção e das quatro provas contra esta seção. Na rodada 3, conferiu a janela da Ordem C contra `git show 2d1410c~1` (`schemas.ts:3` e `BffHttpClient.ts:226`). A prova 4, o vermelho da baseline e os seis controles foram aceitos pelo registro acima, não reexecutados pelo Tech Lead.
+- **Observação.** Na W6, o sweep de expurgo de conta (`apps/bff/src/modules/account/purge.ts`) também chama a IA e o Scheduling e recebe `401`. Não é blocker: a janela continua declarada, não medida.
+- **Aceito sem prova completa.** O deploy real e a duração das janelas W6, W7 e as de D-120 (h); uma sessão anterior ao deploy num navegador real; as credenciais explícitas reais do ambiente de deploy; a prova 4 fora de `validate:integration`, contra o cluster temporário da WU-08. Detalhe no [review110](reviews/110-review.md).

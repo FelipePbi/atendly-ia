@@ -6,6 +6,10 @@ Developer execution profile: OPUS_MEDIUM
 
 Sem linha de quadros do protótipo: nenhuma tela muda, e `docs/design-reference/` fica fora do escopo (o Goal102 já trocou o nome ali).
 
+Registros de controle editáveis: docs/migration/goals/, docs/migration/reviews/, docs/migration/MIGRATION_STATUS.md
+
+Linha acrescentada pelo supervisor em 2026-10-04, depois da parada da R1 por `GOAL_DOC_MUTATED`: o escopo (§3, §4) troca o nome no texto desses registros, e a política do harness só aceita a troca com esta declaração. O documento e os reviews deste Goal, os status, as baselines e a tabela de status continuam fora do alcance do Developer.
+
 Linha do [MASTER_PLAN](../MASTER_PLAN.md) criada na v134 pela divisão do 102, **mantida com o mesmo ID, título e posição na v135**. É a parte documental do pedido do operador de 2026-10-02.
 
 ## Baseline aceita

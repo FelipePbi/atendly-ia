@@ -7,7 +7,7 @@ import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import type { StatusView } from "@/shared/runtime/systemStatus";
 
 import { conversationState, needsAttention } from "./conversationState";
-import { requestError } from "./format";
+import { businessDaysAgo, requestError } from "./format";
 
 /**
  * As três abas do vault mais a entrada própria de ignorados. Nenhuma delas é
@@ -73,6 +73,117 @@ export function prioritizeWaiting(
     else rest.push(conversation);
   }
   return [...waiting, ...rest];
+}
+
+export type InboxGroup = {
+  conversations: Conversation[];
+  key: "all" | "earlier" | "today" | "waiting";
+  /** Texto do título do grupo; some da tela quando o quadro não o desenha. */
+  label: string;
+  labelHidden: boolean;
+};
+
+/**
+ * Os grupos da lista. Só a aba Comercial agrupa: `Aguardando você` no topo,
+ * `Hoje` e as anteriores, com o dia no fuso do negócio. As outras abas são uma
+ * lista só, sem título. As anteriores só ganham título à vista quando nada de
+ * hoje as antecede — depois de `Hoje` o quadro as continua sem título.
+ */
+export function groupInbox(
+  lens: InboxLens,
+  conversations: Conversation[],
+  timezone: string,
+): InboxGroup[] {
+  if (lens !== "commercial") {
+    return conversations.length > 0
+      ? [{ conversations, key: "all", label: "", labelHidden: true }]
+      : [];
+  }
+  const waiting: Conversation[] = [];
+  const today: Conversation[] = [];
+  const earlier: Conversation[] = [];
+  for (const conversation of conversations) {
+    if (conversationState(conversation) === "waiting-you")
+      waiting.push(conversation);
+    else if (businessDaysAgo(conversation.updatedAt, timezone) <= 0)
+      today.push(conversation);
+    else earlier.push(conversation);
+  }
+  const groups: InboxGroup[] = [];
+  if (waiting.length > 0) {
+    groups.push({
+      conversations: waiting,
+      key: "waiting",
+      label: "Aguardando você",
+      labelHidden: false,
+    });
+  }
+  if (today.length > 0) {
+    groups.push({
+      conversations: today,
+      key: "today",
+      label: "Hoje",
+      labelHidden: false,
+    });
+  }
+  if (earlier.length > 0) {
+    groups.push({
+      conversations: earlier,
+      key: "earlier",
+      label: "Anteriores",
+      labelHidden: today.length > 0 || waiting.length === 0,
+    });
+  }
+  return groups;
+}
+
+/**
+ * Contador de atenção da aba Comercial. Na aba Comercial sem busca ele sai da
+ * própria lista (`own`); nas outras abas e com a busca ativa vem de uma leitura
+ * de `category=COMMERCIAL` com o mesmo teto e o mesmo intervalo de atualização.
+ * `null` enquanto essa leitura não respondeu, ou quando falhou: sem número, em
+ * vez de um zero que ninguém calculou.
+ */
+export function useCommercialAttention(
+  own: Conversation[] | null,
+  ownReady: boolean,
+): number | null {
+  const [count, setCount] = useState<number | null>(null);
+  const [remembered, setRemembered] = useState<number | null>(null);
+  const enabled = own === null;
+  const ownCount =
+    own !== null && ownReady
+      ? own.filter((item) => needsAttention(conversationState(item))).length
+      : null;
+  if (ownCount !== null && ownCount !== remembered) setRemembered(ownCount);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const controller = new AbortController();
+    const load = async () => {
+      try {
+        const items = await getProductServices().conversations.list(
+          lensQuery("commercial", ""),
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
+        setCount(
+          items.filter((item) => needsAttention(conversationState(item)))
+            .length,
+        );
+      } catch {
+        /* sem leitura, sem contador */
+      }
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), refreshIntervalMs);
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+    };
+  }, [enabled]);
+
+  return (enabled ? count : ownCount) ?? remembered;
 }
 
 export type InboxQueryResult = {

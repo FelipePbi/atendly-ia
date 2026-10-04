@@ -2,21 +2,26 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 
 import { Icon } from "@/shared/icons/Icon";
+import { ListDetailEmpty } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { useWideLayout } from "@/shared/layout/useWideLayout";
+import { formatBrazilianPhone } from "@/shared/phone";
+import { useProductRuntime } from "@/shared/runtime/ProductRuntime";
 import { useSystemStatus } from "@/shared/runtime/systemStatus";
 import { StatePanel } from "@/shared/ui/States";
 
 import { ConversationLoading } from "./ConversationLoading";
 import { ConversationRow } from "./ConversationRow";
-import { conversationState } from "./conversationState";
+import { DEFAULT_BUSINESS_TIMEZONE } from "./format";
 import {
+  groupInbox,
   type InboxLens,
-  inboxLimit,
   inboxTabs,
   lensLabels,
+  useCommercialAttention,
   useInboxConversations,
   useNoWhatsappProbe,
 } from "./inboxLenses";
@@ -46,11 +51,9 @@ function InboxPending() {
   });
 
   return (
-    <div className="conversation-list-page">
+    <div className="conversation-list-page is-inbox">
       <header className="conversation-page-header">
-        <div>
-          <h1>Conversas</h1>
-        </div>
+        <h1>Conversas</h1>
       </header>
       <section
         aria-busy="true"
@@ -118,15 +121,36 @@ function NoWhatsappState() {
 /**
  * A inbox: três abas do vault (Comercial / Não classificadas / Pessoal) mais a
  * entrada própria de ignorados, todas servidas pelo backend por `category` e
- * `ignored`, com a busca viajando por `search` junto da aba corrente.
+ * `ignored`, com a busca viajando por `search` junto da aba corrente. A busca
+ * abre pelo botão de lupa do cabeçalho e a lente de ignorados só existe nela.
+ *
+ * De 1024 px em diante a lista ocupa uma coluna e o painel "Selecione uma
+ * conversa" fica ao lado (D-103, D-126). O invólucro e a coluna da lista são os
+ * mesmos nós nas duas faixas, e aba, termo e busca aberta moram acima da troca:
+ * cruzar a largura só liga ou desliga o painel. O vazio conectado (C4) e o C5 não
+ * têm painel.
  *
  * Declara `useShellConfig` uma vez; é o único ramo de `ConversationInbox` com abas.
  */
 function InboxWithTabs() {
+  const wide = useWideLayout();
+  const { whatsapp, whatsappView } = useSystemStatus();
   const [lens, setLens] = useState<InboxLens>("commercial");
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const { session } = useProductRuntime();
+  const timezone =
+    session?.businessProfile?.timezone ?? DEFAULT_BUSINESS_TIMEZONE;
   const { attention, conversations, error, loading, reload, searching } =
     useInboxConversations(lens, search);
+  const term = search.trim();
+  const commercialAttention = useCommercialAttention(
+    lens === "commercial" && !term ? conversations : null,
+    !loading && !error,
+  );
+  const searchInput = useRef<HTMLInputElement | null>(null);
+  const searchToggle = useRef<HTMLButtonElement | null>(null);
+  const searchPanelId = useId();
 
   useShellConfig({
     active: "conversas",
@@ -136,52 +160,93 @@ function InboxWithTabs() {
     title: "Conversas",
   });
 
-  const waiting = conversations.filter(
-    (item) => conversationState(item) === "waiting-you",
-  ).length;
-  const term = search.trim();
+  useEffect(() => {
+    if (searchOpen) searchInput.current?.focus();
+  }, [searchOpen]);
+
+  const closeSearch = () => {
+    setSearch("");
+    setSearchOpen(false);
+    if (lens === "ignored") setLens("commercial");
+    searchToggle.current?.focus();
+  };
+
+  const groups = groupInbox(lens, conversations, timezone);
   const showRows = !loading && !error && conversations.length > 0;
   const emptyTab = !loading && !error && conversations.length === 0 && !term;
   const noResults =
     !loading && !error && conversations.length === 0 && Boolean(term);
+  const note = lensNotes[lens];
+  const connectedEmpty =
+    emptyTab && lens === "commercial" && whatsappView === "active";
+  const split = wide && !connectedEmpty;
+  const connectedPhone = whatsapp?.phoneNumber
+    ? formatBrazilianPhone(whatsapp.phoneNumber, "plus")
+    : null;
 
-  return (
-    <div className="conversation-list-page">
+  const inbox = (
+    <div
+      className={clsx(
+        "conversation-list-page is-inbox",
+        connectedEmpty && "is-connected-empty",
+      )}
+    >
       <header className="conversation-page-header">
-        <div>
-          <h1>Conversas</h1>
-          <p>
-            Encontre mensagens recentes e priorize quem precisa do seu
-            atendimento.
-          </p>
-        </div>
-        {!loading && lens === "commercial" && (
-          <span className="conversation-page-summary">
-            <Icon name={waiting > 0 ? "alert" : "info"} />
-            {waiting > 0
-              ? `${waiting} aguardando você nesta aba`
-              : "Nenhuma pendência humana nesta aba"}
+        <h1>Conversas</h1>
+        <button
+          aria-controls={searchOpen ? searchPanelId : undefined}
+          aria-expanded={searchOpen}
+          aria-label="Buscar conversas"
+          className="conversation-search-toggle"
+          onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
+          ref={searchToggle}
+          type="button"
+        >
+          <span className="conversation-search-toggle-disc">
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="20"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.75"
+              viewBox="0 0 24 24"
+              width="20"
+            >
+              {searchOpen ? (
+                <path d="M6 6l12 12M18 6L6 18" />
+              ) : (
+                <>
+                  <circle cx="11" cy="11" r="6.5" />
+                  <path d="M20 20l-4.2-4.2" />
+                </>
+              )}
+            </svg>
           </span>
-        )}
+        </button>
       </header>
 
-      <section className="conversation-toolbar" aria-label="Busca e abas">
-        <div className="conversation-search">
-          <label className="sr-only" htmlFor="conversation-search">
-            Buscar por nome ou telefone
-          </label>
-          <Icon name="search" />
-          <input
-            className="input"
-            id="conversation-search"
-            type="search"
-            placeholder="Buscar por nome ou telefone"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </div>
-        <InboxTabs lens={lens} onSelect={setLens} />
-        <div className="conversation-lens-extra">
+      {searchOpen && (
+        <div className="conversation-search-panel" id={searchPanelId}>
+          <div className="conversation-search">
+            <label className="sr-only" htmlFor="conversation-search">
+              Buscar por nome ou telefone
+            </label>
+            <Icon name="search" />
+            <input
+              className="input"
+              id="conversation-search"
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") closeSearch();
+              }}
+              placeholder="Buscar por nome ou telefone"
+              ref={searchInput}
+              type="search"
+              value={search}
+            />
+          </div>
           <button
             aria-pressed={lens === "ignored"}
             className={clsx(
@@ -195,9 +260,15 @@ function InboxWithTabs() {
             Ignorados
           </button>
         </div>
-      </section>
+      )}
 
-      <p className="conversation-lens-note">{lensNotes[lens]}</p>
+      <InboxTabs
+        attention={commercialAttention}
+        lens={lens}
+        onSelect={setLens}
+      />
+
+      {note && <div className="conversation-lens-note">{note}</div>}
 
       <section
         aria-busy={loading || undefined}
@@ -205,24 +276,12 @@ function InboxWithTabs() {
         className={clsx(
           "conversation-list-surface",
           (loading || error || conversations.length === 0) &&
+            !connectedEmpty &&
             "conversation-list-state",
-          emptyTab && "conversation-empty-surface",
+          emptyTab && !connectedEmpty && "conversation-empty-surface",
         )}
         role="tabpanel"
       >
-        {showRows && (
-          <div className="conversation-list-meta">
-            <strong>{lensLabels[lens]}</strong>
-            <span>
-              {conversations.length === inboxLimit
-                ? `${inboxLimit} conversas mais recentes`
-                : `${conversations.length} ${
-                    conversations.length === 1 ? "conversa" : "conversas"
-                  }`}
-            </span>
-          </div>
-        )}
-
         {loading && searching && (
           <p className="conversation-searching" role="status">
             Buscando conversas em {lensLabels[lens]}…
@@ -247,7 +306,9 @@ function InboxWithTabs() {
           </p>
         )}
 
-        {emptyTab && (
+        {connectedEmpty && <ConnectedEmpty phone={connectedPhone} />}
+
+        {emptyTab && !connectedEmpty && (
           <StatePanel
             actionLabel="Atualizar lista"
             description={emptyStates[lens].description}
@@ -258,30 +319,110 @@ function InboxWithTabs() {
         )}
 
         {showRows &&
-          conversations.map((conversation) => (
-            <ConversationRow
-              conversation={conversation}
-              key={conversation.id}
-            />
+          groups.map((group, index) => (
+            <div
+              className={clsx(
+                "conversation-group",
+                `is-${group.key}`,
+                group.key === "earlier" &&
+                  group.labelHidden &&
+                  index > 0 &&
+                  "is-continued",
+              )}
+              key={group.key}
+            >
+              {group.label && (
+                <h2
+                  className={clsx(
+                    "conversation-group-label",
+                    group.labelHidden && "sr-only",
+                  )}
+                >
+                  {group.label}
+                </h2>
+              )}
+              {group.conversations.map((conversation) => (
+                <ConversationRow
+                  conversation={conversation}
+                  key={conversation.id}
+                  timezone={timezone}
+                />
+              ))}
+            </div>
           ))}
       </section>
+    </div>
+  );
+
+  return (
+    <div
+      className={
+        split ? "list-detail conversation-list-detail" : "list-detail-flat"
+      }
+    >
+      <div
+        aria-label={split ? "Conversas" : undefined}
+        className="list-detail-list conversation-list-column"
+        role={split ? "complementary" : undefined}
+      >
+        {inbox}
+      </div>
+      {split && (
+        <div className="list-detail-panel conversation-detail-panel">
+          <ListDetailEmpty>Selecione uma conversa</ListDetailEmpty>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** C4: o vazio desenhado com os elementos do chat e a pílula de conexão. */
+function ConnectedEmpty({ phone }: { phone: string | null }) {
+  return (
+    <div className="conversation-connected-empty">
+      <div aria-hidden="true" className="conversation-connected-art">
+        <span className="conversation-connected-bubble is-left" />
+        <span className="conversation-connected-bubble is-right">
+          <span />
+          <span />
+          <span />
+        </span>
+      </div>
+      <div className="conversation-connected-copy">
+        <h2>
+          Quando alguém falar com você pelo WhatsApp, a conversa aparecerá aqui.
+        </h2>
+        <p>
+          A IA responde clientes automaticamente e avisa quando precisar de
+          você.
+        </p>
+      </div>
+      <span className="conversation-connected-pill">
+        <span aria-hidden="true" className="conversation-connected-dot" />
+        {phone ? `Conectado · ${phone}` : "Conectado"}
+      </span>
     </div>
   );
 }
 
 /**
- * As três abas do vault. Roving tabindex: a aba corrente recebe o foco pelo
- * Tab e as setas andam entre elas — teclado sem depender de cor para saber
- * onde se está.
+ * As três abas do vault, sublinhadas como no quadro. Roving tabindex: a aba
+ * corrente recebe o foco pelo Tab e as setas andam entre elas — teclado sem
+ * depender de cor para saber onde se está. O contador âmbar de Comercial conta
+ * só quem exige atenção e some em zero; o texto acessível dele é a descrição
+ * da aba, para o nome dela continuar sendo só "Comercial".
  */
 function InboxTabs({
+  attention,
   lens,
   onSelect,
 }: {
+  attention: number | null;
   lens: InboxLens;
   onSelect: (lens: InboxLens) => void;
 }) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
+  const countNoteId = useId();
   const current = inboxTabs.findIndex((tab) => tab.id === lens);
   const focusable = current === -1 ? 0 : current;
 
@@ -291,51 +432,80 @@ function InboxTabs({
       className="conversation-tabs"
       role="tablist"
     >
-      {inboxTabs.map((tab, index) => (
-        <button
-          aria-selected={lens === tab.id}
-          className={clsx(
-            "chip conversation-tab",
-            lens === tab.id && "is-active",
-          )}
-          key={tab.id}
-          onClick={() => onSelect(tab.id)}
-          onKeyDown={(event) => {
-            const step =
-              event.key === "ArrowRight"
-                ? 1
-                : event.key === "ArrowLeft"
-                  ? -1
-                  : 0;
-            if (!step) return;
-            event.preventDefault();
-            const next = (index + step + inboxTabs.length) % inboxTabs.length;
-            onSelect(inboxTabs[next].id);
-            refs.current[next]?.focus();
-          }}
-          ref={(node) => {
-            refs.current[index] = node;
-          }}
-          role="tab"
-          tabIndex={index === focusable ? 0 : -1}
-          type="button"
-        >
-          {tab.label}
-        </button>
-      ))}
+      {inboxTabs.map((tab, index) => {
+        const counted = tab.id === "commercial" && Boolean(attention);
+        return (
+          <button
+            aria-describedby={counted ? countNoteId : undefined}
+            aria-selected={lens === tab.id}
+            className={clsx("conversation-tab", lens === tab.id && "is-active")}
+            key={tab.id}
+            onClick={() => onSelect(tab.id)}
+            onKeyDown={(event) => {
+              const step =
+                event.key === "ArrowRight"
+                  ? 1
+                  : event.key === "ArrowLeft"
+                    ? -1
+                    : 0;
+              if (!step) return;
+              event.preventDefault();
+              const next = (index + step + inboxTabs.length) % inboxTabs.length;
+              onSelect(inboxTabs[next].id);
+              refs.current[next]?.focus();
+            }}
+            ref={(node) => {
+              refs.current[index] = node;
+            }}
+            role="tab"
+            tabIndex={index === focusable ? 0 : -1}
+            type="button"
+          >
+            {tab.label}
+            {counted && (
+              <>
+                <span aria-hidden="true" className="conversation-tab-count">
+                  {attention}
+                </span>
+                <span hidden id={countNoteId}>
+                  {attention} aguardando você
+                </span>
+              </>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-const lensNotes: Record<InboxLens, string> = {
-  commercial:
-    "Atendimento do negócio. Quem está aguardando você aparece primeiro.",
+const lensNotes: Record<InboxLens, ReactNode> = {
+  commercial: null,
   ignored:
     "A IA não usa estas conversas: o conteúdo não vira contexto e o histórico anterior deixa de ser contexto. As mensagens continuam aqui.",
-  personal:
-    "A IA está desativada nestas sessões. Nenhuma resposta automática é enviada.",
+  personal: (
+    <>
+      <svg
+        aria-hidden="true"
+        fill="none"
+        height="18"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        viewBox="0 0 24 24"
+        width="18"
+      >
+        <path d="M9 6v12M15 6v12" />
+      </svg>
+      <span>
+        <strong>IA desativada.</strong> Ela não responde nem usa estas
+        conversas. Elas ficam fora dos seus números.
+      </span>
+    </>
+  ),
   unclassified:
-    "A plataforma ainda não separou estas conversas entre comercial e pessoal.",
+    "Ainda não dá para saber se são clientes ou pessoais. A IA só responde quando a intenção fica clara — ou você move a conversa.",
 };
 
 const emptyStates: Record<InboxLens, { description: string; title: string }> = {

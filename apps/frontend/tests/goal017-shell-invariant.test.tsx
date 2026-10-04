@@ -163,6 +163,7 @@ describe("ShellConfigProvider + Inbox de conversas não excede a profundidade de
     await user.click(screen.getByRole("tab", { name: "Não classificadas" }));
     await user.click(screen.getByRole("tab", { name: "Pessoal" }));
     await user.click(screen.getByRole("tab", { name: "Comercial" }));
+    await user.click(screen.getByRole("button", { name: "Buscar conversas" }));
     await user.click(screen.getByRole("button", { name: "Ignorados" }));
     await user.click(screen.getByRole("tab", { name: "Comercial" }));
     await user.type(

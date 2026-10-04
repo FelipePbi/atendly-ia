@@ -1,6 +1,8 @@
 import { BffHttpError, type Conversation } from "@/data";
 import { extractPhoneDigits, formatBrazilianPhone } from "@/shared/phone";
 
+import { handoffReasonCopy } from "./conversationState";
+
 /** Nome da pessoa quando o contato já tem um; telefone formatado quando não. */
 export function conversationLabel(conversation: Conversation): string {
   return (
@@ -12,7 +14,7 @@ export function conversationLabel(conversation: Conversation): string {
 export function initials(value: string): string {
   const result = value
     .split(/\s+/)
-    .filter(Boolean)
+    .filter((part) => /^[\p{L}\p{N}]/u.test(part))
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("");
@@ -37,6 +39,94 @@ export function formatRelativeTime(value: string): string {
     day: "2-digit",
     month: "short",
   }).format(date);
+}
+
+export const DEFAULT_BUSINESS_TIMEZONE = "America/Sao_Paulo";
+
+/** Telefone no formato do quadro de Conversas (`+55 11 97654-3210`). */
+export function formatInboxPhone(value: string): string {
+  return formatBrazilianPhone(value, "plus") || formatPhone(value);
+}
+
+/** Tempo de espera de quem aguarda a pessoa: `há 12 min`, `há 2 h`, `há 3 d`. */
+export function formatWaitingTime(
+  value: string,
+  now: number = Date.now(),
+): string {
+  const elapsed = now - new Date(value).getTime();
+  if (!Number.isFinite(elapsed) || elapsed < 60_000) return "agora";
+  if (elapsed < 3_600_000) return `há ${Math.floor(elapsed / 60_000)} min`;
+  if (elapsed < 86_400_000) return `há ${Math.floor(elapsed / 3_600_000)} h`;
+  return `há ${Math.floor(elapsed / 86_400_000)} d`;
+}
+
+/** Dia do instante no fuso do negócio, como `YYYY-MM-DD`. */
+function businessDay(instant: number | string, timezone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: timezone,
+    year: "numeric",
+  }).format(new Date(instant));
+}
+
+/** Quantos dias do negócio separam o instante de agora (0 = hoje). */
+export function businessDaysAgo(
+  value: string,
+  timezone: string,
+  now: number = Date.now(),
+): number {
+  if (!Number.isFinite(new Date(value).getTime())) return 0;
+  return Math.round(
+    (Date.parse(`${businessDay(now, timezone)}T00:00:00Z`) -
+      Date.parse(`${businessDay(value, timezone)}T00:00:00Z`)) /
+      86_400_000,
+  );
+}
+
+/**
+ * Horário de uma linha da lista, no fuso do negócio: hora no dia de hoje,
+ * `ontem`, o dia da semana abreviado até seis dias atrás e `DD/MM` depois.
+ */
+export function formatInboxTime(
+  value: string,
+  timezone: string,
+  now: number = Date.now(),
+): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const days = businessDaysAgo(value, timezone, now);
+  if (days <= 0) return formatBusinessTime(value, timezone);
+  if (days === 1) return "ontem";
+  if (days < 7) {
+    return new Intl.DateTimeFormat("pt-BR", {
+      timeZone: timezone,
+      weekday: "short",
+    })
+      .format(date)
+      .replace(/\.$/, "");
+  }
+  const [, month = "--", day = "--"] = businessDay(value, timezone).split("-");
+  return `${day}/${month}`;
+}
+
+/**
+ * O motivo curto da pílula `Aguardando você · motivo`. Só existe quando
+ * `handoffReasonCopy` tem texto legível; o texto que o pipeline gravou entra
+ * como veio, e mídia que a IA não trata ganha uma frase curta.
+ */
+export function waitingReasonLabel(reason: string | null): string | null {
+  if (!handoffReasonCopy(reason)) return null;
+  const value = reason?.trim() ?? "";
+  if (value === "OWNER_TAKEOVER") return null;
+  const normalized = value.toLocaleLowerCase("pt-BR");
+  if (
+    normalized.includes("image_received") ||
+    normalized.includes("suportada")
+  ) {
+    return "enviou algo que a IA não trata";
+  }
+  return value;
 }
 
 export function formatMessageTime(value: string): string {

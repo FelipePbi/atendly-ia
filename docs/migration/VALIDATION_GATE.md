@@ -6329,3 +6329,113 @@ A única mudança de CSS é `display: contents` em `.list-detail-flat`, `.list-d
 - **Conferência do Tech Lead na rodada 2.** Os testes `goal112`, `goal088` e `goal105`: 6 arquivos e 107 testes passando. O `visual:compare` dos 12 quadros nos 4 devices, refeito num PostgreSQL descartável (porta 55441, com `prisma migrate deploy`) contra a árvore final e uma cópia da base `f2ba7c5` tirada com `git archive`: a porcentagem contra o protótipo é igual nos 48 pares e bate com a tabela acima; as capturas do app antes e depois (`sharp`, limiar 30) dão 0 pixel em 46 pares, 4 pixels em M1 desktop e 1 pixel em S4 tablet paisagem. Os `side-by-side.png` de 10 pares foram abertos (CL4 nos 4 devices, CL5 mobile, S4 mobile, I2 tablet retrato, A9 mobile, A6 tablet paisagem e N1 mobile); os outros 38, só por pixel. A diferença com a contagem do Developer (35 pares idênticos e 13 com 2 a 61 pixels) é de método: o Developer comparou sem limiar.
 - **Aceito sem prova completa.** Os três controles negativos vêm da execução do Developer e não foram refeitos pelo Tech Lead. O teste instável de onboarding não foi investigado.
 - **Ambiente.** Na rodada 1, o banco de desenvolvimento do scheduling-service do operador estava sem a migration do enum `CalendarSource` (D-120). Ninguém a aplicou ali: a rodada 2 e o review usaram bancos descartáveis. Detalhe no [review112](reviews/112-review.md).
+
+## A lista de Conversas igual ao protótipo, do Goal113
+
+Texto do Goal113 (decisão [D-127](DECISIONS.md), `PROPOSED`), escrito na rodada 1 e refeito nas rodadas 2, 3, 4 e 5 (FIX-001) contra os blockers do review113. Toda contagem diz a execução que a sustenta; os números abaixo são os da **rodada 5**, sobre a árvore final (a última edição de código foi a classe do invólucro, o CSS da coluna e uma asserção de teste, todos da rodada 5), e não foram copiados de rodada anterior.
+
+### O que a rodada 5 mudou (FIX-001, blocker do review113 da rodada 4)
+
+- Coluna da lista em 1024 px e em 1366 px: `ConversationInbox.tsx` põe a classe `conversation-list-detail` no invólucro dividido (`list-detail conversation-list-detail`), e `avenly-conversations.css` declara `grid-template-columns: 381px minmax(0, 1fr)` só nessa combinação. O quadro usa `width:380px` mais `border-right:1px` em `content-box`, ou seja, 381 px; a regra compartilhada `.list-detail` (380 px com a borda dentro) não foi tocada, e Clientes, Serviços e Configurações seguem como estavam. Teste: `goal113-conversas-composicao` afirma a classe no invólucro dividido.
+- Conferido por pixel (linha y=600, cor da borda `#E5DED4`, protótipo e app): divisor em x=612 no desktop e x=380 na paisagem, igual nos dois lados, nos quatro pares medidos (C1 desktop, C1 paisagem, C2 desktop e C3 paisagem); os demais pares usam a mesma regra. `Posso confi…` trunca igual ao quadro em C1 desktop (lido na captura).
+- O deslocamento de 1 px abaixo da faixa de abas **não sumiu** com a coluna de 381 px. Medido por pixel: em C2 desktop e em C2 e C3 paisagem, a caixa do aviso começa na mesma linha (133) no quadro e no app, e o texto do aviso e tudo abaixo dele ficam 1 px mais baixos no app (texto em 167 no quadro e 168 no app em C2 desktop e paisagem; linhas abaixo, 236 e 237). O CSS do aviso (`margin 16px … 6px`, `padding 12px 14px`, `13px/1.45`) é o do quadro; não isolei a causa. Continua nas divergências que restam.
+
+### O que a rodada 4 mudou (FIX-001, blockers do review113 da rodada 3)
+
+- Horário da linha (`.conversation-row.is-inbox .conversation-row-time`): ganhou `align-self: baseline`. A regra base `.conversation-row-time` declara `align-self: start`, e o override da lista de entrada não a desfazia, então o horário saía da linha de base do nome (15 px) e ficava 2 px acima do quadro, que alinha por `align-items: baseline`. Conferido por pixel (faixas de tinta da coluna do horário, protótipo contra app, na execução final): em C1, o topo de cada horário coincide nos quatro devices (mobile 155 / 250 / 386; retrato 179 / 274 / 410; paisagem e desktop 175 / 270 / 406 / 502, e 593 no desktop). Em C2 e C3 os horários coincidem em mobile e retrato, e em C3 desktop (305 / 390). Em C2 desktop e em C2 e C3 paisagem, o conteúdo abaixo da faixa de abas (nota, linhas, horários) fica 1 px mais baixo no app, e nesses quadros a faixa de abas não tem o contador da Comercial (divergência 4); não verifiquei se uma coisa causa a outra. Em paisagem e desktop, a coluna da lista é 1 px mais estreita no app (o divisor cai em x=611 no desktop e em 612 no quadro, porque `.list-detail` fixa 380 px com a borda dentro e o quadro tem 380 px mais a borda), e por isso a borda direita dos horários fica 1 px à esquerda (desktop 589 contra 590; paisagem 357 contra 358), o que ainda pinta o horário de vermelho no diff; não corrigi, porque mexeria na largura de `.list-detail`, compartilhada com Clientes e Agenda, fora do escopo desta rodada. O item "horário 1 a 2 px acima" saiu das divergências que restam.
+- Registros: D-127 item 8 (cabeçalho de 1024 px, `letter-spacing` do `h2` do vazio, auditoria dos demais títulos e o horário), `CURRENT_STATE` com os números da execução final, controles negativos refeitos depois do CSS da rodada 4, e as tabelas de gates e de `visual:compare` refeitas nesta execução.
+
+### O que a rodada 3 mudou (FIX-001, blockers do review113 da rodada 2)
+
+- Cabeçalho da lista de 1024 px em diante: o `padding-top` de `.is-inbox .conversation-page-header` deixou de herdar os 29 px do tablet em retrato e passou a 25 px, com 1 px de `padding-bottom`; em 768 px o `padding-top` segue 29 px e ganhou o mesmo 1 px de `padding-bottom`. O quadro usa `24px 20px 0` em 1024 px e `28px 28px 0` em 768 px; o 1 px a mais em cima e o 1 px embaixo compensam a altura da linha do título do app, 1 px menor que a do quadro (medido por pixel nas capturas, não por estimativa). Resultado medido: topo do título, da faixa de abas e da primeira linha da lista coincidem com o quadro em linha de pixel (C1 e C4, paisagem e desktop: 38 / 89 / 92 e 38 / 89 / 114; retrato: 42 / 93 / 118). Em mobile o título do app fica 1 px abaixo do quadro (19 contra 18), e a faixa de abas e a lista coincidem; não foi tocado.
+- Título do vazio conectado (C4): `.conversation-connected-copy h2` recebeu `letter-spacing: normal`, porque o `h2` herdava `-0.015em` da regra global. O quadro usa um `span` sem espaçamento de letras. As quebras de linha do título coincidem com as do quadro nos quatro devices.
+
+### O que a rodada 2 mudou
+
+- O contador da Comercial, o disco da lupa e os balões do C4 passaram a `box-sizing: content-box` (pílula 32×20, disco 42 px, balões 99×47), como as medidas do quadro. A divergência "gap 126/135" deixou de existir e saiu do D-127 e deste arquivo.
+- O suporte a `query` no `visual:compare` foi retirado (harness, entradas de C2 e C3 em `targets.json` e testes). Ficou só `{today}` e `{today-N}`, exceção à D-118 (a) autorizada pelo review113 e registrada no D-127. A divergência 4 (contador da Comercial ausente em C2 e C3) voltou.
+
+### Execuções da rodada 5, sobre a árvore final
+
+A rodada 5 mudou `ConversationInbox.tsx` (uma classe), `avenly-conversations.css` (uma regra), uma asserção em `goal113-conversas-composicao.test.tsx` e os registros. Todas as linhas abaixo foram executadas **depois** dessas edições, na árvore final.
+
+| Comando | Resultado |
+| --- | --- |
+| `npx vitest run` em `apps/frontend` | **155** arquivos e **1917** testes passando |
+| `npx vitest run tests/goal113` em `apps/frontend` | 2 arquivos (`goal113-conversas-lista`, `goal113-conversas-composicao`), **23** testes passando |
+| `npx tsc --noEmit` em `apps/frontend` | exit 0 |
+| `rtk proxy npx eslint src tests --max-warnings=0` em `apps/frontend` | exit 0 (com o RTK ligado, `npx eslint` e `npm run lint` saem 1 sem mensagem, porque o RTK reescreve a saída do eslint; é problema de ferramenta, e o eslint cru é o que vale) |
+| `npm run test:gate` | **249** testes, 249 passam, 0 falham |
+| `node --test scripts/tests/visual-responses.test.mjs` | **16** testes, 16 passam, 0 falham |
+| `npm run validate:core` | **PASSED**: 15 passos passaram, 0 falharam, 2 pulados e declarados (`test:bff`, que só existe como suíte de integração, e `test:health-worker`, sem suíte automatizada); `audit:static` passou, com a verificação `production_health` pulada (sem alvos pedidos). Dentro dele, `test:frontend` rodou 155 arquivos e 1917 testes, e `test:gate-scripts`, 249 |
+| `npm run validate:ui` | **PASSED**: 169 testes passaram e 21 foram pulados (os de toque nos devices sem toque), 0 retentativas, tudo na primeira tentativa |
+| `npm run validate:integration` | **PASSED**: 36 de 36 passos, 0 falhas, 0 pulados, contra um PostgreSQL descartável local (`127.0.0.1:55733/avenly_bff_test`). Suítes de vitest dos passos de integração, na ordem: 68 arquivos e 515 testes, 20 e 152, 11 e 77, 3 e 24, todos passando. O gate autenticado de `goal033-authenticated-ui` rodou com **275** testes passando, **0 flaky** e **0 retentativas** ("every test passed on its first attempt"), e é ele que exercita `/conversas` autenticada |
+| `git diff --check` | exit 0 |
+
+Na rodada 5, cada gate rodou uma vez e passou na primeira execução; nenhum teste foi retentado nem marcado como flaky.
+
+`validate:integration` recusa rodar sem `BFF_TEST_DATABASE_URL` (não cai no `.env` do BFF). Foi subido um PostgreSQL local descartável em porta própria só para esta execução e depois parado.
+
+### Controles negativos (§6.2)
+
+Rodados de novo na rodada 5, **depois** da última edição de código (a classe do invólucro e a coluna de 381 px), um de cada vez: edição de produção, teste dirigido, reprovação lida, arquivo devolvido por `cp` do original. `cmp` confirma `inboxLenses.ts` e `ConversationInbox.tsx` iguais aos originais depois dos três, e os testes `goal113` voltam a passar 23 de 23.
+
+| Controle | Edição | Comando | Testes que reprovaram e mensagem |
+| --- | --- | --- | --- |
+| (a) sem o grupo "Aguardando você" | `inboxLenses.ts`, em `groupInbox`: `if (conversationState(conversation) === "waiting-you")` trocado por `if ((1 as number) === 2)` | `npx vitest run tests/goal113-conversas-lista.test.tsx` | 1 de 12: `grupos e linha da aba Comercial > Aguardando você, Hoje e as anteriores, com tempo e motivo`: `AssertionError: expected [ 'Hoje', 'Anteriores' ] to deeply equal [ 'Aguardando você', 'Hoje', …(1) ]` |
+| (b) contador sem o filtro de atenção | `inboxLenses.ts`, em `useCommercialAttention`: `own.filter(… needsAttention …).length` virou `own.length` e `items.filter(… needsAttention …).length` virou `items.length` | `npx vitest run tests/goal113-conversas-lista.test.tsx` | 3 de 12: `o contador da Comercial conta só quem exige atenção` (`Unable to find an element with the text: 2`), `em zero o contador some` (`expected 'Comercial22 aguardando você' to be 'Comercial' // Object.is equality`) e `nas outras abas o contador vem da leitura de category=COMMERCIAL` (`Unable to find an element with the text: 1`) |
+| (c) `/conversas` sem o invólucro de 1024 px | `ConversationInbox.tsx`, em `InboxWithTabs`: `if (!wide) return inbox;` antes do `return` do invólucro | `npx vitest run tests/goal113-conversas-composicao.test.tsx` | 3 de 11: `abaixo de 1024 px não há painel nem coluna marcada` (`expected null not to be null`), `aba, termo e busca aberta sobrevivem a 390 -> 1280 -> 390, com os mesmos nós` (`expected null not to be null`) e `a mesma travessia de 1280 -> 390 -> 1280 mantém os mesmos nós` (`expected <input class="input" …(4)></input> to be <input class="input" …(4)></input> // Object.is equality`) |
+
+### Controle da §4.3: o harness novo não muda os alvos antigos
+
+Alvos sem relação com o Goal (W1, I1, Conversas:C5, NT1 e H3), em quatro devices, rodados com o `visual:compare` do commit-base `5b41f44` (extraído por `git archive` para uma cópia fora da árvore, com cópia física de `apps/frontend/node_modules`, porque o Turbopack recusa link simbólico para fora da raiz) e com o harness final desta árvore. Percentual de pixels diferentes por alvo e device (mobile / tablet retrato / tablet paisagem / desktop):
+
+| Alvo | Base `5b41f44` | Harness final |
+| --- | --- | --- |
+| W1 | 8,1 / 3,4 / 6,0 / 5,0 | 8,1 / 3,4 / 6,0 / 5,0 |
+| I1 | 10,0 / 4,4 / 6,7 / 5,6 | 10,0 / 4,4 / 6,7 / 5,6 |
+| Conversas:C5 | 2,6 / 0,6 / 0,5 / 0,8 | 2,6 / 0,6 / 0,5 / 0,8 |
+| NT1 | 9,8 / 4,2 / 49,0 / 60,1 | 14,1 / 4,2 / 49,0 / 60,1 |
+| H3 | 8,1 / 4,1 / 3,7 / 3,0 | 8,1 / 4,1 / 3,7 / 3,0 |
+
+19 de 20 números idênticos. A exceção é NT1 em mobile (9,8 contra 14,1), e ela é variação do próprio alvo, não do harness: repeti NT1 mobile e obtive 8,4 e 8,4 no harness final, e 8,4 e 9,8 na base. O NT1 mobile oscila entre 8,4 e 14,1 de uma execução para outra nas duas árvores. NT1 em paisagem e desktop mostram 49% e 60% nas duas árvores, e é por isso que o percentual é tendência e não gate.
+
+### Conferência visual (`visual:compare`)
+
+Execução final da rodada 5, depois da coluna de 381 px: `npm run visual:compare -- --target Conversas:C1,Conversas:C2,C3,C4`, contra o BFF local sobre PostgreSQL descartável em loopback (`127.0.0.1:55733`): 16 capturas (4 quadros × 4 devices), nenhuma com ERRO, exit 0. O C5 não foi tocado e não foi refeito; seus percentuais são os da rodada 3 (2,6 / 0,6 / 0,5 / 0,8). A porcentagem é a diferença de pixels contra o protótipo. "Rodada 4" é a execução anterior, com a coluna da lista 1 px mais estreita que a do quadro em paisagem e desktop.
+
+| Quadro | mobile | tablet retrato | tablet paisagem | desktop | Rodada 4 (mobile / retrato / paisagem / desktop) |
+| --- | --- | --- | --- | --- | --- |
+| C1 Comercial | 1,5% | 0,4% | 0,2% | 0,3% | 1,5 / 0,4 / 0,4 / 0,4 |
+| C2 Não classificadas | 1,8% | 0,5% | 0,9% | 0,8% | 1,8 / 0,5 / 1,0 / 0,8 |
+| C3 Pessoal | 1,7% | 0,4% | 1,1% | 0,4% | 1,7 / 0,4 / 1,2 / 0,5 |
+| C4 vazio | 1,0% | 0,1% | 0,7% | 0,3% | 1,0 / 0,1 / 0,7 / 0,3 (C4 não tem coluna de horário) |
+| C5 sem WhatsApp | 2,6% | 0,6% | 0,5% | 0,8% | não refeito (C5 não foi tocado) |
+
+**Capturas abertas e lidas** (`side-by-side.png`), na execução final da rodada 5, depois da coluna de 381 px: C1 desktop e C2 paisagem lidas uma a uma; as outras 14 não foram abertas nesta rodada (a mudança é a largura de uma coluna; o divisor foi medido por pixel em quatro pares, abaixo). **Rodada 5:** o divisor entre a lista e o detalhe coincide com o quadro, medido por pixel em x=612 no desktop e em x=380 em paisagem, tanto no quadro quanto no app; as faixas do horário de C1 em desktop e paisagem são idênticas, e o diff de C1 nesses dois devices não mostra o horário em vermelho. O que resta de 1 px vertical está só em C2 desktop e em C2 e C3 paisagem (última divergência da lista abaixo). **Rodada 4 (histórico):** as 16 capturas foram lidas uma a uma, e C1 desktop também em `app.png`. Além disso, medi por pixel as faixas de tinta da coluna do horário, protótipo contra app, nos 16 pares. Resultado da rodada 4: o horário de cada linha de C1 cai na mesma linha de pixel do quadro nos quatro devices, e o horário deixou de ser a diferença vertical em vermelho; os horários de C3 desktop e de C2 e C3 em mobile e retrato também coincidem. Na rodada 4, em paisagem e desktop, o horário ainda aparecia em vermelho no diff por 1 px na horizontal, porque a coluna da lista era 1 px mais estreita no app; a coluna de 381 px da rodada 5 resolveu isso. Título, faixa de abas, rótulo de grupo e linhas da lista caem na mesma linha de pixel do quadro em C1 (paisagem, desktop e retrato), e o título do vazio (C4) não aparece em vermelho como diferença de espaçamento. Em C4 paisagem, o bloco do vazio (balões, título, texto e pílula) fica 1 px abaixo do quadro, e em C4 desktop só o texto de apoio e a pílula, por arredondamento de centralização; não corrigi. O C5 não foi refeito nesta rodada (a primeira execução da rodada 3 sem o serviço de IA no ar deu 14,5 / 7,0 / 6,8 / 5,4, por estado de erro da IA, e foi refeita com o serviço no ar).
+
+**Divergências que restam** (não corrigidas; todas no D-127):
+
+- Casca: item "Notificações" na sidebar, badge "2" em Conversas na sidebar e na barra inferior que o app não mostra, estilo do ícone de Conversas e altura da barra inferior.
+- C2: o ponto de "não lida" não existe (D-033).
+- C1: "em confirmação" de Pedro não vem do contrato.
+- C2 e C3 (divergência 4): o contador da Comercial não aparece no app, porque o `visual:compare` serve à leitura `category=COMMERCIAL` as linhas do próprio alvo, que não exigem atenção. O contador é provado por teste (`goal113-conversas-lista`) e aparece em C1.
+- C3: Renata mostra `qui` no app e `ter` no protótipo, porque o app calcula o dia da semana e o alvo usa `{today-3}`; o rótulo depende do dia da captura.
+- C1: linha verde-azulada na borda inferior do conteúdo, que é o anel de foco de `main` aplicado pelo `AppShell` ao mudar o `pathname`; a captura sem `steps` a registra.
+- C2 desktop e C2 e C3 paisagem: o texto do aviso e o conteúdo abaixo dele ficam 1 px mais baixos no app; a caixa do aviso começa na mesma linha do quadro. A coluna de 381 px não o resolveu, e a causa não foi isolada.
+- C1 a C4 mobile: o título "Conversas" fica 1 px abaixo do quadro.
+- C5 mobile: o título fica 16 px mais baixo que no quadro, como antes deste Goal.
+- O resto é antialiasing de texto e deriva de 1 px por linha.
+
+### Não executado
+
+Não houve conferência humana em aparelho real.
+
+**Nota de fechamento — review113, 2026-10-04.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima:
+
+- **Decisão.** D-127 ACCEPTED na rodada 6, sem blocker, depois de 5, 3, 2, 1 e 1 blockers nas rodadas 1 a 5. A rodada 6 mudou só o parágrafo "Capturas abertas e lidas", que ainda tinha uma frase da rodada 4 sobre a coluna 1 px mais estreita.
+- **Gates do IA Loop, rodada 5, todos com exit 0:** `typecheck` (WU-05, 1,7 s), `lint` (WU-06, 14 s), testes `goal113` (WU-07, 2,8 s), suíte do frontend (WU-08, 40 s), `test:gate` (WU-09, 1,4 s), `validate:core` (WU-10, 92 s), `validate:ui` (WU-11, 45 s), `validate:integration` (WU-12, 699 s) e `git diff --check` (WU-13). Na rodada 6, os oito primeiros foram reaproveitados da rodada 5, porque só `docs/**/*.md` mudou, e `git diff --check` rodou de novo com exit 0. Snapshot aceito: 17 arquivos (15 rastreados e 2 testes novos não rastreados), hash do diff `ef98e8c5…`.
+- **Conferência do Tech Lead.** Na rodada 6, com o PostgreSQL descartável em `127.0.0.1:55733` ligado só para a execução, `npm run visual:compare -- --target Conversas:C1,Conversas:C2,C3,C4` deu 16 capturas, exit 0, com os percentuais da tabela acima. Os 16 `side-by-side.png` foram abertos nas rodadas 5 e 6. O divisor da lista cai em x=612 no desktop e em 380 na paisagem, no quadro e no app, e as faixas do horário de C1 em desktop e paisagem são idênticas às do quadro.
+- **Escopo.** A troca `{today}` e `{today-N}` em `scripts/lib/visual-responses.mjs` e `scripts/visual-compare.mjs` é exceção ao critério 7 do Goal, autorizada no review113 na rodada 1. Nada mais mudou em `scripts/` além do teste `visual-responses.test.mjs`, e nada mudou em `e2e/` além de `targets.json`.
+- **Aceito sem prova completa.** Os três controles negativos e o controle do §4.3 vêm da execução do Developer e não foram refeitos pelo Tech Lead. O C5 não foi refeito depois da rodada 3. A causa do 1 px vertical do aviso de C2 e C3 de 1024 px em diante não foi isolada.
+- **Redação.** No parágrafo "Capturas abertas e lidas", o parêntese "(última divergência da lista abaixo)" aponta para o sétimo item da lista, não para o último. A frase "o que resta de 1 px vertical está só em…" não conta o 1 px do título mobile de C1 a C4 nem o do bloco do C4, que a lista de divergências registra. A lista está completa. Detalhe no [review113](reviews/113-review.md).

@@ -1,5 +1,5 @@
 {
-  "$comment": "Mapa de quadros do protótipo (docs/design-reference/claude-design/prototype/project) para rotas do app, usado por scripts/visual-compare.mjs. file + label identificam o quadro (data-screen-label); nas versões tablet/desktop o rótulo é '<Módulo> / <label> / Portrait|Landscape|Desktop'. steps são ações simples para levar a tela ao estado do quadro (click, clickRole, fill, press, waitFor, wait). clock fixa a hora do navegador no dia semeado. responses (Goal106) é uma lista de { method, path, json } que leva a tela a um estado que a conta de teste não alcança: só method GET, path exato do BFF sob /v1/ sem query, json é o corpo inteiro da resposta (envelope { data, requestId }); servida por route.fulfill só para o alvo que a declara e só no navegador da captura, nada é gravado; outro método, caminho fora de /v1/ ou campo desconhecido recusa este arquivo (scripts/lib/visual-responses.mjs). notes registra diferenças que são estado da conta de teste, não layout.",
+  "$comment": "Mapa de quadros do protótipo (docs/design-reference/claude-design/prototype/project) para rotas do app, usado por scripts/visual-compare.mjs. file + label identificam o quadro (data-screen-label); nas versões tablet/desktop o rótulo é '<Módulo> / <label> / Portrait|Landscape|Desktop'. steps são ações simples para levar a tela ao estado do quadro (click, clickRole, fill, press, waitFor, wait). clock fixa a hora do navegador no dia semeado. responses (Goal106) é uma lista de { method, path, json } que leva a tela a um estado que a conta de teste não alcança: só method GET, path exato do BFF sob /v1/ sem query (a query não conta), json é o corpo inteiro da resposta (envelope { data, requestId }); nas strings do json, {today} e {today-N} viram o dia semeado (menos N dias), para que o horário do clock e o \"ontem\" saiam iguais em qualquer dia; servida por route.fulfill só para o alvo que a declara e só no navegador da captura, nada é gravado; outro método, caminho fora de /v1/ ou campo desconhecido recusa este arquivo (scripts/lib/visual-responses.mjs). notes registra diferenças que são estado da conta de teste, não layout.",
   "targets": [
     {
       "code": "L1",
@@ -375,7 +375,488 @@
       "file": "Conversas-e-Chat.dc.html",
       "label": "Conversas · Comercial",
       "route": "/conversas",
-      "notes": "A conta visual não alcança este quadro: sem WhatsApp e sem conversas, /conversas mostra o C5 (sem abas), não o C1."
+      "clock": "13:45",
+      "notes": "Resposta fixa de GET /v1/conversations (a query não entra na escolha) e de GET /v1/status conectado (tira o banner da casca), só no navegador da captura; a conta de teste não tem conversa nem número. As datas das linhas usam {today} e {today-N}, trocados pelo dia semeado, para que o horário e o \"ontem\" saiam como no quadro. Compare a estrutura; o contador de Comercial vem das linhas fixas.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/conversations",
+          "json": {
+            "data": [
+              {
+                "id": "visual-compare-c1-ana",
+                "externalContactId": "5511900000001",
+                "customerName": "Ana Paula",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-ana-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Confirmado! Te espero sexta às 15h30 😊",
+                  "createdAt": "{today}T13:42:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T13:42:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false,
+                "session": {
+                  "id": "visual-session-c1-ana",
+                  "startedAt": "{today}T09:00:00-03:00",
+                  "expiresAt": "{today}T23:00:00-03:00"
+                }
+              },
+              {
+                "id": "visual-compare-c1-fernanda",
+                "externalContactId": "5511900000002",
+                "customerName": "Fernanda Lima",
+                "status": "HUMAN_HANDOFF",
+                "humanHandoff": true,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-fernanda-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Quero falar com a Camila, por favor",
+                  "createdAt": "{today}T13:33:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T13:33:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": false,
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c1-marcos",
+                "externalContactId": "5511900000003",
+                "customerName": "Marcos Vieira",
+                "status": "HUMAN_HANDOFF",
+                "humanHandoff": true,
+                "handoffReason": "pediu desconto",
+                "lastMessage": {
+                  "id": "visual-compare-c1-marcos-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Tem desconto se eu fechar 3 sessões?",
+                  "createdAt": "{today}T13:11:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T13:11:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": false,
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c1-juliana",
+                "externalContactId": "5511900000004",
+                "customerName": "Juliana Mendes",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-juliana-last",
+                  "direction": "OUTBOUND",
+                  "source": "OWNER",
+                  "body": "Combinado, até mais tarde!",
+                  "createdAt": "{today}T12:10:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T12:10:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "HUMAN",
+                "ignored": false,
+                "aiPaused": false,
+                "session": {
+                  "id": "visual-session-c1-juliana",
+                  "startedAt": "{today}T09:00:00-03:00",
+                  "expiresAt": "{today}T23:00:00-03:00"
+                }
+              },
+              {
+                "id": "visual-compare-c1-pedro",
+                "externalContactId": "5511900000005",
+                "customerName": "Pedro Alves",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-pedro-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Corte masculino, hoje às 16h30. Posso confirmar?",
+                  "createdAt": "{today}T12:05:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T12:05:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false,
+                "session": {
+                  "id": "visual-session-c1-pedro",
+                  "startedAt": "{today}T09:00:00-03:00",
+                  "expiresAt": "{today}T23:00:00-03:00"
+                }
+              },
+              {
+                "id": "visual-compare-c1-bia",
+                "externalContactId": "5511900000006",
+                "customerName": "Bia Castro",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-bia-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Obrigada! Até amanhã 💛",
+                  "createdAt": "{today-1}T19:20:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today-1}T19:20:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false
+              }
+            ],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T13:45:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "C2",
+      "file": "Conversas-e-Chat.dc.html",
+      "label": "Conversas · Não classificadas",
+      "route": "/conversas",
+      "clock": "13:45",
+      "notes": "Resposta fixa de GET /v1/conversations (a query não entra na escolha: a leitura category=COMMERCIAL do contador de Comercial recebe as linhas do próprio alvo, divergência declarada 4 do Goal113) e de GET /v1/status conectado (tira o banner da casca), só no navegador da captura; a conta de teste não tem conversa nem número. As datas das linhas usam {today} e {today-N}, trocados pelo dia semeado, para que o horário e o \"ontem\" saiam como no quadro. O ponto de \"não lida\" não tem fonte no contrato (D-033).",
+      "steps": [
+        {
+          "clickRole": {
+            "name": "Não classificadas",
+            "role": "tab"
+          }
+        }
+      ],
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/conversations",
+          "json": {
+            "data": [
+              {
+                "id": "visual-compare-c2-numero",
+                "externalContactId": "5511976543210",
+                "customerName": null,
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c2-numero-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Oi",
+                  "createdAt": "{today}T09:12:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T09:12:00-03:00",
+                "category": "UNCLASSIFIED",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c2-renata",
+                "externalContactId": "5511900000007",
+                "customerName": "Renata",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c2-renata-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Oi Camila, tudo bem? 🙂",
+                  "createdAt": "{today}T08:40:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T08:40:00-03:00",
+                "category": "UNCLASSIFIED",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c2-outro",
+                "externalContactId": "5521998881122",
+                "customerName": null,
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c2-outro-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Bom dia",
+                  "createdAt": "{today-1}T10:05:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today-1}T10:05:00-03:00",
+                "category": "UNCLASSIFIED",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false
+              }
+            ],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T13:45:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "C3",
+      "file": "Conversas-e-Chat.dc.html",
+      "label": "Conversas · Pessoal",
+      "route": "/conversas",
+      "clock": "13:45",
+      "notes": "Resposta fixa de GET /v1/conversations (a query não entra na escolha: a leitura category=COMMERCIAL do contador de Comercial recebe as linhas do próprio alvo, divergência declarada 4 do Goal113) e de GET /v1/status conectado (tira o banner da casca), só no navegador da captura; a conta de teste não tem conversa nem número. As datas das linhas usam {today} e {today-N}, trocados pelo dia semeado, para que o horário e o \"ontem\" saiam como no quadro.",
+      "steps": [
+        {
+          "clickRole": {
+            "name": "Pessoal",
+            "role": "tab"
+          }
+        }
+      ],
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/conversations",
+          "json": {
+            "data": [
+              {
+                "id": "visual-compare-c3-mae",
+                "externalContactId": "5511900000008",
+                "customerName": "Mãe",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c3-mae-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Filha, liga pra mim quando puder",
+                  "createdAt": "{today}T11:30:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T11:30:00-03:00",
+                "category": "PERSONAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": true,
+                "ignoredAt": "{today}T11:30:00-03:00",
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c3-dudu",
+                "externalContactId": "5511900000009",
+                "customerName": "Dudu ❤️",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c3-dudu-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Chego às 20h, quer que eu compre algo?",
+                  "createdAt": "{today}T10:58:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T10:58:00-03:00",
+                "category": "PERSONAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": true,
+                "ignoredAt": "{today}T10:58:00-03:00",
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c3-lu",
+                "externalContactId": "5511900000010",
+                "customerName": "Tia Lú",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c3-lu-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Bom dia, família! ☀️",
+                  "createdAt": "{today}T08:02:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T08:02:00-03:00",
+                "category": "PERSONAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": false,
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c3-renata",
+                "externalContactId": "5511900000011",
+                "customerName": "Renata",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c3-renata-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Amiga, o vídeo que te mandei 😂",
+                  "createdAt": "{today-3}T16:30:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today-3}T16:30:00-03:00",
+                "category": "PERSONAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": false,
+                "aiPaused": false
+              }
+            ],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T13:45:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "C4",
+      "file": "Conversas-e-Chat.dc.html",
+      "label": "Conversas · vazio",
+      "route": "/conversas",
+      "clock": "13:45",
+      "notes": "Resposta fixa de GET /v1/conversations vazia e de GET /v1/status conectado com o número 5511987654321, só no navegador da captura; a conta de teste não tem número conectado.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/conversations",
+          "json": {
+            "data": [],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T13:45:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
     },
     {
       "code": "C5",

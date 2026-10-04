@@ -42,7 +42,7 @@ import net from "node:net";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { bffPathname, pickFixedResponse, validateTargetResponses } from "./lib/visual-responses.mjs";
+import { bffPathname, pickFixedResponse, resolveRelativeDays, validateTargetResponses } from "./lib/visual-responses.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FRONTEND_DIR = path.join(ROOT, "apps", "frontend");
@@ -554,7 +554,7 @@ async function captureApp(browser, appUrl, session, target, device, file) {
       const request = route.request();
       const fixed = pickFixedResponse(target, request.method(), bffPathname(request.url()));
       if (!fixed) return route.fallback();
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fixed.json) });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(resolveRelativeDays(fixed.json, session.today)) });
     });
   }
   const page = await context.newPage();

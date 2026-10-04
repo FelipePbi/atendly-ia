@@ -67,3 +67,27 @@ export function pickFixedResponse(target, method, pathname) {
   if (!Array.isArray(target?.responses) || pathname === null) return null;
   return target.responses.find((entry) => entry.method === method && entry.path === pathname) ?? null;
 }
+
+const DAY_TOKEN = /\{today(?:-(\d+))?\}/g;
+
+/**
+ * Troca `{today}` e `{today-N}` nas strings do `json` pela data (AAAA-MM-DD) do
+ * dia semeado, menos N dias. É o que mantém "há 12 min", "13:42" e "ontem" do
+ * quadro iguais em qualquer dia: o `clock` do alvo fixa a hora no mesmo dia.
+ * Devolve uma cópia; `json` sem token sai igual.
+ */
+export function resolveRelativeDays(json, today) {
+  if (typeof json === "string") {
+    return json.replace(DAY_TOKEN, (_, back) => {
+      if (!today) throw new Error(`resposta fixa usa {today}, mas a semeadura não informou o dia`);
+      const day = new Date(`${today}T12:00:00Z`);
+      day.setUTCDate(day.getUTCDate() - Number(back ?? 0));
+      return day.toISOString().slice(0, 10);
+    });
+  }
+  if (Array.isArray(json)) return json.map((item) => resolveRelativeDays(item, today));
+  if (json !== null && typeof json === "object") {
+    return Object.fromEntries(Object.entries(json).map(([key, value]) => [key, resolveRelativeDays(value, today)]));
+  }
+  return json;
+}

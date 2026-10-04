@@ -36,7 +36,12 @@ import { useEffect, useId } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import PlatformLayout from "@/app/(platform)/layout";
-import type { Conversation, Dashboard, Notification, SystemStatus } from "@/data";
+import type {
+  Conversation,
+  Dashboard,
+  Notification,
+  SystemStatus,
+} from "@/data";
 import { ProductConversationsScreen } from "@/features/conversations/ProductConversationsScreen";
 import { ProductDashboardScreen } from "@/features/dashboard/DashboardScreen";
 import { NOTIFICATIONS_DRAWER_QUERY } from "@/features/notifications/NotificationsDrawer";
@@ -393,8 +398,12 @@ describe("Goal096 prova 1: o C5 e a regra de /conversas sem WhatsApp", () => {
     expect(await screen.findByRole("tablist")).toBeVisible();
     expect(await screen.findByText("Marina Duarte")).toBeVisible();
     expect(screen.queryByRole("heading", { name: C5_TITLE })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Conectar WhatsApp" })).toBeNull();
-    expect(screen.getByLabelText("Buscar por nome ou telefone")).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: "Conectar WhatsApp" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Buscar conversas" }),
+    ).toBeVisible();
     expect(screen.getByText(SHELL_BANNER)).toBeVisible();
     expect(liveShellConfigs()[0]?.whatsappInBand).not.toBe(true);
     // A primeira consulta é a da regra; a seguinte já é a da aba Comercial.
@@ -437,7 +446,9 @@ describe("Goal096 prova 1: o C5 e a regra de /conversas sem WhatsApp", () => {
 
     expect(await screen.findByRole("tablist")).toBeVisible();
     expect(screen.queryByRole("heading", { name: C5_TITLE })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Conectar WhatsApp" })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Conectar WhatsApp" }),
+    ).toBeNull();
     expect(
       await screen.findByRole("heading", {
         name: "Nenhuma conversa comercial por enquanto",
@@ -467,7 +478,9 @@ describe("Goal096 prova 1: o C5 e a regra de /conversas sem WhatsApp", () => {
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByRole("heading", { name: C5_TITLE })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Conectar WhatsApp" })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Conectar WhatsApp" }),
+    ).toBeNull();
   });
 
   test("quando o WhatsApp conecta, o tick de status troca o C5 pelas abas sem recarregar", async () => {
@@ -629,7 +642,9 @@ describe("Goal096 prova 3: a linha do NT1", () => {
     renderHome();
 
     await user.click(
-      await screen.findByRole("button", { name: /^Notificações, 2 não lidas$/ }),
+      await screen.findByRole("button", {
+        name: /^Notificações, 2 não lidas$/,
+      }),
     );
     const drawer = await screen.findByRole("dialog", { name: "Notificações" });
     await within(drawer).findByRole("listitem", { name: /^Atenção: / });
@@ -687,7 +702,9 @@ describe("Goal096 prova 4: a gaveta a partir de 1024 px", () => {
     await user.click(bell);
 
     const drawer = await screen.findByRole("dialog", { name: "Notificações" });
-    expect(within(drawer).getByRole("button", { name: "Fechar" })).toBeVisible();
+    expect(
+      within(drawer).getByRole("button", { name: "Fechar" }),
+    ).toBeVisible();
     expect(
       within(drawer).getByRole("button", { name: "Marcar lidas" }),
     ).toBeVisible();

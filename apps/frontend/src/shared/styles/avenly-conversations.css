@@ -19,24 +19,6 @@
   color: var(--muted);
   font-size: 14px;
 }
-.conversation-page-summary {
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-input);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--fg-soft);
-  background: var(--surface);
-  font-size: 13px;
-  font-weight: 600;
-}
-.conversation-toolbar {
-  margin-bottom: 16px;
-  display: grid;
-  gap: 14px;
-}
 .conversation-search {
   position: relative;
   max-width: 460px;
@@ -67,11 +49,6 @@
 .conversation-lens {
   min-height: 44px;
 }
-.conversation-lens-extra {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 .conversation-lens-note {
   margin: 0 2px 16px;
   color: var(--muted);
@@ -90,17 +67,6 @@
   border: 1px solid var(--border);
   border-radius: var(--r-card);
   background: var(--surface);
-}
-.conversation-list-meta {
-  min-height: 44px;
-  padding: 0 18px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  color: var(--muted);
-  font-size: 12px;
 }
 .conversation-row {
   min-height: 94px;
@@ -185,6 +151,491 @@
 }
 .conversation-empty-surface {
   min-height: min(50vh, 500px);
+}
+
+/* Lista de conversas (Goal113), portada de Conversas-e-Chat.dc.html C1–C3 */
+.conversation-list-page.is-inbox {
+  --inbox-gutter: 20px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+.is-inbox .conversation-page-header {
+  margin: 0;
+  padding: 6px var(--inbox-gutter) 0;
+  align-items: center;
+  gap: 16px;
+}
+.is-inbox .conversation-page-header h1 {
+  margin: 0;
+  font-family: var(--font-display, Literata, Georgia, serif);
+  font-size: 26px;
+  line-height: 1.15;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.conversation-search-toggle {
+  width: 44px;
+  height: 44px;
+  margin: -2px -2px -2px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: grid;
+  place-items: center;
+  flex: none;
+  cursor: pointer;
+}
+.conversation-search-toggle-disc {
+  box-sizing: content-box;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #e5ded4;
+  border-radius: 50%;
+  background: #fffdfa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1),
+    border-color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.12s ease;
+}
+.is-connected-empty .conversation-search-toggle-disc {
+  color: #948b80;
+}
+.conversation-search-toggle:hover .conversation-search-toggle-disc {
+  background: #f3efe8;
+  border-color: #d6cec2;
+}
+.conversation-search-toggle:active .conversation-search-toggle-disc {
+  background: #efeae2;
+  transform: scale(0.96);
+}
+.conversation-search-toggle:focus-visible {
+  outline: 2px solid #0f5f63;
+  outline-offset: -2px;
+  border-radius: 50%;
+}
+.conversation-search-panel {
+  padding: 14px var(--inbox-gutter) 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.conversation-search-panel .conversation-search {
+  flex: 1 1 220px;
+  max-width: 460px;
+}
+.is-inbox .conversation-tabs {
+  padding: 18px var(--inbox-gutter) 0;
+  gap: 22px;
+  align-items: stretch;
+  border-bottom: 1px solid #e5ded4;
+}
+.is-inbox .conversation-tab {
+  position: relative;
+  min-height: 0;
+  padding: 0 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: #716859;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: normal;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.is-inbox .conversation-tab::before {
+  content: "";
+  position: absolute;
+  inset: -14px -4px 0;
+}
+.is-inbox .conversation-tab:hover {
+  color: #221e1a;
+}
+.is-inbox .conversation-tab.is-active {
+  border-bottom-color: #221e1a;
+  color: #221e1a;
+  font-weight: 600;
+}
+.is-inbox .conversation-tab:focus-visible {
+  outline: 2px solid #0f5f63;
+  outline-offset: 2px;
+}
+.conversation-tab-count {
+  box-sizing: content-box;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #9a6410;
+  color: #fffdfa;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.is-inbox .conversation-lens-note {
+  margin: 16px var(--inbox-gutter) 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #efeae2;
+  color: #5f574e;
+  font-size: 13px;
+  line-height: 1.45;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.is-inbox .conversation-lens-note svg {
+  flex: none;
+}
+.is-inbox .conversation-lens-note strong {
+  color: #221e1a;
+}
+.is-inbox .conversation-list-surface {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+.is-inbox .conversation-list-surface.conversation-list-state {
+  min-height: 360px;
+}
+.conversation-group-label {
+  margin: 0;
+  padding: 16px var(--inbox-gutter) 8px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: normal;
+  text-transform: uppercase;
+  color: #716859;
+}
+.conversation-group + .conversation-group .conversation-group-label {
+  padding-top: 18px;
+}
+.conversation-group.is-waiting .conversation-group-label {
+  color: #7a4e0a;
+}
+.conversation-group.is-continued > .conversation-row:first-of-type {
+  border-top: 1px solid #e5ded4;
+}
+.conversation-row.is-inbox {
+  min-height: 0;
+  padding: 12px var(--inbox-gutter);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  line-height: normal;
+}
+.conversation-row.is-inbox + .conversation-row.is-inbox {
+  border-top: 1px solid #e5ded4;
+}
+.conversation-row.is-inbox:hover {
+  background: #f7f4ef;
+}
+.conversation-row.is-inbox.is-selected {
+  background: var(--accent-soft, #dcecea);
+}
+.conversation-row.is-inbox.is-waiting {
+  background: #f8ecd5;
+}
+.conversation-row.is-inbox.is-waiting + .conversation-row.is-inbox {
+  border-top-color: #ebd7ae;
+}
+.conversation-row.is-inbox.is-waiting:hover {
+  background: #f4e3c0;
+}
+.conversation-row.is-inbox .conversation-row-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #efeae2;
+  color: #5f574e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  font-size: 15px;
+  font-weight: 600;
+}
+.conversation-row.is-inbox.is-waiting .conversation-row-avatar {
+  background: #f1d9a8;
+  color: #7a4e0a;
+}
+.conversation-row.is-inbox.is-ai .conversation-row-avatar {
+  background: #dceceb;
+  color: #0b4a4e;
+}
+.conversation-row.is-inbox .conversation-row-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.conversation-row-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.conversation-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
+}
+.conversation-row-name.is-phone {
+  font-variant-numeric: tabular-nums;
+}
+.conversation-row.is-inbox .conversation-row-time {
+  align-self: baseline;
+  padding: 0;
+  flex: none;
+  color: #716859;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.conversation-row.is-inbox .conversation-row-time.is-waiting {
+  color: #7a4e0a;
+  font-weight: 600;
+  font-variant-numeric: normal;
+}
+.conversation-row.is-inbox .conversation-row-preview {
+  margin: 0;
+  color: #5f574e;
+  font-size: 14px;
+}
+.conversation-row-pill {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #fffdfa;
+  color: #7a4e0a;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.conversation-row-pill.is-ai {
+  background: #dceceb;
+  color: #0b4a4e;
+}
+.conversation-row-pill.is-human {
+  height: 22px;
+  padding: 0 9px;
+  background: #efeae2;
+  color: #221e1a;
+}
+.conversation-row-pill.is-error {
+  background: var(--coral-soft, #f6dcd2);
+  color: #8a3a2a;
+}
+.conversation-row-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #b7791b;
+}
+.conversation-row-pill.is-ai .conversation-row-pill-dot {
+  background: #0f5f63;
+}
+.conversation-row-ignored {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 5px;
+  color: #716859;
+  font-size: 12px;
+  font-weight: 500;
+}
+@media (min-width: 768px) {
+  .conversation-list-page.is-inbox {
+    --inbox-gutter: 28px;
+  }
+  .is-inbox .conversation-page-header {
+    padding-top: 29px;
+    padding-bottom: 1px;
+  }
+}
+@media (min-width: 1024px) {
+  .conversation-list-page.is-inbox {
+    --inbox-gutter: 20px;
+  }
+  .is-inbox .conversation-page-header {
+    padding-top: 25px;
+    padding-bottom: 1px;
+  }
+}
+
+/* Composição de 1024 px em diante (Goal113, D-126): coluna da lista + painel */
+.list-detail-flat > .conversation-list-column {
+  display: contents;
+}
+/* Coluna do quadro: width 380 + border-right 1 em content-box = 381 */
+.list-detail.conversation-list-detail {
+  grid-template-columns: 381px minmax(0, 1fr);
+}
+.conversation-detail-panel .list-detail-empty {
+  min-height: 100dvh;
+  padding: 40px;
+  box-sizing: border-box;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.conversation-detail-panel .list-detail-empty p {
+  max-width: 260px;
+  margin: 0;
+}
+@media (min-width: 1024px) and (max-width: 1099px) {
+  .conversation-detail-panel .list-detail-empty {
+    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+  }
+}
+
+/* C4 · Vazio com o WhatsApp conectado (Goal113), portado de Conversas-e-Chat.dc.html */
+.conversation-list-page.is-inbox.is-connected-empty {
+  min-height: calc(100dvh - 65px - env(safe-area-inset-bottom));
+}
+.is-connected-empty .conversation-list-surface {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.conversation-connected-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 0 40px 25px;
+  text-align: center;
+  box-sizing: border-box;
+}
+.conversation-connected-art {
+  position: relative;
+  width: 150px;
+  height: 96px;
+}
+.conversation-connected-bubble {
+  position: absolute;
+  height: 44px;
+  box-sizing: content-box;
+}
+.conversation-connected-bubble.is-left {
+  left: 0;
+  top: 0;
+  width: 96px;
+  border: 1.5px solid #d6cec2;
+  border-radius: 16px 16px 16px 6px;
+  background: #fffdfa;
+}
+.conversation-connected-bubble.is-right {
+  right: 0;
+  bottom: 0;
+  width: 104px;
+  border-radius: 16px 16px 6px 16px;
+  background: #dceceb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+.conversation-connected-bubble.is-right span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #0f5f63;
+}
+.conversation-connected-bubble.is-right span:nth-child(1) {
+  opacity: 0.5;
+}
+.conversation-connected-bubble.is-right span:nth-child(2) {
+  opacity: 0.7;
+}
+.conversation-connected-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.conversation-connected-copy h2 {
+  margin: 0;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: normal;
+}
+.conversation-connected-copy p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #5f574e;
+}
+.conversation-connected-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #dfefe4;
+  color: #1f5c39;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.conversation-connected-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2e7d4f;
+}
+@media (min-width: 768px) {
+  .conversation-list-page.is-inbox.is-connected-empty {
+    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+  }
+  .conversation-connected-empty {
+    padding-bottom: 90px;
+  }
+}
+@media (min-width: 1024px) {
+  .conversation-connected-empty {
+    align-self: center;
+    width: 100%;
+    max-width: 520px;
+    padding-bottom: 40px;
+  }
+}
+@media (min-width: 1100px) {
+  .conversation-list-page.is-inbox.is-connected-empty {
+    min-height: 100dvh;
+  }
 }
 
 /* C5 · Conversas sem WhatsApp (Goal096), portado de Conversas-e-Chat.dc.html */
@@ -982,9 +1433,6 @@
   .conversation-page-header h1 {
     font-size: 26px;
   }
-  .conversation-page-header > .conversation-page-summary {
-    display: none;
-  }
   .conversation-search {
     max-width: none;
   }
@@ -995,9 +1443,6 @@
   }
   .conversation-empty-surface {
     min-height: 410px;
-  }
-  .conversation-list-meta {
-    padding-inline: 16px;
   }
   .conversation-row {
     min-height: 96px;

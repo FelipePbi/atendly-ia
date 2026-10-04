@@ -1,4 +1,4 @@
-// Respostas fixas de GET por alvo do `visual:compare` (Goal106).
+// Respostas fixas de GET por alvo do `visual:compare` (Goal106, Goal113).
 //
 // Cobre a parte pura que decide o que o instrumento aceita e o que serve:
 // `responses` só aceita GET com caminho em /v1/; recusa outro método, caminho
@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import {
   bffPathname,
   pickFixedResponse,
+  resolveRelativeDays,
   validateResponses,
   validateTargetResponses,
 } from "../lib/visual-responses.mjs";
@@ -92,21 +93,42 @@ test("bffPathname tira /api/bff e ignora a query; fora do proxy devolve null", (
   assert.equal(bffPathname("http://localhost:3100/api/bffx/v1/whatsapp"), null);
 });
 
-test("targets.json: só W1 e I1 declaram responses, cada um só com o seu GET", () => {
+function declaringTargets() {
   const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "frontend", "e2e", "visual", "targets.json");
   const targets = validateTargetResponses(JSON.parse(readFileSync(file, "utf8")).targets);
-  const declaring = targets.filter((target) => target.responses !== undefined);
-  assert.deepEqual(declaring.map((target) => target.code), ["W1", "I1"]);
+  return targets.filter((target) => target.responses !== undefined);
+}
+
+test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o resto igual", () => {
+  const json = { data: [{ at: "{today}T13:42:00-03:00", before: "{today-1}T19:20:00-03:00", month: "{today-5}T08:00:00-03:00" }], n: 3, flag: null };
+  assert.deepEqual(resolveRelativeDays(json, "2026-10-04"), {
+    data: [{ at: "2026-10-04T13:42:00-03:00", before: "2026-10-03T19:20:00-03:00", month: "2026-09-29T08:00:00-03:00" }],
+    n: 3,
+    flag: null,
+  });
+  assert.equal(resolveRelativeDays("{today-4}", "2026-03-02"), "2026-02-26");
+  assert.deepEqual(resolveRelativeDays({ a: "2026-09-18T13:42:00.000Z" }, undefined), { a: "2026-09-18T13:42:00.000Z" });
+  assert.throws(() => resolveRelativeDays({ a: "{today}" }, undefined), /não informou o dia/);
+  assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
+});
+
+test("targets.json: só W1, I1, C1, C2, C3 e C4 declaram responses", () => {
+  const declaring = declaringTargets();
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["C1", "C2", "C3", "C4", "I1", "W1"]);
   for (const target of declaring) {
-    assert.equal(target.file, "Mais-WhatsApp-Importacao-Conta.dc.html");
-    assert.equal(target.responses.length, 1);
+    const owner = ["W1", "I1"].includes(target.code) ? "Mais-WhatsApp-Importacao-Conta.dc.html" : "Conversas-e-Chat.dc.html";
+    assert.equal(target.file, owner, `${target.code} declara responses no arquivo errado`);
     for (const entry of target.responses) {
       assert.equal(entry.method, "GET");
       assert.equal(typeof entry.json.requestId, "string");
     }
   }
+});
 
-  const [w1, i1] = declaring;
+test("targets.json: W1 e I1 declaram só o seu GET", () => {
+  const [w1, i1] = ["W1", "I1"].map((code) => declaringTargets().find((target) => target.code === code));
+  assert.equal(w1.responses.length, 1);
+  assert.equal(i1.responses.length, 1);
   const [whatsapp] = w1.responses;
   assert.equal(whatsapp.path, "/v1/whatsapp");
   assert.equal(whatsapp.json.data.status, "CONNECTED");
@@ -130,4 +152,82 @@ test("targets.json: só W1 e I1 declaram responses, cada um só com o seu GET", 
   assert.equal(imported.PAST_APPOINTMENT, 1400);
   assert.ok(imported.AVAILABILITY > 0);
   assert.equal(history.pendingAcceptance.pendingCount, 3);
+});
+
+function conversationFrame(code) {
+  const target = declaringTargets().find((candidate) => candidate.code === code && candidate.file === "Conversas-e-Chat.dc.html");
+  assert.ok(target, `alvo Conversas:${code} sem responses`);
+  assert.equal(target.route, "/conversas");
+  assert.equal(target.clock, "13:45");
+  assert.deepEqual(target.responses.map((entry) => `${entry.method} ${entry.path}`), ["GET /v1/conversations", "GET /v1/status"]);
+  const [conversations, status] = target.responses.map((entry) => resolveRelativeDays(entry.json, "2026-10-04"));
+  assert.equal(status.data.whatsapp.status, "CONNECTED");
+  assert.equal(status.data.whatsapp.phoneNumber, "5511987654321");
+  assert.equal(status.data.ai.state, "ACTIVE");
+  assert.equal(status.data.degraded, false);
+  return { target, rows: conversations.data };
+}
+
+test("targets.json: Conversas:C1 tem os grupos do quadro Comercial", () => {
+  const { rows } = conversationFrame("C1");
+  assert.deepEqual(rows.map((row) => row.customerName), ["Ana Paula", "Fernanda Lima", "Marcos Vieira", "Juliana Mendes", "Pedro Alves", "Bia Castro"]);
+  assert.ok(rows.every((row) => row.category === "COMMERCIAL"));
+  const waiting = rows.filter((row) => row.status === "HUMAN_HANDOFF" && row.humanHandoff);
+  assert.deepEqual(waiting.map((row) => row.customerName), ["Fernanda Lima", "Marcos Vieira"]);
+  assert.equal(waiting[0].handoffReason, null);
+  assert.equal(waiting[1].handoffReason, "pediu desconto");
+  const now = Date.parse("2026-10-04T13:45:00-03:00");
+  assert.equal(Math.round((now - Date.parse(waiting[0].updatedAt)) / 60_000), 12);
+  assert.equal(Math.round((now - Date.parse(waiting[1].updatedAt)) / 60_000), 34);
+  const byName = Object.fromEntries(rows.map((row) => [row.customerName, row]));
+  assert.equal(byName["Ana Paula"].updatedAt, "2026-10-04T13:42:00-03:00");
+  assert.equal(byName["Juliana Mendes"].handling, "HUMAN");
+  assert.equal(byName["Juliana Mendes"].lastMessage.direction, "OUTBOUND");
+  assert.equal(byName["Bia Castro"].updatedAt, "2026-10-03T19:20:00-03:00");
+  for (const name of ["Ana Paula", "Juliana Mendes", "Pedro Alves"]) {
+    assert.ok(Date.parse(byName[name].session.expiresAt) > now, `${name} precisa de sessão viva às 13:45`);
+  }
+  const times = rows.map((row) => Date.parse(row.updatedAt));
+  assert.deepEqual(times, [...times].sort((a, b) => b - a), "a lista vem do mais recente para o mais antigo, como o BFF");
+});
+
+test("targets.json: Conversas:C2 e C3 abrem a aba e trazem as linhas do quadro", () => {
+  const c2 = conversationFrame("C2");
+  assert.deepEqual(c2.target.steps, [{ clickRole: { name: "Não classificadas", role: "tab" } }]);
+  assert.ok(c2.rows.every((row) => row.category === "UNCLASSIFIED" && row.ignored === false));
+  assert.deepEqual(c2.rows.map((row) => row.customerName), [null, "Renata", null]);
+  assert.deepEqual(c2.rows.map((row) => row.externalContactId), ["5511976543210", "5511900000007", "5521998881122"]);
+  assert.deepEqual(c2.rows.map((row) => row.lastMessage.body), ["Oi", "Oi Camila, tudo bem? 🙂", "Bom dia"]);
+
+  const c3 = conversationFrame("C3");
+  assert.deepEqual(c3.target.steps, [{ clickRole: { name: "Pessoal", role: "tab" } }]);
+  assert.ok(c3.rows.every((row) => row.category === "PERSONAL"));
+  assert.deepEqual(c3.rows.map((row) => [row.customerName, row.ignored]), [["Mãe", true], ["Dudu ❤️", true], ["Tia Lú", false], ["Renata", false]]);
+});
+
+test("targets.json: a resposta fixa de Conversas vale para qualquer query do mesmo caminho", () => {
+  for (const code of ["C2", "C3"]) {
+    const { target, rows } = conversationFrame(code);
+    const own = pickFixedResponse(target, "GET", "/v1/conversations");
+    assert.equal(resolveRelativeDays(own.json, "2026-10-04").data.length, rows.length);
+    assert.ok(target.responses.every((entry) => !("query" in entry)));
+  }
+});
+
+test("targets.json: Conversas:C4 serve a lista vazia com o WhatsApp conectado", () => {
+  const { rows, target } = conversationFrame("C4");
+  assert.deepEqual(rows, []);
+  assert.equal(target.steps, undefined);
+});
+
+test("targets.json: a resposta de cada Conversas só vale para o seu GET exato", () => {
+  for (const code of ["C1", "C2", "C3", "C4"]) {
+    const { target } = conversationFrame(code);
+    assert.ok(pickFixedResponse(target, "GET", "/v1/conversations"));
+    assert.ok(pickFixedResponse(target, "GET", "/v1/status"));
+    for (const other of ["/v1/whatsapp", "/v1/conversations/ignored-contacts", "/v1/conversations/visual-compare-c1-ana", "/v1/notifications"]) {
+      assert.equal(pickFixedResponse(target, "GET", other), null, `${code}: ${other} não deveria casar`);
+    }
+    assert.equal(pickFixedResponse(target, "PUT", "/v1/conversations"), null);
+  }
 });

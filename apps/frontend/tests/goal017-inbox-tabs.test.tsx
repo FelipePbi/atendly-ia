@@ -181,8 +181,9 @@ describe("as três abas são servidas pelo backend", () => {
         expect.anything(),
       ),
     );
+    expect(screen.getByText(/IA desativada./)).toBeVisible();
     expect(
-      screen.getByText(/A IA está desativada nestas sessões/),
+      screen.getByText(/Ela não responde nem usa estas conversas/),
     ).toBeVisible();
   });
 
@@ -211,7 +212,9 @@ describe("ignorados têm entrada própria", () => {
   test("a entrada consulta por ignored e diz que a IA não usa a conversa", async () => {
     const user = userEvent.setup();
     renderInbox();
-    await screen.findByRole("button", { name: "Ignorados" });
+    await user.click(
+      await screen.findByRole("button", { name: "Buscar conversas" }),
+    );
 
     await user.click(screen.getByRole("button", { name: "Ignorados" }));
 
@@ -244,6 +247,7 @@ describe("a busca é do backend e tem estados próprios", () => {
     );
 
     listConversations.mockResolvedValue([]);
+    await user.click(screen.getByRole("button", { name: "Buscar conversas" }));
     await user.type(
       screen.getByLabelText("Buscar por nome ou telefone"),
       "Bruno",
@@ -267,12 +271,27 @@ describe("a busca é do backend e tem estados próprios", () => {
     ).toBeNull();
   });
 
-  test("aba vazia sem busca mostra o estado próprio da aba, com ação", async () => {
+  test("Comercial vazia com o WhatsApp conectado mostra o vazio do quadro C4, com a pílula", async () => {
     renderInbox();
 
     expect(
       await screen.findByRole("heading", {
-        name: "Nenhuma conversa comercial por enquanto",
+        name: "Quando alguém falar com você pelo WhatsApp, a conversa aparecerá aqui.",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText(/^Conectado/)).toBeVisible();
+  });
+
+  test("aba vazia sem busca mostra o estado próprio da aba, com ação", async () => {
+    const user = userEvent.setup();
+    renderInbox();
+    await screen.findByRole("tab", { name: "Pessoal" });
+
+    await user.click(screen.getByRole("tab", { name: "Pessoal" }));
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Nenhuma conversa pessoal por enquanto",
       }),
     ).toBeVisible();
     expect(
@@ -293,6 +312,7 @@ describe("a busca é do backend e tem estados próprios", () => {
           release = resolve;
         }),
     );
+    await user.click(screen.getByRole("button", { name: "Buscar conversas" }));
     await user.type(screen.getByLabelText("Buscar por nome ou telefone"), "Ma");
 
     expect(

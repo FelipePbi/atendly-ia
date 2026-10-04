@@ -112,9 +112,9 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, I1, C1, C2, C3 e C4 declaram responses", () => {
+test("targets.json: só W1, I1, C1 a C4 e K1 a K4 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["C1", "C2", "C3", "C4", "I1", "W1"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["C1", "C2", "C3", "C4", "I1", "K1", "K2", "K3", "K4", "W1"]);
   for (const target of declaring) {
     const owner = ["W1", "I1"].includes(target.code) ? "Mais-WhatsApp-Importacao-Conta.dc.html" : "Conversas-e-Chat.dc.html";
     assert.equal(target.file, owner, `${target.code} declara responses no arquivo errado`);
@@ -218,6 +218,95 @@ test("targets.json: Conversas:C4 serve a lista vazia com o WhatsApp conectado", 
   const { rows, target } = conversationFrame("C4");
   assert.deepEqual(rows, []);
   assert.equal(target.steps, undefined);
+});
+
+function chatFrame(code) {
+  const target = declaringTargets().find((candidate) => candidate.code === code && candidate.file === "Conversas-e-Chat.dc.html");
+  assert.ok(target, `alvo Conversas:${code} sem responses`);
+  const id = /^\/conversas\/([^/?#]+)$/.exec(target.route)?.[1];
+  assert.ok(id, `${code}: route precisa ser /conversas/{id fixo}, veio ${target.route}`);
+  assert.equal(target.clock, "13:45");
+  assert.deepEqual(
+    target.responses.map((entry) => `${entry.method} ${entry.path}`),
+    ["GET /v1/conversations", `GET /v1/conversations/${id}`, `GET /v1/conversations/${id}/messages`, `GET /v1/conversations/${id}/events`, "GET /v1/status"],
+  );
+  const [list, conversation, messages, events, status] = target.responses.map((entry) => resolveRelativeDays(entry.json, "2026-10-04"));
+  assert.equal(status.data.whatsapp.status, "CONNECTED");
+  assert.equal(status.data.degraded, false);
+  assert.equal(conversation.data.id, id);
+  assert.ok(list.data.some((row) => row.id === id), `${code}: a lista da coluna precisa trazer a conversa aberta`);
+  return { target, id, conversation: conversation.data, messages: messages.data, events: events.data };
+}
+
+test("targets.json: Chat:K1 a K4 abrem /conversas/{id fixo} com a conversa, as mensagens, os eventos, a lista e o status", () => {
+  for (const code of ["K1", "K2", "K3", "K4"]) {
+    const { target, messages } = chatFrame(code);
+    assert.equal(target.steps, undefined);
+    assert.ok(messages.length >= 3, `${code}: mensagens do quadro`);
+    const times = messages.map((message) => Date.parse(message.createdAt));
+    assert.deepEqual(times, [...times].sort((a, b) => a - b), `${code}: mensagens da mais antiga para a mais nova`);
+    assert.ok(times.every((time) => time <= Date.parse("2026-10-04T13:45:00-03:00")), `${code}: nenhuma mensagem depois do clock`);
+  }
+});
+
+test("targets.json: K1 traz IA atendendo, a reserva viva às 13:45 e o agendamento criado", () => {
+  const { conversation, messages, events } = chatFrame("K1");
+  assert.equal(conversation.handling, "AI");
+  assert.equal(conversation.humanHandoff, false);
+  assert.deepEqual(messages.map((message) => message.source), ["CUSTOMER", "AI", "CUSTOMER", "AI", "CUSTOMER", "AI", "CUSTOMER", "AI"]);
+  assert.deepEqual(events.map((event) => event.type), ["HOLD_PLACED", "APPOINTMENT_CREATED"]);
+  assert.ok(Date.parse(events[0].holdExpiresAt) > Date.parse("2026-10-04T13:45:00-03:00"), "a reserva precisa estar viva às 13:45");
+  assert.equal(events[0].holdExpiresAt, "2026-10-04T13:46:00-03:00");
+  assert.equal(events[0].startTime, "15:30");
+  assert.equal(events[1].startTime, "15:30");
+  assert.ok(events[1].appointmentId);
+});
+
+test("targets.json: K2 aguarda a profissional há 12 min com imagem recebida", () => {
+  const { conversation, messages, events } = chatFrame("K2");
+  assert.equal(conversation.status, "HUMAN_HANDOFF");
+  assert.equal(conversation.humanHandoff, true);
+  assert.ok(conversation.handoffReason);
+  assert.equal(Math.round((Date.parse("2026-10-04T13:45:00-03:00") - Date.parse(conversation.updatedAt)) / 60_000), 12);
+  const image = messages.find((message) => message.kind === "IMAGE");
+  assert.equal(image.attachment.kind, "IMAGE");
+  assert.equal(image.attachment.mediaAvailable, true);
+  assert.deepEqual(events, []);
+});
+
+test("targets.json: K3 tem a profissional atendendo, o áudio com transcrição e a hora em que assumiu", () => {
+  const { conversation, messages } = chatFrame("K3");
+  assert.equal(conversation.handling, "HUMAN");
+  assert.equal(conversation.session.humanHandlingSince, "2026-10-04T12:02:00-03:00");
+  const audio = messages.find((message) => message.kind === "AUDIO");
+  assert.equal(audio.attachment.durationSeconds, 14);
+  assert.equal(audio.attachment.transcriptStatus, "DONE");
+  assert.match(audio.attachment.transcript, /hidratação junto com a escova/);
+  assert.equal(messages.filter((message) => message.source === "OWNER").length, 2);
+});
+
+test("targets.json: K4 é conversa pessoal ignorada", () => {
+  const { conversation, messages } = chatFrame("K4");
+  assert.equal(conversation.category, "PERSONAL");
+  assert.equal(conversation.ignored, true);
+  assert.equal(conversation.customerName, "Mãe");
+  assert.deepEqual(messages.map((message) => message.source), ["CUSTOMER", "OWNER", "CUSTOMER"]);
+});
+
+test("targets.json: a resposta de cada Chat só vale para o GET exato da sua conversa", () => {
+  for (const code of ["K1", "K2", "K3", "K4"]) {
+    const { target, id } = chatFrame(code);
+    for (const own of [`/v1/conversations/${id}`, `/v1/conversations/${id}/messages`, `/v1/conversations/${id}/events`]) {
+      assert.ok(pickFixedResponse(target, "GET", own), `${code}: ${own} precisa casar`);
+    }
+    for (const other of [`/v1/conversations/${id}/messages/x/media`, `/v1/conversations/${id}/suggestions`, `/v1/conversations/outra/messages`, "/v1/whatsapp"]) {
+      assert.equal(pickFixedResponse(target, "GET", other), null, `${code}: ${other} não deveria casar`);
+    }
+    for (const method of ["POST", "PUT", "DELETE"]) {
+      assert.equal(pickFixedResponse(target, method, `/v1/conversations/${id}/messages`), null, `${code}: ${method} não deveria casar`);
+      assert.equal(pickFixedResponse(target, method, `/v1/conversations/${id}/suggestions`), null);
+    }
+  }
 });
 
 test("targets.json: a resposta de cada Conversas só vale para o seu GET exato", () => {

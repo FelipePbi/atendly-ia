@@ -22,14 +22,15 @@ export type ConversationState =
  * continuar: `erro: …` do nó do agente, mídia que o bot não trata e a pausa
  * indefinida que acompanha essas falhas. São o que o vault chama de
  * `IA com instabilidade` — separados de um handoff normal, em que a IA
- * simplesmente entregou a conversa para a pessoa.
+ * simplesmente entregou a conversa para a pessoa. Imagem recebida é handoff
+ * normal (vault, 03-IA-e-Conversas "Imagens"; quadro K2): a conversa fica
+ * `Aguardando você`, não instável (Goal114).
  */
 const instabilityMarkers = [
   "erro",
   "error",
   "falha",
   "failed",
-  "image_received",
   "nao suportada",
   "não suportada",
   "timeout",
@@ -174,4 +175,24 @@ export function handoffReasonCopy(reason: string | null): string | null {
     return "A IA não conseguiu concluir a resposta e chamou você.";
   }
   return `A IA passou a conversa para você: ${value}`;
+}
+
+/**
+ * O motivo da espera como linha de evento do chat (quadro K2). Imagem recebida
+ * ganha a frase do quadro; os outros motivos usam `handoffReasonCopy`. A
+ * assunção pela própria profissional não é espera, e não vira linha.
+ */
+export function waitingNoticeCopy(reason: string | null): string | null {
+  const value = reason?.trim();
+  if (!value || value === "OWNER_TAKEOVER") return null;
+  if (isImageReason(value)) {
+    return "Imagem recebida · a IA pausou e está aguardando você";
+  }
+  return handoffReasonCopy(value);
+}
+
+export function isImageReason(reason: string | null): boolean {
+  return Boolean(
+    reason?.toLocaleLowerCase("pt-BR").includes("image_received"),
+  );
 }

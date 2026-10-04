@@ -6439,3 +6439,107 @@ Não houve conferência humana em aparelho real.
 - **Escopo.** A troca `{today}` e `{today-N}` em `scripts/lib/visual-responses.mjs` e `scripts/visual-compare.mjs` é exceção ao critério 7 do Goal, autorizada no review113 na rodada 1. Nada mais mudou em `scripts/` além do teste `visual-responses.test.mjs`, e nada mudou em `e2e/` além de `targets.json`.
 - **Aceito sem prova completa.** Os três controles negativos e o controle do §4.3 vêm da execução do Developer e não foram refeitos pelo Tech Lead. O C5 não foi refeito depois da rodada 3. A causa do 1 px vertical do aviso de C2 e C3 de 1024 px em diante não foi isolada.
 - **Redação.** No parágrafo "Capturas abertas e lidas", o parêntese "(última divergência da lista abaixo)" aponta para o sétimo item da lista, não para o último. A frase "o que resta de 1 px vertical está só em…" não conta o 1 px do título mobile de C1 a C4 nem o do bloco do C4, que a lista de divergências registra. A lista está completa. Detalhe no [review113](reviews/113-review.md).
+
+## O chat igual ao protótipo, do Goal114
+
+Texto do Goal114 (decisão [D-128](DECISIONS.md), `PROPOSED`), escrito na rodada 2 (FIX-001) contra os oito blockers do review114 da rodada 1 e corrigido na rodada 3 (FIX-001) contra os três blockers do review114 da rodada 2. A rodada 1 tinha entregado só `targets.json` e o teste de `visual-responses`. Toda contagem abaixo é de execução da rodada 3, depois da última edição de código; nenhuma foi copiada de rodada anterior.
+
+### Ambiente
+
+O BFF de desenvolvimento em `localhost:3002` respondia 500 no login da conta visual (o erro da rodada 1). Ele não foi tocado. O `visual:compare` desta rodada rodou contra uma pilha própria, com BFF em 3012, Scheduling em 3013 e IA em 3010, código da worktree, sobre bancos descartáveis criados só para isto (`g114_bff` e `g114_sched` no PostgreSQL do Docker de desenvolvimento, `g114_ai` no da IA), com `prisma migrate deploy` dos três serviços, laços de fundo desligados e LLM e Evolution da IA apontados para endereço morto. O script foi chamado com `VISUAL_BFF_URL=http://localhost:3012` e `VISUAL_BFF_ORIGIN=http://localhost:3001`, variáveis que ele já aceita. A conta visual foi criada e semeada ali na primeira execução. O banco de desenvolvimento do operador não foi migrado nem semeado. `npx prisma generate` rodou em `apps/ai-orchestrator` antes de `test:gate` (precondição apontada no review). O `validate:integration` rodou num cluster PostgreSQL 18 criado com `initdb` no scratchpad, em `127.0.0.1:55814`, porque a guarda dos testes de integração recusa o Docker, cuja porta interna (5432) não é a declarada.
+
+### Execução de controle (§3.3) e medida de antes
+
+As duas execuções rodaram com `targets.json` e o teste de `visual-responses` já mudados e com os dez arquivos de `apps/frontend/src/` desta rodada trocados temporariamente pelas versões de `HEAD` (`git show HEAD:…`; `ConversationListColumn.tsx`, novo, retirado). `git diff --ignore-all-space -- apps/frontend/src` não mostrou diferença nessa árvore. Depois os arquivos voltaram e o `sha256sum -c` conferiu os dez.
+
+`npm run visual:compare -- --target W1,I1,Conversas:C1`, saída 0. Números iguais aos da baseline do Goal113 nos 12 pares:
+
+| Alvo | Baseline (Goal113) | Controle (Goal114) |
+| --- | --- | --- |
+| W1 | 8,1 / 3,4 / 6,0 / 5,0 | 8,1 / 3,4 / 6,0 / 5,0 |
+| I1 | 10,0 / 4,4 / 6,7 / 5,6 | 10,0 / 4,4 / 6,7 / 5,6 |
+| Conversas:C1 | 1,5 / 0,4 / 0,2 / 0,3 | 1,5 / 0,4 / 0,2 / 0,3 |
+
+Medida de antes, `npm run visual:compare -- --target Conversas:C1,C4,K1,K2,K3,K4`, saída 0, capturas guardadas fora do repositório: C1 1,5 / 0,4 / 0,2 / 0,3; C4 1,0 / 0,1 / 0,7 / 0,3; K1 10,2 / 6,2 / 7,5 / 7,1; K2 9,2 / 5,4 / 7,6 / 7,0; K3 8,8 / 5,3 / 7,4 / 6,8; K4 6,2 / 3,6 / 4,9 / 4,9 (mobile / tablet retrato / tablet paisagem / desktop).
+
+### Conferência visual (`visual:compare`) depois
+
+Execução final, depois da última edição de código: `npm run visual:compare -- --target K1,K2,K3,K4,Conversas:C1,C4`, 24 capturas, nenhuma com erro, saída 0.
+
+| Quadro | mobile | tablet retrato | tablet paisagem | desktop | Antes |
+| --- | --- | --- | --- | --- | --- |
+| K1 IA atendendo | 0,5% | 2,8% | 0,4% | 0,5% | 10,2 / 6,2 / 7,5 / 7,1 |
+| K2 aguardando você | 2,1% | 0,9% | 2,0% | 1,0% | 9,2 / 5,4 / 7,6 / 7,0 |
+| K3 você atendendo | 6,2% | 2,7% | 2,9% | 2,4% | 8,8 / 5,3 / 7,4 / 6,8 |
+| K4 pessoal | 0,0% | 0,0% | 0,5% | 0,5% | 6,2 / 3,6 / 4,9 / 4,9 |
+| Conversas:C1 | 1,5% | 0,4% | 0,2% | 0,3% | igual |
+| Conversas:C4 | 1,0% | 0,1% | 0,7% | 0,3% | igual |
+
+**C1 e C4 iguais à captura de antes:** a comparação por pixel do `app.png` de antes e de depois (`sharp`, limiar 30 na soma RGB) deu **0 pixel** diferente nos 8 pares.
+
+**Capturas abertas e lidas** (`side-by-side.png` ou `app.png`): as 16 de K1 a K4 da execução final ou de uma execução anterior com o mesmo número; K1 mobile, K2 mobile e K3 mobile em três execuções; K1 desktop e K2 paisagem também em `app.png`. C1 e C4 foram conferidos por pixel contra o antes. O que cada uma mostrou e o que mudou por causa delas:
+
+- K1: na primeira execução a área não rolava até o fim (a altura do chat chega depois da primeira pintura); corrigido com a área presa ao fim e um `ResizeObserver`. Depois disso K1 bate com o quadro em celular, paisagem e desktop.
+- K2: a conversa saía "IA com instabilidade", porque `image_received` era marcador de instabilidade; o vault e o quadro dizem "Aguardando você" (D-128 (6)). Corrigido, o avatar fica âmbar e a linha do motivo entra depois da imagem. Na paisagem e no desktop, a linha aberta aguardando você passou a manter o âmbar com a faixa, e a pílula da Fernanda diz só "Aguardando você", como no quadro. O placeholder de duas linhas do celular passou a caber como no quadro.
+- K4: a nota estava 10 px mais alta; corrigida. Na rodada 3, o espaço entre "·" e "alterar" tinha uns 4 px, contra os 8 px de `gap` do quadro (`inline-flex; gap: 8px`, com "alterar" como filho próprio), porque o texto e o botão estavam dentro de um só `<span>`. Agora o texto (`<span>`) e o botão são filhos diretos de `.chat-ignored-note` e o `gap` vale entre eles. K4 foi de 0,3 / 0,1 / 0,7 / 0,6 para 0,0 / 0,0 / 0,5 / 0,5. Os `side-by-side.png` dos quatro devices foram abertos: nos de celular e de tablet em retrato a diferença da nota some (0,0%); na paisagem e no desktop o que resta de vermelho está na coluna da lista (divergências de D-127) e na casca, e a nota não aparece mais nas diferenças.
+- Cabeçalho do celular 2 px mais baixo que o quadro; corrigido com `margin-top: -2px` (D-128).
+
+**Divergências que restam**, todas em D-128: a sugestão aberta (K2 e K3), que na captura é o botão "Sugerir resposta"; o conteúdo da imagem (K2); a linha "Você editou o agendamento" (K3); o dia da semana dos eventos do K1 (`sáb`, calculado de 2026-09-19, contra `sex` no quadro); a pílula "Hoje" no K3, que o quadro não tem (o histórico do K3 fica 32 px mais baixo, e é por isso que o K3 mobile tem o maior número); o K1 no tablet em retrato, onde o quadro ancora as mensagens embaixo e o app as começa em cima; na coluna da lista, as divergências de D-127 (casca, "em confirmação", contador da Comercial fora da aba Comercial no K4, dia da semana de Renata, prévia da última mensagem da Mãe, que vem do alvo); e antialiasing.
+
+### Controles negativos (§5.2)
+
+Rodados de novo na rodada 3, depois da última edição de código (a que pôs o texto e o botão da nota do K4 como filhos diretos): mutação em `ConversationThread.tsx` por script, teste dirigido, reprovação lida, arquivo devolvido por `cp` da cópia e conferido com `cmp` (`cmp ok` nos três). Depois dos três, `npx vitest run tests/goal114` voltou a 37 de 37.
+
+| Controle | Mutação | Comando | Reprovou |
+| --- | --- | --- | --- |
+| (a) a barra de estado volta | `div.conversation-state-bar` com o rótulo do estado e o botão "Assumir conversa" logo depois do `</header>` | `npx vitest run tests/goal114-chat.test.tsx` | 1 de 31: `o estado mora no cabeçalho, uma linha por estado > não há barra de estado nem botão Contexto, e o estado aparece uma vez só`: `AssertionError: expected <div …(1)><span></span>…` (esperava `null`) |
+| (b) "Assumir" sai do menu | o item "Assumir conversa" do menu "Mais ações" deixa de ser montado (`{false && !closed && (…)}`) | `npx vitest run tests/goal114-chat.test.tsx` | 1 de 31: `toda ação de hoje continua alcançável > o menu Mais ações traz assumir, criar agendamento, categoria, ignorar e resolver`: `TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "Assumir conversa"` |
+| (c) o chat sem o invólucro de 1024 px em diante | `if (wide) return <div className="conversation-workspace">{chat}</div>;` antes do `return` do invólucro | `npx vitest run tests/goal114-chat-composicao.test.tsx` | 5 de 6, entre eles `cruzar 1024 px não apaga o rascunho nem troca o campo > 1280 -> 390 -> 1280 mantém o texto e o mesmo nó`: `AssertionError: expected <textarea …(5)></textarea> to be <textarea …(5)></textarea> // Object.is equality`, e `390 -> 1280 -> 390 mantém o texto e o mesmo nó`: `Unable to find role="complementary" and name "Conversas"` |
+
+### Testes novos e ajustes
+
+- `goal114-chat.test.tsx` (31 testes; na rodada 3, o teste da nota do K4 passou a exigir que o texto e o botão "alterar" sejam filhos diretos de `.chat-ignored-note`): o cabeçalho dos oito estados (K1 a K4 e os sem quadro: IA ativa, IA pausada, IA com instabilidade, resolvida); o ponto que pulsa só com a IA atendendo; a ausência da barra e do botão "Contexto"; "Retomar IA" abrindo o diálogo de devolver; assumir, criar agendamento, mudar a categoria, ignorar e resolver pelo menu, e pelo contexto com você atendendo; o nome abrindo o contexto; os rótulos de autoria; as linhas de evento, com "Você assumiu a conversa" no seu instante e o motivo do K2 depois da imagem; o áudio com a transcrição na mesma bolha; a nota do K4 e o "alterar"; os avisos do composer (K1, K2, K3 e K4, resolvida); nenhuma chamada a `generateSuggestions`, `getMedia` nem à lista ao abrir; "Usar" e "Editar".
+- `goal114-chat-composicao.test.tsx` (6 testes): abaixo de 1024 px, sem coluna e sem leitura da lista; de 1024 px em diante, a coluna com a aba da categoria (Comercial e Pessoal) e a linha aberta com `aria-current="page"`; o rascunho e o mesmo nó em 390 → 1280 → 390 e 1280 → 390 → 1280; um só `useShellConfig` vivo nas duas faixas e ao cruzar.
+- Ajustes em testes existentes, só pela estrutura que o quadro tira:
+  - `goal017-human-handling`: a linha do estado é `.chat-header-state` e "Aguardando você" vem com o tempo; o aviso de enviar-assume com a conversa aguardando você é o placeholder do K2 e a descrição acessível do campo; "Assumir conversa" é aberto pelo menu; o teste de resolver usa a IA atendendo, porque com você atendendo o K3 não tem menu (resolver nesse estado é provado pelo contexto em `goal114-chat`); os testes de categoria abrem o contexto pelo nome.
+  - `goal017-a11y`: o grupo de categorias depois de abrir o contexto pelo nome; a sugestão alcançada pelo botão "Usar: {texto}"; o contexto aberto por "Abrir contexto de Marina Duarte".
+  - `goal017-contact-profile`: o teste do painel lateral virou "não há coluna de contexto antes de abrir a folha"; a folha é aberta pelo nome; ignorar entra pelo menu "Mais ações", e depois de ignorar a prova é a nota "A IA nunca responde este contato".
+  - `goal017-inbox-tabs`: o texto da barra ("A IA responde em nome do negócio na próxima mensagem.") virou a linha do cabeçalho "IA ativa".
+  - `goal017-reachability`: o teste do rail virou o da coluna da lista de 1024 px em diante (com `matchMedia` largo), que também aponta para a rota de cada conversa; o contexto é a folha aberta pelo nome.
+  - `goal017-shell-invariant`: o contexto é aberto pelo nome, e de novo antes de trocar a categoria.
+  - `goal017-suggestions`: o teste "some quando aguardando você" virou "aparece quando aguardando você (K2)", com a prova de que nada é pedido ao abrir. É a única asserção invertida, e a inversão é o comportamento que o K2 e a divergência 4 do Goal pedem (a IA aceita sugestão com `humanHandoff`); o clique de usar passou para o botão "Usar".
+  - `goal023-conversation-expired`: "continua listada" (link do rail) virou o cabeçalho da conversa aberta, porque o chat não tem mais rail.
+
+### Execução final
+
+Todas as linhas abaixo rodaram na rodada 3, depois da última edição de código (a nota do K4), sobre a mesma árvore, e a de `validate:integration` reutilizou o cluster PostgreSQL descartável de 127.0.0.1:55814 que já estava de pé.
+
+| Comando | Resultado |
+| --- | --- |
+| `npx tsc --noEmit -p .` em `apps/frontend` | saída 0 |
+| `rtk proxy npm run lint` em `apps/frontend` | saída 0 |
+| `npx vitest run tests/goal114` em `apps/frontend` | 2 arquivos, **37** testes passando |
+| `npx vitest run` em `apps/frontend` | **157** arquivos, **1954** testes passando |
+| `node --test scripts/tests/visual-responses.test.mjs` | 22 testes, 22 passando |
+| `npm run test:gate` | **255** testes, 255 passando, 0 falhas |
+| `npm run validate:core` | `PASSED`: 17 passos, 15 passaram, 0 falharam, 2 pulados e reportados (`test:bff`, só na integração, e `test:health-worker`, sem suíte); frontend 157 arquivos e 1954 testes |
+| `npm run validate:ui` | **169** passed, "every test passed on its first attempt" |
+| `npm run validate:integration` com `BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55814/avenly_bff_test` | `PASSED`: **36** de 36 passos, 0 falharam, 0 pulados; o gate autenticado (`rehearse:goal033-authenticated-ui`) passou **275** testes, "authenticated gate retries: 0 — every test passed on its first attempt" |
+| `git diff --check` | saída 0 |
+
+Uma primeira tentativa de `validate:integration` com o banco no Docker (`127.0.0.1:5555`) saiu 1 em `test:bff-integration`, com "Connected server port 5432 is not the declared test port." em todos os arquivos: é a guarda dos testes recusando um servidor cuja porta interna não é a declarada. Não vale como veredito; a execução da tabela é a do cluster descartável.
+
+Arquivos mudados: dez em `apps/frontend/src/` (um novo), dois testes novos e oito ajustados em `apps/frontend/tests/`, `apps/frontend/e2e/visual/targets.json`, `scripts/tests/visual-responses.test.mjs` e os três registros desta seção. Nenhum outro arquivo de `e2e/` mudou.
+
+### Não executado
+
+Não houve conferência humana em aparelho real.
+
+**Nota de fechamento — review114, 2026-10-04.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima:
+
+- **Decisão.** D-128 ACCEPTED na rodada 3, sem blocker, depois de 8 e 3 blockers nas rodadas 1 e 2. A rodada 3 mudou só a nota do K4 (o texto e o botão "alterar" como filhos diretos de `.chat-ignored-note`), a asserção correspondente de `goal114-chat.test.tsx` e os três registros.
+- **Gates do IA Loop, rodada 3, sobre a árvore final, todos com exit 0:** `typecheck` (WU-05, 1,7 s), `lint` (WU-06, 14,5 s), testes `goal114` (WU-07, 3,5 s) e suíte do frontend (WU-08, 40 s), com estado `PASSED`; `test:gate` (WU-10, 1,4 s), `validate:core` (WU-11, 93 s), `validate:ui` (WU-12, 46 s), `validate:integration` (WU-13, 699 s) e `git diff --check` (WU-14), com estado `OBSERVED`, porque a WU-09 (`test:ia-loop`) não se aplica: o repositório não tem esse script. Snapshot aceito: 25 arquivos (22 rastreados e 3 novos não rastreados), hash do diff `a2719b65…`.
+- **Conferência do Tech Lead.** Na rodada 3, contra a pilha descartável do Developer (BFF em 3012), `npm run visual:compare -- --target K1,K2,K3,K4,Conversas:C1,C4` deu 24 capturas, exit 0, com os percentuais da tabela acima. Os 16 `side-by-side.png` de K1 a K4 foram abertos nas rodadas 2 e 3, e a nota do K4 bate com o quadro nos quatro devices. `npx vitest run tests/goal114` deu 37 de 37.
+- **Escopo.** Os 25 arquivos estão dentro do critério 7 do Goal, sem exceção. Nada mudou em `e2e/` além de `targets.json`, nem em `scripts/` além de `visual-responses.test.mjs`.
+- **Aceito sem prova completa.** Os três controles negativos, a execução de controle do §3.3, as capturas de antes e a comparação por pixel de C1 e C4 contra o antes vêm da execução do Developer e não foram refeitos pelo Tech Lead. `test:gate`, `validate:core`, `validate:ui`, `validate:integration` e `git diff --check` foram aceitos pelo exit 0, não por veredito `PASSED`.
+- **Ambiente.** `test:gate` exige `npx prisma generate` em `apps/ai-orchestrator`. A guarda dos testes de integração recusa o PostgreSQL do Docker, cuja porta interna é 5432, e por isso `validate:integration` rodou num cluster criado com `initdb`. O BFF de desenvolvimento em `localhost:3002` respondia 500 no login da conta visual. Detalhe no [review114](reviews/114-review.md).

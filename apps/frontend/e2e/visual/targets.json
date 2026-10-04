@@ -866,6 +866,1067 @@
       "notes": "Este quadro É o estado da conta de teste (sem WhatsApp)."
     },
     {
+      "code": "K1",
+      "file": "Conversas-e-Chat.dc.html",
+      "label": "Chat · IA atendendo",
+      "route": "/conversas/visual-compare-c1-ana",
+      "clock": "13:45",
+      "notes": "Respostas fixas de GET (a conversa, as mensagens, os eventos, a lista da coluna de 1024 px em diante e /v1/status conectado, que tira o banner da casca), só no navegador da captura; a conta de teste não tem conversa nem número. As datas e horas usam {today} e {today-N}, trocados pelo dia semeado, para que o horário e o \"ontem\" saiam como no quadro. A data dos eventos de agenda é fixa (2026-09-19, a do quadro, 19/09): o dia da semana sai calculado dessa data, divergência declarada 7 do Goal114. O quadro traz o rótulo \"IA · 13:38\" sem estado de entrega: as saídas não declaram deliveryState.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/conversations",
+          "json": {
+            "data": [
+              {
+                "id": "visual-compare-c1-ana",
+                "externalContactId": "5511900000001",
+                "customerName": "Ana Paula",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-k1-m8",
+                  "direction": "OUTBOUND",
+                  "source": "AI",
+                  "body": "Confirmado! Te espero sexta às 15h30 😊",
+                  "createdAt": "{today}T13:42:30-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T13:42:30-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false,
+                "session": {
+                  "id": "visual-session-c1-ana",
+                  "startedAt": "{today}T09:00:00-03:00",
+                  "expiresAt": "{today}T23:00:00-03:00"
+                }
+              },
+              {
+                "id": "visual-compare-c1-fernanda",
+                "externalContactId": "5511900000002",
+                "customerName": "Fernanda Lima",
+                "status": "HUMAN_HANDOFF",
+                "humanHandoff": true,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-fernanda-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Quero falar com a Camila, por favor",
+                  "createdAt": "{today}T13:33:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T13:33:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": false,
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c1-marcos",
+                "externalContactId": "5511900000003",
+                "customerName": "Marcos Vieira",
+                "status": "HUMAN_HANDOFF",
+                "humanHandoff": true,
+                "handoffReason": "pediu desconto",
+                "lastMessage": {
+                  "id": "visual-compare-c1-marcos-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Tem desconto se eu fechar 3 sessões?",
+                  "createdAt": "{today}T13:11:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T13:11:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": false,
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c1-juliana",
+                "externalContactId": "5511900000004",
+                "customerName": "Juliana Mendes",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-juliana-last",
+                  "direction": "OUTBOUND",
+                  "source": "OWNER",
+                  "body": "Combinado, até mais tarde!",
+                  "createdAt": "{today}T12:10:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T12:10:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "HUMAN",
+                "ignored": false,
+                "aiPaused": false,
+                "session": {
+                  "id": "visual-session-c1-juliana",
+                  "startedAt": "{today}T09:00:00-03:00",
+                  "expiresAt": "{today}T23:00:00-03:00"
+                }
+              },
+              {
+                "id": "visual-compare-c1-pedro",
+                "externalContactId": "5511900000005",
+                "customerName": "Pedro Alves",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-pedro-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Corte masculino, hoje às 16h30. Posso confirmar?",
+                  "createdAt": "{today}T12:05:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T12:05:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false,
+                "session": {
+                  "id": "visual-session-c1-pedro",
+                  "startedAt": "{today}T09:00:00-03:00",
+                  "expiresAt": "{today}T23:00:00-03:00"
+                }
+              },
+              {
+                "id": "visual-compare-c1-bia",
+                "externalContactId": "5511900000006",
+                "customerName": "Bia Castro",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-bia-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Obrigada! Até amanhã 💛",
+                  "createdAt": "{today-1}T19:20:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today-1}T19:20:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false
+              }
+            ],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/visual-compare-c1-ana",
+          "json": {
+            "data": {
+              "id": "visual-compare-c1-ana",
+              "externalContactId": "5511900000001",
+              "customerName": "Ana Paula",
+              "status": "ACTIVE",
+              "humanHandoff": false,
+              "handoffReason": null,
+              "lastMessage": {
+                "id": "visual-compare-k1-m8",
+                "direction": "OUTBOUND",
+                "source": "AI",
+                "body": "Confirmado! Te espero sexta às 15h30 😊",
+                "createdAt": "{today}T13:42:30-03:00"
+              },
+              "unreadCount": 0,
+              "updatedAt": "{today}T13:42:30-03:00",
+              "category": "COMMERCIAL",
+              "categorySource": "AUTOMATIC",
+              "handling": "AI",
+              "ignored": false,
+              "aiPaused": false,
+              "session": {
+                "id": "visual-session-c1-ana",
+                "startedAt": "{today}T09:00:00-03:00",
+                "expiresAt": "{today}T23:00:00-03:00"
+              }
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/visual-compare-c1-ana/messages",
+          "json": {
+            "data": [
+              {
+                "id": "visual-compare-k1-m1",
+                "direction": "INBOUND",
+                "source": "CUSTOMER",
+                "body": "Oi Camila! Quanto tá o corte?",
+                "createdAt": "{today}T13:37:00-03:00"
+              },
+              {
+                "id": "visual-compare-k1-m2",
+                "direction": "OUTBOUND",
+                "source": "AI",
+                "body": "Oi, Ana! O corte feminino é R$ 90 e leva 45 min. Quer marcar? 😊",
+                "createdAt": "{today}T13:38:00-03:00"
+              },
+              {
+                "id": "visual-compare-k1-m3",
+                "direction": "INBOUND",
+                "source": "CUSTOMER",
+                "body": "Quero, tem sexta de tarde?",
+                "createdAt": "{today}T13:39:00-03:00"
+              },
+              {
+                "id": "visual-compare-k1-m4",
+                "direction": "OUTBOUND",
+                "source": "AI",
+                "body": "Tenho sexta às 14h, 15h30 ou 17h. Qual fica melhor?",
+                "createdAt": "{today}T13:39:30-03:00"
+              },
+              {
+                "id": "visual-compare-k1-m5",
+                "direction": "INBOUND",
+                "source": "CUSTOMER",
+                "body": "15h30",
+                "createdAt": "{today}T13:41:00-03:00"
+              },
+              {
+                "id": "visual-compare-k1-m6",
+                "direction": "OUTBOUND",
+                "source": "AI",
+                "body": "Corte feminino, sexta-feira, 19 de setembro, às 15h30. Posso confirmar?",
+                "createdAt": "{today}T13:41:30-03:00"
+              },
+              {
+                "id": "visual-compare-k1-m7",
+                "direction": "INBOUND",
+                "source": "CUSTOMER",
+                "body": "Pode!",
+                "createdAt": "{today}T13:42:00-03:00"
+              },
+              {
+                "id": "visual-compare-k1-m8",
+                "direction": "OUTBOUND",
+                "source": "AI",
+                "body": "Confirmado! Te espero sexta às 15h30 😊",
+                "createdAt": "{today}T13:42:30-03:00"
+              }
+            ],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/visual-compare-c1-ana/events",
+          "json": {
+            "data": [
+              {
+                "type": "HOLD_PLACED",
+                "id": "visual-compare-k1-hold",
+                "occurredAt": "{today}T13:41:10-03:00",
+                "date": "2026-09-19",
+                "startTime": "15:30",
+                "holdExpiresAt": "{today}T13:46:00-03:00"
+              },
+              {
+                "type": "APPOINTMENT_CREATED",
+                "id": "visual-compare-k1-appointment-event",
+                "occurredAt": "{today}T13:42:10-03:00",
+                "appointmentId": "visual-compare-k1-appointment",
+                "date": "2026-09-19",
+                "startTime": "15:30"
+              }
+            ],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T13:45:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "K2",
+      "file": "Conversas-e-Chat.dc.html",
+      "label": "Chat · aguardando você",
+      "route": "/conversas/visual-compare-c1-fernanda",
+      "clock": "13:45",
+      "notes": "Respostas fixas de GET (a conversa, as mensagens, os eventos, a lista da coluna de 1024 px em diante e /v1/status conectado, que tira o banner da casca), só no navegador da captura; a conta de teste não tem conversa nem número. As datas e horas usam {today} e {today-N}, trocados pelo dia semeado, para que o horário e o \"ontem\" saiam como no quadro. O motivo da espera vem de handoffReason (image_received), a fonte da linha \"Imagem recebida · a IA pausou…\". Sem resposta para a mídia (GET …/media é binário e sob demanda) nem para a sugestão (POST sob demanda): a captura mostra a bolha antes de carregar e o botão \"Sugerir resposta\", divergências declaradas 4 e 5 do Goal114.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/conversations",
+          "json": {
+            "data": [
+              {
+                "id": "visual-compare-c1-ana",
+                "externalContactId": "5511900000001",
+                "customerName": "Ana Paula",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-ana-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Confirmado! Te espero sexta às 15h30 😊",
+                  "createdAt": "{today}T13:42:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T13:42:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false,
+                "session": {
+                  "id": "visual-session-c1-ana",
+                  "startedAt": "{today}T09:00:00-03:00",
+                  "expiresAt": "{today}T23:00:00-03:00"
+                }
+              },
+              {
+                "id": "visual-compare-c1-fernanda",
+                "externalContactId": "5511900000002",
+                "customerName": "Fernanda Lima",
+                "status": "HUMAN_HANDOFF",
+                "humanHandoff": true,
+                "handoffReason": "image_received",
+                "lastMessage": {
+                  "id": "visual-compare-c1-fernanda-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Quero falar com a Camila, por favor",
+                  "createdAt": "{today}T13:33:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T13:33:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": false,
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c1-marcos",
+                "externalContactId": "5511900000003",
+                "customerName": "Marcos Vieira",
+                "status": "HUMAN_HANDOFF",
+                "humanHandoff": true,
+                "handoffReason": "pediu desconto",
+                "lastMessage": {
+                  "id": "visual-compare-c1-marcos-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Tem desconto se eu fechar 3 sessões?",
+                  "createdAt": "{today}T13:11:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T13:11:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": false,
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c1-juliana",
+                "externalContactId": "5511900000004",
+                "customerName": "Juliana Mendes",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-juliana-last",
+                  "direction": "OUTBOUND",
+                  "source": "OWNER",
+                  "body": "Combinado, até mais tarde!",
+                  "createdAt": "{today}T12:10:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T12:10:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "HUMAN",
+                "ignored": false,
+                "aiPaused": false,
+                "session": {
+                  "id": "visual-session-c1-juliana",
+                  "startedAt": "{today}T09:00:00-03:00",
+                  "expiresAt": "{today}T23:00:00-03:00"
+                }
+              },
+              {
+                "id": "visual-compare-c1-pedro",
+                "externalContactId": "5511900000005",
+                "customerName": "Pedro Alves",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-pedro-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Corte masculino, hoje às 16h30. Posso confirmar?",
+                  "createdAt": "{today}T12:05:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T12:05:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false,
+                "session": {
+                  "id": "visual-session-c1-pedro",
+                  "startedAt": "{today}T09:00:00-03:00",
+                  "expiresAt": "{today}T23:00:00-03:00"
+                }
+              },
+              {
+                "id": "visual-compare-c1-bia",
+                "externalContactId": "5511900000006",
+                "customerName": "Bia Castro",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-bia-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Obrigada! Até amanhã 💛",
+                  "createdAt": "{today-1}T19:20:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today-1}T19:20:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false
+              }
+            ],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/visual-compare-c1-fernanda",
+          "json": {
+            "data": {
+              "id": "visual-compare-c1-fernanda",
+              "externalContactId": "5511900000002",
+              "customerName": "Fernanda Lima",
+              "status": "HUMAN_HANDOFF",
+              "humanHandoff": true,
+              "handoffReason": "image_received",
+              "lastMessage": {
+                "id": "visual-compare-c1-fernanda-last",
+                "direction": "INBOUND",
+                "source": "CUSTOMER",
+                "body": "Quero falar com a Camila, por favor",
+                "createdAt": "{today}T13:33:00-03:00"
+              },
+              "unreadCount": 0,
+              "updatedAt": "{today}T13:33:00-03:00",
+              "category": "COMMERCIAL",
+              "categorySource": "AUTOMATIC",
+              "ignored": false,
+              "aiPaused": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/visual-compare-c1-fernanda/messages",
+          "json": {
+            "data": [
+              {
+                "id": "visual-compare-k2-m1",
+                "direction": "INBOUND",
+                "source": "CUSTOMER",
+                "body": "Oi! Vocês fazem esse tipo de corte?",
+                "createdAt": "{today}T13:28:00-03:00"
+              },
+              {
+                "id": "visual-compare-k2-m2",
+                "direction": "INBOUND",
+                "source": "CUSTOMER",
+                "body": "",
+                "createdAt": "{today}T13:28:30-03:00",
+                "kind": "IMAGE",
+                "attachment": {
+                  "kind": "IMAGE",
+                  "mimetype": "image/jpeg",
+                  "fileName": null,
+                  "sizeBytes": 84213,
+                  "durationSeconds": null,
+                  "tooLarge": false,
+                  "transcript": null,
+                  "transcriptStatus": null,
+                  "transcriptError": null,
+                  "mediaAvailable": true
+                }
+              },
+              {
+                "id": "visual-compare-k2-m3",
+                "direction": "INBOUND",
+                "source": "CUSTOMER",
+                "body": "Quero falar com a Camila, por favor",
+                "createdAt": "{today}T13:30:00-03:00"
+              }
+            ],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/visual-compare-c1-fernanda/events",
+          "json": {
+            "data": [],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T13:45:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "K3",
+      "file": "Conversas-e-Chat.dc.html",
+      "label": "Chat · você atendendo",
+      "route": "/conversas/visual-compare-c1-juliana",
+      "clock": "13:45",
+      "notes": "Respostas fixas de GET (a conversa, as mensagens, os eventos, a lista da coluna de 1024 px em diante e /v1/status conectado, que tira o banner da casca), só no navegador da captura; a conta de teste não tem conversa nem número. As datas e horas usam {today} e {today-N}, trocados pelo dia semeado, para que o horário e o \"ontem\" saiam como no quadro. A linha \"Você assumiu a conversa · 12:02\" vem de session.humanHandlingSince. A linha \"Você editou o agendamento de hoje, 15:00 · + Hidratação\" não tem fonte no contrato e a sugestão aberta é POST sob demanda: divergências declaradas 3 e 4 do Goal114.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/conversations",
+          "json": {
+            "data": [
+              {
+                "id": "visual-compare-c1-ana",
+                "externalContactId": "5511900000001",
+                "customerName": "Ana Paula",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-ana-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Confirmado! Te espero sexta às 15h30 😊",
+                  "createdAt": "{today}T13:42:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T13:42:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false,
+                "session": {
+                  "id": "visual-session-c1-ana",
+                  "startedAt": "{today}T09:00:00-03:00",
+                  "expiresAt": "{today}T23:00:00-03:00"
+                }
+              },
+              {
+                "id": "visual-compare-c1-fernanda",
+                "externalContactId": "5511900000002",
+                "customerName": "Fernanda Lima",
+                "status": "HUMAN_HANDOFF",
+                "humanHandoff": true,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-fernanda-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Quero falar com a Camila, por favor",
+                  "createdAt": "{today}T13:33:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T13:33:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": false,
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c1-marcos",
+                "externalContactId": "5511900000003",
+                "customerName": "Marcos Vieira",
+                "status": "HUMAN_HANDOFF",
+                "humanHandoff": true,
+                "handoffReason": "pediu desconto",
+                "lastMessage": {
+                  "id": "visual-compare-c1-marcos-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Tem desconto se eu fechar 3 sessões?",
+                  "createdAt": "{today}T13:11:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T13:11:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": false,
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c1-juliana",
+                "externalContactId": "5511900000004",
+                "customerName": "Juliana Mendes",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-juliana-last",
+                  "direction": "OUTBOUND",
+                  "source": "OWNER",
+                  "body": "Combinado, até mais tarde!",
+                  "createdAt": "{today}T12:10:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T12:10:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "HUMAN",
+                "ignored": false,
+                "aiPaused": false,
+                "session": {
+                  "id": "visual-session-c1-juliana",
+                  "startedAt": "{today}T09:00:00-03:00",
+                  "expiresAt": "{today}T23:00:00-03:00",
+                  "humanHandlingSince": "{today}T12:02:00-03:00"
+                }
+              },
+              {
+                "id": "visual-compare-c1-pedro",
+                "externalContactId": "5511900000005",
+                "customerName": "Pedro Alves",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-pedro-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Corte masculino, hoje às 16h30. Posso confirmar?",
+                  "createdAt": "{today}T12:05:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T12:05:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false,
+                "session": {
+                  "id": "visual-session-c1-pedro",
+                  "startedAt": "{today}T09:00:00-03:00",
+                  "expiresAt": "{today}T23:00:00-03:00"
+                }
+              },
+              {
+                "id": "visual-compare-c1-bia",
+                "externalContactId": "5511900000006",
+                "customerName": "Bia Castro",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c1-bia-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Obrigada! Até amanhã 💛",
+                  "createdAt": "{today-1}T19:20:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today-1}T19:20:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false
+              }
+            ],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/visual-compare-c1-juliana",
+          "json": {
+            "data": {
+              "id": "visual-compare-c1-juliana",
+              "externalContactId": "5511900000004",
+              "customerName": "Juliana Mendes",
+              "status": "ACTIVE",
+              "humanHandoff": false,
+              "handoffReason": null,
+              "lastMessage": {
+                "id": "visual-compare-c1-juliana-last",
+                "direction": "OUTBOUND",
+                "source": "OWNER",
+                "body": "Combinado, até mais tarde!",
+                "createdAt": "{today}T12:10:00-03:00"
+              },
+              "unreadCount": 0,
+              "updatedAt": "{today}T12:10:00-03:00",
+              "category": "COMMERCIAL",
+              "categorySource": "AUTOMATIC",
+              "handling": "HUMAN",
+              "ignored": false,
+              "aiPaused": false,
+              "session": {
+                "id": "visual-session-c1-juliana",
+                "startedAt": "{today}T09:00:00-03:00",
+                "expiresAt": "{today}T23:00:00-03:00",
+                "humanHandlingSince": "{today}T12:02:00-03:00"
+              }
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/visual-compare-c1-juliana/messages",
+          "json": {
+            "data": [
+              {
+                "id": "visual-compare-k3-m1",
+                "direction": "INBOUND",
+                "source": "CUSTOMER",
+                "body": "",
+                "createdAt": "{today}T12:01:00-03:00",
+                "kind": "AUDIO",
+                "attachment": {
+                  "kind": "AUDIO",
+                  "mimetype": "audio/ogg",
+                  "fileName": null,
+                  "sizeBytes": 21500,
+                  "durationSeconds": 14,
+                  "tooLarge": false,
+                  "transcript": "Oi Camila, consegue encaixar uma hidratação junto com a escova de hoje?",
+                  "transcriptStatus": "DONE",
+                  "transcriptError": null,
+                  "mediaAvailable": true
+                }
+              },
+              {
+                "id": "visual-compare-k3-m2",
+                "direction": "OUTBOUND",
+                "source": "OWNER",
+                "body": "Consigo sim! Fica 1h10 no total, tudo bem?",
+                "createdAt": "{today}T12:05:00-03:00"
+              },
+              {
+                "id": "visual-compare-k3-m3",
+                "direction": "INBOUND",
+                "source": "CUSTOMER",
+                "body": "Perfeito! Pode deixar no mesmo horário",
+                "createdAt": "{today}T12:08:00-03:00"
+              },
+              {
+                "id": "visual-compare-k3-m4",
+                "direction": "OUTBOUND",
+                "source": "OWNER",
+                "body": "Combinado, até mais tarde!",
+                "createdAt": "{today}T12:10:00-03:00"
+              }
+            ],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/visual-compare-c1-juliana/events",
+          "json": {
+            "data": [],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T13:45:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "K4",
+      "file": "Conversas-e-Chat.dc.html",
+      "label": "Chat · pessoal",
+      "route": "/conversas/visual-compare-c3-mae",
+      "clock": "13:45",
+      "notes": "Respostas fixas de GET (a conversa, as mensagens, os eventos, a lista da coluna de 1024 px em diante e /v1/status conectado, que tira o banner da casca), só no navegador da captura; a conta de teste não tem conversa nem número. As datas e horas usam {today} e {today-N}, trocados pelo dia semeado, para que o horário e o \"ontem\" saiam como no quadro. A conversa é PERSONAL e ignorada (ignored true): a nota \"A IA nunca responde este contato · alterar\" e o estado \"Pessoal · IA desativada\" vêm dela. A coluna da lista de 1024 px em diante usa as linhas do C3.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/conversations",
+          "json": {
+            "data": [
+              {
+                "id": "visual-compare-c3-mae",
+                "externalContactId": "5511900000008",
+                "customerName": "Mãe",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-k4-m3",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Tá bom, beijo",
+                  "createdAt": "{today}T11:35:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T11:35:00-03:00",
+                "category": "PERSONAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": true,
+                "ignoredAt": "{today}T11:30:00-03:00",
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c3-dudu",
+                "externalContactId": "5511900000009",
+                "customerName": "Dudu ❤️",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c3-dudu-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Chego às 20h, quer que eu compre algo?",
+                  "createdAt": "{today}T10:58:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T10:58:00-03:00",
+                "category": "PERSONAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": true,
+                "ignoredAt": "{today}T10:58:00-03:00",
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c3-lu",
+                "externalContactId": "5511900000010",
+                "customerName": "Tia Lú",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c3-lu-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Bom dia, família! ☀️",
+                  "createdAt": "{today}T08:02:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T08:02:00-03:00",
+                "category": "PERSONAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": false,
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c3-renata",
+                "externalContactId": "5511900000011",
+                "customerName": "Renata",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c3-renata-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Amiga, o vídeo que te mandei 😂",
+                  "createdAt": "{today-3}T16:30:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today-3}T16:30:00-03:00",
+                "category": "PERSONAL",
+                "categorySource": "AUTOMATIC",
+                "ignored": false,
+                "aiPaused": false
+              }
+            ],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/visual-compare-c3-mae",
+          "json": {
+            "data": {
+              "id": "visual-compare-c3-mae",
+              "externalContactId": "5511900000008",
+              "customerName": "Mãe",
+              "status": "ACTIVE",
+              "humanHandoff": false,
+              "handoffReason": null,
+              "lastMessage": {
+                "id": "visual-compare-k4-m3",
+                "direction": "INBOUND",
+                "source": "CUSTOMER",
+                "body": "Tá bom, beijo",
+                "createdAt": "{today}T11:35:00-03:00"
+              },
+              "unreadCount": 0,
+              "updatedAt": "{today}T11:35:00-03:00",
+              "category": "PERSONAL",
+              "categorySource": "AUTOMATIC",
+              "ignored": true,
+              "ignoredAt": "{today}T11:30:00-03:00",
+              "aiPaused": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/visual-compare-c3-mae/messages",
+          "json": {
+            "data": [
+              {
+                "id": "visual-compare-k4-m1",
+                "direction": "INBOUND",
+                "source": "CUSTOMER",
+                "body": "Filha, liga pra mim quando puder",
+                "createdAt": "{today}T11:30:00-03:00"
+              },
+              {
+                "id": "visual-compare-k4-m2",
+                "direction": "OUTBOUND",
+                "source": "OWNER",
+                "body": "Oi mãe! Tô com cliente, te ligo às 13h 💛",
+                "createdAt": "{today}T11:34:00-03:00"
+              },
+              {
+                "id": "visual-compare-k4-m3",
+                "direction": "INBOUND",
+                "source": "CUSTOMER",
+                "body": "Tá bom, beijo",
+                "createdAt": "{today}T11:35:00-03:00"
+              }
+            ],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/visual-compare-c3-mae/events",
+          "json": {
+            "data": [],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T13:45:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "NT1",
       "file": "Notificacoes.dc.html",
       "label": "Notificações",

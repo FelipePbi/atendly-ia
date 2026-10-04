@@ -253,6 +253,12 @@ describe("chat da conversa", () => {
 
   test("as opções de categoria formam um grupo com estado nunca só por cor", async () => {
     await renderThread(conversationFixture());
+    // Goal114: a categoria mora no contexto, aberto pelo nome no cabeçalho.
+    await userEvent
+      .setup()
+      .click(
+        screen.getByRole("button", { name: "Abrir contexto de Marina Duarte" }),
+      );
 
     const group = screen.getByRole("group", { name: "Categoria da conversa" });
     const commercial = within(group).getByRole("button", { name: "Comercial" });
@@ -283,7 +289,7 @@ describe("chat da conversa", () => {
 
     const group = await screen.findByRole("group", { name: "Sugestões da IA" });
     const first = within(group).getByRole("button", {
-      name: "Claro, temos horário amanhã às 10h",
+      name: "Usar: Claro, temos horário amanhã às 10h",
     });
     await tabUntilFocused(user, first);
     expect(first).toHaveFocus();
@@ -323,7 +329,7 @@ describe("chat da conversa", () => {
     const user = userEvent.setup();
 
     const trigger = screen.getByRole("button", {
-      name: "Abrir contexto do cliente",
+      name: "Abrir contexto de Marina Duarte",
     });
     await user.click(trigger);
     const dialog = await screen.findByRole("dialog", {

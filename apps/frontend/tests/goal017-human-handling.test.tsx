@@ -7,9 +7,9 @@
  *
  * - abrir a conversa não chama nenhuma mutação de estado;
  * - antes do envio, quando quem responde ainda não é a profissional, o
- *   campo avisa que enviar assume a conversa; depois de enviar, a barra de
- *   estado passa de `Aguardando você` para `Você atendendo`, sem esperar o
- *   próximo polling;
+ *   campo avisa que enviar assume a conversa; depois de enviar, a linha de
+ *   estado do cabeçalho passa de `Aguardando você` para `Você atendendo`,
+ *   sem esperar o próximo polling (Goal114: o estado mora no cabeçalho);
  * - `takeover`, `release` (Retomar IA) e `resolve` continuam alcançáveis, e
  *   o diálogo de Retomar IA explica que a IA reavalia o contexto atual;
  * - override de categoria funciona nos três valores e em `null`, a origem
@@ -91,9 +91,17 @@ function messageFixture(overrides: Partial<Message> = {}): Message {
 }
 
 function stateBar(): HTMLElement {
-  const node = document.querySelector(".conversation-state-bar");
+  const node = document.querySelector(".chat-header-state");
   expect(node).not.toBeNull();
   return node as HTMLElement;
+}
+
+/** Goal114: a categoria mora no contexto, aberto pelo nome no cabeçalho. */
+async function openContext(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    screen.getByRole("button", { name: "Abrir contexto de Marina Duarte" }),
+  );
+  return screen.findByRole("dialog", { name: "Contexto da conversa" });
 }
 
 async function renderThread(conversation: Conversation, messages: Message[] = []) {
@@ -144,12 +152,14 @@ describe("enviar assume a conversa", () => {
       }),
     );
 
-    expect(within(stateBar()).getByText("Aguardando você")).toBeVisible();
-    expect(
-      screen.getByText(
-        "Enviar assume esta conversa: a IA é pausada e você passa a atender.",
-      ),
-    ).toBeVisible();
+    expect(within(stateBar()).getByText(/^Aguardando você/)).toBeVisible();
+    expect(screen.getByLabelText("Mensagem")).toHaveAttribute(
+      "placeholder",
+      "Sua primeira mensagem assume a conversa",
+    );
+    expect(screen.getByLabelText("Mensagem")).toHaveAccessibleDescription(
+      "Sua primeira mensagem assume a conversa.",
+    );
   });
 
   test("reflete Aguardando você para Você atendendo depois do envio", async () => {
@@ -167,7 +177,7 @@ describe("enviar assume a conversa", () => {
     );
     const user = userEvent.setup();
 
-    expect(within(stateBar()).getByText("Aguardando você")).toBeVisible();
+    expect(within(stateBar()).getByText(/^Aguardando você/)).toBeVisible();
     await user.type(
       screen.getByLabelText("Mensagem"),
       "Já te atendo por aqui",
@@ -177,7 +187,7 @@ describe("enviar assume a conversa", () => {
     expect(
       await within(stateBar()).findByText("Você atendendo"),
     ).toBeVisible();
-    expect(within(stateBar()).queryByText("Aguardando você")).toBeNull();
+    expect(within(stateBar()).queryByText(/Aguardando você/)).toBeNull();
     expect(sendMessage).toHaveBeenCalledWith(
       "conv-1",
       "Já te atendo por aqui",
@@ -204,6 +214,7 @@ describe("takeover, release e resolve continuam alcançáveis", () => {
     );
     const user = userEvent.setup();
 
+    await user.click(screen.getByRole("button", { name: "Mais ações" }));
     await user.click(screen.getByRole("button", { name: "Assumir conversa" }));
 
     expect(takeover).toHaveBeenCalledWith("conv-1");
@@ -238,7 +249,7 @@ describe("takeover, release e resolve continuam alcançáveis", () => {
       conversationFixture({ status: "CLOSED" }),
     );
     await renderThread(
-      conversationFixture({ handling: "HUMAN", status: "HUMAN_HANDOFF" }),
+      conversationFixture({ handling: "AI", status: "ACTIVE" }),
     );
     const user = userEvent.setup();
 
@@ -265,6 +276,7 @@ describe("override de categoria", () => {
         suggestedCategory: "PERSONAL",
       }),
     );
+    await openContext(userEvent.setup());
 
     expect(screen.getByText("Classificação automática")).toBeVisible();
     expect(
@@ -297,6 +309,7 @@ describe("override de categoria", () => {
       }),
     );
     const user = userEvent.setup();
+    await openContext(user);
 
     await user.click(screen.getByRole("button", { name: "Pessoal" }));
 
@@ -322,6 +335,7 @@ describe("override de categoria", () => {
     await renderThread(
       conversationFixture({ category: "COMMERCIAL", categorySource: "AUTOMATIC" }),
     );
+    await openContext(userEvent.setup());
 
     expect(
       screen.getByRole("button", { name: "Usar classificação automática" }),

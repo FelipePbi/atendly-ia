@@ -7,8 +7,8 @@
  * - com vínculo (`customerId`), o painel liga para a pessoa certa por id,
  *   nunca por telefone;
  * - sem vínculo, a tela diz que o contato ainda não é cliente cadastrado;
- * - o desktop mostra o painel lateral direto na árvore, e o mobile alcança o
- *   mesmo conteúdo por uma folha aberta pelo cabeçalho;
+ * - o contexto não é mais coluna (Goal114): em todas as larguras ele abre
+ *   numa folha, pelo nome no cabeçalho;
  * - nenhuma memória, nota ou tag aparece aqui — isso é Clientes;
  * - marcar e desmarcar "ignorar na IA" existem na tela, são reversíveis pela
  *   mesma operação (`setIgnored`) e dizem o que fazem antes de confirmar.
@@ -148,8 +148,8 @@ describe("nada de memória, nota ou tag aqui", () => {
   });
 });
 
-describe("desktop com painel lateral e mobile com folha pelo cabeçalho", () => {
-  test("desktop encontra o painel direto na árvore, sem interação", async () => {
+describe("o contexto abre em folha pelo nome no cabeçalho (Goal114)", () => {
+  test("não há coluna de contexto na árvore antes de abrir a folha", async () => {
     getConversation.mockResolvedValue(
       conversationFixture({ customerId: "cust-42" }),
     );
@@ -160,13 +160,13 @@ describe("desktop com painel lateral e mobile com folha pelo cabeçalho", () => 
       </ShellConfigProvider>,
     );
 
-    const aside = await screen.findByLabelText("Contexto da conversa");
-    expect(
-      within(aside).getByRole("link", { name: "Abrir cliente" }),
-    ).toHaveAttribute("href", "/clientes/detalhes?id=cust-42");
+    await screen.findByLabelText("Histórico da conversa com Marina Duarte");
+    expect(screen.queryByLabelText("Contexto da conversa")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Abrir cliente" })).toBeNull();
+    expect(document.querySelector(".conversation-context")).toBeNull();
   });
 
-  test("mobile alcança o mesmo contexto por uma folha aberta pelo cabeçalho", async () => {
+  test("o nome no cabeçalho abre o contexto numa folha", async () => {
     getConversation.mockResolvedValue(
       conversationFixture({ customerId: "cust-42" }),
     );
@@ -182,7 +182,7 @@ describe("desktop com painel lateral e mobile com folha pelo cabeçalho", () => 
     expect(screen.queryByRole("dialog")).toBeNull();
 
     await user.click(
-      screen.getByRole("button", { name: "Abrir contexto do cliente" }),
+      screen.getByRole("button", { name: "Abrir contexto de Marina Duarte" }),
     );
 
     const dialog = await screen.findByRole("dialog", {
@@ -247,9 +247,11 @@ describe("ignorar na IA pela tela real, com confirmação antes do efeito", () =
         <ProductConversationsScreen conversationId="conv-1" />
       </ShellConfigProvider>,
     );
-    const aside = await screen.findByLabelText("Contexto da conversa");
+    await screen.findByLabelText("Histórico da conversa com Marina Duarte");
+    // Goal114: sem coluna de contexto, ignorar fica no menu "Mais ações".
+    await user.click(screen.getByRole("button", { name: "Mais ações" }));
     await user.click(
-      within(aside).getByRole("button", {
+      screen.getByRole("button", {
         name: conversation.ignored
           ? "Voltar a usar na IA"
           : "Ignorar contato na IA",
@@ -275,7 +277,7 @@ describe("ignorar na IA pela tela real, com confirmação antes do efeito", () =
 
     expect(setIgnored).toHaveBeenCalledWith("conv-1", true);
     expect(
-      await screen.findByRole("button", { name: "Voltar a usar na IA" }),
+      await screen.findByText(/A IA nunca responde este contato/),
     ).toBeVisible();
   });
 

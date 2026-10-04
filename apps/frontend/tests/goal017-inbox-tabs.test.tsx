@@ -452,8 +452,7 @@ describe("o despachante separa os dois cenários", () => {
     expect(
       await screen.findByLabelText("Histórico da conversa com Marina Duarte"),
     ).toBeVisible();
-    expect(
-      screen.getByText("A IA responde em nome do negócio na próxima mensagem."),
-    ).toBeVisible();
+    // Goal114: o estado mora numa linha do cabeçalho, não numa barra.
+    expect(screen.getByText("IA ativa")).toBeVisible();
   });
 });

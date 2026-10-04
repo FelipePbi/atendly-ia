@@ -187,11 +187,15 @@ describe("ShellConfigProvider + Chat da conversa não excede a profundidade de a
     renderWithShell(<ConversationThread conversationId="conv-1" />);
 
     await screen.findByLabelText("Histórico da conversa com Marina Duarte");
-    const openContext = screen.getByRole("button", { name: "Abrir contexto" });
+    const openContext = screen.getByRole("button", {
+      name: "Abrir contexto de Marina Duarte",
+    });
     for (let i = 0; i < 4; i += 1) {
       await user.click(openContext);
       await user.click(await screen.findByRole("button", { name: "Fechar" }));
     }
+    // Goal114: a categoria mora no contexto, que só existe em folha.
+    await user.click(openContext);
 
     setCategory.mockResolvedValue(
       conversationFixture({ category: "PERSONAL", categorySource: "MANUAL" }),

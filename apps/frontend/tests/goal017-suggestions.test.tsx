@@ -4,8 +4,9 @@
  *
  * O que este arquivo prova, pelo que a usuária encontra na tela:
  *
- * - a sugestão só é oferecida com atendimento humano vigente — some do chat
- *   em qualquer outro estado;
+ * - a sugestão só é oferecida com atendimento humano vigente ou à espera da
+ *   profissional (Goal114, quadro K2: a IA aceita `humanHandoff`) — some do
+ *   chat com a IA atendendo;
  * - até três sugestões aparecem, cada uma preenche o rascunho ao ser usada
  *   (editável antes de enviar) e nenhuma é enviada sozinha;
  * - as cinco recusas próprias (`error.details.upstreamCode`) têm copy
@@ -106,7 +107,7 @@ describe("só oferecida com atendimento humano vigente", () => {
     ).toBeNull();
   });
 
-  test("some do chat quando a conversa está aguardando você, mas ainda não assumida", async () => {
+  test("aparece quando a conversa está aguardando você, ainda não assumida (K2)", async () => {
     await renderThread(
       conversationFixture({
         handling: "AI",
@@ -117,8 +118,9 @@ describe("só oferecida com atendimento humano vigente", () => {
     );
 
     expect(
-      screen.queryByRole("button", { name: /Sugerir resposta/ }),
-    ).toBeNull();
+      screen.getByRole("button", { name: /Sugerir resposta/ }),
+    ).toBeVisible();
+    expect(generateSuggestions).not.toHaveBeenCalled();
   });
 
   test("aparece quando você está atendendo", async () => {
@@ -157,7 +159,9 @@ describe("até três sugestões, editáveis, nenhuma enviada sozinha", () => {
     ).toBeVisible();
     expect(screen.getByText("Posso confirmar às 9h da manhã?")).toBeVisible();
 
-    await user.click(first);
+    await user.click(
+      screen.getByRole("button", { name: "Usar: Sim, temos às 9h e às 10h30." }),
+    );
 
     const field = screen.getByLabelText<HTMLTextAreaElement>("Mensagem");
     expect(field.value).toBe("Sim, temos às 9h e às 10h30.");

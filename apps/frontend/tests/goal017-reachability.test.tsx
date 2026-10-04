@@ -165,7 +165,18 @@ describe("a inbox leva ao chat pela rota dinâmica, e o chat volta pela mesma ro
     ).toHaveAttribute("href", "/conversas");
   });
 
-  test("o rail de conversas recentes do chat também aponta para a rota de cada conversa", async () => {
+  test("de 1024 px em diante, a coluna da lista ao lado do chat também aponta para a rota de cada conversa", async () => {
+    // Goal114: a coluna da lista de /conversas substitui o rail do chat.
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: (query: string) => ({
+        addEventListener: () => undefined,
+        matches: /min-width:\s*1024px/.test(query),
+        media: query,
+        removeEventListener: () => undefined,
+      }),
+      writable: true,
+    });
     getConversation.mockResolvedValue(conversationFixture({ id: "conv-1" }));
     listMessages.mockResolvedValue([]);
     listConversations.mockResolvedValue([
@@ -173,11 +184,19 @@ describe("a inbox leva ao chat pela rota dinâmica, e o chat volta pela mesma ro
       conversationFixture({ customerName: "Bruno Nunes", id: "conv-2" }),
     ]);
 
-    await renderConversation("conv-1");
+    try {
+      await renderConversation("conv-1");
 
-    const rail = await screen.findByLabelText("Conversas recentes");
-    const other = within(rail).getByRole("link", { name: /Bruno Nunes/ });
-    expect(other).toHaveAttribute("href", "/conversas/conv-2");
+      const column = await screen.findByRole("complementary", {
+        name: "Conversas",
+      });
+      const other = await within(column).findByRole("link", {
+        name: /Bruno Nunes/,
+      });
+      expect(other).toHaveAttribute("href", "/conversas/conv-2");
+    } finally {
+      Reflect.deleteProperty(window, "matchMedia");
+    }
   });
 });
 
@@ -192,7 +211,13 @@ describe("ConversationContextPanel e ConversationSuggestions não ficam sem impo
     await renderConversation("conv-1");
 
     await screen.findByLabelText("Histórico da conversa com Marina Duarte");
-    const context = await screen.findByLabelText("Contexto da conversa");
+    // Goal114: o contexto abre em folha pelo nome no cabeçalho.
+    screen
+      .getByRole("button", { name: "Abrir contexto de Marina Duarte" })
+      .click();
+    const context = await screen.findByRole("dialog", {
+      name: "Contexto da conversa",
+    });
     expect(
       within(context).getByRole("link", { name: "Abrir cliente" }),
     ).toHaveAttribute("href", "/clientes/detalhes?id=cust-1");

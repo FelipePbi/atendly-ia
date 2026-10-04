@@ -4,102 +4,39 @@ import clsx from "clsx";
 import Link from "next/link";
 
 import type { Conversation } from "@/data";
-import { Icon } from "@/shared/icons/Icon";
 
+import { conversationState, conversationStateView } from "./conversationState";
 import {
-  conversationState,
-  conversationStateView,
-  needsAttention,
-} from "./conversationState";
-import {
-  conversationLabel,
   DEFAULT_BUSINESS_TIMEZONE,
   formatInboxPhone,
   formatInboxTime,
-  formatRelativeTime,
   formatWaitingTime,
   initials,
   waitingReasonLabel,
 } from "./format";
 
 /**
- * Uma linha da conversa. Na inbox (`compact` falso) é a linha do quadro de
- * Conversas do protótipo: nome, última mensagem, horário e, quando há o que
- * dizer, o estado. Na coluna de conversas do chat (`compact`) segue a linha
- * de antes. Não há contador de não lidas: o contrato devolve `unreadCount`
- * zero fixo e a tela não afirma o que nenhuma camada calcula.
+ * Uma linha da conversa, a do quadro de Conversas do protótipo: nome, última
+ * mensagem, horário e, quando há o que dizer, o estado. Ao lado do chat
+ * (Goal114) a linha da conversa aberta vem marcada com `aria-current`. Não há
+ * contador de não lidas: o contrato devolve `unreadCount` zero fixo e a tela
+ * não afirma o que nenhuma camada calcula.
  */
 export function ConversationRow({
-  compact = false,
   conversation,
   selected = false,
   timezone = DEFAULT_BUSINESS_TIMEZONE,
 }: {
-  compact?: boolean;
   conversation: Conversation;
   selected?: boolean;
   timezone?: string;
 }) {
-  if (compact) {
-    return <RailRow conversation={conversation} selected={selected} />;
-  }
   return (
     <InboxRow
       conversation={conversation}
       selected={selected}
       timezone={timezone}
     />
-  );
-}
-
-function RailRow({
-  conversation,
-  selected,
-}: {
-  conversation: Conversation;
-  selected: boolean;
-}) {
-  const state = conversationState(conversation);
-  const view = conversationStateView(state);
-  const label = conversationLabel(conversation);
-  return (
-    <Link
-      className={clsx(
-        "conversation-row",
-        needsAttention(state) && "is-attention",
-        selected && "is-selected",
-      )}
-      href={`/conversas/${encodeURIComponent(conversation.id)}`}
-    >
-      <span className="conversation-row-avatar">
-        <span className="avatar">{initials(label)}</span>
-      </span>
-      <span className="conversation-row-main">
-        <span className="conversation-row-title">
-          <strong>{label}</strong>
-        </span>
-        <span className="conversation-row-preview">
-          {conversation.lastMessage?.body || "Sem mensagens"}
-        </span>
-        <span className="conversation-row-signals">
-          <span
-            className={clsx(
-              "badge",
-              (state === "ai-active" || state === "ai-handling") && "badge-ai",
-              needsAttention(state) && "badge-attention",
-              state === "you-handling" && "badge-success",
-            )}
-          >
-            <Icon name={view.icon} />
-            {view.label}
-          </span>
-        </span>
-      </span>
-      <time className="conversation-row-time" dateTime={conversation.updatedAt}>
-        {formatRelativeTime(conversation.updatedAt)}
-      </time>
-      <span className="sr-only">Abrir conversa</span>
-    </Link>
   );
 }
 
@@ -117,7 +54,9 @@ function InboxRow({
   const name = conversation.customerName?.trim();
   const label = name || formatInboxPhone(conversation.externalContactId);
   const waiting = state === "waiting-you";
-  const reason = waiting ? waitingReasonLabel(conversation.handoffReason) : null;
+  const reason = waiting
+    ? waitingReasonLabel(conversation.handoffReason)
+    : null;
   const tone = waiting ? "is-waiting" : state === "ai-handling" ? "is-ai" : "";
   const hasPill =
     waiting ||
@@ -138,6 +77,7 @@ function InboxRow({
         tone,
         selected && "is-selected",
       )}
+      aria-current={selected ? "page" : undefined}
       href={`/conversas/${encodeURIComponent(conversation.id)}`}
     >
       <span aria-hidden="true" className="conversation-row-avatar">
@@ -162,10 +102,7 @@ function InboxRow({
       <span className="conversation-row-main">
         <span className="conversation-row-top">
           <strong
-            className={clsx(
-              "conversation-row-name",
-              !name && "is-phone",
-            )}
+            className={clsx("conversation-row-name", !name && "is-phone")}
           >
             {label}
           </strong>

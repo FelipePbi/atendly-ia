@@ -2,7 +2,14 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import type {
   Conversation,
@@ -12,6 +19,7 @@ import type {
 } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { useWideLayout } from "@/shared/layout/useWideLayout";
 import {
   getProductServices,
   useProductRuntime,
@@ -20,37 +28,51 @@ import { Dialog } from "@/shared/ui/Dialog";
 import { StatePanel } from "@/shared/ui/States";
 
 import { ConversationContextPanel } from "./ConversationContextPanel";
-import { ConversationLoading } from "./ConversationLoading";
-import { ConversationRow } from "./ConversationRow";
 import {
+  ConversationListColumn,
+  lensForConversation,
+  useConversationList,
+} from "./ConversationListColumn";
+import { ConversationLoading } from "./ConversationLoading";
+import {
+  type ConversationState,
   conversationState,
   conversationStateView,
-  handoffReasonCopy,
+  isImageReason,
   needsAttention,
+  waitingNoticeCopy,
 } from "./conversationState";
 import { ConversationSuggestions } from "./ConversationSuggestions";
 import {
   conversationLabel,
-  formatPhone,
+  formatWaitingTime,
   initials,
   requestError,
 } from "./format";
+import type { InboxLens } from "./inboxLenses";
 import { refreshIntervalMs } from "./inboxLenses";
 import { MessageTimeline } from "./MessageTimeline";
 
 /**
- * O chat de uma conversa. É o único ponto da árvore do detalhe que declara
- * `useShellConfig` — o número de call sites acompanha o número de cenários
- * vivos, não o de componentes.
+ * O chat de uma conversa, como nos quadros K1 a K4 (Goal114). É o único ponto
+ * da árvore do detalhe que declara `useShellConfig` — o número de call sites
+ * acompanha o número de cenários vivos, não o de componentes.
+ *
+ * De 1024 px em diante a coluna da lista de Conversas (a mesma de
+ * `/conversas`) fica ao lado, aberta na aba da categoria da conversa e com a
+ * linha aberta marcada. A técnica é a de D-126: o invólucro existe nas duas
+ * faixas e o chat fica sempre na mesma posição da árvore, então cruzar 1024 px
+ * não apaga o rascunho nem troca o campo. Abaixo disso o chat é tela
+ * empurrada, sem barra de abas, e a lista nem é montada.
  */
 export function ConversationThread({
   conversationId,
 }: {
   conversationId: string;
 }) {
+  const wide = useWideLayout();
   const { session } = useProductRuntime();
   const [conversation, setConversation] = useState<Conversation | null>(null);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [events, setEvents] = useState<ConversationEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,15 +83,15 @@ export function ConversationThread({
   const [contextOpen, setContextOpen] = useState(false);
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
-  const [sendConfirmation, setSendConfirmation] = useState<string | null>(
-    null,
-  );
+  const [sendConfirmation, setSendConfirmation] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [categoryBusy, setCategoryBusy] = useState(false);
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [ignoredBusy, setIgnoredBusy] = useState(false);
   const [ignoredError, setIgnoredError] = useState<string | null>(null);
   const [ignoreOpen, setIgnoreOpen] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal, background = false) => {
@@ -87,18 +109,15 @@ export function ConversationThread({
         }
       })();
       try {
-        const [conversationResult, messagesResult, listResult] =
-          await Promise.all([
-            getProductServices().conversations.get(conversationId, signal),
-            getProductServices().conversations.listMessages(
-              conversationId,
-              signal,
-            ),
-            getProductServices().conversations.list({ limit: 50 }, signal),
-          ]);
+        const [conversationResult, messagesResult] = await Promise.all([
+          getProductServices().conversations.get(conversationId, signal),
+          getProductServices().conversations.listMessages(
+            conversationId,
+            signal,
+          ),
+        ]);
         setConversation(conversationResult);
         setMessages(messagesResult);
-        setConversations(listResult);
         if (!background) setError(null);
       } catch (caught: unknown) {
         if (!signal?.aborted && !background) {
@@ -130,22 +149,25 @@ export function ConversationThread({
       window.clearTimeout(initialTimer);
       window.clearInterval(timer);
     };
-  }, [load]);
+  }, [load, attempt]);
+
+  function retry() {
+    setLoading(true);
+    setError(null);
+    setAttempt((value) => value + 1);
+  }
 
   async function mutate(action: "release" | "resolve" | "takeover") {
     if (!conversation || busy) return;
     setBusy(true);
     setActionError(null);
+    setActionsOpen(false);
     try {
       const result = await getProductServices().conversations[action](
         conversation.id,
       );
       setConversation(result);
-      setConversations((current) =>
-        current.map((item) => (item.id === result.id ? result : item)),
-      );
       if (action === "release") setReleaseOpen(false);
-      if (action === "resolve") setActionsOpen(false);
     } catch (caught: unknown) {
       setActionError(
         requestError(caught, "Não foi possível alterar o atendimento."),
@@ -159,21 +181,14 @@ export function ConversationThread({
    * `handling` reflete a sessão vigente, e o envio grava o controle humano
    * antes do transporte (ai-orchestrator internal/routes.ts:474-492): o
    * estado local acompanha isso na hora, sem esperar o próximo polling —
-   * senão a barra de estado continuaria dizendo `Aguardando você` logo
-   * depois do envio que acabou de assumir a conversa.
+   * senão o cabeçalho continuaria dizendo `Aguardando você` logo depois do
+   * envio que acabou de assumir a conversa.
    */
   function markHumanHandling() {
     setConversation((current) =>
       current && current.handling !== "HUMAN"
         ? { ...current, handling: "HUMAN" }
         : current,
-    );
-    setConversations((current) =>
-      current.map((item) =>
-        item.id === conversationId && item.handling !== "HUMAN"
-          ? { ...item, handling: "HUMAN" }
-          : item,
-      ),
     );
   }
 
@@ -187,9 +202,6 @@ export function ConversationThread({
         category,
       );
       setConversation(result);
-      setConversations((current) =>
-        current.map((item) => (item.id === result.id ? result : item)),
-      );
     } catch (caught: unknown) {
       setCategoryError(
         requestError(caught, "Não foi possível alterar a categoria."),
@@ -214,9 +226,6 @@ export function ConversationThread({
         !conversation.ignored,
       );
       setConversation(result);
-      setConversations((current) =>
-        current.map((item) => (item.id === result.id ? result : item)),
-      );
       setIgnoreOpen(false);
     } catch (caught: unknown) {
       setIgnoredError(
@@ -225,6 +234,13 @@ export function ConversationThread({
     } finally {
       setIgnoredBusy(false);
     }
+  }
+
+  function openIgnore() {
+    setActionsOpen(false);
+    setContextOpen(false);
+    setIgnoredError(null);
+    setIgnoreOpen(true);
   }
 
   async function send(event: FormEvent) {
@@ -298,355 +314,604 @@ export function ConversationThread({
     loading,
     mainClassName: ready ? "conversation-detail-main" : undefined,
     module: "conversations",
-    showBottomNav: !ready,
+    pushed: ready,
     title: conversation ? conversationLabel(conversation) : "Conversas",
   });
 
-  if (loading || error || !conversation) {
-    return (
-      <div className="conversation-list-page">
-        <section className="conversation-list-surface conversation-list-state">
-          {loading ? (
-            <ConversationLoading />
-          ) : (
-            <StatePanel
-              actionHref="/conversas"
-              actionLabel="Voltar para conversas"
-              description={
-                error ?? "A conversa solicitada não está disponível."
-              }
-              icon="alert"
-              title="Não foi possível abrir a conversa"
-              tone="error"
-            />
-          )}
-        </section>
-      </div>
-    );
-  }
-
-  const state = conversationState(conversation);
-  const stateView = conversationStateView(state);
-  const closed = conversation.status === "CLOSED";
-  // Enviar assume: o takeover prévio deixou de ser pré-condição
-  // (internal/routes.ts:474-492), então o campo aceita digitação em qualquer
-  // estado aberto — só a conversa resolvida bloqueia. `willAssume` avisa
-  // antes do envio quando ele vai mudar quem está atendendo.
-  const canReply = !closed;
-  const willAssume = !closed && state !== "you-handling";
-  const person = conversationLabel(conversation);
-  const phone = formatPhone(conversation.externalContactId);
-  const reason = handoffReasonCopy(conversation.handoffReason);
   const businessName =
     session?.businessProfile?.businessName ??
     session?.tenant.name ??
     "Seu negócio";
   const businessTimezone =
     session?.businessProfile?.timezone ?? "America/Sao_Paulo";
-  const waiting = conversations.filter(
-    (item) => conversationState(item) === "waiting-you",
-  ).length;
-  const context = (
-    <ConversationContextPanel
-      categoryBusy={categoryBusy}
-      categoryError={categoryError}
-      conversation={conversation}
-      ignoredBusy={ignoredBusy}
-      ignoredError={ignoredError}
-      onResolve={() => void mutate("resolve")}
-      onSetCategory={(category) => void setCategory(category)}
-      onToggleIgnored={() => {
-        setIgnoredError(null);
-        setIgnoreOpen(true);
-      }}
-    />
-  );
+  const person = conversation ? conversationLabel(conversation) : "";
+
+  let chat: ReactNode;
+  if (loading || error || !conversation) {
+    chat = (
+      <section
+        aria-busy={loading || undefined}
+        className="conversation-chat conversation-chat-state"
+      >
+        {loading ? (
+          <ConversationLoading />
+        ) : (
+          <>
+            <StatePanel
+              actionLabel="Tentar novamente"
+              description={
+                error ?? "A conversa solicitada não está disponível."
+              }
+              icon="alert"
+              onAction={retry}
+              title="Não foi possível abrir a conversa"
+              tone="error"
+            />
+            <Link className="btn btn-secondary" href="/conversas">
+              Voltar para conversas
+            </Link>
+          </>
+        )}
+      </section>
+    );
+  } else {
+    const state = conversationState(conversation);
+    const closed = conversation.status === "CLOSED";
+    const personal =
+      state === "ai-paused" && conversation.category === "PERSONAL";
+    const youHandling = state === "you-handling";
+    // Enviar assume: o takeover prévio deixou de ser pré-condição
+    // (internal/routes.ts:474-492), então o campo aceita digitação em
+    // qualquer estado aberto — só a conversa resolvida bloqueia.
+    const canReply = !closed;
+    const aiAnswering =
+      state === "ai-handling" ||
+      state === "ai-active" ||
+      state === "ai-unstable";
+    const assumesOnSend = !closed && !youHandling;
+    const composerNotice = closed
+      ? "Esta conversa foi marcada como resolvida."
+      : aiAnswering
+        ? "Ao enviar uma mensagem, você assume a conversa e a IA pausa aqui."
+        : null;
+    const placeholder =
+      assumesOnSend && !aiAnswering && !personal
+        ? "Sua primeira mensagem assume a conversa"
+        : "Mensagem";
+    const noticeText =
+      state === "waiting-you" || state === "ai-unstable"
+        ? waitingNoticeCopy(conversation.handoffReason)
+        : null;
+    const offerSuggestions =
+      !closed && (youHandling || state === "waiting-you");
+
+    chat = (
+      <section
+        aria-labelledby="conversation-person-name"
+        className="conversation-chat"
+      >
+        <header className="chat-header">
+          <Link
+            aria-label="Voltar para conversas"
+            className="chat-header-icon chat-header-back"
+            href="/conversas"
+          >
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.75"
+              viewBox="0 0 24 24"
+              width="24"
+            >
+              <path d="M15 5l-7 7 7 7" />
+            </svg>
+          </Link>
+          <span
+            aria-hidden="true"
+            className={clsx("chat-avatar", avatarTone(state))}
+          >
+            {initials(person)}
+          </span>
+          <div className="chat-header-copy">
+            <button
+              aria-label={`Abrir contexto de ${person}`}
+              className="chat-header-name"
+              onClick={() => setContextOpen(true)}
+              type="button"
+            >
+              <span id="conversation-person-name">{person}</span>
+              <svg
+                aria-hidden="true"
+                fill="none"
+                height="14"
+                stroke="#716859"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+                width="14"
+              >
+                <path d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+            <HeaderState
+              closed={closed}
+              conversation={conversation}
+              personal={personal}
+              state={state}
+            />
+          </div>
+          {youHandling ? (
+            <button
+              className="chat-header-resume"
+              disabled={busy || closed}
+              onClick={() => setReleaseOpen(true)}
+              type="button"
+            >
+              <svg
+                aria-hidden="true"
+                fill="currentColor"
+                height="12"
+                viewBox="0 0 24 24"
+                width="12"
+              >
+                <path d="M8 5v14l11-7z" />
+              </svg>
+              Retomar IA
+            </button>
+          ) : (
+            <div className="dropdown chat-header-more">
+              <button
+                aria-expanded={actionsOpen}
+                aria-label="Mais ações"
+                className="chat-header-icon"
+                onClick={() => setActionsOpen((open) => !open)}
+                type="button"
+              >
+                <svg
+                  aria-hidden="true"
+                  fill="currentColor"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  width="22"
+                >
+                  <circle cx="5" cy="12" r="1.9" />
+                  <circle cx="12" cy="12" r="1.9" />
+                  <circle cx="19" cy="12" r="1.9" />
+                </svg>
+              </button>
+              {actionsOpen && (
+                <div className="menu">
+                  {!closed && (
+                    <button
+                      className="menu-item"
+                      disabled={busy}
+                      onClick={() => void mutate("takeover")}
+                      type="button"
+                    >
+                      <Icon name="user" />
+                      Assumir conversa
+                    </button>
+                  )}
+                  <Link className="menu-item" href="/agenda/novo">
+                    <Icon name="calendar" />
+                    Criar agendamento
+                  </Link>
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      setActionsOpen(false);
+                      setContextOpen(true);
+                    }}
+                    type="button"
+                  >
+                    <Icon name="chat" />
+                    Mudar categoria
+                  </button>
+                  <button
+                    className="menu-item"
+                    onClick={openIgnore}
+                    type="button"
+                  >
+                    <Icon name="eye" />
+                    {conversation.ignored
+                      ? "Voltar a usar na IA"
+                      : "Ignorar contato na IA"}
+                  </button>
+                  <button
+                    className="menu-item"
+                    disabled={busy || closed}
+                    onClick={() => void mutate("resolve")}
+                    type="button"
+                  >
+                    <Icon name="check" />
+                    Marcar como resolvida
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </header>
+
+        <MessageTimeline
+          businessTimezone={businessTimezone}
+          contentExpiredThrough={conversation.contentExpiredThrough ?? null}
+          conversationId={conversation.id}
+          events={events}
+          footer={
+            conversation.ignored ? (
+              <p className="chat-ignored-note">
+                <svg
+                  aria-hidden="true"
+                  fill="none"
+                  height="13"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2.5"
+                  viewBox="0 0 24 24"
+                  width="13"
+                >
+                  <circle cx="12" cy="12" r="8" />
+                  <path d="M6.5 6.5l11 11" />
+                </svg>
+                <span>A IA nunca responde este contato ·</span>
+                <button onClick={openIgnore} type="button">
+                  alterar
+                </button>
+              </p>
+            ) : null
+          }
+          humanHandlingSince={conversation.session?.humanHandlingSince ?? null}
+          messages={messages}
+          notice={
+            noticeText
+              ? {
+                  anchorImage: isImageReason(conversation.handoffReason),
+                  text: noticeText,
+                }
+              : null
+          }
+          onResend={(message) => void resend(message)}
+          person={person}
+          resendingId={resendingId}
+        />
+
+        <footer
+          className={clsx("chat-composer", composerNotice && "has-notice")}
+        >
+          {actionError && (
+            <div className="composer-error" role="alert">
+              <span>{actionError}</span>
+              <button onClick={() => setActionError(null)} type="button">
+                Fechar
+              </button>
+            </div>
+          )}
+          {composerNotice ? (
+            <span className="chat-composer-notice" id="composer-status-text">
+              {composerNotice}
+            </span>
+          ) : (
+            assumesOnSend && (
+              <span className="sr-only" id="composer-status-text">
+                Sua primeira mensagem assume a conversa.
+              </span>
+            )
+          )}
+          {sendConfirmation && (
+            <p className="composer-confirmation" role="status">
+              {sendConfirmation}
+            </p>
+          )}
+          {offerSuggestions && (
+            <ConversationSuggestions
+              conversationId={conversation.id}
+              onEdit={(text) => {
+                setDraft(text);
+                composerRef.current?.focus();
+              }}
+              onUse={(text) => setDraft(text)}
+            />
+          )}
+          <form
+            className="composer-form"
+            onSubmit={(event) => void send(event)}
+          >
+            <label className="sr-only" htmlFor="message-composer">
+              Mensagem
+            </label>
+            <textarea
+              aria-describedby={
+                composerNotice || assumesOnSend
+                  ? "composer-status-text"
+                  : undefined
+              }
+              className={clsx(
+                "composer-input",
+                !draft && placeholder !== "Mensagem" && "is-long-placeholder",
+              )}
+              disabled={!canReply || busy}
+              id="message-composer"
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder={placeholder}
+              ref={composerRef}
+              rows={1}
+              value={draft}
+            />
+            <button
+              aria-label="Enviar mensagem"
+              className="composer-send"
+              disabled={!canReply || busy || !draft.trim()}
+              type="submit"
+            >
+              <svg
+                aria-hidden="true"
+                fill="none"
+                height="20"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.75"
+                viewBox="0 0 24 24"
+                width="20"
+              >
+                <path d="M4 12 20 4l-4 16-4-7z" />
+              </svg>
+            </button>
+          </form>
+        </footer>
+      </section>
+    );
+  }
 
   return (
     <>
-      <div className="conversation-workspace">
-        <aside className="conversation-rail" aria-label="Conversas recentes">
-          <header className="conversation-rail-header">
-            <h1>Conversas</h1>
-            <span className="badge badge-attention">
-              {waiting} aguardando você
-            </span>
-          </header>
-          <div className="conversation-rail-list">
-            {conversations.map((item) => (
-              <ConversationRow
-                compact
-                conversation={item}
-                key={item.id}
-                selected={item.id === conversation.id}
-              />
-            ))}
-          </div>
-        </aside>
-
-        <section
-          className="conversation-thread"
-          aria-labelledby="conversation-person-name"
-        >
-          <header className="conversation-thread-header">
-            <div className="conversation-person">
-              <Link
-                aria-label="Voltar para conversas"
-                className="icon-btn conversation-mobile-back"
-                href="/conversas"
-              >
-                <Icon name="chevron-right" />
-              </Link>
-              <span className="avatar">{initials(person)}</span>
-              <span className="conversation-person-copy">
-                <strong id="conversation-person-name">{person}</strong>
-                <span>{phone} · WhatsApp</span>
-              </span>
-            </div>
-            <div className="conversation-header-actions">
-              <button
-                className="btn btn-secondary desktop-context-action"
-                onClick={() => setContextOpen(true)}
-                type="button"
-              >
-                Abrir contexto
-              </button>
-              <button
-                aria-label="Abrir contexto do cliente"
-                className="icon-btn conversation-mobile-context"
-                onClick={() => setContextOpen(true)}
-                type="button"
-              >
-                <Icon name="user" />
-              </button>
-              <div className="dropdown">
-                <button
-                  aria-expanded={actionsOpen}
-                  aria-label="Mais ações"
-                  className="icon-btn"
-                  onClick={() => setActionsOpen((open) => !open)}
-                  type="button"
-                >
-                  <Icon name="more" />
-                </button>
-                {actionsOpen && (
-                  <div className="menu">
-                    <Link className="menu-item" href="/agenda/novo">
-                      <Icon name="calendar" />
-                      Criar agendamento
-                    </Link>
-                    <button
-                      className="menu-item"
-                      disabled={busy || closed}
-                      onClick={() => void mutate("resolve")}
-                      type="button"
-                    >
-                      <Icon name="check" />
-                      Marcar como resolvida
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </header>
-
-          <div
-            className={clsx("conversation-state-bar", stateView.className)}
-            role="status"
-          >
-            <span className="conversation-state-icon">
-              <Icon name={stateView.icon} />
-            </span>
-            <span className="conversation-state-copy">
-              <strong>{stateView.label}</strong>
-              <span>{stateView.copy}</span>
-              {reason && (
-                <span className="conversation-state-reason">{reason}</span>
-              )}
-              {closed && (
-                <span className="conversation-state-reason">
-                  Esta conversa foi marcada como resolvida.
-                </span>
-              )}
-            </span>
-            <button
-              className={clsx(
-                "btn conversation-state-action",
-                state === "you-handling" ? "btn-secondary" : "btn-primary",
-              )}
-              disabled={busy || closed}
-              onClick={() => {
-                if (state === "you-handling") setReleaseOpen(true);
-                else void mutate("takeover");
-              }}
-              type="button"
-            >
-              {busy ? "Atualizando…" : stateView.action}
-            </button>
-          </div>
-
-          <MessageTimeline
-            businessTimezone={businessTimezone}
-            contentExpiredThrough={conversation.contentExpiredThrough ?? null}
-            conversationId={conversation.id}
-            events={events}
-            messages={messages}
-            onResend={(message) => void resend(message)}
-            person={person}
-            resendingId={resendingId}
-          />
-
-          <footer className="composer-zone">
-            {actionError && (
-              <div className="composer-error" role="alert">
-                <span>{actionError}</span>
-                <button onClick={() => setActionError(null)} type="button">
-                  Fechar
-                </button>
-              </div>
-            )}
-            <div className="composer-status">
-              <Icon name="info" />
-              <span id="composer-status-text">
-                {closed
-                  ? "Esta conversa foi marcada como resolvida."
-                  : willAssume
-                    ? "Enviar assume esta conversa: a IA é pausada e você passa a atender."
-                    : stateView.composer}
-              </span>
-            </div>
-            {sendConfirmation && (
-              <p className="composer-confirmation" role="status">
-                {sendConfirmation}
-              </p>
-            )}
-            {!closed && state === "you-handling" && (
-              <ConversationSuggestions
-                conversationId={conversation.id}
-                onUse={(text) => setDraft(text)}
-              />
-            )}
-            <form
-              className="composer-form"
-              onSubmit={(event) => void send(event)}
-            >
-              <label className="sr-only" htmlFor="message-composer">
-                Mensagem
-              </label>
-              <textarea
-                aria-describedby="composer-status-text"
-                className="composer-input"
-                disabled={!canReply || busy}
-                id="message-composer"
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder={
-                  canReply ? "Digite sua mensagem" : stateView.composer
-                }
-                rows={1}
-                value={draft}
-              />
-              <button
-                aria-label="Enviar mensagem"
-                className="btn btn-primary composer-send"
-                disabled={!canReply || busy || !draft.trim()}
-                type="submit"
-              >
-                <Icon name="chevron-right" />
-              </button>
-            </form>
-          </footer>
-        </section>
-
-        <aside
-          className="conversation-context"
-          aria-label="Contexto da conversa"
-        >
-          <h2>Contexto</h2>
-          {context}
-        </aside>
-      </div>
-
-      <Dialog
-        open={contextOpen}
-        onClose={() => setContextOpen(false)}
-        title="Contexto da conversa"
-        variant="sheet"
-      >
-        <div className="context-sheet-profile">{context}</div>
-      </Dialog>
-      <Dialog
-        eyebrow={conversation.ignored ? "Voltar a usar na IA" : "Ignorar na IA"}
-        open={ignoreOpen}
-        onClose={() => setIgnoreOpen(false)}
-        title={
-          conversation.ignored
-            ? "Voltar a usar este contato na IA?"
-            : "Ignorar este contato na IA?"
+      <div
+        className={
+          wide ? "list-detail conversation-list-detail" : "list-detail-flat"
         }
       >
-        <p className="small muted">
-          {conversation.ignored
-            ? `A IA volta a usar as conversas de ${person} como contexto e pode responder de novo por ${businessName}. As mensagens já trocadas continuam onde estão.`
-            : `A IA deixa de usar as conversas de ${person}: o conteúdo não vira contexto e o histórico anterior deixa de ser contexto. Nada é apagado, o contato não é bloqueado e as mensagens continuam visíveis aqui.`}
-        </p>
-        {ignoredError && (
-          <p className="composer-error" role="alert">
-            {ignoredError}
-          </p>
-        )}
-        <div className="modal-actions">
-          <button
-            className="btn btn-secondary"
-            disabled={ignoredBusy}
-            onClick={() => setIgnoreOpen(false)}
-            type="button"
-          >
-            Cancelar
-          </button>
-          <button
-            className="btn btn-primary"
-            disabled={ignoredBusy}
-            onClick={() => void toggleIgnored()}
-            type="button"
-          >
-            {ignoredBusy
-              ? "Salvando…"
-              : conversation.ignored
-                ? "Voltar a usar na IA"
-                : "Ignorar contato"}
-          </button>
+        <div
+          aria-label={wide ? "Conversas" : undefined}
+          className="list-detail-list conversation-list-column"
+          role={wide ? "complementary" : undefined}
+        >
+          {wide && conversation && (
+            <ThreadListColumn
+              initialLens={lensForConversation(conversation)}
+              selectedId={conversationId}
+            />
+          )}
         </div>
-      </Dialog>
-      <Dialog
-        eyebrow="Retomar automação"
-        open={releaseOpen}
-        onClose={() => setReleaseOpen(false)}
-        title="Devolver conversa para a IA?"
-      >
-        <p className="small muted">
-          A IA volta a responder em nome de {businessName} e reavalia o
-          contexto atual da conversa, em vez de simplesmente continuar do
-          ponto em que parou.
-        </p>
-        <div className="modal-actions">
-          <button
-            className="btn btn-secondary"
-            disabled={busy}
-            onClick={() => setReleaseOpen(false)}
-            type="button"
-          >
-            Manter atendimento humano
-          </button>
-          <button
-            className="btn btn-primary"
-            disabled={busy}
-            onClick={() => void mutate("release")}
-            type="button"
-          >
-            {busy ? "Devolvendo…" : "Retomar IA"}
-          </button>
+        <div className="list-detail-panel conversation-detail-panel">
+          {chat}
         </div>
-      </Dialog>
+      </div>
+
+      {conversation && (
+        <>
+          <Dialog
+            open={contextOpen}
+            onClose={() => setContextOpen(false)}
+            title="Contexto da conversa"
+            variant="sheet"
+          >
+            <div className="context-sheet-profile">
+              <ConversationContextPanel
+                categoryBusy={categoryBusy}
+                categoryError={categoryError}
+                conversation={conversation}
+                ignoredBusy={ignoredBusy}
+                ignoredError={ignoredError}
+                onResolve={() => void mutate("resolve")}
+                onSetCategory={(category) => void setCategory(category)}
+                onToggleIgnored={openIgnore}
+              />
+            </div>
+          </Dialog>
+          <Dialog
+            eyebrow={
+              conversation.ignored ? "Voltar a usar na IA" : "Ignorar na IA"
+            }
+            open={ignoreOpen}
+            onClose={() => setIgnoreOpen(false)}
+            title={
+              conversation.ignored
+                ? "Voltar a usar este contato na IA?"
+                : "Ignorar este contato na IA?"
+            }
+          >
+            <p className="small muted">
+              {conversation.ignored
+                ? `A IA volta a usar as conversas de ${person} como contexto e pode responder de novo por ${businessName}. As mensagens já trocadas continuam onde estão.`
+                : `A IA deixa de usar as conversas de ${person}: o conteúdo não vira contexto e o histórico anterior deixa de ser contexto. Nada é apagado, o contato não é bloqueado e as mensagens continuam visíveis aqui.`}
+            </p>
+            {ignoredError && (
+              <p className="composer-error" role="alert">
+                {ignoredError}
+              </p>
+            )}
+            <div className="modal-actions">
+              <button
+                className="btn btn-secondary"
+                disabled={ignoredBusy}
+                onClick={() => setIgnoreOpen(false)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={ignoredBusy}
+                onClick={() => void toggleIgnored()}
+                type="button"
+              >
+                {ignoredBusy
+                  ? "Salvando…"
+                  : conversation.ignored
+                    ? "Voltar a usar na IA"
+                    : "Ignorar contato"}
+              </button>
+            </div>
+          </Dialog>
+          <Dialog
+            eyebrow="Retomar automação"
+            open={releaseOpen}
+            onClose={() => setReleaseOpen(false)}
+            title="Devolver conversa para a IA?"
+          >
+            <p className="small muted">
+              A IA volta a responder em nome de {businessName} e reavalia o
+              contexto atual da conversa, em vez de simplesmente continuar do
+              ponto em que parou.
+            </p>
+            <div className="modal-actions">
+              <button
+                className="btn btn-secondary"
+                disabled={busy}
+                onClick={() => setReleaseOpen(false)}
+                type="button"
+              >
+                Manter atendimento humano
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={busy}
+                onClick={() => void mutate("release")}
+                type="button"
+              >
+                {busy ? "Devolvendo…" : "Retomar IA"}
+              </button>
+            </div>
+          </Dialog>
+        </>
+      )}
     </>
+  );
+}
+
+/**
+ * A coluna da lista ao lado do chat: o mesmo estado e o mesmo componente de
+ * `/conversas`, sem declarar casca. Só é montada de 1024 px em diante, então
+ * abaixo disso o chat não lê a lista.
+ */
+function ThreadListColumn({
+  initialLens,
+  selectedId,
+}: {
+  initialLens: InboxLens;
+  selectedId: string;
+}) {
+  const list = useConversationList(initialLens);
+  return <ConversationListColumn list={list} selectedId={selectedId} />;
+}
+
+/** Cor do avatar do cabeçalho, a mesma da linha da lista (quadros C1 e K1–K4). */
+function avatarTone(state: ConversationState): string | undefined {
+  if (state === "waiting-you") return "is-waiting";
+  if (state === "ai-handling") return "is-ai";
+  return undefined;
+}
+
+/**
+ * A linha do estado no cabeçalho, uma por estado, no estilo do quadro: "IA
+ * atendendo" com o ponto que pulsa (K1), "Aguardando você · há 12 min" (K2),
+ * "Você atendendo" (K3) e "Pessoal · IA desativada" (K4). Os estados sem
+ * quadro usam o mesmo desenho e o rótulo de hoje. O texto diz o estado; a cor
+ * só acompanha.
+ */
+function HeaderState({
+  closed,
+  conversation,
+  personal,
+  state,
+}: {
+  closed: boolean;
+  conversation: Conversation;
+  personal: boolean;
+  state: ConversationState;
+}) {
+  const view = conversationStateView(state);
+  if (closed) {
+    return (
+      <span className="chat-header-state is-resolved">
+        <Icon name="check" />
+        Resolvida
+      </span>
+    );
+  }
+  if (state === "ai-handling" || state === "ai-active") {
+    return (
+      <span className="chat-header-state is-ai">
+        <span
+          aria-hidden="true"
+          className={clsx(
+            "chat-header-pulse",
+            state === "ai-handling" && "is-live",
+          )}
+        />
+        {view.label}
+      </span>
+    );
+  }
+  if (state === "waiting-you") {
+    return (
+      <span className="chat-header-state is-waiting">
+        <span aria-hidden="true" className="chat-header-dot" />
+        {view.label} · {formatWaitingTime(conversation.updatedAt)}
+      </span>
+    );
+  }
+  if (state === "ai-unstable") {
+    return (
+      <span className="chat-header-state is-error">
+        <span aria-hidden="true" className="chat-header-dot" />
+        {view.label}
+      </span>
+    );
+  }
+  if (state === "you-handling") {
+    return (
+      <span className="chat-header-state is-human">
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="12"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2.5"
+          viewBox="0 0 24 24"
+          width="12"
+        >
+          <circle cx="12" cy="8.5" r="3.5" />
+          <path d="M5 20a7 7 0 0 1 14 0" />
+        </svg>
+        {view.label}
+      </span>
+    );
+  }
+  return (
+    <span className="chat-header-state is-paused">
+      <svg
+        aria-hidden="true"
+        fill="none"
+        height="12"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2.5"
+        viewBox="0 0 24 24"
+        width="12"
+      >
+        <path d="M9 6v12M15 6v12" />
+      </svg>
+      {personal ? "Pessoal · IA desativada" : view.label}
+    </span>
   );
 }

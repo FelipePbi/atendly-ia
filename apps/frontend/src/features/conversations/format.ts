@@ -113,20 +113,42 @@ export function formatInboxTime(
 /**
  * O motivo curto da pílula `Aguardando você · motivo`. Só existe quando
  * `handoffReasonCopy` tem texto legível; o texto que o pipeline gravou entra
- * como veio, e mídia que a IA não trata ganha uma frase curta.
+ * como veio, e mídia que a IA não trata ganha uma frase curta. Imagem recebida
+ * fica só `Aguardando você`, como a Fernanda nos quadros C1 e K2: quem diz o
+ * motivo é a linha de evento do chat (Goal114).
  */
 export function waitingReasonLabel(reason: string | null): string | null {
   if (!handoffReasonCopy(reason)) return null;
   const value = reason?.trim() ?? "";
   if (value === "OWNER_TAKEOVER") return null;
   const normalized = value.toLocaleLowerCase("pt-BR");
-  if (
-    normalized.includes("image_received") ||
-    normalized.includes("suportada")
-  ) {
+  if (normalized.includes("image_received")) return null;
+  if (normalized.includes("suportada")) {
     return "enviou algo que a IA não trata";
   }
   return value;
+}
+
+/**
+ * Rótulo do dia na timeline do chat (quadros K2 e K4): `Hoje`, `Ontem` e,
+ * antes disso, o dia da semana com `DD/MM`, sempre no fuso do negócio.
+ */
+export function formatTimelineDay(
+  value: string,
+  timezone: string,
+  now: number = Date.now(),
+): string {
+  const days = businessDaysAgo(value, timezone, now);
+  if (days <= 0) return "Hoje";
+  if (days === 1) return "Ontem";
+  const weekday = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: timezone,
+    weekday: "short",
+  })
+    .format(new Date(value))
+    .replace(/\.$/, "");
+  const [, month = "--", day = "--"] = businessDay(value, timezone).split("-");
+  return `${weekday} ${day}/${month}`;
 }
 
 export function formatMessageTime(value: string): string {

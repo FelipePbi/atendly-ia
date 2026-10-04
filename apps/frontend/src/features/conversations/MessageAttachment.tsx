@@ -1,5 +1,6 @@
 "use client";
 
+import clsx from "clsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
@@ -31,8 +32,7 @@ const kindLabel: Record<MessageAttachmentKind, string> = {
  * (`error.details.upstreamCode`), nunca apresentadas como erro genérico.
  */
 const refusalCopy: Record<string, string> = {
-  MEDIA_TOO_LARGE:
-    "Este arquivo é maior do que o suportado para baixar agora.",
+  MEDIA_TOO_LARGE: "Este arquivo é maior do que o suportado para baixar agora.",
   MEDIA_UNAVAILABLE: "A mídia não está disponível na origem no momento.",
   MESSAGE_ATTACHMENT_NOT_FOUND: "Esta mídia não está mais disponível.",
 };
@@ -97,6 +97,11 @@ export function MessageAttachmentView({
   );
 }
 
+/**
+ * Áudio como no quadro K3: tocar, onda e duração na mesma bolha da
+ * transcrição. A onda é desenho fixo, não amostra do áudio: a plataforma não
+ * guarda os bytes, e o player de verdade só nasce depois do pedido.
+ */
 function AudioAttachment({
   attachment,
   conversationId,
@@ -107,17 +112,71 @@ function AudioAttachment({
   messageId: string;
 }) {
   const { cancel, load, media } = useAttachmentMedia(conversationId, messageId);
+  const duration =
+    attachment.durationSeconds !== null
+      ? formatDuration(attachment.durationSeconds)
+      : null;
 
   return (
     <div className="message-attachment message-attachment-audio">
-      <div className="message-attachment-meta">
-        <span className="message-attachment-kind">Áudio</span>
-        {attachment.durationSeconds !== null && (
-          <span className="message-attachment-size">
-            {formatDuration(attachment.durationSeconds)}
-          </span>
-        )}
-      </div>
+      {/*
+       * Transcrição e áudio respondem a perguntas distintas: ler o que foi
+       * dito não substitui ouvir como foi dito. O player só existe quando a
+       * origem ainda tem os bytes (`mediaAvailable`) — a plataforma não guarda
+       * cópia —, e a busca continua sendo sob demanda.
+       */}
+      {attachment.mediaAvailable && media.status === "ready" ? (
+        // Sem `<track>`: o equivalente à legenda deste áudio é a
+        // transcrição logo abaixo, que vem da IA e diz seu próprio estado.
+        <audio
+          aria-label="Áudio recebido na conversa"
+          className="message-audio-player"
+          controls
+          src={media.url}
+        />
+      ) : (
+        <div className="message-audio-row">
+          {attachment.mediaAvailable && media.status !== "loading" ? (
+            <button
+              aria-label="Ouvir áudio"
+              className="message-audio-play"
+              onClick={() => void load()}
+              type="button"
+            >
+              <PlayGlyph size={14} />
+            </button>
+          ) : (
+            <span aria-hidden="true" className="message-audio-play is-idle">
+              <PlayGlyph size={14} />
+            </span>
+          )}
+          {media.status === "loading" ? (
+            <span className="message-audio-loading">
+              <span role="status">Carregando áudio…</span>
+              <button
+                className="message-audio-cancel"
+                onClick={cancel}
+                type="button"
+              >
+                Cancelar
+              </button>
+            </span>
+          ) : (
+            <span aria-hidden="true" className="message-audio-wave">
+              {waveBars.map((height, index) => (
+                <span
+                  className={index < 8 ? "is-played" : undefined}
+                  key={index}
+                  style={{ height }}
+                />
+              ))}
+            </span>
+          )}
+          {duration && (
+            <span className="message-audio-duration">{duration}</span>
+          )}
+        </div>
+      )}
       {attachment.tooLarge && (
         <p className="message-attachment-note">
           Áudio maior do que o limite do WhatsApp — os bytes não estão
@@ -132,45 +191,10 @@ function AudioAttachment({
           {media.message}
         </p>
       )}
-      {/*
-       * Transcrição e áudio respondem a perguntas distintas: ler o que foi
-       * dito não substitui ouvir como foi dito. O player só existe quando a
-       * origem ainda tem os bytes (`mediaAvailable`) — a plataforma não guarda
-       * cópia —, e a busca continua sendo sob demanda.
-       */}
-      {attachment.mediaAvailable ? (
-        media.status === "ready" ? (
-          // Sem `<track>`: o equivalente à legenda deste áudio é a
-          // transcrição logo abaixo, que vem da IA e diz seu próprio estado.
-          <audio
-            aria-label="Áudio recebido na conversa"
-            className="message-audio-player"
-            controls
-            src={media.url}
-          />
-        ) : media.status === "loading" ? (
-          <div className="message-attachment-actions">
-            <span role="status">Carregando áudio…</span>
-            <button className="btn btn-tertiary" onClick={cancel} type="button">
-              Cancelar
-            </button>
-          </div>
-        ) : (
-          <button
-            className="btn btn-secondary message-attachment-view"
-            onClick={() => void load()}
-            type="button"
-          >
-            <Icon name="chat" />
-            Ouvir áudio
-          </button>
-        )
-      ) : (
-        !attachment.tooLarge && (
-          <p className="message-attachment-note">
-            O áudio não está mais disponível na origem para ouvir.
-          </p>
-        )
+      {!attachment.mediaAvailable && !attachment.tooLarge && (
+        <p className="message-attachment-note">
+          O áudio não está mais disponível na origem para ouvir.
+        </p>
       )}
       <TranscriptView
         error={attachment.transcriptError}
@@ -178,6 +202,25 @@ function AudioAttachment({
         transcript={attachment.transcript}
       />
     </div>
+  );
+}
+
+/** As alturas das 18 barras da onda do quadro K3; as 8 primeiras já tocadas. */
+const waveBars = [
+  8, 16, 22, 12, 18, 9, 20, 14, 6, 15, 21, 10, 17, 8, 13, 19, 7, 12,
+];
+
+function PlayGlyph({ size }: { size: number }) {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="currentColor"
+      height={size}
+      viewBox="0 0 24 24"
+      width={size}
+    >
+      <path d="M8 5v14l11-7z" />
+    </svg>
   );
 }
 
@@ -299,18 +342,42 @@ function MediaAttachment({
 
   const kind = attachment.kind;
   const title = attachment.fileName ?? kindLabel[kind];
+  const image = kind === "IMAGE";
 
   return (
-    <div className="message-attachment">
-      <div className="message-attachment-meta">
-        <span className="message-attachment-kind">{kindLabel[kind]}</span>
-        <span className="message-attachment-name">{title}</span>
-        {attachment.sizeBytes !== null && (
-          <span className="message-attachment-size">
-            {formatFileSize(attachment.sizeBytes)}
-          </span>
-        )}
-      </div>
+    <div className={clsx("message-attachment", image && "is-image")}>
+      {image ? (
+        // A bolha da imagem do quadro K2, antes de carregar: o conteúdo só
+        // existe depois do pedido, então o quadro listrado é o próprio botão.
+        attachment.mediaAvailable && media.status !== "loading" ? (
+          <button
+            className="message-image-tile"
+            onClick={() => void openMedia()}
+            type="button"
+          >
+            <span>Imagem recebida</span>
+            <span>Ver mídia</span>
+          </button>
+        ) : (
+          <div className="message-image-tile">
+            {media.status === "loading" ? (
+              <span role="status">Carregando mídia…</span>
+            ) : (
+              <span>Mídia não está disponível para visualização.</span>
+            )}
+          </div>
+        )
+      ) : (
+        <div className="message-attachment-meta">
+          <span className="message-attachment-kind">{kindLabel[kind]}</span>
+          <span className="message-attachment-name">{title}</span>
+          {attachment.sizeBytes !== null && (
+            <span className="message-attachment-size">
+              {formatFileSize(attachment.sizeBytes)}
+            </span>
+          )}
+        </div>
+      )}
       {attachment.tooLarge && (
         <p className="message-attachment-note">
           Arquivo maior do que o limite do WhatsApp — os bytes não estão
@@ -318,43 +385,44 @@ function MediaAttachment({
         </p>
       )}
       {media.status === "error" && (
-        <p className="message-attachment-note message-attachment-error" role="alert">
+        <p
+          className="message-attachment-note message-attachment-error"
+          role="alert"
+        >
           {media.message}
         </p>
       )}
-      {attachment.mediaAvailable ? (
-        media.status === "loading" ? (
+      {attachment.mediaAvailable &&
+        (media.status === "loading" ? (
           <div className="message-attachment-actions">
-            <span role="status">Carregando mídia…</span>
+            {!image && <span role="status">Carregando mídia…</span>}
             <button className="btn btn-tertiary" onClick={cancel} type="button">
               Cancelar
             </button>
           </div>
         ) : (
-          <button
-            className="btn btn-secondary message-attachment-view"
-            onClick={() => void openMedia()}
-            type="button"
-          >
-            <Icon name="eye" />
-            Ver mídia
-          </button>
-        )
-      ) : (
-        !attachment.tooLarge && (
-          <p className="message-attachment-note">
-            Mídia não está disponível para visualização.
-          </p>
-        )
+          !image && (
+            <button
+              className="btn btn-secondary message-attachment-view"
+              onClick={() => void openMedia()}
+              type="button"
+            >
+              <Icon name="eye" />
+              Ver mídia
+            </button>
+          )
+        ))}
+      {!attachment.mediaAvailable && !attachment.tooLarge && !image && (
+        <p className="message-attachment-note">
+          Mídia não está disponível para visualização.
+        </p>
       )}
       <Dialog
         onClose={() => setDialogOpen(false)}
         open={dialogOpen}
         title={title}
       >
-        {media.status === "ready" && (
-          <MediaPreview kind={kind} media={media} />
-        )}
+        {media.status === "ready" && <MediaPreview kind={kind} media={media} />}
       </Dialog>
     </div>
   );
@@ -378,9 +446,7 @@ function MediaPreview({
     );
   }
   if (kind === "VIDEO") {
-    return (
-      <video className="message-media-preview" controls src={media.url} />
-    );
+    return <video className="message-media-preview" controls src={media.url} />;
   }
   return (
     <a

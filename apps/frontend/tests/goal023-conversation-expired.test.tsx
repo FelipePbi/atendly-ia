@@ -12,7 +12,9 @@
  *   erro nem como "nenhuma mensagem registrada" genérico;
  * - sem `contentExpiredThrough`, o vazio continua sendo o genérico de sempre
  *   — a ausência de mensagem sozinha nunca vira "expirou";
- * - a conversa inteiramente expirada continua na lista/rail normalmente.
+ * - a conversa inteiramente expirada continua aberta normalmente, com o
+ *   cabeçalho dela (Goal114: o chat não tem mais rail; a lista é a coluna de
+ *   `/conversas`, de 1024 px em diante).
  */
 
 import { render, screen } from "@testing-library/react";
@@ -125,7 +127,9 @@ describe("conversa inteiramente expirada", () => {
     expect(screen.getByText(/expirou pela política de retenção/)).toBeVisible();
     expect(empty.closest(".message-system")).not.toHaveClass("is-error");
 
-    expect(screen.getByRole("link", { name: /Marina Duarte/ })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Abrir contexto de Marina Duarte" }),
+    ).toBeVisible();
   });
 });
 

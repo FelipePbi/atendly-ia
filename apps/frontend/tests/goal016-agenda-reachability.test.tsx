@@ -23,6 +23,9 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { CalendarState, TimeBlock } from "@/data";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
+/** A folha do quadro A4 (Goal118) tomou o lugar do menu suspenso de "Novo". */
+const SHEET = "O que você quer adicionar?";
+
 const push = vi.fn();
 const replace = vi.fn();
 
@@ -153,7 +156,7 @@ describe("cada fluxo obrigatório tem rota própria e é alcançável", () => {
     await user.click(await screen.findByRole("button", { name: "Novo" }));
 
     expect(
-      within(screen.getByRole("menu")).getByRole("menuitem", {
+      within(screen.getByRole("dialog", { name: SHEET })).getByRole("link", {
         name: "Exceção do dia",
       }),
     ).toHaveAttribute("href", "/agenda/excecoes");

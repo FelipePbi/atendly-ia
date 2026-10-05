@@ -112,15 +112,17 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, I1, C1 a C4, K1 a K6 e H1 a H5 e H7 declaram responses", () => {
+test("targets.json: só W1, I1, A2, A12, C1 a C4, K1 a K6 e H1 a H5 e H7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["C1", "C2", "C3", "C4", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "W1"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["A12", "A2", "C1", "C2", "C3", "C4", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "W1"]);
   for (const target of declaring) {
     const owner = ["W1", "I1"].includes(target.code)
       ? "Mais-WhatsApp-Importacao-Conta.dc.html"
       : target.code.startsWith("H")
         ? "Home.dc.html"
-        : "Conversas-e-Chat.dc.html";
+        : target.code.startsWith("A")
+          ? "Agenda.dc.html"
+          : "Conversas-e-Chat.dc.html";
     assert.equal(target.file, owner, `${target.code} declara responses no arquivo errado`);
     for (const entry of target.responses) {
       assert.equal(entry.method, "GET");
@@ -494,4 +496,76 @@ test("targets.json: H7 abre a confirmação de pausa por steps com a IA ativa e 
   assert.equal(bodies.get("/v1/dashboard").ai.data.automatedConversationsToday, 3);
   assert.equal(bodies.get("/v1/dashboard").scheduling.data.todayAppointments.length, 5);
   assertServiceColors("H7", bodies);
+});
+
+function agendaTarget(code) {
+  const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "frontend", "e2e", "visual", "targets.json");
+  const targets = validateTargetResponses(JSON.parse(readFileSync(file, "utf8")).targets);
+  const target = targets.find((candidate) => candidate.code === code && candidate.file === "Agenda.dc.html");
+  assert.ok(target, `alvo Agenda:${code} ausente`);
+  assert.equal(target.route, "/agenda");
+  assert.equal(target.clock, "13:45");
+  return target;
+}
+
+function agendaBodies(target) {
+  return new Map((target.responses ?? []).map((entry) => [entry.path, entry.json]));
+}
+
+function assertGetOnlyExactPaths(target) {
+  for (const entry of target.responses ?? []) {
+    assert.equal(entry.method, "GET");
+    assert.match(entry.path, /^\/v1\/[^?#\s]+$/);
+    assert.equal(typeof entry.json.requestId, "string");
+  }
+}
+
+test("targets.json: Agenda:A2 cai num dia sem atendimento e sem regra ativa, qualquer que seja o dia semeado", () => {
+  const target = agendaTarget("A2");
+  assertGetOnlyExactPaths(target);
+  assert.deepEqual(
+    target.responses.map((entry) => `${entry.method} ${entry.path}`).sort(),
+    ["GET /v1/appointments", "GET /v1/availability-exceptions", "GET /v1/settings", "GET /v1/time-blocks"],
+  );
+  const bodies = agendaBodies(target);
+  assert.deepEqual(bodies.get("/v1/appointments").data, []);
+  assert.deepEqual(bodies.get("/v1/time-blocks").data, []);
+  assert.deepEqual(bodies.get("/v1/availability-exceptions").data, []);
+  const { availability } = bodies.get("/v1/settings").data;
+  assert.deepEqual(availability.rules.filter((rule) => rule.active), []);
+  const next = target.steps.at(-1);
+  assert.equal(next.clickRole.name, "Próximo dia");
+  assert.equal(next.clickRole.role, "button");
+  assert.notEqual(next.optional, true, "A2: sem 'Próximo dia' a captura tem de falhar, não cair no dia de hoje");
+});
+
+test("targets.json: Agenda:A3 abre o calendário pelo título e A4 abre o menu Novo, sem responses e sem passo opcional", () => {
+  const a3 = agendaTarget("A3");
+  const a4 = agendaTarget("A4");
+  assert.equal(a3.responses, undefined);
+  assert.equal(a4.responses, undefined);
+  const a3Step = a3.steps.at(-1);
+  assert.equal(a3Step.clickRole.name, "Abrir calendário");
+  assert.equal(a3Step.clickRole.role, "button");
+  assert.notEqual(a3Step.optional, true);
+  const a4Step = a4.steps.at(-1);
+  assert.equal(a4Step.clickRole.name, "Novo");
+  assert.equal(a4Step.clickRole.role, "button");
+  assert.notEqual(a4Step.optional, true);
+});
+
+test("targets.json: Agenda:A12 abre a Semana com o domingo oculto e sem regra no domingo", () => {
+  const target = agendaTarget("A12");
+  assertGetOnlyExactPaths(target);
+  assert.deepEqual(
+    target.responses.map((entry) => `${entry.method} ${entry.path}`).sort(),
+    ["GET /v1/settings", "GET /v1/settings/agenda-view"],
+  );
+  const bodies = agendaBodies(target);
+  assert.deepEqual(bodies.get("/v1/settings/agenda-view").data.hiddenWeekdays, [0]);
+  const { rules } = bodies.get("/v1/settings").data.availability;
+  assert.deepEqual(rules.filter((rule) => rule.active).map((rule) => rule.dayOfWeek).sort(), [1, 2, 3, 4, 5, 6]);
+  assert.equal(rules.some((rule) => rule.dayOfWeek === 0), false);
+  assert.deepEqual(target.steps.map((step) => [step.clickRole.role, step.clickRole.name]), [["tab", "Semana"], ["button", "Seg–Sáb"]]);
+  assert.ok(target.steps.every((step) => step.optional !== true));
 });

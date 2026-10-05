@@ -2,7 +2,14 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   type AgendaInitialView,
@@ -11,11 +18,14 @@ import {
   type CalendarState,
   type TimeBlock,
 } from "@/data";
+import { ChatSheetShell } from "@/features/conversations/ConversationActionsSheet";
 import { Icon } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { StatePanel } from "@/shared/ui/States";
 
+import { AgendaCalendarSheet } from "./AgendaCalendarSheet";
+import { AgendaVisibleDaysSheet } from "./AgendaVisibleDaysSheet";
 import { AppointmentHistory } from "./AppointmentHistory";
 import { DaySummaryCard } from "./DaySummaryCard";
 import { DayView } from "./DayView";
@@ -28,6 +38,7 @@ import {
   buildAgendaEntries,
   customerLabel,
   endOfMonth,
+  entriesForDate,
   formatAppointmentDate,
   formatDate,
   isoDate,
@@ -125,6 +136,9 @@ export function AgendaBoard() {
   const [wideLayout, setWideLayout] = useState(
     () => typeof window !== "undefined" && window.innerWidth >= TWO_COLUMN_MIN_WIDTH,
   );
+  // As folhas do calendário (A3) e dos dias visíveis (A12) abrem pela própria barra.
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [visibleDaysOpen, setVisibleDaysOpen] = useState(false);
 
   // Leitura falhada (ou serviço ausente) mantém a Agenda em Automática, com
   // todos os dias visíveis e sem mensagem de erro (Goal073).
@@ -332,6 +346,12 @@ export function AgendaBoard() {
     navigateTo("day", date);
   }
 
+  /** O mini-calendário move a Agenda para a data, sem trocar a visualização. */
+  function pickCalendarDate(date: Date) {
+    setCalendarOpen(false);
+    navigateTo(view, date);
+  }
+
   return (
     <>
       <div className="agenda-page">
@@ -362,10 +382,31 @@ export function AgendaBoard() {
         {!error && calendar && calendar.source && (
           <>
             <section className="agenda-command-bar">
-              <strong className="agenda-date-title">
+              <button
+                aria-expanded={calendarOpen}
+                aria-haspopup="dialog"
+                aria-label={`Abrir calendário, ${monthYear.month} de ${monthYear.year}`}
+                className="agenda-date-title"
+                onClick={() => setCalendarOpen(true)}
+                type="button"
+              >
                 <span className="agenda-date-month">{monthYear.month}</span>{" "}
                 <span className="agenda-date-year">{monthYear.year}</span>
-              </strong>
+                <svg
+                  aria-hidden="true"
+                  className="agenda-date-chevron"
+                  fill="none"
+                  height="16"
+                  stroke="#716859"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  width="16"
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
               <div className="agenda-view-controls">
               <div
                 aria-label="Visualização da agenda"
@@ -394,13 +435,16 @@ export function AgendaBoard() {
                 </div>
               </div>
               {view !== "day" && (
-                <Link
+                <button
+                  aria-expanded={visibleDaysOpen}
+                  aria-haspopup="dialog"
                   className="agenda-visible-days"
-                  href="/configuracoes/agenda"
+                  onClick={() => setVisibleDaysOpen(true)}
+                  type="button"
                 >
                   <Icon name="eye" />
                   {visibleDaysLabel(hiddenWeekdays)}
-                </Link>
+                </button>
               )}
               </div>
               <div className="agenda-date-tools">
@@ -423,6 +467,26 @@ export function AgendaBoard() {
               </div>
               <AgendaNewMenu capabilities={calendar.capabilities} />
             </section>
+            {calendarOpen && (
+              <AgendaCalendarSheet
+                avenly={calendar.source === "AVENLY"}
+                focusedDate={cursor}
+                onClose={() => setCalendarOpen(false)}
+                onPick={pickCalendarDate}
+                timezone={calendar.timezone ?? undefined}
+              />
+            )}
+            {visibleDaysOpen && (
+              <AgendaVisibleDaysSheet
+                availableWeekdays={availableWeekdays}
+                hiddenWeekdays={hiddenWeekdays}
+                onClose={() => setVisibleDaysOpen(false)}
+                onSaved={(next) => {
+                  setHiddenWeekdays(next);
+                  setVisibleDaysOpen(false);
+                }}
+              />
+            )}
             {loading && <AgendaLoading />}
             {!loading && view === "day" && (
               <>
@@ -457,6 +521,10 @@ export function AgendaBoard() {
                   {wideLayout && (
                     <DayDetailPanel
                       appointment={selectedAppointment}
+                      closedDay={
+                        hasAvailability === false &&
+                        entriesForDate(entries, isoDate(cursor)).length === 0
+                      }
                       lifecycleAvailable={calendar.source === "AVENLY"}
                       onUpdated={appointmentUpdated}
                     />
@@ -526,10 +594,13 @@ export function AgendaBoard() {
  */
 function DayDetailPanel({
   appointment,
+  closedDay,
   lifecycleAvailable,
   onUpdated,
 }: {
   appointment: Appointment | null;
+  /** Dia vazio em que o negócio não atende (quadro A2): não há o que selecionar. */
+  closedDay: boolean;
   lifecycleAvailable: boolean;
   onUpdated: () => void;
 }) {
@@ -539,9 +610,11 @@ function DayDetailPanel({
         aria-label="Detalhe do agendamento"
         className="agenda-day-detail is-empty"
       >
-        <p className="agenda-day-detail-empty">
-          Selecione um atendimento para ver os detalhes
-        </p>
+        {!closedDay && (
+          <p className="agenda-day-detail-empty">
+            Selecione um atendimento para ver os detalhes
+          </p>
+        )}
       </aside>
     );
   }
@@ -605,7 +678,7 @@ function ViewTab({
  * (`createAppointments` para Agendamento, `manageAvailability` para
  * Compromisso pessoal, Bloqueio e Exceção do dia). Sem nenhuma das duas, o
  * botão não existe. O mesmo botão é flutuante abaixo de 1024 px e fica na
- * barra a partir dele (quadro A1); só o CSS muda a posição.
+ * barra a partir dele (quadro A1); a escolha abre a folha do quadro A4.
  */
 function AgendaNewMenu({
   capabilities,
@@ -625,18 +698,10 @@ function AgendaNewMenu({
   }
 
   return (
-    <div
-      className="dropdown agenda-new-menu"
-      onKeyDown={(event) => {
-        if (event.key !== "Escape" || !open) return;
-        event.preventDefault();
-        close();
-      }}
-    >
+    <div className="agenda-new-menu">
       <button
-        aria-controls="agenda-new-menu-list"
         aria-expanded={open}
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-label="Novo"
         className="btn agenda-new-trigger"
         onClick={() => setOpen((value) => !value)}
@@ -646,51 +711,154 @@ function AgendaNewMenu({
         <Icon name="plus" />
         <span>Novo</span>
       </button>
-      {open && (
-        <div className="menu" id="agenda-new-menu-list" role="menu">
-          {capabilities.createAppointments && (
-            <Link
-              className="menu-item"
-              href="/agenda/novo"
-              onClick={() => setOpen(false)}
-              role="menuitem"
-            >
-              Agendamento
-            </Link>
-          )}
-          {capabilities.manageAvailability && (
-            <Link
-              className="menu-item"
-              href="/agenda/bloquear?type=PERSONAL"
-              onClick={() => setOpen(false)}
-              role="menuitem"
-            >
-              Compromisso pessoal
-            </Link>
-          )}
-          {capabilities.manageAvailability && (
-            <Link
-              className="menu-item"
-              href="/agenda/bloquear?type=BLOCK"
-              onClick={() => setOpen(false)}
-              role="menuitem"
-            >
-              Bloqueio
-            </Link>
-          )}
-          {capabilities.manageAvailability && (
-            <Link
-              className="menu-item"
-              href="/agenda/excecoes"
-              onClick={() => setOpen(false)}
-              role="menuitem"
-            >
-              Exceção do dia
-            </Link>
-          )}
-        </div>
-      )}
+      {open && <AgendaNewSheet capabilities={capabilities} onClose={close} />}
     </div>
+  );
+}
+
+const NEW_ROW_ICON_PROPS = {
+  fill: "none",
+  height: 22,
+  stroke: "currentColor",
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+  strokeWidth: 1.75,
+  viewBox: "0 0 24 24",
+  width: 22,
+} as const;
+
+function AgendaNewSheet({
+  capabilities,
+  onClose,
+}: {
+  capabilities: CalendarState["capabilities"];
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  return (
+    <ChatSheetShell
+      className="is-agenda-new"
+      onClose={onClose}
+      title="O que você quer adicionar?"
+      titleId={titleId}
+    >
+      <h2 className="agenda-new-sheet-title" id={titleId}>
+        O que você quer adicionar?
+      </h2>
+      <div className="agenda-new-sheet-list">
+        {capabilities.createAppointments && (
+          <AgendaNewRow
+            description="Atendimento para um cliente"
+            href="/agenda/novo"
+            onNavigate={onClose}
+            title="Agendamento"
+            tone="appointment"
+          >
+            <svg aria-hidden="true" {...NEW_ROW_ICON_PROPS}>
+              <circle cx="12" cy="8.5" r="3.5" />
+              <path d="M5 20a7 7 0 0 1 14 0" />
+            </svg>
+          </AgendaNewRow>
+        )}
+        {capabilities.manageAvailability && (
+          <AgendaNewRow
+            description="Ocupa a agenda sem cliente — a IA não marca por cima"
+            href="/agenda/bloquear?type=PERSONAL"
+            onNavigate={onClose}
+            title="Compromisso pessoal"
+            tone="personal"
+          >
+            <svg aria-hidden="true" {...NEW_ROW_ICON_PROPS}>
+              <rect height="14.5" rx="2.5" width="16" x="4" y="5.5" />
+              <path d="M4 10h16M8 3.5v4M16 3.5v4" />
+              <circle cx="12" cy="15" fill="currentColor" r="1.5" stroke="none" />
+            </svg>
+          </AgendaNewRow>
+        )}
+        {capabilities.manageAvailability && (
+          <AgendaNewRow
+            description="Horário indisponível, uma vez ou toda semana"
+            href="/agenda/bloquear?type=BLOCK"
+            onNavigate={onClose}
+            title="Bloqueio"
+            tone="block"
+          >
+            <svg aria-hidden="true" {...NEW_ROW_ICON_PROPS}>
+              <circle cx="12" cy="12" r="8" />
+              <path d="M6.5 6.5l11 11" />
+            </svg>
+          </AgendaNewRow>
+        )}
+        {capabilities.manageAvailability && (
+          <AgendaNewRow
+            description="Atender ou fechar um dia fora do horário de sempre"
+            href="/agenda/excecoes"
+            onNavigate={onClose}
+            title="Exceção do dia"
+            tone="exception"
+          >
+            <svg aria-hidden="true" {...NEW_ROW_ICON_PROPS}>
+              <rect height="14.5" rx="2.5" width="16" x="4" y="5.5" />
+              <path d="M4 10h16M8 3.5v4M16 3.5v4" />
+              <path d="M12 12.5v2.5l1.75 1" />
+            </svg>
+          </AgendaNewRow>
+        )}
+      </div>
+    </ChatSheetShell>
+  );
+}
+
+function AgendaNewRow({
+  children,
+  description,
+  href,
+  onNavigate,
+  title,
+  tone,
+}: {
+  children: ReactNode;
+  description: string;
+  href: string;
+  onNavigate: () => void;
+  title: string;
+  tone: "appointment" | "block" | "exception" | "personal";
+}) {
+  const id = useId();
+  return (
+    <Link
+      aria-describedby={`${id}-description`}
+      aria-labelledby={`${id}-title`}
+      className="agenda-new-row"
+      href={href}
+      onClick={onNavigate}
+    >
+      <span aria-hidden="true" className={clsx("agenda-new-row-icon", `is-${tone}`)}>
+        {children}
+      </span>
+      <span className="agenda-new-row-copy">
+        <span className="agenda-new-row-title" id={`${id}-title`}>
+          {title}
+        </span>
+        <span className="agenda-new-row-description" id={`${id}-description`}>
+          {description}
+        </span>
+      </span>
+      <svg
+        aria-hidden="true"
+        className="agenda-new-row-chevron"
+        fill="none"
+        height="20"
+        stroke="#716859"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.75"
+        viewBox="0 0 24 24"
+        width="20"
+      >
+        <path d="M9 5l7 7-7 7" />
+      </svg>
+    </Link>
   );
 }
 

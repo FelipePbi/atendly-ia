@@ -377,6 +377,17 @@ export function entriesForDate(
   return entries.filter((entry) => entry.date === date);
 }
 
+const FULL_DAY_END_MINUTES = 23 * 60 + 59;
+
+/** Bloqueio ou exceção indisponível que cobre o dia inteiro: o Mês e o mini-calendário pintam o dia de fechado. */
+export function isFullDayClosure(entry: AgendaEntry): boolean {
+  return (
+    (entry.kind === "block" || entry.kind === "exception-unavailable") &&
+    entry.startMinutes <= 0 &&
+    entry.endMinutes >= FULL_DAY_END_MINUTES
+  );
+}
+
 /**
  * Datas com pelo menos um agendamento ativo (Goal069 AG-01) — a faixa da
  * semana marca ponto só nelas, nunca em bloqueio, buffer ou exceção.

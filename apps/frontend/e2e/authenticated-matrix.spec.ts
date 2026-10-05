@@ -2346,12 +2346,14 @@ test(`G-8 new appointment from /agenda, five widths`, async ({ page }, testInfo)
 
   const width = page.viewportSize()?.width ?? 0;
   const wide = width >= WIDE_LAYOUT_BREAKPOINT;
-  const what = `${route.path}: the "Novo" menu`;
+  const what = `${route.path}: the "Novo" sheet`;
   const where = `${route.path} to /agenda/novo at ${testInfo.project.name} (${width}px)`;
 
   await clickForReal(page.getByRole("button", { name: "Novo", exact: true }), what, testInfo);
   await clickForReal(
-    page.getByRole("menuitem", { name: "Agendamento" }),
+    page
+      .getByRole("dialog", { name: "O que você quer adicionar?" })
+      .getByRole("link", { name: /Agendamento/u }),
     `${what}: the "Agendamento" item`,
     testInfo,
   );

@@ -1410,6 +1410,263 @@
       "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
     },
     {
+      "code": "A2",
+      "file": "Agenda.dc.html",
+      "label": "Agenda · vazio",
+      "route": "/agenda",
+      "clock": "13:45",
+      "steps": [
+        {
+          "click": "Dia",
+          "exact": true,
+          "optional": true
+        },
+        {
+          "clickRole": {
+            "name": "Próximo dia",
+            "role": "button"
+          }
+        }
+      ],
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação. O quadro é um domingo sem atendimento; o alvo escolhe “Próximo dia” a partir do dia semeado, então o dia vazio é amanhã e hoje fica com o anel na faixa da semana. O dia da semana (e, por isso, o “aos domingos” da frase da IA) segue o dia semeado, não o domingo do quadro. As respostas fixas de GET /v1/appointments, /v1/time-blocks e /v1/availability-exceptions deixam o dia sem atendimento e sem bloqueio, e GET /v1/settings traz a disponibilidade sem nenhuma regra ativa: o dia escolhido não tem horário de atendimento seja qual for o dia da semana semeado.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/appointments",
+          "json": {
+            "data": [],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/time-blocks",
+          "json": {
+            "data": [],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/availability-exceptions",
+          "json": {
+            "data": [],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/settings",
+          "json": {
+            "data": {
+              "business": {
+                "name": "Studio Camila",
+                "category": "Beleza",
+                "timezone": "America/Sao_Paulo",
+                "language": "pt-BR",
+                "currency": "BRL"
+              },
+              "ai": {
+                "enabled": true,
+                "tone": "BALANCED",
+                "pausedAt": null
+              },
+              "calendar": {
+                "source": "AVENLY",
+                "timezone": "America/Sao_Paulo",
+                "integration": null,
+                "capabilities": {
+                  "manageAvailability": true,
+                  "manageServices": true,
+                  "manageCustomers": true,
+                  "createAppointments": true,
+                  "migrate": false,
+                  "aiActivationReady": true,
+                  "hoursConfigured": true,
+                  "activationTestCompleted": true
+                }
+              },
+              "availability": {
+                "timezone": "America/Sao_Paulo",
+                "rules": [],
+                "minLeadMinutes": 0,
+                "maxLeadDays": 90,
+                "granularityMinutes": 30,
+                "customerChangeMinNoticeMinutes": 0
+              }
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "A3",
+      "file": "Agenda.dc.html",
+      "label": "Agenda · calendário",
+      "route": "/agenda",
+      "clock": "13:45",
+      "steps": [
+        {
+          "click": "Dia",
+          "exact": true,
+          "optional": true
+        },
+        {
+          "clickRole": {
+            "name": "Abrir calendário",
+            "role": "button"
+          }
+        }
+      ],
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação. O passo é obrigatório: sem o título que abre o calendário, a captura falha em vez de passar sem a folha. O mês é o do dia semeado; quais dias têm ponto ou ficam cinza e os atendimentos de fundo seguem os dados da conta de teste."
+    },
+    {
+      "code": "A4",
+      "file": "Agenda.dc.html",
+      "label": "Agenda · novo",
+      "route": "/agenda",
+      "clock": "13:45",
+      "steps": [
+        {
+          "click": "Dia",
+          "exact": true,
+          "optional": true
+        },
+        {
+          "clickRole": {
+            "name": "Novo",
+            "role": "button"
+          }
+        }
+      ],
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação. O passo “Novo” é obrigatório. A quarta linha, “Exceção do dia”, é divergência declarada do Goal118: o app não tem outro caminho para ela e a mantém no estilo das três do quadro."
+    },
+    {
+      "code": "A12",
+      "file": "Agenda.dc.html",
+      "label": "Agenda · dias visíveis",
+      "route": "/agenda",
+      "clock": "13:45",
+      "steps": [
+        {
+          "clickRole": {
+            "name": "Semana",
+            "role": "tab"
+          }
+        },
+        {
+          "clickRole": {
+            "name": "Seg–Sáb",
+            "role": "button"
+          }
+        }
+      ],
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação. A folha abre sobre a Semana, com o domingo oculto: GET /v1/settings/agenda-view fixa hiddenWeekdays [0] e GET /v1/settings fixa a disponibilidade de segunda a sábado, sem regra no domingo (“Você não atende neste dia”), como no quadro, seja qual for a semeadura. Os passos são obrigatórios: o nome da pílula é “Seg–Sáb” e ela só é botão depois do Goal118. Os atendimentos de fundo seguem os dados da conta de teste.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/settings/agenda-view",
+          "json": {
+            "data": {
+              "hiddenWeekdays": [
+                0
+              ],
+              "initialView": null
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/settings",
+          "json": {
+            "data": {
+              "business": {
+                "name": "Studio Camila",
+                "category": "Beleza",
+                "timezone": "America/Sao_Paulo",
+                "language": "pt-BR",
+                "currency": "BRL"
+              },
+              "ai": {
+                "enabled": true,
+                "tone": "BALANCED",
+                "pausedAt": null
+              },
+              "calendar": {
+                "source": "AVENLY",
+                "timezone": "America/Sao_Paulo",
+                "integration": null,
+                "capabilities": {
+                  "manageAvailability": true,
+                  "manageServices": true,
+                  "manageCustomers": true,
+                  "createAppointments": true,
+                  "migrate": false,
+                  "aiActivationReady": true,
+                  "hoursConfigured": true,
+                  "activationTestCompleted": true
+                }
+              },
+              "availability": {
+                "timezone": "America/Sao_Paulo",
+                "rules": [
+                  {
+                    "id": "visual-compare-a12-seg",
+                    "dayOfWeek": 1,
+                    "startTime": "09:00",
+                    "endTime": "18:00",
+                    "active": true
+                  },
+                  {
+                    "id": "visual-compare-a12-ter",
+                    "dayOfWeek": 2,
+                    "startTime": "09:00",
+                    "endTime": "18:00",
+                    "active": true
+                  },
+                  {
+                    "id": "visual-compare-a12-qua",
+                    "dayOfWeek": 3,
+                    "startTime": "09:00",
+                    "endTime": "18:00",
+                    "active": true
+                  },
+                  {
+                    "id": "visual-compare-a12-qui",
+                    "dayOfWeek": 4,
+                    "startTime": "09:00",
+                    "endTime": "18:00",
+                    "active": true
+                  },
+                  {
+                    "id": "visual-compare-a12-sex",
+                    "dayOfWeek": 5,
+                    "startTime": "09:00",
+                    "endTime": "18:00",
+                    "active": true
+                  },
+                  {
+                    "id": "visual-compare-a12-sab",
+                    "dayOfWeek": 6,
+                    "startTime": "09:00",
+                    "endTime": "13:00",
+                    "active": true
+                  }
+                ],
+                "minLeadMinutes": 0,
+                "maxLeadDays": 90,
+                "granularityMinutes": 30,
+                "customerChangeMinNoticeMinutes": 0
+              }
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "S1",
       "file": "Agenda.dc.html",
       "label": "Serviço · editar",

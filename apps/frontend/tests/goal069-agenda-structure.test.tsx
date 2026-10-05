@@ -16,6 +16,9 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { CalendarState } from "@/data";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
+/** A folha do quadro A4 (Goal118) tomou o lugar do menu suspenso de "Novo". */
+const SHEET = "O que você quer adicionar?";
+
 const push = vi.fn();
 const replace = vi.fn();
 
@@ -104,16 +107,16 @@ describe("/agenda troca cabeçalho técnico e botões soltos por uma barra únic
     await screen.findByText("Nenhum atendimento neste dia.");
 
     await user.click(screen.getByRole("button", { name: "Novo" }));
-    const menu = screen.getByRole("menu");
+    const menu = screen.getByRole("dialog", { name: SHEET });
 
     expect(
-      within(menu).getByRole("menuitem", { name: "Agendamento" }),
+      within(menu).getByRole("link", { name: "Agendamento" }),
     ).toHaveAttribute("href", "/agenda/novo");
     expect(
-      within(menu).getByRole("menuitem", { name: "Compromisso pessoal" }),
+      within(menu).getByRole("link", { name: "Compromisso pessoal" }),
     ).toHaveAttribute("href", "/agenda/bloquear?type=PERSONAL");
     expect(
-      within(menu).getByRole("menuitem", { name: "Bloqueio" }),
+      within(menu).getByRole("link", { name: "Bloqueio" }),
     ).toHaveAttribute("href", "/agenda/bloquear?type=BLOCK");
   });
 
@@ -124,10 +127,10 @@ describe("/agenda troca cabeçalho técnico e botões soltos por uma barra únic
 
     const trigger = screen.getByRole("button", { name: "Novo" });
     await user.click(trigger);
-    expect(screen.getByRole("menu")).toBeVisible();
+    expect(screen.getByRole("dialog", { name: SHEET })).toBeVisible();
 
     await user.keyboard("{Escape}");
-    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(trigger).toHaveFocus();
   });
 
@@ -148,12 +151,12 @@ describe("/agenda troca cabeçalho técnico e botões soltos por uma barra únic
     await screen.findByText("Nenhum atendimento neste dia.");
 
     await user.click(screen.getByRole("button", { name: "Novo" }));
-    const menu = screen.getByRole("menu");
+    const menu = screen.getByRole("dialog", { name: SHEET });
     expect(
-      within(menu).queryByRole("menuitem", { name: "Agendamento" }),
+      within(menu).queryByRole("link", { name: "Agendamento" }),
     ).toBeNull();
     expect(
-      within(menu).getByRole("menuitem", { name: "Compromisso pessoal" }),
+      within(menu).getByRole("link", { name: "Compromisso pessoal" }),
     ).toBeVisible();
   });
 
@@ -182,7 +185,7 @@ describe("/agenda troca cabeçalho técnico e botões soltos por uma barra únic
     const first = renderPage(<AgendaPage />);
     await user.click(await screen.findByRole("button", { name: "Novo" }));
     expect(
-      within(screen.getByRole("menu")).getByRole("menuitem", {
+      within(screen.getByRole("dialog", { name: SHEET })).getByRole("link", {
         name: "Exceção do dia",
       }),
     ).toHaveAttribute("href", "/agenda/excecoes");
@@ -202,7 +205,7 @@ describe("/agenda troca cabeçalho técnico e botões soltos por uma barra únic
     renderPage(<AgendaPage />);
     await user.click(await screen.findByRole("button", { name: "Novo" }));
     expect(
-      within(screen.getByRole("menu")).queryByRole("menuitem", {
+      within(screen.getByRole("dialog", { name: SHEET })).queryByRole("link", {
         name: "Exceção do dia",
       }),
     ).toBeNull();

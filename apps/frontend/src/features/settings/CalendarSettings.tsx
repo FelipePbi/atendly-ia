@@ -27,7 +27,7 @@ import { SaveActions } from "./shared/fields";
 import { weekdayLabels } from "./shared/labels";
 import { SettingsPage } from "./shared/SettingsPage";
 
-const HIDDEN_WEEKDAYS_LIMIT_REASON =
+export const HIDDEN_WEEKDAYS_LIMIT_REASON =
   "Pelo menos um dia precisa aparecer na Agenda.";
 
 /**
@@ -35,7 +35,7 @@ const HIDDEN_WEEKDAYS_LIMIT_REASON =
  * limite do cliente (Goal073, `agendaHiddenWeekdaysSchema.max(6)`); detecta
  * essa recusa específica para mostrar a mesma frase, não a genérica.
  */
-function hiddenWeekdaysLimitReason(error: unknown): string | null {
+export function hiddenWeekdaysLimitReason(error: unknown): string | null {
   if (!(error instanceof BffHttpError) || error.code !== "VALIDATION_ERROR") {
     return null;
   }

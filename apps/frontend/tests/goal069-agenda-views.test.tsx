@@ -221,8 +221,9 @@ describe("§6.4 — dia vazio com motivo e ação (AG-03)", () => {
     );
     renderBoard();
 
+    // Goal118 (A2): o motivo passou para o resumo do dia, em minúsculas.
     expect(
-      await screen.findByText("Você não atende neste dia."),
+      await screen.findByText("você não atende neste dia"),
     ).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Criar agendamento" }),
@@ -234,7 +235,7 @@ describe("§6.4 — dia vazio com motivo e ação (AG-03)", () => {
     renderBoard();
 
     await screen.findByText("Nenhum atendimento neste dia.");
-    expect(screen.queryByText("Você não atende neste dia.")).toBeNull();
+    expect(screen.queryByText("você não atende neste dia")).toBeNull();
   });
 });
 

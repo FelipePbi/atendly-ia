@@ -124,7 +124,10 @@ export function ChatSheetShell({
     <div
       className="chat-sheet-wrap"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target !== event.currentTarget) return;
+        // Sem isto o foco devolvido ao abrir é perdido pelo padrão do mousedown.
+        event.preventDefault();
+        onClose();
       }}
       role="presentation"
     >

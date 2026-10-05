@@ -21,6 +21,9 @@ import type {
 import { AgendaBoard } from "@/features/agenda/AgendaBoard";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
+/** A folha do quadro A4 (Goal118) tomou o lugar do menu suspenso de "Novo". */
+const SHEET = "O que você quer adicionar?";
+
 const getCalendar = vi.fn();
 const listAppointments = vi.fn();
 const listAvailabilityExceptions = vi.fn();
@@ -471,7 +474,7 @@ describe("4 — o resumo do dia", () => {
     await user.click(screen.getByRole("button", { name: "Próximo dia" }));
 
     const summary = document.querySelector(".agenda-day-summary");
-    expect(summary).toHaveTextContent("Quarta 30");
+    expect(summary).toHaveTextContent("Quarta, 30");
     expect(summary).not.toHaveTextContent("Hoje");
   });
 });
@@ -507,19 +510,19 @@ describe("6 — o menu de criar", () => {
     renderBoard();
 
     await user.click(await screen.findByRole("button", { name: "Novo" }));
-    const menu = screen.getByRole("menu");
+    const menu = screen.getByRole("dialog", { name: SHEET });
 
     expect(
-      within(menu).getByRole("menuitem", { name: "Agendamento" }),
+      within(menu).getByRole("link", { name: "Agendamento" }),
     ).toHaveAttribute("href", "/agenda/novo");
     expect(
-      within(menu).getByRole("menuitem", { name: "Compromisso pessoal" }),
+      within(menu).getByRole("link", { name: "Compromisso pessoal" }),
     ).toHaveAttribute("href", "/agenda/bloquear?type=PERSONAL");
     expect(
-      within(menu).getByRole("menuitem", { name: "Bloqueio" }),
+      within(menu).getByRole("link", { name: "Bloqueio" }),
     ).toHaveAttribute("href", "/agenda/bloquear?type=BLOCK");
     expect(
-      within(menu).getByRole("menuitem", { name: "Exceção do dia" }),
+      within(menu).getByRole("link", { name: "Exceção do dia" }),
     ).toHaveAttribute("href", "/agenda/excecoes");
     expect(screen.queryByRole("link", { name: "Exceções do dia" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Exceções do dia" })).toBeNull();
@@ -533,19 +536,19 @@ describe("6 — o menu de criar", () => {
     renderBoard();
 
     await user.click(await screen.findByRole("button", { name: "Novo" }));
-    const menu = screen.getByRole("menu");
+    const menu = screen.getByRole("dialog", { name: SHEET });
 
     expect(
-      within(menu).getByRole("menuitem", { name: "Agendamento" }),
+      within(menu).getByRole("link", { name: "Agendamento" }),
     ).toBeVisible();
     expect(
-      within(menu).queryByRole("menuitem", { name: "Exceção do dia" }),
+      within(menu).queryByRole("link", { name: "Exceção do dia" }),
     ).toBeNull();
     expect(
-      within(menu).queryByRole("menuitem", { name: "Bloqueio" }),
+      within(menu).queryByRole("link", { name: "Bloqueio" }),
     ).toBeNull();
     expect(
-      within(menu).queryByRole("menuitem", { name: "Compromisso pessoal" }),
+      within(menu).queryByRole("link", { name: "Compromisso pessoal" }),
     ).toBeNull();
   });
 
@@ -555,10 +558,10 @@ describe("6 — o menu de criar", () => {
 
     const trigger = await screen.findByRole("button", { name: "Novo" });
     await user.click(trigger);
-    expect(screen.getByRole("menu")).toBeVisible();
+    expect(screen.getByRole("dialog", { name: SHEET })).toBeVisible();
 
     await user.keyboard("{Escape}");
-    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(trigger).toHaveFocus();
   });
 });

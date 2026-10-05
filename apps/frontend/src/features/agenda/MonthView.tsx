@@ -11,6 +11,7 @@ import {
   customerLabel,
   endOfMonth,
   entriesForDate,
+  isFullDayClosure,
   isoDate,
   parseDate,
   type ServiceColorMap,
@@ -27,7 +28,6 @@ const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const LINES_MIN_WIDTH = 768;
 const LINES_TWO_MIN_WIDTH = 1024;
 const MAX_STRIPES = 5;
-const FULL_DAY_END_MINUTES = 23 * 60 + 59;
 
 type MonthDensity = "stripes" | "lines-3" | "lines-2";
 
@@ -53,14 +53,6 @@ function useMonthDensity(): MonthDensity {
 /** Atendimento, bloqueio, compromisso e indisponibilidade ocupam o dia; intervalo e horário extra não. */
 function isDayMark(entry: AgendaEntry): boolean {
   return entry.kind !== "buffer" && entry.kind !== "exception-extra";
-}
-
-function isFullDayClosure(entry: AgendaEntry): boolean {
-  return (
-    (entry.kind === "block" || entry.kind === "exception-unavailable") &&
-    entry.startMinutes <= 0 &&
-    entry.endMinutes >= FULL_DAY_END_MINUTES
-  );
 }
 
 function plural(count: number, one: string, many: string): string {

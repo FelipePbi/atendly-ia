@@ -670,7 +670,7 @@ describe("5 — Mês: o primeiro toque seleciona, o segundo abre o Dia", () => {
       "true",
     );
     expect(document.querySelector(".agenda-day-summary")).toHaveTextContent(
-      "Quinta 1",
+      "Quinta, 1",
     );
   });
 
@@ -771,19 +771,20 @@ describe("6 — o resumo do dia", () => {
 });
 
 describe("7 — a pílula de dias visíveis", () => {
-  test("'Todos os dias' sem ocultos, e leva a Configurações › Agenda, na Semana e no Mês", async () => {
+  // Goal118: a pílula deixou de levar a Configurações › Agenda e abre a folha
+  // "Dias visíveis" na própria Agenda (quadro A12).
+  test("'Todos os dias' sem ocultos, e abre a folha dos dias visíveis, na Semana e no Mês", async () => {
     const user = setup();
     renderBoard();
 
     await openWeek(user);
-    const link = screen.getByRole("link", { name: "Todos os dias" });
-    expect(link).toHaveAttribute("href", "/configuracoes/agenda");
+    const pill = screen.getByRole("button", { name: "Todos os dias" });
+    expect(pill).toHaveAttribute("aria-haspopup", "dialog");
 
     await user.click(screen.getByRole("tab", { name: "Mês" }));
-    expect(screen.getByRole("link", { name: "Todos os dias" })).toHaveAttribute(
-      "href",
-      "/configuracoes/agenda",
-    );
+    expect(
+      screen.getByRole("button", { name: "Todos os dias" }),
+    ).toHaveAttribute("aria-haspopup", "dialog");
   });
 
   test("'Seg–Sáb' com o domingo oculto", async () => {
@@ -795,17 +796,16 @@ describe("7 — a pílula de dias visíveis", () => {
     renderBoard();
 
     await openWeek(user);
-    const link = await screen.findByRole("link", { name: "Seg–Sáb" });
-    expect(link).toHaveAttribute("href", "/configuracoes/agenda");
-    expect(screen.queryByRole("link", { name: "Todos os dias" })).toBeNull();
+    const pill = await screen.findByRole("button", { name: "Seg–Sáb" });
+    expect(pill).toHaveAttribute("aria-haspopup", "dialog");
+    expect(screen.queryByRole("button", { name: "Todos os dias" })).toBeNull();
   });
 
   test("o Dia não tem a pílula", async () => {
     renderBoard();
 
     await screen.findByRole("tab", { name: "Dia" });
-    expect(
-      document.querySelector("a[href='/configuracoes/agenda']"),
-    ).toBeNull();
+    expect(document.querySelector(".agenda-visible-days")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Todos os dias" })).toBeNull();
   });
 });

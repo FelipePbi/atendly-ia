@@ -57,17 +57,31 @@
   align-items: center;
   gap: 12px 10px;
 }
+/* O título abre o mini-calendário (quadro A3); o chevron ⌄ é o dos quadros. */
 .agenda-date-title {
   grid-area: title;
   min-width: 0;
+  justify-self: start;
+  /* Alvo de toque de 44 px estendido só para baixo, sem mudar o layout. O
+     título não é posicionado: o marcador do gate autenticado
+     (`.agenda-page-title`, absoluto) fica por cima do canto dele no desktop. */
+  margin-bottom: -14px;
+  padding: 0 0 14px;
   display: flex;
   align-items: baseline;
   gap: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
   font-family: var(--font-display);
   font-size: 26px;
   font-weight: 500;
   line-height: 1.15;
   letter-spacing: -0.01em;
+  text-align: left;
+}
+.agenda-date-chevron {
+  flex: none;
 }
 .agenda-date-year {
   color: #716859;
@@ -189,9 +203,375 @@
 .agenda-new-menu .agenda-new-trigger span {
   display: none;
 }
-.agenda-new-menu .menu {
-  right: 0;
-  left: auto;
+/* Folha "O que você quer adicionar?" (quadro A4), sobre a casca das folhas do chat. */
+.chat-sheet.is-agenda-new {
+  gap: 14px;
+}
+.chat-sheet.is-agenda-new .chat-sheet-handle {
+  margin-bottom: 0;
+}
+.agenda-new-sheet-title {
+  margin: 0;
+  padding: 4px 0;
+  font-family: var(--font-display, Literata, Georgia, serif);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.agenda-new-sheet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.agenda-new-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid #e5ded4;
+  border-radius: 16px;
+  background: #f7f4ef;
+  color: inherit;
+  text-decoration: none;
+  transition:
+    background-color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1),
+    border-color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.agenda-new-row:hover {
+  background: #f3efe8;
+  border-color: #d6cec2;
+}
+.agenda-new-row:focus-visible {
+  outline-offset: 2px;
+}
+.agenda-new-row-icon {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: #efeae2;
+  color: #5f574e;
+}
+.agenda-new-row-icon.is-appointment {
+  background: #dceceb;
+  color: #0b4a4e;
+}
+.agenda-new-row-icon.is-block {
+  background: repeating-linear-gradient(135deg, #efeae2 0 5px, #f7f4ef 5px 10px);
+}
+.agenda-new-row-copy {
+  flex: 1;
+  min-width: 0;
+}
+.agenda-new-row-title {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+}
+.agenda-new-row-description {
+  display: block;
+  margin-top: 2px;
+  color: #5f574e;
+  font-size: 13px;
+}
+.agenda-new-row-chevron {
+  flex: none;
+}
+@media (min-width: 1024px) {
+  .chat-sheet.is-agenda-new,
+  .chat-sheet.is-agenda-calendar,
+  .chat-sheet.is-agenda-days {
+    width: 460px;
+  }
+}
+/* Mini-calendário de navegação (quadro A3), na mesma casca. */
+.chat-sheet.is-agenda-calendar {
+  gap: 16px;
+}
+.chat-sheet.is-agenda-calendar .chat-sheet-handle,
+.chat-sheet.is-agenda-days .chat-sheet-handle {
+  margin-bottom: 0;
+}
+.agenda-calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.agenda-calendar-step {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  transition:
+    background-color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1),
+    color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.agenda-calendar-step::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+}
+.agenda-calendar-step:hover {
+  background: #efeae2;
+}
+.agenda-calendar-step:active {
+  background: #e5ded4;
+}
+.agenda-calendar-title {
+  font-family: var(--font-display, Literata, Georgia, serif);
+  font-size: 22px;
+  font-weight: 500;
+}
+.agenda-calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  color: #716859;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+.agenda-calendar-weekdays .is-sunday {
+  color: #948b80;
+}
+.agenda-calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  row-gap: 6px;
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.agenda-calendar-day {
+  min-width: 0;
+  height: 44px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #221e1a;
+  transition:
+    background-color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1),
+    color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.12s ease,
+    box-shadow 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.agenda-calendar-day:hover:not(.is-selected) {
+  background: #f3efe8;
+}
+.agenda-calendar-day.is-past {
+  color: #716859;
+}
+.agenda-calendar-day.is-outside,
+.agenda-calendar-day.is-closed {
+  color: #948b80;
+}
+.agenda-calendar-day.is-today:not(.is-selected) {
+  box-shadow: inset 0 0 0 1.5px #0f5f63;
+}
+.agenda-calendar-day.is-selected {
+  background: #0f5f63;
+  color: #f7f4ef;
+  font-weight: 600;
+}
+.agenda-calendar-day.is-selected:hover {
+  background: #0b484c;
+}
+.agenda-calendar-day.is-selected:active {
+  background: #0b484c;
+  transform: scale(0.98);
+}
+.agenda-calendar-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+.agenda-calendar-dot.has-appointment {
+  background: #0f5f63;
+}
+.agenda-calendar-day.is-past .agenda-calendar-dot.has-appointment {
+  background: #b9b1a6;
+}
+.agenda-calendar-day.is-selected .agenda-calendar-dot.has-appointment {
+  background: #f7f4ef;
+}
+.agenda-calendar-foot {
+  padding-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.agenda-calendar-foot > span {
+  color: #716859;
+  font-size: 13px;
+}
+.agenda-calendar-today {
+  position: relative;
+  height: 36px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d6cec2;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+.agenda-calendar-today::before {
+  content: "";
+  position: absolute;
+  inset: -4px -1px;
+}
+.agenda-calendar-today:hover {
+  background: #f3efe8;
+}
+/* "Dias visíveis" (quadro A12): sete interruptores e "Salvar". */
+.chat-sheet.is-agenda-days {
+  gap: 14px;
+}
+.agenda-days-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.agenda-days-title {
+  margin: 0;
+  font-family: var(--font-display, Literata, Georgia, serif);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.agenda-days-lead {
+  margin: 0;
+  color: #5f574e;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.agenda-days-list {
+  display: flex;
+  flex-direction: column;
+}
+.agenda-days-row {
+  padding: 11px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #e5ded4;
+  cursor: pointer;
+}
+.agenda-days-row:last-child {
+  border-bottom: 0;
+}
+.agenda-days-row-copy {
+  display: flex;
+  flex-direction: column;
+}
+.agenda-days-row-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+.agenda-days-row.is-hidden .agenda-days-row-name,
+.agenda-days-row-hint {
+  color: #716859;
+}
+.agenda-days-row-hint {
+  font-size: 12px;
+}
+.agenda-days-switch {
+  position: relative;
+  width: 46px;
+  height: 28px;
+  padding: 0;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  background: #d6cec2;
+  transition: background-color 0.2s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.agenda-days-switch[aria-checked="true"] {
+  background: #0f5f63;
+}
+.agenda-days-switch:disabled {
+  opacity: 0.55;
+}
+.agenda-days-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fffdfa;
+  transition: transform 0.2s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.agenda-days-switch[aria-checked="true"] .agenda-days-knob {
+  background: #f7f4ef;
+  transform: translateX(18px);
+}
+.agenda-days-note {
+  margin: 0;
+  color: #716859;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.agenda-days-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.agenda-days-save {
+  height: 52px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 14px;
+  background: #0f5f63;
+  color: #f7f4ef;
+  font-size: 16px;
+  font-weight: 600;
+  transition:
+    background-color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.12s ease;
+}
+.agenda-days-save:hover:not(:disabled) {
+  background: #0b484c;
+}
+.agenda-days-save:active:not(:disabled) {
+  background: #0b484c;
+  transform: scale(0.98);
+}
+.agenda-days-save:disabled {
+  opacity: 0.6;
+}
+@media (prefers-reduced-motion: reduce) {
+  .agenda-calendar-step,
+  .agenda-calendar-day,
+  .agenda-days-switch,
+  .agenda-days-knob,
+  .agenda-days-save {
+    transition: none;
+  }
 }
 @media (max-width: 1023px) {
   .agenda-new-menu {
@@ -200,11 +580,6 @@
     right: 20px;
     bottom: calc(106px + env(safe-area-inset-bottom));
   }
-  .agenda-new-menu .menu {
-    top: auto;
-    bottom: calc(100% + 8px);
-    transform-origin: bottom right;
-  }
 }
 @media (min-width: 1024px) {
   .agenda-command-bar {
@@ -212,6 +587,11 @@
     grid-template-columns: auto minmax(0, 1fr) auto auto;
     grid-template-areas: "title tabs nav new";
     gap: 20px;
+  }
+  /* O chevron (16 px e o vão de 8 px) não alarga a coluna do título: as
+     abas ficam onde já estavam na barra de uma linha só. */
+  .agenda-date-chevron {
+    margin-right: -24px;
   }
   .agenda-view-controls {
     width: 100%;
@@ -237,9 +617,6 @@
   }
   .agenda-new-menu .agenda-new-trigger span {
     display: inline;
-  }
-  .agenda-new-menu .menu {
-    top: calc(100% + 8px);
   }
 }
 @media (min-width: 1100px) {
@@ -973,6 +1350,10 @@
   gap: 12px;
   color: #716859;
   font-size: 13px;
+}
+/* O quadro A2 dá 4 px a mais acima do resumo do dia em que não se atende. */
+.agenda-day-summary.is-closed {
+  padding-top: 14px;
 }
 .agenda-day-summary strong {
   color: var(--fg);
@@ -2470,8 +2851,13 @@
 .agenda-day-panel .agenda-week-strip-day.is-past .agenda-week-strip-number {
   color: #716859;
 }
-.agenda-day-panel .agenda-week-strip-day.is-today .agenda-week-strip-label,
 .agenda-day-panel .agenda-week-strip-day.is-selected .agenda-week-strip-label {
+  color: var(--accent);
+}
+/* Hoje, quando não é o dia escolhido, fica com anel (quadro A2). */
+.agenda-day-panel .agenda-week-strip-day.is-today:not(.is-selected) .agenda-week-strip-number {
+  box-sizing: border-box;
+  border: 1.5px solid var(--accent);
   color: var(--accent);
 }
 .agenda-day-panel .agenda-week-strip-day.is-selected .agenda-week-strip-number {

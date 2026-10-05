@@ -6796,3 +6796,100 @@ Conferência em aparelho real; o Goal pede as capturas do `visual:compare`, não
 - **Gates do IA Loop, rodada 4, todos com saída 0 na árvore final:** `typecheck` do BFF e do frontend (WU-05 e WU-06), `lint` do frontend (WU-07), testes alvo `goal117` do BFF e do frontend (WU-08 e WU-09), suíte do frontend (WU-10), `test:gate` (WU-11), `validate:core` (WU-12), `validate:ui` (WU-13), `validate:integration` (WU-14, 716 s) e `git diff --check` (WU-15). Snapshot aceito: 24 arquivos, hash do diff `c8f3462a…`.
 - **Conferência do Tech Lead, rodada 4.** `npm run visual:compare -- --target H2,H4,H5,H7`: 16 pares, saída 0, com os percentuais da tabela acima. Os 16 `side-by-side.png` foram abertos. No H4, as bordas das linhas do checklist em tablet retrato ficam iguais no quadro e no app (y 279/328/377/436/501, cartão até 501); em tablet paisagem e desktop, deslocadas 1 px; no mobile, com a mesma altura e um deslocamento uniforme de 17 px, que é o respiro de topo da casca.
 - **Aceito sem prova completa.** Os três controles negativos e as contagens da tabela "Execução final" vêm do Developer, na rodada 2, e não foram refeitos pelo Tech Lead. K5, K6 e IA1 vêm só do `visual:compare` do Developer. Detalhe no [review117](reviews/117-review.md).
+
+## A Agenda igual ao protótipo no dia vazio, no calendário, no botão de criar e nos dias visíveis, do Goal118
+
+Texto do Goal118 (decisão [D-132](DECISIONS.md), `PROPOSED`), escrito na rodada 2 (FIX-001) contra os oito blockers do review da rodada 1. Tudo abaixo foi rodado nesta rodada, sobre a árvore completa. Nada foi copiado da rodada 1. As duas primeiras execuções do `validate:integration` reprovaram 1 de 275 testes do gate autenticado (abaixo), e a correção foi no CSS do título. Os controles negativos rodaram de novo depois de cada correção, e a última rodada deles veio depois da última edição de código. Depois disso, só mudaram os três registros desta seção.
+
+### Ambiente
+
+A pilha do `visual:compare` usa os bancos descartáveis `g118_bff`, `g118_sched` e `g118_ai`, num cluster PostgreSQL 18 próprio em `127.0.0.1:56318` (criado com `initdb` no scratchpad da sessão, fora do repositório). `prisma migrate deploy` e `prisma generate` rodaram nos três serviços. O BFF ficou em 3012, o Scheduling em 3013 e a IA em 3010, todos com `tsx src/server.ts`, os laços de fundo desligados e o OpenAI apontando para uma porta de loopback onde nada escuta. As chamadas usaram `VISUAL_BFF_URL=http://127.0.0.1:3012` e `VISUAL_BFF_ORIGIN=http://localhost:3001`. Os três `/health` responderam `200`. A conta visual foi criada e semeada pelo próprio `visual:compare` na primeira chamada. O `validate:integration` usou o banco descartável `avenly_bff_test` no mesmo cluster, depois de os três serviços da pilha visual serem parados.
+
+### Controles negativos (§3.2)
+
+Rodados três vezes, a última depois da última edição de código (o CSS do título), com o mesmo resultado nas três, por mutação na fonte (`scratchpad/mutate.py`) e `npx vitest run tests/goal118-agenda.test.tsx` em `apps/frontend`. Antes, `AgendaVisibleDaysSheet.tsx`, `AgendaCalendarSheet.tsx` e `AgendaBoard.tsx` foram copiados para fora do repositório. Depois de ler a reprovação, os três voltaram da cópia (`cp`), e `cmp` contra a cópia saiu sem diferença nos três, depois de cada controle.
+
+| Controle | Mutação | Reprovou |
+| --- | --- | --- |
+| (a) a folha do A12 grava no toque | em `AgendaVisibleDaysSheet.tsx`, o `onToggle` de cada linha passou a chamar `updateAgendaViewPreference` logo depois de `toggle(day)` | 2 de 30: `os interruptores não gravam nada antes de 'Salvar', e fechar descarta o rascunho` (`AssertionError: expected "vi.fn()" to not be called at all, but actually been called 2 times`) e `'Salvar' grava só hiddenWeekdays, em ordem, …` (`expected "vi.fn()" to be called 1 times, but got 3 times`) |
+| (b) os pontos do A3 da janela já carregada | em `AgendaCalendarSheet.tsx`, os pontos passaram a vir de `marksFrom(loadedEntries)`, com as entradas que a Agenda já tinha (passadas por `AgendaBoard.tsx`), e o efeito da leitura do mês passou a sair antes de ler | 4 de 30: `lê o mês da grade com as três leituras e marca ponto …` (`TestingLibraryElementError: Unable to find role="button" and name /^terça-feira, 15 de setembro, com atendimentos$/`), `‹ › trocam de mês com uma leitura nova` (o mesmo, para 20 de outubro), `a falha da leitura do mês deixa a folha navegável …` (`expected "vi.fn()" to be called with arguments`) e `Escape fecha sem mover a Agenda, … e cancela a leitura em voo` (`expected undefined to be defined`) |
+| (c) "Agendamento" sem `createAppointments` | em `AgendaBoard.tsx`, a condição da linha passou de `capabilities.createAppointments &&` para `(capabilities.createAppointments \|\| true) &&` | 1 de 30: `Agendamento só com createAppointments; os outros três só com manageAvailability` (`AssertionError: expected [ …(4) ] to deeply equal [ StringContaining{…}, …(2) ]`) |
+
+Com a fonte revertida, `goal118-agenda` voltou a 30 de 30 (e a suíte inteira do frontend passou, abaixo).
+
+### Execução final
+
+| Comando | Resultado |
+| --- | --- |
+| `npx tsc --noEmit` em `apps/frontend` (antes e depois da última edição) | saída 0 |
+| `rtk proxy npm run lint` em `apps/frontend` (antes e depois da última edição) | saída 0 |
+| `npx vitest run` em `apps/frontend` (antes e depois da última edição) | **161** arquivos, **2068** testes passando (`goal118-agenda.test.tsx`: 30) |
+| testes da Agenda: `goal016`, `goal069`, `goal073`, `goal092`, `goal097`, `goal100` e `goal118` | todos passando dentro da suíte acima |
+| `node --test scripts/tests/visual-responses.test.mjs` | 33 testes, 33 passando |
+| `npm run test:gate` (com o `prisma generate` de `apps/ai-orchestrator` já feito), depois da última edição | **266** testes, 266 passando, 0 falhas |
+| `npm run validate:core`, depois da última edição | `PASSED`: 17 passos, 15 passaram, 0 falharam, 2 pulados e reportados (`test:bff` e `test:health-worker`) |
+| `npm run validate:ui`, nas cinco larguras 360, 390, 768, 1024 e 1440, depois da última edição | **169** passed, 21 skipped, "public UI gate retries: 0 — every test passed on its first attempt" |
+| `npm run validate:integration` com `BFF_TEST_DATABASE_URL` no banco descartável acima | `PASSED` na terceira execução: **36** de 36 passos, 0 falharam, 0 pulados. Testes: BFF integração 71 arquivos e **540** passando, Scheduling 20 arquivos e 152, IA durabilidade 11 arquivos e 77, IA depuração de conteúdo 3 arquivos e 24. O gate autenticado (`rehearse:goal033-authenticated-ui`) passou os **275** testes: 274 na primeira tentativa e `[mobile-360] › configuracoes-conta › measured, logged in` na nova tentativa ("the session marker is missing", fora da Agenda; o harness reportou "1 test(s) needed a retry") |
+| `git diff --check` | saída 0 |
+
+**Execuções reprovadas do `validate:integration`.** Nas duas primeiras, 35 de 36 passos passaram, e o gate autenticado (`rehearse:goal033-authenticated-ui`) passou 274 de 275 e 273 de 275. Nas duas, `[desktop-1440] › agenda › measured, logged in` reprovou nas duas tentativas, com `elementFromPoint at the centre of the content marker (Agenda, point {"x":268,"y":28}) found button.agenda-date-title, not the marker` (primeira) e `… found span.agenda-date-month, not the marker` (segunda). O marcador `.agenda-page-title` é um `h1` absoluto de 1 px no canto onde o título começa no desktop. Na baseline, o título era um `<strong>` não posicionado, e o `h1` pintava por cima dele. O título-botão tinha `position: relative` (para um `::before` que estendia o alvo de toque), e passou a pintar por cima do marcador. A primeira correção (o `::before` só para baixo) não bastava, porque o botão continuava posicionado. A correção final tira o `position` e o `::before` e estende o alvo de toque com `padding-bottom: 14px` e `margin-bottom: -14px`. O layout não muda: o `visual:compare` de A1, A10, A11, A2, A3, A4 e A12 depois dela deu 0 pixel diferente contra a chamada anterior em A3, A4 e A12, e os mesmos 28 pixels do chevron contra a captura de antes em A1, A10 e A11. A segunda execução teve também `[notebook-1024] › configuracoes-conta` instável ("the session marker is missing"), que passou na nova tentativa. O gate não mudou. A tabela acima traz a terceira execução, sobre a árvore final.
+
+### Testes existentes ajustados
+
+Só para o novo papel, o novo lugar ou o novo texto, sem afrouxar asserção:
+
+- `goal016-agenda-reachability`, `goal069-agenda-structure`, `goal069-agenda-views` e `goal092-agenda-dia`: `getByRole("menu")` virou `getByRole("dialog", { name: "O que você quer adicionar?" })`, e `menuitem` virou `link`, com os mesmos nomes, destinos e ausências por capacidade (escolha 3).
+- `goal069-agenda-views`: o motivo "Você não atende neste dia." virou "você não atende neste dia", que passou para o resumo do dia (escolha 1), na asserção de presença e na de ausência.
+- `goal092-agenda-dia`: o resumo do dia fechado esperado passou de "Quarta 30" para "Quarta, 30", o texto do A2.
+- `goal100-agenda-semana-mes`: a pílula deixou de ser link para `/configuracoes/agenda` e virou botão com `aria-haspopup="dialog"` (escolha 4), nos testes "'Todos os dias' sem ocultos …" (Semana e Mês) e "'Seg–Sáb' com o domingo oculto". No teste "o Dia não tem a pílula", a ausência do link virou a ausência de `.agenda-visible-days` e do botão "Todos os dias"; e o resumo do dia fechado esperado passou de "Quinta 1" para "Quinta, 1", o texto do A2 (escolha 1).
+- `goal118-agenda` (da rodada 1): a descrição de "Exceção do dia" passou para "Atender ou fechar um dia fora do horário de sempre" (blocker 5); o teste da disponibilidade "não lida" virou dois, um com a leitura pendente e um com a leitura falhada (blocker 6).
+
+### Ajuste autorizado do gate autenticado
+
+No G-8 de `apps/frontend/e2e/authenticated-matrix.spec.ts`, com a autorização do review da rodada 1: o localizador do item passou de `page.getByRole("menuitem", { name: "Agendamento" })` para `page.getByRole("dialog", { name: "O que você quer adicionar?" }).getByRole("link", { name: /Agendamento/u })`, e o `what` passou de `the "Novo" menu` para `the "Novo" sheet`. O clique real, o timeout e a asserção do formulário "Novo agendamento" não mudaram. Nenhum outro arquivo de `e2e/` mudou, além de `e2e/visual/targets.json`.
+
+### Conferência visual (`visual:compare`)
+
+`npm run visual:compare -- --target A2,A3,A4,A12,A1,A10,A11,A5,A6,AG1,K5,K6,H7` com a pilha acima: 52 pares (13 alvos × 4 devices), nenhum com erro, saída 0. Depois dessa chamada, o vazio do A2 ainda mudou (a medida da barra inferior no tablet), e `npm run visual:compare -- --target A2` rodou de novo sobre o código final. Percentual de pixels diferentes por device:
+
+| Quadro | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| A2 | 7,4% | 3,1% | 3,9% | 3,2% |
+| A3 | 4,7% | 3,0% | 5,3% | 3,9% |
+| A4 | 16,4% | 8,7% | 11,2% | 8,5% |
+| A12 | 1,7% | 3,3% | 3,6% | 3,2% |
+| A1 | 10,4% | 4,8% | 5,4% | 4,3% |
+| A10 | 15,9% | 4,6% | 5,3% | 4,5% |
+| A11 | 10,8% | 5,2% | 5,6% | 4,5% |
+| A5 | 8,0% | 3,4% | 7,9% | 6,3% |
+| A6 | 16,0% | 9,0% | 12,4% | 10,3% |
+| AG1 | 8,3% | 3,7% | 6,1% | 5,1% |
+| K5 | 32,3% | 17,7% | 12,5% | 9,6% |
+| K6 | 0,5% | 0,6% | 0,8% | 1,3% |
+| H7 | 5,4% | 1,0% | 1,7% | 0,8% |
+
+Capturas abertas (`side-by-side.png`, e `app.png` onde indicado): A2 mobile, tablet retrato, tablet paisagem (`app.png`) e desktop; A3 mobile e desktop; A4 mobile e desktop; A12 mobile e desktop; A1 desktop e tablet retrato, e A5 mobile (`app.png`, antes e depois).
+
+- **A2** bate com o quadro, salvo as divergências de D-132. O que mudou nesta rodada, depois de abrir as capturas: hoje passou a ter anel na faixa da semana (faltava) e o rótulo de hoje ficou cinza; o resumo ganhou os 14 px do A2 (de 52 para 56 px abaixo da faixa no mobile, contra 55 no quadro); o `min-height` provisório `calc(100dvh - 224px)` saiu, e o vazio passou a ser medido como o `flex: 1` do quadro (até a borda de baixo no mobile e até a barra inferior no tablet), com o centro a 1 a 5 px do centro calculado pela regra do quadro nos quatro devices; o painel de detalhe do desktop e do tablet paisagem ficou vazio, como no quadro. O vazio fica mais baixo que no quadro porque o aviso de WhatsApp da conta de teste empurra a Agenda (divergência declarada 2). A frase quebra em lugar diferente por causa do dia da semana (divergência declarada 3).
+- **A3** bate com o quadro: a folha tem a mesma altura e posição (no desktop, 337 px nos dois, a 460 px de largura), a grade de 5 semanas a 44 px com 6 px entre linhas, o título "Outubro 2026" a 1 px do "Setembro 2026" do quadro, a legenda e "Ir para hoje". O fundo atrás do escurecido e os dias com ponto seguem a conta de teste.
+- **A4** bate com o quadro nas três linhas do quadro (alça → título 35 px, título → primeira linha 31 px, linhas de 72 a 73 px e 85 px nos dois), mais a quarta linha declarada.
+- **A12** bate com o quadro: no mobile, os sete interruptores, o texto e "Salvar" caem sobre o quadro sem diferença visível; no desktop, a folha tem 475 a 476 px de altura e 460 px de largura nos dois.
+- **A1, A10 e A11:** o `app.png` dos 12 pares difere do de antes (capturas da WU-01 da rodada 1, na baseline) só em 28 pixels, no chevron ⌄ ao lado do ano, que é o dos quadros (16 px, traço 2, `#716859`). Na primeira chamada, as abas do desktop e do tablet paisagem tinham andado cerca de 12 px, porque o chevron alargava a coluna do título; a margem de −24 px do chevron a partir de 1024 px devolveu as abas ao lugar.
+- **A6, AG1, K5, K6 e H7:** o `app.png` dos 20 pares é igual pixel a pixel ao de antes (0 pixel diferente), inclusive depois da mudança em `ChatSheetShell`.
+- **A5:** difere do de antes só no horário de criação do histórico ("16:01" contra "15:11"), porque a conta visual foi semeada de novo neste banco.
+
+### Escopo
+
+Os arquivos alterados estão dentro do critério 8 do Goal, mais o ajuste autorizado do G-8: `apps/frontend/src/`, `apps/frontend/tests/`, `apps/frontend/e2e/visual/targets.json`, `apps/frontend/e2e/authenticated-matrix.spec.ts` (só o G-8), `scripts/tests/visual-responses.test.mjs` e os três registros.
+
+### Não executado
+
+Conferência em aparelho real; o Goal pede as capturas do `visual:compare`, não aparelho.
+
+**Nota de fechamento — review118, 2026-10-05.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima, salvo a linha de `goal100-agenda-semana-mes` em "Testes existentes ajustados", que o review da rodada 2 pediu (o resumo do dia fechado esperado, de "Quinta 1" para "Quinta, 1"):
+
+- **Decisão.** D-132 ACCEPTED na rodada 2, depois de 8 blockers na rodada 1. O review da rodada 2 terminou `CHANGES_REQUIRED` com 1 blocker só de registro, e o IA Loop aceitou a rodada com ele adiado para este fechamento, onde foi aplicado.
+- **Gates do IA Loop, rodada 2, todos com saída 0 na árvore final:** `typecheck` (WU-06), `lint` (WU-07), testes alvo (WU-08), suíte do frontend (WU-09), `test:gate` (WU-10), `validate:core` (WU-11), `validate:ui` (WU-12), `validate:integration` (WU-13, 706 s) e `git diff --check` (WU-14). Snapshot aceito: 22 arquivos (19 rastreados e 3 novos), hash do diff `95770e56…`.
+- **Rodada 1.** A WU-13 (`validate:integration`) reprovou no G-8 nas cinco larguras, pelo `menuitem` "Agendamento", o que levou ao ajuste autorizado acima. Os gates WU-06 a WU-12 e WU-14 passaram, mas sobre árvore incompleta, e não contam como prova.
+- **Conferência do Tech Lead, rodada 2.** Com a pilha descartável descrita em "Ambiente" (os três `/health` com `200`), `npm run visual:compare` de A2, A3, A4 e A12: os 16 `side-by-side.png` foram abertos. A3, A4 e A12 batem com os quadros nos quatro devices; A2 bate em mobile, tablet paisagem e desktop. No A2 em tablet retrato, a faixa da semana e o resumo têm recuo lateral de 24 px e cerca de 10 px a mais abaixo das abas, e o botão flutuante fica 8 px à direita, iguais ao A1 aceito; corrigir mudaria o A1, que o Goal manda manter igual à captura de antes. A1, A10, A11, A5, A6, AG1, K5, K6 e H7 foram comparados pixel a pixel com as capturas de antes da WU-01: K5, K6, H7, AG1 e A6 com 0 pixel diferente; A1, A10 e A11 só nos 28 pixels do chevron; A5 de 72 a 156 pixels, na hora do histórico.
+- **Aceito sem prova completa.** Os três controles negativos e as contagens da tabela "Execução final" vêm do Developer, na rodada 2, e não foram refeitos pelo Tech Lead. Detalhe no [review118](reviews/118-review.md).

@@ -2,7 +2,14 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { Fragment, type ReactNode, useEffect, useState } from "react";
+import {
+  Fragment,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { type Appointment, type TimeBlock } from "@/data";
 import { Button } from "@/shared/ui/Button";
@@ -78,6 +85,7 @@ export function DayView({
   const blockCount = dayEntries.filter(
     (entry) => entry.kind === "block",
   ).length;
+  const closedDay = rows.length === 0 && hasAvailability === false;
   const weekStart = startOfWeek(parseDate(date));
   const activeDates = datesWithActiveAppointment(entries);
   const nowIndex = isToday
@@ -97,18 +105,26 @@ export function DayView({
         today={today}
         weekStart={weekStart}
       />
-      <div className="agenda-day-summary">
-        <strong>{daySummaryHeading(date, isToday)}</strong>
-        <span>{daySummaryLabel(appointmentCount, blockCount)}</span>
+      <div className={clsx("agenda-day-summary", closedDay && "is-closed")}>
+        <strong>
+          {closedDay
+            ? closedDayHeading(date, isToday)
+            : daySummaryHeading(date, isToday)}
+        </strong>
+        <span>
+          {closedDay
+            ? "você não atende neste dia"
+            : daySummaryLabel(appointmentCount, blockCount)}
+        </span>
       </div>
-      {rows.length === 0 ? (
+      {closedDay ? (
+        <ClosedDayEmpty
+          canCreateAppointment={canCreateAppointment}
+          weekday={parseDate(date).getDay()}
+        />
+      ) : rows.length === 0 ? (
         <div className="agenda-day-empty">
           <p className="agenda-no-results">Nenhum atendimento neste dia.</p>
-          {hasAvailability === false && (
-            <p className="agenda-day-empty-reason">
-              Você não atende neste dia.
-            </p>
-          )}
           {canCreateAppointment && (
             <Button href="/agenda/novo" variant="secondary">
               Criar agendamento
@@ -142,6 +158,114 @@ export function DayView({
         </ul>
       )}
     </section>
+  );
+}
+
+/** Dia da semana no plural, com a preposição que o quadro A2 usa ("aos domingos"). */
+const WEEKDAY_PLURAL = [
+  "aos domingos",
+  "às segundas",
+  "às terças",
+  "às quartas",
+  "às quintas",
+  "às sextas",
+  "aos sábados",
+];
+
+function closedDayHeading(date: string, isToday: boolean): string {
+  if (isToday) return daySummaryHeading(date, true);
+  const parsed = parseDate(date);
+  const weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long" })
+    .format(parsed)
+    .replace(/-feira$/, "");
+  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}, ${parsed.getDate()}`;
+}
+
+function ClosedDayEmpty({
+  canCreateAppointment,
+  weekday,
+}: {
+  canCreateAppointment: boolean;
+  weekday: number;
+}) {
+  const reason = `A IA não marca horários ${WEEKDAY_PLURAL[weekday]}`;
+  const ref = useRef<HTMLDivElement>(null);
+  // No quadro A2 o vazio é `flex: 1` até o fim da tela: no celular a barra
+  // inferior fica por cima dele; no tablet ela vem depois, no fluxo. Mede o
+  // topo da caixa e a estica até a borda de baixo (ou até a barra, no tablet).
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    function fit() {
+      if (!element) return;
+      const top = element.getBoundingClientRect().top + window.scrollY;
+      const navHeight =
+        window.innerWidth >= 768
+          ? Math.max(
+              0,
+              ...Array.from(
+                document.querySelectorAll('nav[class*="bottom-nav"]'),
+                (nav) => nav.getBoundingClientRect().height,
+              ),
+            )
+          : 0;
+      element.style.minHeight = `${Math.max(0, window.innerHeight - top - navHeight)}px`;
+    }
+    fit();
+    // O aviso da casca e outras faixas acima podem entrar depois: qualquer
+    // nó novo na página, ou mudança de tamanho, mede de novo no próximo quadro.
+    let frame = 0;
+    function refit() {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(fit);
+    }
+    window.addEventListener("resize", refit);
+    const resizes =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(refit);
+    resizes?.observe(document.body);
+    const mutations = new MutationObserver(refit);
+    mutations.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", refit);
+      resizes?.disconnect();
+      mutations.disconnect();
+    };
+  }, []);
+  return (
+    <div className="agenda-day-closed" ref={ref}>
+      <div aria-hidden="true" className="agenda-day-closed-art">
+        <span />
+        <span />
+        <span className="agenda-day-closed-slot" />
+        <span />
+        <span />
+      </div>
+      <p className="agenda-day-closed-title">Nenhum atendimento neste dia.</p>
+      <p className="agenda-day-closed-copy">
+        {canCreateAppointment
+          ? `${reason}, mas você pode criar um atendimento por conta própria.`
+          : `${reason}.`}
+      </p>
+      {canCreateAppointment && (
+        <Link className="agenda-day-closed-create" href="/agenda/novo">
+          <svg
+            aria-hidden="true"
+            fill="none"
+            height="16"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2.25"
+            viewBox="0 0 24 24"
+            width="16"
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Criar agendamento
+        </Link>
+      )}
+    </div>
   );
 }
 

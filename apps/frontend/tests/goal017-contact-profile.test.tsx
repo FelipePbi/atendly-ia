@@ -20,6 +20,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { Conversation } from "@/data";
 import { ConversationContextPanel } from "@/features/conversations/ConversationContextPanel";
+import { ConversationCustomerSheet } from "@/features/conversations/ConversationCustomerSheet";
 import { ProductConversationsScreen } from "@/features/conversations/ProductConversationsScreen";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
@@ -31,9 +32,13 @@ const listConversations = vi.fn();
 const getConversation = vi.fn();
 const listMessages = vi.fn();
 const setIgnored = vi.fn();
+const getCustomer = vi.fn();
+const listAppointments = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
+    calendar: { listAppointments },
+    customers: { generateSummary: vi.fn(), get: getCustomer },
     conversations: {
       get: getConversation,
       list: listConversations,
@@ -76,62 +81,81 @@ beforeEach(() => {
   getConversation.mockReset();
   listMessages.mockReset();
   setIgnored.mockReset();
+  getCustomer.mockReset();
+  listAppointments.mockReset();
+  getCustomer.mockResolvedValue({
+    id: "cust-42",
+    name: "Marina Duarte",
+    phone: "5511999990000",
+  });
+  listAppointments.mockResolvedValue([]);
   listConversations.mockResolvedValue([]);
 });
 
 function renderPanel(
   conversation: Conversation,
   props: Partial<{
-    ignoredBusy: boolean;
-    ignoredError: string | null;
-    onToggleIgnored: () => void;
+    onChooseTreatment: () => void;
+    treatmentError: string | null;
   }> = {},
 ) {
   return render(
     <ConversationContextPanel
-      categoryBusy={false}
-      categoryError={null}
       conversation={conversation}
-      ignoredBusy={props.ignoredBusy ?? false}
-      ignoredError={props.ignoredError ?? null}
+      onChooseTreatment={props.onChooseTreatment ?? vi.fn()}
       onResolve={vi.fn()}
-      onSetCategory={vi.fn()}
-      onToggleIgnored={props.onToggleIgnored ?? vi.fn()}
+      person="Marina Duarte"
+      treatmentBusy={false}
+      treatmentError={props.treatmentError ?? null}
+    />,
+  );
+}
+
+function renderSheet(conversation: Conversation) {
+  return render(
+    <ConversationCustomerSheet
+      conversation={conversation}
+      onChooseTreatment={vi.fn()}
+      onClose={vi.fn()}
+      onResolve={vi.fn()}
+      onTakeover={vi.fn()}
+      person="Marina Duarte"
+      takeoverBusy={false}
+      treatmentBusy={false}
+      treatmentError={null}
     />,
   );
 }
 
 describe("vínculo por customerId", () => {
-  test("com vínculo, liga para a pessoa certa por id", () => {
-    renderPanel(conversationFixture({ customerId: "cust-42" }));
+  test("com vínculo, liga para a pessoa certa por id", async () => {
+    renderSheet(conversationFixture({ customerId: "cust-42" }));
 
-    const link = screen.getByRole("link", { name: "Abrir cliente" });
+    const link = await screen.findByRole("link", { name: "Ver perfil" });
     expect(link).toHaveAttribute("href", "/clientes/detalhes?id=cust-42");
+    expect(getCustomer).toHaveBeenCalledWith("cust-42", expect.anything());
   });
 
   test("sem vínculo, diz que o contato ainda não é cliente cadastrado, sem casar por telefone", () => {
-    renderPanel(conversationFixture({ customerId: null }));
+    renderSheet(conversationFixture({ customerId: null }));
 
     expect(
       screen.getByText("Este contato ainda não é um cliente cadastrado."),
     ).toBeVisible();
-    expect(
-      screen.queryByRole("link", { name: "Abrir cliente" }),
-    ).toBeNull();
+    expect(screen.queryByRole("link", { name: "Ver perfil" })).toBeNull();
+    expect(getCustomer).not.toHaveBeenCalled();
     expect(screen.queryByText(/telefone/i)).toBeNull();
   });
 
   test("campo ausente no estoque anterior também é tratado como sem vínculo", () => {
     const conversation = conversationFixture();
     delete (conversation as { customerId?: string | null }).customerId;
-    renderPanel(conversation);
+    renderSheet(conversation);
 
     expect(
       screen.getByText("Este contato ainda não é um cliente cadastrado."),
     ).toBeVisible();
-    expect(
-      screen.queryByRole("link", { name: "Abrir cliente" }),
-    ).toBeNull();
+    expect(screen.queryByRole("link", { name: "Ver perfil" })).toBeNull();
   });
 });
 
@@ -162,7 +186,7 @@ describe("o contexto abre em folha pelo nome no cabeçalho (Goal114)", () => {
 
     await screen.findByLabelText("Histórico da conversa com Marina Duarte");
     expect(screen.queryByLabelText("Contexto da conversa")).toBeNull();
-    expect(screen.queryByRole("link", { name: "Abrir cliente" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Ver perfil" })).toBeNull();
     expect(document.querySelector(".conversation-context")).toBeNull();
   });
 
@@ -189,51 +213,46 @@ describe("o contexto abre em folha pelo nome no cabeçalho (Goal114)", () => {
       name: "Contexto da conversa",
     });
     expect(
-      within(dialog).getByRole("link", { name: "Abrir cliente" }),
+      await within(dialog).findByRole("link", { name: "Ver perfil" }),
     ).toHaveAttribute("href", "/clientes/detalhes?id=cust-42");
   });
 });
 
 describe("ignorar na IA: marcar e desmarcar existem e são reversíveis", () => {
   test("contato não ignorado oferece marcar, dizendo o que a marca faz", async () => {
-    const onToggleIgnored = vi.fn();
-    renderPanel(conversationFixture({ ignored: false }), { onToggleIgnored });
+    const onChooseTreatment = vi.fn();
+    renderPanel(conversationFixture({ ignored: false }), {
+      onChooseTreatment,
+    });
     const user = userEvent.setup();
 
-    const button = screen.getByRole("button", {
-      name: "Ignorar contato na IA",
-    });
-    expect(screen.getByText("A IA usa esta conversa")).toBeVisible();
-    expect(
-      screen.getByText(/o conteúdo deixa de alimentá-la/),
-    ).toBeVisible();
+    const radio = screen.getByRole("radio", { name: "Nunca responde" });
+    expect(radio).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByText(/é o mesmo que Ignorar IA/)).toBeVisible();
 
-    await user.click(button);
-    expect(onToggleIgnored).toHaveBeenCalledTimes(1);
+    await user.click(radio);
+    expect(onChooseTreatment).toHaveBeenCalledTimes(1);
+    expect(onChooseTreatment).toHaveBeenCalledWith("NEVER");
   });
 
   test("contato ignorado oferece desmarcar, sem dizer que a conversa sumiu", () => {
     renderPanel(conversationFixture({ ignored: true }));
 
-    expect(
-      screen.getByRole("button", { name: "Voltar a usar na IA" }),
-    ).toBeVisible();
-    expect(screen.getByText("Contato ignorado")).toBeVisible();
+    expect(screen.getByRole("radio", { name: "Nunca responde" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Automático" })).not.toBeChecked();
     expect(screen.getByText(/As mensagens continuam aqui/)).toBeVisible();
     expect(screen.queryByText(/apagad|bloquead/i)).toBeNull();
   });
 
   test("falha da operação aparece junto do controle, não como tela de erro", () => {
     renderPanel(conversationFixture({ ignored: false }), {
-      ignoredError: "Não foi possível alterar o contato ignorado. (ID r-1)",
+      treatmentError: "Não foi possível alterar o contato ignorado. (ID r-1)",
     });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Não foi possível alterar o contato ignorado.",
     );
-    expect(
-      screen.getByRole("button", { name: "Ignorar contato na IA" }),
-    ).toBeEnabled();
+    expect(screen.getByRole("radio", { name: "Nunca responde" })).toBeEnabled();
   });
 });
 

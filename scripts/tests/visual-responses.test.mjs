@@ -112,9 +112,9 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, I1, C1 a C4 e K1 a K4 e K6 declaram responses", () => {
+test("targets.json: só W1, I1, C1 a C4 e K1 a K6 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["C1", "C2", "C3", "C4", "I1", "K1", "K2", "K3", "K4", "K6", "W1"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["C1", "C2", "C3", "C4", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "W1"]);
   for (const target of declaring) {
     const owner = ["W1", "I1"].includes(target.code) ? "Mais-WhatsApp-Importacao-Conta.dc.html" : "Conversas-e-Chat.dc.html";
     assert.equal(target.file, owner, `${target.code} declara responses no arquivo errado`);
@@ -220,7 +220,7 @@ test("targets.json: Conversas:C4 serve a lista vazia com o WhatsApp conectado", 
   assert.equal(target.steps, undefined);
 });
 
-function chatFrame(code) {
+function chatFrame(code, extraPaths = []) {
   const target = declaringTargets().find((candidate) => candidate.code === code && candidate.file === "Conversas-e-Chat.dc.html");
   assert.ok(target, `alvo Conversas:${code} sem responses`);
   const id = /^\/conversas\/([^/?#]+)$/.exec(target.route)?.[1];
@@ -228,14 +228,14 @@ function chatFrame(code) {
   assert.equal(target.clock, "13:45");
   assert.deepEqual(
     target.responses.map((entry) => `${entry.method} ${entry.path}`),
-    ["GET /v1/conversations", `GET /v1/conversations/${id}`, `GET /v1/conversations/${id}/messages`, `GET /v1/conversations/${id}/events`, "GET /v1/status"],
+    ["GET /v1/conversations", `GET /v1/conversations/${id}`, `GET /v1/conversations/${id}/messages`, `GET /v1/conversations/${id}/events`, "GET /v1/status", ...extraPaths],
   );
-  const [list, conversation, messages, events, status] = target.responses.map((entry) => resolveRelativeDays(entry.json, "2026-10-04"));
+  const [list, conversation, messages, events, status, ...extras] = target.responses.map((entry) => resolveRelativeDays(entry.json, "2026-10-04"));
   assert.equal(status.data.whatsapp.status, "CONNECTED");
   assert.equal(status.data.degraded, false);
   assert.equal(conversation.data.id, id);
   assert.ok(list.data.some((row) => row.id === id), `${code}: a lista da coluna precisa trazer a conversa aberta`);
-  return { target, id, conversation: conversation.data, messages: messages.data, events: events.data };
+  return { target, id, conversation: conversation.data, messages: messages.data, events: events.data, extras };
 }
 
 test("targets.json: Chat:K1 a K4 abrem /conversas/{id fixo} com a conversa, as mensagens, os eventos, a lista e o status", () => {
@@ -305,6 +305,34 @@ test("targets.json: K6 abre o menu da Renata não classificada e toca em Marcar 
   assert.deepEqual(messages.map((message) => message.body), ["Oi Camila, tudo bem? 🙂"]);
   assert.deepEqual(events, []);
   for (const entry of target.responses) assert.equal(entry.method, "GET");
+});
+
+test("targets.json: K5 abre a folha do cliente pelo nome do cabeçalho, com cliente e agendamentos só de GET", () => {
+  const { target, id, conversation, messages, events, extras } = chatFrame("K5", ["GET /v1/customers/visual-compare-k5-customer", "GET /v1/appointments"]);
+  assert.equal(target.label, "Chat · detalhe do cliente");
+  assert.deepEqual(target.steps, [{ clickRole: { name: "Ana Paula", role: "button" } }]);
+  assert.equal(id, "visual-compare-c1-ana");
+  assert.equal(conversation.customerName, "Ana Paula");
+  assert.equal(conversation.customerId, "visual-compare-k5-customer");
+  assert.equal(conversation.contactCategory, null);
+  assert.equal(messages.length, 2);
+  assert.deepEqual(events, []);
+  for (const entry of target.responses) assert.equal(entry.method, "GET");
+  const raw = JSON.stringify(target.responses);
+  assert.match(raw, /{today}/);
+  assert.match(raw, /{today-50}/);
+  const [customer, appointments] = extras;
+  assert.equal(customer.data.id, conversation.customerId);
+  assert.equal(customer.data.name, "Ana Paula");
+  assert.equal(customer.data.nextAppointment.date, "2026-10-04");
+  assert.equal(customer.data.lastAppointment.date, "2026-08-15");
+  assert.equal(appointments.data.length, 2);
+  for (const appointment of appointments.data) {
+    assert.equal(appointment.customerId, conversation.customerId);
+    assert.equal(appointment.services[0].name, "Corte feminino");
+  }
+  assert.equal(appointments.data.at(-1).finalValue, null);
+  assert.equal(appointments.data[0].finalValue, 90);
 });
 
 test("targets.json: a resposta de cada Chat só vale para o GET exato da sua conversa", () => {

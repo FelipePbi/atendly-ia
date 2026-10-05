@@ -31,7 +31,8 @@ import {
   type CategoryWriteScope,
   ConversationActionsSheet,
 } from "./ConversationActionsSheet";
-import { ConversationContextPanel } from "./ConversationContextPanel";
+import type { TreatmentPosition } from "./ConversationContextPanel";
+import { ConversationCustomerSheet } from "./ConversationCustomerSheet";
 import {
   ConversationListColumn,
   lensForConversation,
@@ -89,11 +90,13 @@ export function ConversationThread({
   const [actionsOpen, setActionsOpen] = useState(false);
   const [sendConfirmation, setSendConfirmation] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
-  const [categoryBusy, setCategoryBusy] = useState(false);
-  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [treatmentBusy, setTreatmentBusy] = useState(false);
+  const [treatmentError, setTreatmentError] = useState<string | null>(null);
   const [ignoredBusy, setIgnoredBusy] = useState(false);
   const [ignoredError, setIgnoredError] = useState<string | null>(null);
   const [ignoreOpen, setIgnoreOpen] = useState(false);
+  const [ignoreFromContext, setIgnoreFromContext] = useState(false);
+  const [ignoreExit, setIgnoreExit] = useState<TreatmentPosition | null>(null);
   const [sheetBusy, setSheetBusy] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -198,22 +201,42 @@ export function ConversationThread({
     );
   }
 
-  async function setCategory(category: SessionCategory | null) {
-    if (!conversation || categoryBusy) return;
-    setCategoryBusy(true);
-    setCategoryError(null);
+  /**
+   * "Como a IA trata este contato" (K5). Nada é gravado no toque quando há
+   * diálogo: Nunca responde abre "Ignorar este contato na IA?" e sair de Nunca
+   * responde abre "Voltar a usar este contato na IA?", e quem grava é
+   * `toggleIgnored`, na confirmação. Só Automático e Sempre atende com o
+   * contato não ignorado gravam direto a decisão do contato (`scope: CONTACT`).
+   */
+  async function chooseTreatment(position: TreatmentPosition) {
+    if (!conversation || treatmentBusy) return;
+    setTreatmentError(null);
+    if (position === "NEVER") {
+      openIgnore(true);
+      return;
+    }
+    if (conversation.ignored) {
+      openIgnore(true, position);
+      return;
+    }
+    setTreatmentBusy(true);
     try {
-      const conversations = getProductServices().conversations;
-      const result = category
-        ? await conversations.setCategory(conversation.id, category, "CONTACT")
-        : await conversations.setCategory(conversation.id, null);
-      setConversation(result);
+      setConversation(
+        await getProductServices().conversations.setCategory(
+          conversation.id,
+          position === "ALWAYS" ? "COMMERCIAL" : null,
+          "CONTACT",
+        ),
+      );
     } catch (caught: unknown) {
-      setCategoryError(
-        requestError(caught, "Não foi possível alterar a categoria."),
+      setTreatmentError(
+        requestError(
+          caught,
+          "Não foi possível alterar como a IA trata o contato.",
+        ),
       );
     } finally {
-      setCategoryBusy(false);
+      setTreatmentBusy(false);
     }
   }
 
@@ -254,33 +277,76 @@ export function ConversationThread({
   /**
    * Marcar e desmarcar ignorado, sempre pela mesma operação reversível
    * (`setIgnored`): a decisão é do contato, não da sessão, e a confirmação
-   * acontece antes — nunca ao lado do efeito já aplicado.
+   * acontece antes — nunca ao lado do efeito já aplicado. Ao sair de Nunca
+   * responde pelo controle, a categoria escolhida grava primeiro e `ignored:
+   * false` depois: se a categoria falha, nada mais é gravado; se `ignored:
+   * false` falha, o contato continua ignorado.
    */
   async function toggleIgnored() {
     if (!conversation || ignoredBusy) return;
+    const nextIgnored = !conversation.ignored;
     setIgnoredBusy(true);
     setIgnoredError(null);
     try {
-      const result = await getProductServices().conversations.setIgnored(
+      const conversations = getProductServices().conversations;
+      if (ignoreExit) {
+        setConversation(
+          await conversations.setCategory(
+            conversation.id,
+            ignoreExit === "ALWAYS" ? "COMMERCIAL" : null,
+            "CONTACT",
+          ),
+        );
+      }
+      const result = await conversations.setIgnored(
         conversation.id,
-        !conversation.ignored,
+        nextIgnored,
       );
       setConversation(result);
-      setIgnoreOpen(false);
+      closeIgnore();
     } catch (caught: unknown) {
-      setIgnoredError(
-        requestError(caught, "Não foi possível alterar o contato ignorado."),
+      const message = requestError(
+        caught,
+        ignoreExit
+          ? "Não foi possível alterar como a IA trata o contato."
+          : "Não foi possível alterar o contato ignorado.",
       );
+      if (ignoreFromContext) {
+        setTreatmentError(message);
+        closeIgnore();
+      } else {
+        setIgnoredError(message);
+      }
     } finally {
       setIgnoredBusy(false);
     }
   }
 
-  function openIgnore() {
+  /** A folha do cliente fecha enquanto o diálogo pergunta e volta depois. */
+  function openIgnore(
+    fromContext = false,
+    exitTo: TreatmentPosition | null = null,
+  ) {
     setActionsOpen(false);
     setContextOpen(false);
     setIgnoredError(null);
+    setIgnoreFromContext(fromContext);
+    setIgnoreExit(exitTo);
     setIgnoreOpen(true);
+  }
+
+  function closeIgnore() {
+    setIgnoreOpen(false);
+    setIgnoreExit(null);
+    if (ignoreFromContext) {
+      setIgnoreFromContext(false);
+      setContextOpen(true);
+    }
+  }
+
+  function openContext() {
+    setTreatmentError(null);
+    setContextOpen(true);
   }
 
   async function send(event: FormEvent) {
@@ -460,7 +526,7 @@ export function ConversationThread({
             <button
               aria-label={`Abrir contexto de ${person}`}
               className="chat-header-name"
-              onClick={() => setContextOpen(true)}
+              onClick={openContext}
               type="button"
             >
               <span id="conversation-person-name">{person}</span>
@@ -552,7 +618,7 @@ export function ConversationThread({
                   <path d="M6.5 6.5l11 11" />
                 </svg>
                 <span>A IA nunca responde este contato ·</span>
-                <button onClick={openIgnore} type="button">
+                <button onClick={() => openIgnore()} type="button">
                   alterar
                 </button>
               </p>
@@ -687,37 +753,32 @@ export function ConversationThread({
 
       {conversation && (
         <>
-          <Dialog
-            open={contextOpen}
-            onClose={() => setContextOpen(false)}
-            title="Contexto da conversa"
-            variant="sheet"
-          >
-            <div className="context-sheet-profile">
-              <ConversationContextPanel
-                categoryBusy={categoryBusy}
-                categoryError={categoryError}
-                conversation={conversation}
-                ignoredBusy={ignoredBusy}
-                ignoredError={ignoredError}
-                onResolve={() => void mutate("resolve")}
-                onSetCategory={(category) => void setCategory(category)}
-                onTakeover={() => {
-                  setContextOpen(false);
-                  void mutate("takeover");
-                }}
-                onToggleIgnored={openIgnore}
-                takeoverBusy={busy}
-              />
-            </div>
-          </Dialog>
+          {contextOpen && (
+            <ConversationCustomerSheet
+              conversation={conversation}
+              onChooseTreatment={(position) => void chooseTreatment(position)}
+              onClose={() => setContextOpen(false)}
+              onResolve={() => {
+                setContextOpen(false);
+                void mutate("resolve");
+              }}
+              onTakeover={() => {
+                setContextOpen(false);
+                void mutate("takeover");
+              }}
+              person={person}
+              takeoverBusy={busy}
+              treatmentBusy={treatmentBusy}
+              treatmentError={treatmentError}
+            />
+          )}
           <ConversationActionsSheet
             busy={sheetBusy}
             category={conversation.category ?? "UNCLASSIFIED"}
             error={sheetError}
             ignored={Boolean(conversation.ignored)}
             onClose={() => setActionsOpen(false)}
-            onIgnore={openIgnore}
+            onIgnore={() => openIgnore()}
             onMarkPersonal={(scope) =>
               void setCategoryFromSheet("PERSONAL", scope)
             }
@@ -726,7 +787,7 @@ export function ConversationThread({
             }
             onViewContact={() => {
               setActionsOpen(false);
-              setContextOpen(true);
+              openContext();
             }}
             open={actionsOpen}
             person={person}
@@ -736,7 +797,7 @@ export function ConversationThread({
               conversation.ignored ? "Voltar a usar na IA" : "Ignorar na IA"
             }
             open={ignoreOpen}
-            onClose={() => setIgnoreOpen(false)}
+            onClose={closeIgnore}
             title={
               conversation.ignored
                 ? "Voltar a usar este contato na IA?"
@@ -757,7 +818,7 @@ export function ConversationThread({
               <button
                 className="btn btn-secondary"
                 disabled={ignoredBusy}
-                onClick={() => setIgnoreOpen(false)}
+                onClick={closeIgnore}
                 type="button"
               >
                 Cancelar

@@ -40,9 +40,12 @@ const setCategory = vi.fn();
 const setIgnored = vi.fn();
 const generateSuggestions = vi.fn();
 const getMedia = vi.fn();
+const getCustomer = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
+    calendar: { listAppointments: vi.fn().mockResolvedValue([]) },
+    customers: { generateSummary: vi.fn(), get: getCustomer },
     conversations: {
       generateSuggestions,
       get: getConversation,
@@ -206,9 +209,15 @@ beforeEach(() => {
     setIgnored,
     generateSuggestions,
     getMedia,
+    getCustomer,
   ]) {
     mock.mockReset();
   }
+  getCustomer.mockResolvedValue({
+    id: "cust-7",
+    name: "Ana Paula",
+    phone: "5511999990000",
+  });
   listConversations.mockResolvedValue([]);
   URL.createObjectURL = vi.fn(() => "blob:mock-media-url");
   URL.revokeObjectURL = vi.fn();
@@ -244,9 +253,7 @@ describe("o estado mora no cabeçalho, uma linha por estado", () => {
     expect(document.querySelector(".conversation-state-bar")).toBeNull();
     expect(screen.getAllByText("IA atendendo")).toHaveLength(1);
     expect(screen.queryByRole("button", { name: /^Contexto$/ })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Abrir contexto" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Abrir contexto" })).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Assumir conversa" }),
     ).toBeNull();
@@ -269,11 +276,15 @@ describe("toda ação de hoje continua alcançável", () => {
     const user = userEvent.setup();
 
     const header = document.querySelector(".chat-header") as HTMLElement;
-    await user.click(within(header).getByRole("button", { name: "Retomar IA" }));
+    await user.click(
+      within(header).getByRole("button", { name: "Retomar IA" }),
+    );
     const dialog = await screen.findByRole("dialog", {
       name: "Devolver conversa para a IA?",
     });
-    await user.click(within(dialog).getByRole("button", { name: "Retomar IA" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Retomar IA" }),
+    );
 
     expect(release).toHaveBeenCalledWith("conv-1");
   });
@@ -297,7 +308,9 @@ describe("toda ação de hoje continua alcançável", () => {
       within(sheet).getByRole("button", { name: "Marcar como pessoal" }),
     ).toBeVisible();
     expect(
-      within(sheet).getByRole("button", { name: "Ignorar IA para este contato" }),
+      within(sheet).getByRole("button", {
+        name: "Ignorar IA para este contato",
+      }),
     ).toBeVisible();
     for (const moved of [
       "Assumir conversa",
@@ -308,7 +321,9 @@ describe("toda ação de hoje continua alcançável", () => {
       expect(within(sheet).queryByText(moved)).toBeNull();
     }
 
-    await user.click(within(sheet).getByRole("button", { name: "Ver contato" }));
+    await user.click(
+      within(sheet).getByRole("button", { name: "Ver contato" }),
+    );
     const context = await screen.findByRole("dialog", {
       name: "Contexto da conversa",
     });
@@ -338,9 +353,13 @@ describe("toda ação de hoje continua alcançável", () => {
     expect(resolve).toHaveBeenCalledWith("conv-1");
   });
 
-  test("Ver contato abre o contexto com o grupo de categorias", async () => {
+  test("Ver contato abre o contexto com o controle de como a IA trata o contato", async () => {
     setCategory.mockResolvedValue(
-      conversationFixture({ category: "PERSONAL", categorySource: "MANUAL" }),
+      conversationFixture({
+        category: "COMMERCIAL",
+        categorySource: "MANUAL",
+        contactCategory: "COMMERCIAL",
+      }),
     );
     await renderThread(conversationFixture());
     const user = userEvent.setup();
@@ -350,12 +369,14 @@ describe("toda ação de hoje continua alcançável", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Contexto da conversa",
     });
-    const group = within(dialog).getByRole("group", {
-      name: "Categoria da conversa",
+    const group = within(dialog).getByRole("radiogroup", {
+      name: "Como a IA trata este contato",
     });
-    await user.click(within(group).getByRole("button", { name: "Pessoal" }));
+    await user.click(
+      within(group).getByRole("radio", { name: "Sempre atende" }),
+    );
 
-    expect(setCategory).toHaveBeenCalledWith("conv-1", "PERSONAL", "CONTACT");
+    expect(setCategory).toHaveBeenCalledWith("conv-1", "COMMERCIAL", "CONTACT");
   });
 
   test("Ignorar IA para este contato pelo menu pede confirmação antes do efeito", async () => {
@@ -394,10 +415,12 @@ describe("toda ação de hoje continua alcançável", () => {
       within(dialog).getByRole("link", { name: "Criar agendamento" }),
     ).toHaveAttribute("href", "/agenda/novo");
     expect(
-      within(dialog).getByRole("group", { name: "Categoria da conversa" }),
+      within(dialog).getByRole("radiogroup", {
+        name: "Como a IA trata este contato",
+      }),
     ).toBeVisible();
     expect(
-      within(dialog).getByRole("button", { name: "Ignorar contato na IA" }),
+      within(dialog).getByRole("radio", { name: "Nunca responde" }),
     ).toBeVisible();
     expect(
       within(dialog).getByRole("button", { name: "Marcar como resolvida" }),
@@ -417,7 +440,7 @@ describe("toda ação de hoje continua alcançável", () => {
       name: "Contexto da conversa",
     });
     expect(
-      within(dialog).getByRole("link", { name: "Abrir cliente" }),
+      await within(dialog).findByRole("link", { name: "Ver perfil" }),
     ).toHaveAttribute("href", "/clientes/detalhes?id=cust-7");
   });
 });
@@ -441,9 +464,10 @@ describe("a timeline do quadro", () => {
     ]);
 
     const meta = (text: string) =>
-      screen.getByText(text).closest(".message-group")?.querySelector(
-        ".message-meta",
-      )?.textContent;
+      screen
+        .getByText(text)
+        .closest(".message-group")
+        ?.querySelector(".message-meta")?.textContent;
     expect(meta("Oi, Ana! O corte é R$ 90.")).toMatch(/^IA · \d{2}:\d{2}$/);
     expect(meta("Consigo sim!")).toMatch(/^Você · \d{2}:\d{2}$/);
     expect(meta("Oi Camila! Quanto tá o corte?")).toMatch(/^\d{2}:\d{2}$/);
@@ -483,7 +507,9 @@ describe("a timeline do quadro", () => {
       "/agenda/agendamento?id=appt-1",
     );
     expect(
-      timeline.querySelectorAll(".conversation-event .conversation-event-label"),
+      timeline.querySelectorAll(
+        ".conversation-event .conversation-event-label",
+      ),
     ).toHaveLength(2);
   });
 
@@ -507,7 +533,9 @@ describe("a timeline do quadro", () => {
 
     const line = screen.getByText(/Você assumiu a conversa · \d{2}:\d{2}/);
     const rows = Array.from(
-      screen.getByRole("log").querySelectorAll(".message-group, .conversation-event"),
+      screen
+        .getByRole("log")
+        .querySelectorAll(".message-group, .conversation-event"),
     );
     const index = rows.indexOf(line.closest(".conversation-event") as Element);
     expect(index).toBe(1);
@@ -554,12 +582,14 @@ describe("a timeline do quadro", () => {
       "Imagem recebida · a IA pausou e está aguardando você",
     );
     const rows = Array.from(
-      screen.getByRole("log").querySelectorAll(".message-group, .conversation-event"),
+      screen
+        .getByRole("log")
+        .querySelectorAll(".message-group, .conversation-event"),
     );
-    expect(rows.indexOf(notice.closest(".conversation-event") as Element)).toBe(2);
-    expect(
-      screen.getByRole("button", { name: /Ver mídia/ }),
-    ).toBeVisible();
+    expect(rows.indexOf(notice.closest(".conversation-event") as Element)).toBe(
+      2,
+    );
+    expect(screen.getByRole("button", { name: /Ver mídia/ })).toBeVisible();
   });
 
   test("áudio e transcrição ficam dentro da mesma bolha", async () => {
@@ -588,7 +618,9 @@ describe("a timeline do quadro", () => {
       .closest(".message-bubble") as HTMLElement;
     expect(bubble).not.toBeNull();
     expect(within(bubble).getByText("Transcrição")).toBeVisible();
-    expect(within(bubble).getByRole("button", { name: "Ouvir áudio" })).toBeVisible();
+    expect(
+      within(bubble).getByRole("button", { name: "Ouvir áudio" }),
+    ).toBeVisible();
     expect(within(bubble).getByText("0:14")).toBeVisible();
   });
 

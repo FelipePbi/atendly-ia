@@ -104,6 +104,8 @@ const conversationSchema = z.object({
   categorySource: z.enum(["AUTOMATIC", "MANUAL"]).optional(),
   // Goal115: de quem e a decisao manual vigente; opcional como os demais.
   categoryScope: z.enum(["CONVERSATION", "CONTACT"]).nullish().optional(),
+  // Goal116: decisao manual do contato, independente da vigente na conversa.
+  contactCategory: sessionCategorySchema.nullish().optional(),
   suggestedCategory: sessionCategorySchema.nullish().optional(),
   handling: z.enum(["AI", "HUMAN"]).optional(),
   ignored: z.boolean().optional(),

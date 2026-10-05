@@ -49,6 +49,9 @@ const GOAL109_MIGRATION = "20261003120000_goal109_avenly_calendar_source";
 const OLD_CONSTRAINT = "CalendarSettings_source_atendly_check";
 const NEW_CONSTRAINT = "CalendarSettings_source_avenly_check";
 const CHECK_VIOLATION = "23514";
+// `DROP DATABASE` força um checkpoint cujo custo cresce com os bancos que os
+// ensaios anteriores do gate deixam no cluster; os 10s padrão não bastam.
+const DATABASE_HOOK_TIMEOUT_MS = 120_000;
 
 function migrationSql(directory: string): string {
   return readFileSync(path.join(migrationsRoot, directory, "migration.sql"), "utf8");
@@ -156,7 +159,7 @@ describeWithDatabase("goal109 migration renames ATENDLY to AVENLY (prova 1)", ()
       INSERT INTO "MigrationJob" ("id", "tenantId", "source", "target", "status", "requestedBy", "createdAt", "updatedAt") VALUES
         ('goal109-job-in',  'goal109-tenant-a', 'MINHA_AGENDA', 'ATENDLY',      'COMPLETED', 'legacy', TIMESTAMP '2026-08-01 10:00:00', TIMESTAMP '2026-08-01 10:05:00'),
         ('goal109-job-out', 'goal109-tenant-b', 'ATENDLY',      'MINHA_AGENDA', 'FAILED',    'legacy', TIMESTAMP '2026-08-03 10:00:00', TIMESTAMP '2026-08-03 10:02:00')`);
-  });
+  }, DATABASE_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await client?.end();
@@ -167,7 +170,7 @@ describeWithDatabase("goal109 migration renames ATENDLY to AVENLY (prova 1)", ()
     } finally {
       await maintenance.end();
     }
-  });
+  }, DATABASE_HOOK_TIMEOUT_MS);
 
   it("starts from the state the previous migrations leave", async () => {
     expect(previousMigrations()).not.toContain(GOAL109_MIGRATION);

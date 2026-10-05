@@ -178,7 +178,7 @@ describe("ShellConfigProvider + Inbox de conversas não excede a profundidade de
 });
 
 describe("ShellConfigProvider + Chat da conversa não excede a profundidade de atualização", () => {
-  test("abre e fecha o contexto repetidamente e alterna a categoria continuamente", async () => {
+  test("abre e fecha o contexto repetidamente e alterna o tratamento do contato continuamente", async () => {
     getConversation.mockResolvedValue(conversationFixture());
     listMessages.mockResolvedValue([messageFixture()]);
     listConversations.mockResolvedValue([conversationFixture()]);
@@ -192,26 +192,30 @@ describe("ShellConfigProvider + Chat da conversa não excede a profundidade de a
     });
     for (let i = 0; i < 4; i += 1) {
       await user.click(openContext);
-      await user.click(await screen.findByRole("button", { name: "Fechar" }));
+      await screen.findByRole("dialog", { name: "Contexto da conversa" });
+      // Goal116: a folha do K5 não tem botão Fechar; fecha com Escape.
+      await user.keyboard("{Escape}");
+      expect(screen.queryByRole("dialog")).toBeNull();
     }
-    // Goal114: a categoria mora no contexto, que só existe em folha.
+    // Goal116: o tratamento do contato mora no contexto, que só existe em folha.
     await user.click(openContext);
 
-    setCategory.mockResolvedValue(
-      conversationFixture({ category: "PERSONAL", categorySource: "MANUAL" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Pessoal" }));
     setCategory.mockResolvedValue(
       conversationFixture({
         category: "COMMERCIAL",
         categorySource: "MANUAL",
+        contactCategory: "COMMERCIAL",
       }),
     );
-    await user.click(screen.getByRole("button", { name: "Comercial" }));
+    await user.click(screen.getByRole("radio", { name: "Sempre atende" }));
+    setCategory.mockResolvedValue(
+      conversationFixture({ contactCategory: null }),
+    );
+    await user.click(screen.getByRole("radio", { name: "Automático" }));
 
     expect(
-      await screen.findByRole("button", { name: "Comercial" }),
-    ).toHaveAttribute("aria-pressed", "true");
+      await screen.findByRole("radio", { name: "Automático" }),
+    ).toHaveAttribute("aria-checked", "true");
   });
 
   test("abre e fecha o diálogo de Retomar IA repetidamente sem confirmar", async () => {

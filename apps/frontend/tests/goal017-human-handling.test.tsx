@@ -17,7 +17,7 @@
  *   aplicada sozinha — só o clique explícito na categoria muda o override.
  */
 
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -104,7 +104,10 @@ async function openContext(user: ReturnType<typeof userEvent.setup>) {
   return screen.findByRole("dialog", { name: "Contexto da conversa" });
 }
 
-async function renderThread(conversation: Conversation, messages: Message[] = []) {
+async function renderThread(
+  conversation: Conversation,
+  messages: Message[] = [],
+) {
   getConversation.mockResolvedValue(conversation);
   listMessages.mockResolvedValue(messages);
   listConversations.mockResolvedValue([conversation]);
@@ -131,7 +134,9 @@ beforeEach(() => {
 
 describe("abrir a conversa não altera estado", () => {
   test("nenhuma mutação é chamada ao carregar", async () => {
-    await renderThread(conversationFixture({ handling: "AI", status: "ACTIVE" }));
+    await renderThread(
+      conversationFixture({ handling: "AI", status: "ACTIVE" }),
+    );
 
     expect(takeover).not.toHaveBeenCalled();
     expect(release).not.toHaveBeenCalled();
@@ -178,20 +183,12 @@ describe("enviar assume a conversa", () => {
     const user = userEvent.setup();
 
     expect(within(stateBar()).getByText(/^Aguardando você/)).toBeVisible();
-    await user.type(
-      screen.getByLabelText("Mensagem"),
-      "Já te atendo por aqui",
-    );
+    await user.type(screen.getByLabelText("Mensagem"), "Já te atendo por aqui");
     await user.click(screen.getByRole("button", { name: "Enviar mensagem" }));
 
-    expect(
-      await within(stateBar()).findByText("Você atendendo"),
-    ).toBeVisible();
+    expect(await within(stateBar()).findByText("Você atendendo")).toBeVisible();
     expect(within(stateBar()).queryByText(/Aguardando você/)).toBeNull();
-    expect(sendMessage).toHaveBeenCalledWith(
-      "conv-1",
-      "Já te atendo por aqui",
-    );
+    expect(sendMessage).toHaveBeenCalledWith("conv-1", "Já te atendo por aqui");
   });
 
   test("o campo aceita digitação mesmo quando a IA ainda está ativa", async () => {
@@ -237,9 +234,7 @@ describe("takeover, release e resolve continuam alcançáveis", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Devolver conversa para a IA?",
     });
-    expect(
-      within(dialog).getByText(/reavalia o contexto atual/),
-    ).toBeVisible();
+    expect(within(dialog).getByText(/reavalia o contexto atual/)).toBeVisible();
 
     await user.click(
       within(dialog).getByRole("button", { name: "Retomar IA" }),
@@ -248,9 +243,7 @@ describe("takeover, release e resolve continuam alcançáveis", () => {
   });
 
   test("Marcar como resolvida chama resolve", async () => {
-    resolve.mockResolvedValue(
-      conversationFixture({ status: "CLOSED" }),
-    );
+    resolve.mockResolvedValue(conversationFixture({ status: "CLOSED" }));
     await renderThread(
       conversationFixture({ handling: "AI", status: "ACTIVE" }),
     );
@@ -267,7 +260,9 @@ describe("takeover, release e resolve continuam alcançáveis", () => {
 });
 
 describe("override de categoria", () => {
-  test("mostra a origem automática e a sugestão da IA, sem aplicá-la sozinha", async () => {
+  // Goal116: os chips, o selo e a dica da sugestão saíram do contexto; o
+  // override do contato é o controle "Como a IA trata este contato".
+  test("mostra Automático marcado e a sugestão da IA nunca é aplicada sozinha", async () => {
     await renderThread(
       conversationFixture({
         category: "COMMERCIAL",
@@ -277,26 +272,23 @@ describe("override de categoria", () => {
     );
     await openContext(userEvent.setup());
 
-    expect(screen.getByText("Classificação automática")).toBeVisible();
-    expect(
-      screen.getByText(/A IA sugere Pessoal\. A escolha final é sua\./),
-    ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Comercial" })).toHaveAttribute(
-      "aria-pressed",
+    expect(screen.getByRole("radio", { name: "Automático" })).toHaveAttribute(
+      "aria-checked",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Pessoal" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
+    expect(
+      screen.getByRole("radio", { name: "Sempre atende" }),
+    ).toHaveAttribute("aria-checked", "false");
     expect(setCategory).not.toHaveBeenCalled();
   });
 
-  test("os três valores e null funcionam, e a origem manual fica visível depois", async () => {
+  test("Sempre atende e Automático gravam a decisão do contato, e a posição vem da resposta", async () => {
     setCategory.mockResolvedValue(
       conversationFixture({
-        category: "PERSONAL",
+        category: "COMMERCIAL",
+        categoryScope: "CONTACT",
         categorySource: "MANUAL",
+        contactCategory: "COMMERCIAL",
         suggestedCategory: null,
       }),
     );
@@ -310,34 +302,46 @@ describe("override de categoria", () => {
     const user = userEvent.setup();
     await openContext(user);
 
-    await user.click(screen.getByRole("button", { name: "Pessoal" }));
+    await user.click(screen.getByRole("radio", { name: "Sempre atende" }));
 
-    expect(setCategory).toHaveBeenCalledWith("conv-1", "PERSONAL", "CONTACT");
-    expect(await screen.findByText("Definida manualmente")).toBeVisible();
+    expect(setCategory).toHaveBeenCalledWith("conv-1", "COMMERCIAL", "CONTACT");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("radio", { name: "Sempre atende" }),
+      ).toHaveAttribute("aria-checked", "true"),
+    );
 
     setCategory.mockResolvedValue(
       conversationFixture({
         category: "UNCLASSIFIED",
         categorySource: "AUTOMATIC",
+        contactCategory: null,
         suggestedCategory: null,
       }),
     );
-    await user.click(
-      screen.getByRole("button", { name: "Usar classificação automática" }),
-    );
+    await user.click(screen.getByRole("radio", { name: "Automático" }));
 
-    expect(setCategory).toHaveBeenCalledWith("conv-1", null);
-    expect(await screen.findByText("Classificação automática")).toBeVisible();
+    expect(setCategory).toHaveBeenCalledWith("conv-1", null, "CONTACT");
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: "Automático" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      ),
+    );
   });
 
-  test("Usar classificação automática fica desabilitado quando já é automática", async () => {
+  test("tocar Automático quando já é automático não grava", async () => {
     await renderThread(
-      conversationFixture({ category: "COMMERCIAL", categorySource: "AUTOMATIC" }),
+      conversationFixture({
+        category: "COMMERCIAL",
+        categorySource: "AUTOMATIC",
+      }),
     );
-    await openContext(userEvent.setup());
+    const user = userEvent.setup();
+    await openContext(user);
 
-    expect(
-      screen.getByRole("button", { name: "Usar classificação automática" }),
-    ).toBeDisabled();
+    await user.click(screen.getByRole("radio", { name: "Automático" }));
+
+    expect(setCategory).not.toHaveBeenCalled();
   });
 });

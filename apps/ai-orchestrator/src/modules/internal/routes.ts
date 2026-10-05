@@ -1702,6 +1702,10 @@ function conversationDto(conversation: ConversationDtoInput) {
           override: conversation.contact?.categoryOverride,
         })
       : null,
+    // Goal116: a decisao manual do contato, independente da vigente na
+    // conversa. Permite a tela dizer "esta conversa e Pessoal, o contato e
+    // Comercial". `null` quando o contato nao tem decisao.
+    contactCategory: conversation.contact?.categoryOverride ?? null,
     // "Voce atendendo" x "IA atendendo": estado de atendimento, nao ciclo de
     // vida. Aberto ou lido nao muda nada disto.
     handling: humanHandling ? "HUMAN" : "AI",

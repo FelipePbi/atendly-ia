@@ -716,6 +716,9 @@ export const conversationSchema = z.object({
   // Goal115: de quem e a decisao manual vigente. `null` na classificacao
   // automatica, ausente no estoque anterior a este campo.
   categoryScope: z.enum(["CONVERSATION", "CONTACT"]).nullish().optional(),
+  // Goal116: decisao manual do contato, independente da vigente na conversa.
+  // `null` sem decisao do contato, ausente no estoque anterior ao campo.
+  contactCategory: sessionCategorySchema.nullish().optional(),
   suggestedCategory: sessionCategorySchema.nullish().optional(),
   handling: z.enum(["AI", "HUMAN"]).optional(),
   ignored: z.boolean().optional(),

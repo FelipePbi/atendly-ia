@@ -47,9 +47,13 @@ const generateSuggestions = vi.fn();
 const getMedia = vi.fn();
 const statusGet = vi.fn();
 const notificationsSummary = vi.fn();
+const getCustomer = vi.fn();
+const listAppointments = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
+    calendar: { listAppointments },
+    customers: { generateSummary: vi.fn(), get: getCustomer },
     notifications: { summary: notificationsSummary },
     status: { get: statusGet },
     conversations: {
@@ -138,9 +142,17 @@ beforeEach(() => {
     getMedia,
     statusGet,
     notificationsSummary,
+    getCustomer,
+    listAppointments,
   ]) {
     spy.mockReset();
   }
+  getCustomer.mockResolvedValue({
+    id: "cust-1",
+    name: "Marina Duarte",
+    phone: "5511999990000",
+  });
+  listAppointments.mockResolvedValue([]);
   listConversations.mockResolvedValue([]);
   notificationsSummary.mockResolvedValue({
     byLevel: { ATTENTION: 0, CRITICAL: 0, INFO: 0 },
@@ -223,7 +235,10 @@ describe("inbox de conversas", () => {
 });
 
 describe("chat da conversa", () => {
-  async function renderThread(conversation: Conversation, messages: Message[] = []) {
+  async function renderThread(
+    conversation: Conversation,
+    messages: Message[] = [],
+  ) {
     getConversation.mockResolvedValue(conversation);
     listMessages.mockResolvedValue(messages);
     listConversations.mockResolvedValue([conversation]);
@@ -245,36 +260,43 @@ describe("chat da conversa", () => {
         id: "msg-customer",
         source: "CUSTOMER",
       }),
-      messageFixture({ body: "Já te atendo", id: "msg-owner", source: "OWNER" }),
+      messageFixture({
+        body: "Já te atendo",
+        id: "msg-owner",
+        source: "OWNER",
+      }),
     ]);
 
     await expectNoA11yViolations(container);
   });
 
-  test("as opções de categoria formam um grupo com estado nunca só por cor", async () => {
+  test("as opções de tratamento formam um grupo com estado nunca só por cor", async () => {
     await renderThread(conversationFixture());
-    // Goal114: a categoria mora no contexto, aberto pelo nome no cabeçalho.
+    // Goal116: o tratamento do contato mora na folha do cliente, aberta pelo
+    // nome no cabeçalho; as opções são um radiogroup de uma parada de Tab só.
     await userEvent
       .setup()
       .click(
         screen.getByRole("button", { name: "Abrir contexto de Marina Duarte" }),
       );
 
-    const group = screen.getByRole("group", { name: "Categoria da conversa" });
-    const commercial = within(group).getByRole("button", { name: "Comercial" });
-    const personal = within(group).getByRole("button", { name: "Pessoal" });
-    expect(commercial).toHaveAttribute("aria-pressed", "true");
-    expect(personal).toHaveAttribute("aria-pressed", "false");
+    const group = screen.getByRole("radiogroup", {
+      name: "Como a IA trata este contato",
+    });
+    const automatic = within(group).getByRole("radio", { name: "Automático" });
+    const always = within(group).getByRole("radio", { name: "Sempre atende" });
+    const never = within(group).getByRole("radio", { name: "Nunca responde" });
+    expect(automatic).toHaveAttribute("aria-checked", "true");
+    expect(always).toHaveAttribute("aria-checked", "false");
+    expect(never).toHaveAttribute("aria-checked", "false");
 
     const user = userEvent.setup();
-    await tabUntilFocused(user, commercial);
-    expect(commercial).toHaveFocus();
-    await user.tab();
-    expect(
-      within(group).getByRole("button", { name: "Não classificada" }),
-    ).toHaveFocus();
-    await user.tab();
-    expect(personal).toHaveFocus();
+    await tabUntilFocused(user, automatic);
+    expect(automatic).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+    expect(always).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+    expect(never).toHaveFocus();
   });
 
   test("as sugestões da IA formam um grupo alcançável por teclado", async () => {
@@ -306,7 +328,9 @@ describe("chat da conversa", () => {
     });
 
     await expectNoA11yViolations(document.body);
-    expect(within(dialog).getByRole("button", { name: "Fechar" })).toHaveFocus();
+    expect(
+      within(dialog).getByRole("button", { name: "Fechar" }),
+    ).toHaveFocus();
 
     await user.tab({ shift: true });
     expect(
@@ -324,7 +348,11 @@ describe("chat da conversa", () => {
 
   test("contexto do cliente em folha: foco entra no diálogo e Esc devolve o foco a quem abriu", async () => {
     await renderThread(
-      conversationFixture({ customerId: "cust-1", handling: "AI", status: "ACTIVE" }),
+      conversationFixture({
+        customerId: "cust-1",
+        handling: "AI",
+        status: "ACTIVE",
+      }),
     );
     const user = userEvent.setup();
 
@@ -337,7 +365,10 @@ describe("chat da conversa", () => {
     });
 
     await expectNoA11yViolations(document.body);
-    expect(within(dialog).getByRole("button", { name: "Fechar" })).toHaveFocus();
+    // A folha do K5 não tem botão Fechar: o foco entra no primeiro controle.
+    expect(
+      within(dialog).getByRole("radio", { name: "Automático" }),
+    ).toHaveFocus();
 
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();

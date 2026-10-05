@@ -59,23 +59,25 @@ export function ConversationActionsSheet(props: ConversationActionsSheetProps) {
   return <OpenSheet {...props} />;
 }
 
-function OpenSheet({
-  busy,
-  category,
-  error,
-  ignored,
+/**
+ * A casca das folhas do chat (K5 e K6): folha embaixo no celular, diálogo
+ * centrado de 768 px em diante. Prende o foco, fecha com Escape e devolve o
+ * foco a quem a abriu.
+ */
+export function ChatSheetShell({
+  children,
+  className,
   onClose,
-  onIgnore,
-  onMarkPersonal,
-  onMoveToCommercial,
-  onViewContact,
-  person,
-}: ConversationActionsSheetProps) {
+  title,
+}: {
+  children: ReactNode;
+  className?: string;
+  onClose: () => void;
+  title: string;
+}) {
   const titleId = useId();
   const panelRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
-  const [personalOpen, setPersonalOpen] = useState(false);
-  const [scope, setScope] = useState<CategoryWriteScope>("CONVERSATION");
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -114,10 +116,6 @@ function OpenSheet({
     };
   }, []);
 
-  const canMoveToCommercial = category !== "COMMERCIAL";
-  const canMarkPersonal = category !== "PERSONAL";
-  const personalExpanded = canMarkPersonal && personalOpen;
-
   return (
     <div
       className="chat-sheet-wrap"
@@ -129,114 +127,137 @@ function OpenSheet({
       <section
         aria-labelledby={titleId}
         aria-modal="true"
-        className="chat-sheet"
+        className={clsx("chat-sheet", className)}
         ref={panelRef}
         role="dialog"
       >
         <h2 className="sr-only" id={titleId}>
-          Mais ações
+          {title}
         </h2>
         <div aria-hidden="true" className="chat-sheet-handle" />
-        {error && (
-          <p className="chat-sheet-error" role="alert">
-            {error}
-          </p>
-        )}
+        {children}
+      </section>
+    </div>
+  );
+}
+
+function OpenSheet({
+  busy,
+  category,
+  error,
+  ignored,
+  onClose,
+  onIgnore,
+  onMarkPersonal,
+  onMoveToCommercial,
+  onViewContact,
+  person,
+}: ConversationActionsSheetProps) {
+  const [personalOpen, setPersonalOpen] = useState(false);
+  const [scope, setScope] = useState<CategoryWriteScope>("CONVERSATION");
+
+  const canMoveToCommercial = category !== "COMMERCIAL";
+  const canMarkPersonal = category !== "PERSONAL";
+  const personalExpanded = canMarkPersonal && personalOpen;
+
+  return (
+    <ChatSheetShell onClose={onClose} title="Mais ações">
+      {error && (
+        <p className="chat-sheet-error" role="alert">
+          {error}
+        </p>
+      )}
+      <button
+        className="chat-sheet-row"
+        disabled={busy}
+        onClick={onViewContact}
+        type="button"
+      >
+        <RowIcon>
+          <circle cx="12" cy="8.5" r="3.5" />
+          <path d="M5 20a7 7 0 0 1 14 0" />
+        </RowIcon>
+        <span>Ver contato</span>
+      </button>
+      {canMoveToCommercial && (
         <button
           className="chat-sheet-row"
           disabled={busy}
-          onClick={onViewContact}
+          onClick={onMoveToCommercial}
           type="button"
         >
           <RowIcon>
-            <circle cx="12" cy="8.5" r="3.5" />
-            <path d="M5 20a7 7 0 0 1 14 0" />
+            <path d="M4 7h16M4 12h16M4 17h10" />
+            <path d="M16 15l3 3 3-3M19 18v-9" />
           </RowIcon>
-          <span>Ver contato</span>
+          <span>Mover para Comercial</span>
         </button>
-        {canMoveToCommercial && (
+      )}
+      {canMarkPersonal && (
+        <div
+          className={clsx("chat-sheet-personal", personalExpanded && "is-open")}
+        >
           <button
+            aria-expanded={personalExpanded}
             className="chat-sheet-row"
             disabled={busy}
-            onClick={onMoveToCommercial}
+            onClick={() => setPersonalOpen((value) => !value)}
             type="button"
           >
-            <RowIcon>
-              <path d="M4 7h16M4 12h16M4 17h10" />
-              <path d="M16 15l3 3 3-3M19 18v-9" />
+            <RowIcon stroke={personalExpanded ? "#221E1A" : "#5F574E"}>
+              <path d="M9 6v12M15 6v12" />
             </RowIcon>
-            <span>Mover para Comercial</span>
+            <span>Marcar como pessoal</span>
           </button>
-        )}
-        {canMarkPersonal && (
-          <div
-            className={clsx(
-              "chat-sheet-personal",
-              personalExpanded && "is-open",
-            )}
-          >
-            <button
-              aria-expanded={personalExpanded}
-              className="chat-sheet-row"
-              disabled={busy}
-              onClick={() => setPersonalOpen((value) => !value)}
-              type="button"
-            >
-              <RowIcon stroke={personalExpanded ? "#221E1A" : "#5F574E"}>
-                <path d="M9 6v12M15 6v12" />
-              </RowIcon>
-              <span>Marcar como pessoal</span>
-            </button>
-            {personalExpanded && (
-              <div className="chat-sheet-options">
-                <div
-                  aria-label="Onde a IA para de responder"
-                  className="chat-sheet-radios"
-                  role="radiogroup"
-                >
-                  <PersonalOption
-                    checked={scope === "CONVERSATION"}
-                    description="A IA para de responder aqui. Uma nova conversa volta ao normal."
-                    disabled={busy}
-                    onSelect={() => setScope("CONVERSATION")}
-                    title="Só esta conversa"
-                  />
-                  <PersonalOption
-                    checked={scope === "CONTACT"}
-                    description="A IA nunca mais responde este contato."
-                    disabled={busy}
-                    onSelect={() => setScope("CONTACT")}
-                    title={`Sempre, para ${person}`}
-                  />
-                </div>
-                <button
-                  className="chat-sheet-submit"
+          {personalExpanded && (
+            <div className="chat-sheet-options">
+              <div
+                aria-label="Onde a IA para de responder"
+                className="chat-sheet-radios"
+                role="radiogroup"
+              >
+                <PersonalOption
+                  checked={scope === "CONVERSATION"}
+                  description="A IA para de responder aqui. Uma nova conversa volta ao normal."
                   disabled={busy}
-                  onClick={() => onMarkPersonal(scope)}
-                  type="button"
-                >
-                  {busy ? "Salvando…" : "Marcar como pessoal"}
-                </button>
+                  onSelect={() => setScope("CONVERSATION")}
+                  title="Só esta conversa"
+                />
+                <PersonalOption
+                  checked={scope === "CONTACT"}
+                  description="A IA nunca mais responde este contato."
+                  disabled={busy}
+                  onSelect={() => setScope("CONTACT")}
+                  title={`Sempre, para ${person}`}
+                />
               </div>
-            )}
-          </div>
-        )}
-        <button
-          className="chat-sheet-row is-last"
-          disabled={busy}
-          onClick={onIgnore}
-          type="button"
-        >
-          <RowIcon>
-            <circle cx="12" cy="12" r="8" />
-            <path d="M6.5 6.5l11 11" />
-          </RowIcon>
-          <span>
-            {ignored ? "Voltar a usar na IA" : "Ignorar IA para este contato"}
-          </span>
-        </button>
-      </section>
-    </div>
+              <button
+                className="chat-sheet-submit"
+                disabled={busy}
+                onClick={() => onMarkPersonal(scope)}
+                type="button"
+              >
+                {busy ? "Salvando…" : "Marcar como pessoal"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      <button
+        className="chat-sheet-row is-last"
+        disabled={busy}
+        onClick={onIgnore}
+        type="button"
+      >
+        <RowIcon>
+          <circle cx="12" cy="12" r="8" />
+          <path d="M6.5 6.5l11 11" />
+        </RowIcon>
+        <span>
+          {ignored ? "Voltar a usar na IA" : "Ignorar IA para este contato"}
+        </span>
+      </button>
+    </ChatSheetShell>
   );
 }
 

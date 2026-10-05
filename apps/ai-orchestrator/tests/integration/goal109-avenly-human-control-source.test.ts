@@ -34,6 +34,9 @@ const migrationsRoot = path.resolve(
 );
 const GOAL109_MIGRATION = "20261003120000_goal109_avenly_human_control_source";
 const GOAL115_MIGRATION = "20261004120000_goal115_session_category_override";
+// `DROP DATABASE` força um checkpoint cujo custo cresce com os bancos que os
+// ensaios anteriores do gate deixam no cluster; os 10s padrão não bastam.
+const DATABASE_HOOK_TIMEOUT_MS = 120_000;
 
 const TENANT = "tenant-goal109-human-control";
 const CHANNEL = "channel-goal109-human-control";
@@ -189,12 +192,12 @@ describe.skipIf(!databaseUrl)(
           WHERE "tenantId" = $1 AND "humanHandlingSource" IN ('ATENDLY', 'WHATSAPP')`,
         [TENANT],
       );
-    });
+    }, DATABASE_HOOK_TIMEOUT_MS);
 
     afterAll(async () => {
       await client?.end();
       if (urls) await dropDatabase(urls.maintenance, urls.name, false);
-    });
+    }, DATABASE_HOOK_TIMEOUT_MS);
 
     it("starts from the state the previous migrations leave", async () => {
       expect(previousMigrations()).not.toContain(GOAL109_MIGRATION);

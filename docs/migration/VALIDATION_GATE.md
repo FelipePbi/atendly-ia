@@ -6638,3 +6638,75 @@ Conferência em aparelho real; o Goal pede as capturas do `visual:compare`, não
 - **Escopo.** Os 31 arquivos estão dentro do critério 9 do Goal, com uma exceção autorizada no review da rodada 1: `alignAiDurabilityTargetWithGoal115` em `scripts/goal074-human-takeover-migration-rehearsal.mjs`. Nada mudou em `e2e/` além de `targets.json`.
 - **Aceito sem prova completa.** Os três controles negativos, as capturas de antes e a comparação por pixel contra o antes vêm da execução do Developer e não foram refeitos pelo Tech Lead. `validate:integration` foi aceito pelo `PASSED` da WU-17, sem reexecução completa pelo Tech Lead.
 - **Ambiente.** O BFF de desenvolvimento em `localhost:3002` não respondia nas duas rodadas, e o `visual:compare` só rodou com pilhas próprias e `VISUAL_BFF_URL` e `VISUAL_BFF_ORIGIN`. Migration nova da IA lida pela `SessionService` exige alinhar o banco `_goal004` no ensaio `goal074` e o preparo dos testes de integração que aplicam só parte do histórico. Detalhe no [review115](reviews/115-review.md).
+
+## O cliente no chat igual ao protótipo e o controle de como a IA trata o contato, do Goal116
+
+Texto do Goal116 (decisão [D-130](DECISIONS.md), `PROPOSED`), escrito na rodada 3 (FIX-001) contra os quatro blockers do review da rodada 2. Toda contagem abaixo é de execução da rodada 3, sobre a árvore completa; nenhuma foi copiada de rodada anterior. Entre os controles negativos e o fim da execução final não houve edição de código de produto nem dos testes dos controles; a DIAG-001 mudou depois só o timeout de hook dos dois testes de integração `goal109`, que nenhum controle toca: o `git diff` da árvore antes dos controles e depois de toda a execução é byte a byte igual (`cmp`), sem contar este registro.
+
+### Ambiente
+
+PostgreSQL 18 próprio em `127.0.0.1:55561` (cluster novo, `initdb` da rodada), sem nenhuma outra execução de `validate:integration` ao mesmo tempo. O `validate:integration` rodou com `BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55561/avenly_bff_test`. A pilha do `visual:compare` usa os bancos descartáveis `g116r3_bff`, `g116r3_sched` e `g116r3_ai` do mesmo cluster, com `prisma migrate deploy` nos três serviços (BFF em 3042, Scheduling em 3043 e IA em 3040), `VISUAL_BFF_URL=http://127.0.0.1:3042` e `VISUAL_BFF_ORIGIN=http://localhost:3001`. Nenhum arquivo de `e2e/` além de `e2e/visual/targets.json` mudou. A execução isolada da FIX-001 (cluster 55561) passou 36 de 36 sem tocar teste algum. A primeira execução da WU-16 no cluster do harness (127.0.0.1:55500, com os bancos de ensaios anteriores acumulados) reprovou em `test:scheduling-integration` (`Hook timed out in 10000ms` no `afterAll` de `goal109-avenly-calendar-source.test.ts`). O log do PostgreSQL mostrou que o checkpoint forçado pelo `DROP DATABASE ... WITH (FORCE)` levou 12,5 s. A DIAG-001 passou o timeout dos `beforeAll` e `afterAll` que criam e derrubam o banco da prova para `DATABASE_HOOK_TIMEOUT_MS = 120_000`, em `apps/scheduling-service/tests/integration/goal109-avenly-calendar-source.test.ts` e em `apps/ai-orchestrator/tests/integration/goal109-avenly-human-control-source.test.ts`. Nenhuma asserção, passo do gate, `vitest.config` ou `scripts/validate-integration.mjs` mudou. Com isso, a WU-16 passou: `validate:integration PASSED against 127.0.0.1:55500/ia_bff_test`, 36 de 36 passos, gate autenticado 275 passed, retries 0.
+
+### Controles negativos (§4.2)
+
+Rodados sobre a árvore final, por mutação na fonte, teste dirigido, reprovação lida e arquivo devolvido por `cp` da cópia e conferido com `cmp` (sem diferença nos três):
+
+| Controle | Mutação | Comando | Reprovou |
+| --- | --- | --- | --- |
+| (a) Sempre atende grava o escopo da conversa | em `ConversationThread.tsx`, `chooseTreatment` passou a gravar `setCategory(id, 'COMMERCIAL', 'CONVERSATION')` (o `"CONTACT"` da chamada virou `"CONVERSATION"`) | `npx vitest run tests/goal116-customer-sheet.test.tsx` em `apps/frontend` | 3 de 38: `as gravações do controle > Sempre atende grava COMMERCIAL com scope CONTACT e a posição vem da resposta` (`AssertionError: expected "vi.fn()" to be called with arguments: [ 'conv-1', 'COMMERCIAL', 'CONTACT' ]`), `Automático grava category null com scope CONTACT` e `Pessoal só nesta conversa: tocar Automático, já marcado, grava para tirar a conversa de Pessoal` |
+| (b) `ignored:false` antes da categoria | em `toggleIgnored`, com `ignoreExit` definido, `await conversations.setIgnored(conversation.id, false)` passou a vir antes do `setCategory` | `npx vitest run tests/goal116-customer-sheet.test.tsx` em `apps/frontend` | 4 de 38, entre eles `Nunca responde e a saída dele > sair para 'Sempre atende' abre o diálogo, não grava antes e grava a categoria antes de ignored:false` (`AssertionError: expected [ 'ignored', 'category', 'ignored' ] to deeply equal [ 'category', 'ignored' ]`) e `se a categoria falha, setIgnored não é chamado e o erro fica na folha` (`expected "vi.fn()" to not be called at all, but actually been called 1 times`) |
+| (c) `contactCategory` sempre `null` | em `apps/ai-orchestrator/src/modules/internal/routes.ts`, `conversationDto` passou a devolver `contactCategory: null` | `npx vitest run tests/internal/goal116-contact-category.test.ts` em `apps/ai-orchestrator` | 6 de 7, entre eles `devolve COMMERCIAL quando o contato tem essa decisao, no detalhe e na lista` (`AssertionError: expected null to be 'COMMERCIAL'`) e `PUT category CONTACT: contactCategory acompanha a decisao gravada` |
+
+Depois de cada reversão: `cmp` do arquivo contra a cópia, sem diferença, e, ao fim, `cmp` do `git diff` inteiro da árvore contra o de antes dos controles, sem diferença. Com a fonte revertida, `goal116-customer-sheet` voltou a 38 de 38 e `goal116-contact-category` da IA a 7 de 7.
+
+### Execução final
+
+| Comando | Resultado |
+| --- | --- |
+| `npm run typecheck` em `apps/ai-orchestrator`, `apps/bff` e `apps/frontend` | saída 0 nos três |
+| `rtk proxy npm run lint` nos três | saída 0 nos três |
+| `npm test` em `apps/ai-orchestrator` | 97 arquivos passaram, 14 pulados; **1230** testes passaram, 101 pulados (integração) |
+| `npm test` em `apps/bff` | 21 arquivos passaram, 48 pulados; **166** passaram, 361 pulados (integração) |
+| `npm test` em `apps/frontend` | **159** arquivos, **2013** testes passando (`goal116-customer-sheet.test.tsx`: 38) |
+| `node --test scripts/tests/visual-responses.test.mjs` | 24 testes, 24 passando |
+| `npx prisma generate` em `apps/ai-orchestrator`, depois `npm run test:gate` | **257** testes, 257 passando, 0 falhas |
+| `npm run validate:core` | `PASSED`: 17 passos, 15 passaram, 0 falharam, 2 pulados e reportados; testes dos serviços dentro dele: IA 1230, Scheduling 543, frontend 2013 |
+| `npm run validate:ui`, nas cinco larguras 360, 390, 768, 1024 e 1440 | **169** passed, 21 skipped, "public UI gate retries: 0 — every test passed on its first attempt" |
+| `npm run validate:integration` com o banco descartável acima | `PASSED`: **36** de 36 passos, 0 falharam, 0 pulados. Testes: BFF integração 69 arquivos e **527** passando, Scheduling 20 arquivos e 152, IA durabilidade 11 arquivos e 77, IA depuração de conteúdo 3 arquivos e 24; o gate autenticado (`rehearse:goal033-authenticated-ui`) passou **275** testes, "authenticated gate retries: 0 — every test passed on its first attempt" |
+| `git diff --check` | saída 0 |
+
+### Conferência visual (`visual:compare`)
+
+`npm run visual:compare -- --target K5,K1,K2,K3,K4,K6,Conversas:C1,C4` com a pilha acima: 32 pares (8 alvos × 4 devices), nenhum com erro, saída 0. Percentual de pixels diferentes por device:
+
+| Quadro | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| K5 | 32,3% | 17,7% | 12,5% | 9,6% |
+| K1 | 0,5% | 2,8% | 0,4% | 0,5% |
+| K2 | 2,1% | 0,9% | 2,0% | 1,0% |
+| K3 | 6,2% | 2,7% | 2,9% | 2,4% |
+| K4 | 0,0% | 0,0% | 0,5% | 0,5% |
+| K6 | 0,5% | 0,6% | 0,8% | 1,3% |
+| Conversas:C1 | 1,5% | 0,4% | 0,2% | 0,3% |
+| Conversas:C4 | 1,0% | 0,1% | 0,7% | 0,3% |
+
+K1 a K4, K6, C1 e C4 saíram com os mesmos números das capturas do Goal115. Abri os `side-by-side.png` do K5 nos quatro devices. A estrutura e a ordem dos blocos são as do quadro (cabeçalho com avatar, nome em Literata, telefone e "cliente desde", "Ver perfil", bloco "Resumo da IA", "Próximo", "Último", "Como a IA trata este contato" com o controle de três posições e a frase de baixo). O percentual alto do K5 vem da divergência 7: a seção "Nesta conversa" deixa a folha mais alta que o quadro (no mobile o topo da folha sobe; do tablet em diante a folha centrada é mais alta, com rolagem interna), e tudo que fica abaixo do bloco "Resumo da IA" desce junto, o que o diff conta como pixel diferente.
+
+**Divergências que restam no K5**, todas declaradas no Goal: o botão "Gerar resumo" no lugar do texto do resumo (o resumo é um `POST` sob demanda); dias da semana e datas do "Próximo" e do "Último" calculados de `{today}`; a seção "Nesta conversa", que o quadro não desenha; a conversa real e o seu cabeçalho atrás do escurecido, com a pílula "Hoje", a hora e o campo de mensagem; a barra de status do iPhone no mobile; o item "Notificações" da casca e a coluna da lista de D-127 a D-129. Nenhuma outra diferença visível.
+
+### Escopo
+
+**Escopo.** Os arquivos alterados estão dentro do critério 9 do Goal, com uma exceção autorizada no review116 (rodada 3): `apps/scheduling-service/tests/integration/goal109-avenly-calendar-source.test.ts`, só com o timeout de hook `DATABASE_HOOK_TIMEOUT_MS = 120_000` da DIAG-001. O ajuste igual em `apps/ai-orchestrator/tests/integration/goal109-avenly-human-control-source.test.ts` fica em `apps/ai-orchestrator/tests/` e não é exceção.
+
+### Não executado
+
+Conferência em aparelho real; o Goal pede as capturas do `visual:compare`, não aparelho.
+
+**Nota de fechamento — review116, 2026-10-05.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima, salvo as duas correções de texto que o review da rodada 3 pediu (o parágrafo "Ambiente", a frase sobre edição de código do primeiro parágrafo e o item "Escopo"):
+
+- **Decisão.** D-130 ACCEPTED na rodada 3, depois de 4 blockers na rodada 1 e 4 na rodada 2. O review da rodada 3 terminou `CHANGES_REQUIRED` com 2 blockers só de registro, e o IA Loop aceitou a rodada com os dois adiados para este fechamento, onde foram aplicados.
+- **Gates do IA Loop, rodada 3, todos com exit 0 na árvore final:** `typecheck` da IA, do BFF e do frontend (WU-05 a WU-07), `lint` do frontend (WU-08), testes alvo `goal116` dos três serviços (WU-09 a WU-11), suíte do frontend (WU-12), `test:gate` (WU-13), `validate:core` (WU-14) e `validate:ui` (WU-15) foram reaproveitados da rodada 2, porque a FIX-001 da rodada 3 só mudou `docs/`; `validate:integration` (WU-16) rodou de novo: a primeira execução saiu com exit 1 em `test:scheduling-integration`, a DIAG-001 pôs o timeout de hook nos dois testes `goal109`, e a segunda execução (WU-16-g2, 841 s) saiu `PASSED`, com 36 de 36 passos e 275 testes no gate autenticado; `git diff --check` (WU-17) saiu com exit 0. O reaproveitamento dos gates WU-05 a WU-15 é anterior à DIAG-001; o review da rodada 3 registra o `typecheck` da IA e do Scheduling refeito depois dela, com saída 0. Snapshot aceito: 26 arquivos, hash do diff `b258311c…`.
+- **Conferência do Tech Lead, rodada 3.** O PostgreSQL 55561 da pilha do Developer recusava conexões (Windows error 487) e o Scheduling em 3043 respondia 503; o Tech Lead reiniciou o cluster com `pg_ctl`, e a pilha 3040/3042/3043 voltou saudável. `npm run visual:compare -- --target K5,K6,K1,K3` deu saída 0, com os mesmos percentuais da tabela acima (K5 32,3 / 17,7 / 12,5 / 9,6%; K6 0,5 / 0,6 / 0,8 / 1,3%; K1 0,5 / 2,8 / 0,4 / 0,5%; K3 6,2 / 2,7 / 2,9 / 2,4%). Os `side-by-side.png` do K5 nos quatro devices e o do K6 no mobile foram abertos. Na rodada 1, o Tech Lead já tinha rodado o `visual:compare` e conferido K5, K6 e K1, depois de reiniciar o PostgreSQL 55481 da WU-02, que falhava com o erro 487.
+- **Escopo.** A exceção ao critério 9 está no item "Escopo" acima.
+- **Aceito sem prova completa.** Os três controles negativos, a execução isolada no cluster 55561 e as contagens da tabela "Execução final" vêm do Developer e não foram refeitos pelo Tech Lead. `validate:integration` foi aceito pelo `PASSED` da WU-16-g2. K2, K4, `Conversas:C1` e `Conversas:C4` vêm só da execução do Developer.
+- **Ambiente.** O cluster do harness acumula os bancos dos ensaios anteriores, e o checkpoint de `DROP DATABASE ... WITH (FORCE)` passou dos 10 s padrão do hook. Teste de integração que cria e derruba banco próprio precisa de timeout de hook explícito. Detalhe no [review116](reviews/116-review.md).

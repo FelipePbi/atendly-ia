@@ -27,9 +27,12 @@ const getConversation = vi.fn();
 const listMessages = vi.fn();
 const statusGet = vi.fn();
 const notificationsSummary = vi.fn();
+const getCustomer = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
+    calendar: { listAppointments: vi.fn().mockResolvedValue([]) },
+    customers: { generateSummary: vi.fn(), get: getCustomer },
     conversations: {
       get: getConversation,
       list: listConversations,
@@ -205,6 +208,11 @@ describe("ConversationContextPanel e ConversationSuggestions não ficam sem impo
     getConversation.mockResolvedValue(
       conversationFixture({ customerId: "cust-1" }),
     );
+    getCustomer.mockResolvedValue({
+      id: "cust-1",
+      name: "Marina Duarte",
+      phone: "5511999990000",
+    });
     listMessages.mockResolvedValue([]);
     listConversations.mockResolvedValue([]);
 
@@ -219,7 +227,7 @@ describe("ConversationContextPanel e ConversationSuggestions não ficam sem impo
       name: "Contexto da conversa",
     });
     expect(
-      within(context).getByRole("link", { name: "Abrir cliente" }),
+      await within(context).findByRole("link", { name: "Ver perfil" }),
     ).toHaveAttribute("href", "/clientes/detalhes?id=cust-1");
   });
 

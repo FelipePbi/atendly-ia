@@ -35,9 +35,12 @@ const listConversations = vi.fn();
 const takeover = vi.fn();
 const setCategory = vi.fn();
 const setIgnored = vi.fn();
+const getCustomer = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
+    calendar: { listAppointments: vi.fn().mockResolvedValue([]) },
+    customers: { generateSummary: vi.fn(), get: getCustomer },
     conversations: {
       generateSuggestions: vi.fn(),
       get: getConversation,
@@ -114,9 +117,15 @@ beforeEach(() => {
     takeover,
     setCategory,
     setIgnored,
+    getCustomer,
   ]) {
     mock.mockReset();
   }
+  getCustomer.mockResolvedValue({
+    id: "cust-1",
+    name: "Renata",
+    phone: "5511900000007",
+  });
   listConversations.mockResolvedValue([]);
 });
 
@@ -192,14 +201,16 @@ describe("Ver contato e Mover para Comercial", () => {
     const user = userEvent.setup();
 
     const sheet = await openSheet(user);
-    await user.click(within(sheet).getByRole("button", { name: "Ver contato" }));
+    await user.click(
+      within(sheet).getByRole("button", { name: "Ver contato" }),
+    );
 
     expect(screen.queryByRole("dialog", { name: "Mais ações" })).toBeNull();
     const context = await screen.findByRole("dialog", {
       name: "Contexto da conversa",
     });
     expect(
-      within(context).getByRole("link", { name: "Abrir cliente" }),
+      await within(context).findByRole("link", { name: "Ver perfil" }),
     ).toBeVisible();
   });
 
@@ -387,11 +398,15 @@ describe("teclado e foco", () => {
 
     const sheet = await openSheet(user);
     await user.click(
-      within(sheet).getByRole("button", { name: "Ignorar IA para este contato" }),
+      within(sheet).getByRole("button", {
+        name: "Ignorar IA para este contato",
+      }),
     );
 
     expect(
-      await screen.findByRole("dialog", { name: "Ignorar este contato na IA?" }),
+      await screen.findByRole("dialog", {
+        name: "Ignorar este contato na IA?",
+      }),
     ).toBeVisible();
     expect(setIgnored).not.toHaveBeenCalled();
   });
@@ -429,48 +444,59 @@ describe("assumir e o selo de categoria moram no contexto", () => {
     ).toBeNull();
   });
 
+  // Goal116: o selo de quem decidiu virou a frase do controle de tratamento.
   test.each([
-    { expected: "Só nesta conversa", scope: "CONVERSATION" as const },
-    { expected: "Definida manualmente", scope: "CONTACT" as const },
-  ])("selo $expected para categoryScope $scope", async ({ expected, scope }) => {
-    await renderThread(
-      conversationFixture({
-        category: "PERSONAL",
-        categoryScope: scope,
-        categorySource: "MANUAL",
-      }),
-    );
-    const user = userEvent.setup();
+    {
+      expected: /Só esta conversa está em Pessoal/,
+      scope: "CONVERSATION" as const,
+    },
+    { expected: /está em Pessoal para sempre/, scope: "CONTACT" as const },
+  ])(
+    "a frase diz de quem é a decisão para categoryScope $scope",
+    async ({ expected, scope }) => {
+      await renderThread(
+        conversationFixture({
+          category: "PERSONAL",
+          categoryScope: scope,
+          categorySource: "MANUAL",
+        }),
+      );
+      const user = userEvent.setup();
 
-    const context = await openContext(user);
+      const context = await openContext(user);
 
-    expect(within(context).getByText(expected)).toBeVisible();
-  });
+      expect(within(context).getByText(expected)).toBeVisible();
+    },
+  );
 
-  test("sem decisão manual o selo diz Classificação automática", async () => {
+  test("sem decisão manual a posição é Automático", async () => {
     await renderThread(conversationFixture({ categoryScope: null }));
     const user = userEvent.setup();
 
     const context = await openContext(user);
 
-    expect(within(context).getByText("Classificação automática")).toBeVisible();
     expect(
-      within(context).getByRole("button", {
-        name: "Usar classificação automática",
-      }),
-    ).toBeDisabled();
+      within(context).getByText(/Automático: a IA decide pela conversa/),
+    ).toBeVisible();
+    expect(
+      within(context).getByRole("radio", { name: "Automático" }),
+    ).toHaveAttribute("aria-checked", "true");
   });
 
-  test("os botões de categoria do contexto gravam com scope CONTACT", async () => {
+  test("as posições do contexto gravam com scope CONTACT", async () => {
     setCategory.mockResolvedValue(
-      conversationFixture({ category: "COMMERCIAL", categorySource: "MANUAL" }),
+      conversationFixture({
+        category: "COMMERCIAL",
+        categorySource: "MANUAL",
+        contactCategory: "COMMERCIAL",
+      }),
     );
     await renderThread(conversationFixture());
     const user = userEvent.setup();
 
     const context = await openContext(user);
     await user.click(
-      within(context).getByRole("button", { name: "Comercial" }),
+      within(context).getByRole("radio", { name: "Sempre atende" }),
     );
 
     expect(setCategory).toHaveBeenCalledWith("conv-1", "COMMERCIAL", "CONTACT");

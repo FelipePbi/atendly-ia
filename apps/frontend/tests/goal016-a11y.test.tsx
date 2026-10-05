@@ -467,14 +467,16 @@ describe("controles de decisão de sobreposição", () => {
     const chooseAnother = await screen.findByRole("button", {
       name: "Escolher outro horário",
     });
-    const override = screen.getByRole("button", { name: "Sobrepor mesmo assim" });
+    const override = screen.getByRole("button", { name: "Encaixar mesmo assim" });
+    await waitFor(() => expect(override).toBeEnabled());
     await expectNoA11yViolations(container);
 
-    await user.type(screen.getByLabelText("Motivo da sobreposição"), "Retorno urgente");
-    await tabUntilFocused(user, chooseAnother);
-    expect(chooseAnother).toHaveFocus();
-    await user.tab();
+    // Ordem do quadro A7: motivo, depois "Encaixar mesmo assim", depois "Escolher outro horário".
+    await user.type(screen.getByLabelText("Motivo do encaixe"), "Retorno urgente");
+    await tabUntilFocused(user, override);
     expect(override).toHaveFocus();
+    await user.tab();
+    expect(chooseAnother).toHaveFocus();
   });
 
   test("conflito de série de bloqueio: os três botões de decisão são alcançáveis por teclado", async () => {

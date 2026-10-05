@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import {
   type AvailabilitySlot,
+  BffHttpError,
   type CalendarState,
   type CreateAppointmentInput,
   type Customer,
@@ -22,7 +23,7 @@ import {
   formatMoney,
   ReadOnlyState,
 } from "./AppointmentFlowShell";
-import { ConflictPanel, occupyingEntries } from "./ConflictPanel";
+import { occupyingEntries } from "./ConflictPanel";
 import {
   holdLostMessage,
   isHoldLostError,
@@ -44,6 +45,7 @@ import {
   requestError,
   serviceColorMap,
 } from "./occupancy";
+import { ConflictGlyph, SlotConflictNotice } from "./SlotConflictNotice";
 import { holdNotice } from "./SlotPicker";
 
 type AppointmentFormProps = {
@@ -92,6 +94,20 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<ConflictState | null>(null);
+  const timeFieldsetRef = useRef<HTMLFieldSetElement>(null);
+  const timeLegendRef = useRef<HTMLLegendElement>(null);
+  const reasonInputRef = useRef<HTMLInputElement>(null);
+  const [focusTimeRequest, setFocusTimeRequest] = useState(0);
+
+  // "Escolher outro horário": o foco vai para o primeiro horário livre, ou
+  // para a legenda "Horário" quando não há nenhum.
+  useEffect(() => {
+    if (focusTimeRequest === 0) return;
+    const first = timeFieldsetRef.current?.querySelector<HTMLInputElement>(
+      'input[name="start-time"]',
+    );
+    (first ?? timeLegendRef.current)?.focus();
+  }, [focusTimeRequest]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -298,7 +314,7 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
         startTime: time,
       });
     } catch (caught) {
-      if (isSlotConflictError(caught)) {
+      if (isSlotRefusal(caught)) {
         await openConflict(time);
         return;
       }
@@ -306,11 +322,12 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
     }
   }
 
-  async function openConflict(time: string) {
+  async function openConflict(time: string, reason = "") {
+    setShowManual(false);
     setConflict({
       entries: null,
       loading: true,
-      reason: "",
+      reason,
       reasonError: null,
       startTime: time,
     });
@@ -369,9 +386,9 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
         setError(holdLostMessage(caught));
         return;
       }
-      if (isSlotConflictError(caught)) {
+      if (isSlotRefusal(caught)) {
         hold.release();
-        await openConflict(startTime);
+        await openConflict(startTime, overlapReason);
         return;
       }
       setError(requestError(caught, "Não foi possível criar o agendamento."));
@@ -381,20 +398,27 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
   }
 
   function submitOverride() {
-    if (!conflict) return;
+    if (!conflict || conflict.loading || busy) return;
     const reason = conflict.reason.trim();
     if (!reason) {
-      // Sem motivo a sobreposição nem sai da tela: o contrato exige o motivo,
-      // e enviar sem ele seria pedir uma recusa que ninguém entende.
+      // Sem motivo o encaixe nem sai da tela: o contrato exige o motivo, e
+      // enviar sem ele seria pedir uma recusa que ninguém entende.
       setConflict({
         ...conflict,
         reasonError:
-          "Descreva o motivo da sobreposição. Sem motivo, o agendamento não é enviado.",
+          "Descreva o motivo do encaixe. Sem motivo, o agendamento não é enviado.",
       });
+      reasonInputRef.current?.focus();
       return;
     }
     setStartTime(conflict.startTime);
     void create(reason);
+  }
+
+  function chooseAnotherTime() {
+    resetSlotChoice();
+    setManualTime("");
+    setFocusTimeRequest((current) => current + 1);
   }
 
   return (
@@ -419,7 +443,8 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
             className="agenda-new-form"
             onSubmit={(event: FormEvent) => {
               event.preventDefault();
-              if (canSubmit) void create();
+              if (conflict) submitOverride();
+              else if (canSubmit) void create();
             }}
           >
             <div className="agenda-new-columns">
@@ -541,8 +566,9 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
                 <fieldset
                   className="agenda-new-block agenda-new-time"
                   disabled={!other && serviceIds.length === 0}
+                  ref={timeFieldsetRef}
                 >
-                  <legend className="label">
+                  <legend className="label" ref={timeLegendRef} tabIndex={-1}>
                     Horário
                     {!other && durationMinutes > 0 && (
                       <span className="agenda-new-legend-note">
@@ -567,35 +593,69 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
                       Nenhum horário disponível para esta seleção.
                     </p>
                   ) : null}
-                  {!other && (
+                  {(!other || conflict) && (
                     <div className="agenda-new-chips">
-                      {!slotsLoading &&
-                        slots.map((slot) => (
-                          <label
-                            className="agenda-new-chip agenda-new-slot"
-                            key={`${slot.date}-${slot.startTime}`}
-                          >
+                      {!other &&
+                        !slotsLoading &&
+                        slots.map((slot) => {
+                          const refused = conflict?.startTime === slot.startTime;
+                          return (
+                            <label
+                              className={`agenda-new-chip agenda-new-slot${refused ? " is-conflict" : ""}`}
+                              key={`${slot.date}-${slot.startTime}`}
+                            >
+                              <input
+                                checked={startTime === slot.startTime}
+                                name="start-time"
+                                onChange={() => void chooseTime(slot.startTime)}
+                                type="radio"
+                              />
+                              <span>
+                                {refused && (
+                                  <ConflictGlyph size={14} strokeWidth={2.25} />
+                                )}
+                                {slot.startTime}
+                                {refused && (
+                                  <span className="sr-only"> · ocupado</span>
+                                )}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      {conflict &&
+                        (other ||
+                          slotsLoading ||
+                          !slots.some(
+                            (slot) => slot.startTime === conflict.startTime,
+                          )) && (
+                          <label className="agenda-new-chip agenda-new-slot is-conflict">
                             <input
-                              checked={startTime === slot.startTime}
+                              checked
                               name="start-time"
-                              onChange={() => void chooseTime(slot.startTime)}
+                              onChange={() => undefined}
                               type="radio"
                             />
-                            <span>{slot.startTime}</span>
+                            <span>
+                              <ConflictGlyph size={14} strokeWidth={2.25} />
+                              {conflict.startTime}
+                              <span className="sr-only"> · ocupado</span>
+                            </span>
                           </label>
-                        ))}
-                      <button
-                        aria-expanded={showManual}
-                        className="agenda-new-chip-other"
-                        disabled={serviceIds.length === 0}
-                        onClick={() => setShowManual((current) => !current)}
-                        type="button"
-                      >
-                        Outro horário
-                      </button>
+                        )}
+                      {!other && (
+                        <button
+                          aria-expanded={showManual}
+                          className="agenda-new-chip-other"
+                          disabled={serviceIds.length === 0}
+                          onClick={() => setShowManual((current) => !current)}
+                          type="button"
+                        >
+                          Outro horário
+                        </button>
+                      )}
                     </div>
                   )}
-                  {(other || showManual) && (
+                  {(other || showManual) && !conflict && (
                     <div className="agenda-new-manual">
                       <label className="field">
                         <span className="label">
@@ -626,6 +686,49 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
                 </fieldset>
               </div>
             </div>
+            {conflict && (
+              <>
+                <SlotConflictNotice
+                  durationMinutes={durationMinutes}
+                  entries={conflict.entries}
+                  loading={conflict.loading}
+                  startTime={conflict.startTime}
+                />
+                <div className="agenda-new-block">
+                  <label className="label" htmlFor="agenda-new-reason">
+                    Motivo do encaixe
+                  </label>
+                  <input
+                    aria-describedby={
+                      conflict.reasonError ? "agenda-new-reason-error" : undefined
+                    }
+                    aria-invalid={conflict.reasonError ? true : undefined}
+                    className="input"
+                    id="agenda-new-reason"
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setConflict((current) =>
+                        current
+                          ? { ...current, reason: value, reasonError: null }
+                          : current,
+                      );
+                    }}
+                    ref={reasonInputRef}
+                    type="text"
+                    value={conflict.reason}
+                  />
+                  {conflict.reasonError && (
+                    <p
+                      className="form-error"
+                      id="agenda-new-reason-error"
+                      role="alert"
+                    >
+                      {conflict.reasonError}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
             <div className="agenda-new-note">
               {showComments ? (
                 <label className="field">
@@ -655,47 +758,68 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
             <Link className="agenda-new-series" href="/agenda/serie">
               Agendar série
             </Link>
-            <div className="agenda-new-footer">
-              <p className="agenda-hold-status" role="status">
-                {!other && hold.phase !== "none"
-                  ? holdNotice(hold, calendar?.timezone)
-                  : ""}
-              </p>
-              {blockedReason && (
-                <p className="agenda-new-blocked">{blockedReason}</p>
-              )}
-              <Button
-                className="agenda-new-cta"
-                disabled={!canSubmit}
-                loading={busy}
-                type="submit"
-              >
-                {ctaLabel}
-              </Button>
-            </div>
+            {conflict ? (
+              <div className="agenda-new-footer is-conflict">
+                <Button
+                  className="agenda-new-cta"
+                  disabled={conflict.loading}
+                  loading={busy}
+                  onClick={submitOverride}
+                  type="button"
+                >
+                  Encaixar mesmo assim
+                </Button>
+                <Button
+                  className="agenda-new-cta"
+                  disabled={busy}
+                  onClick={chooseAnotherTime}
+                  type="button"
+                  variant="secondary"
+                >
+                  Escolher outro horário
+                </Button>
+              </div>
+            ) : (
+              <div className="agenda-new-footer">
+                <p className="agenda-hold-status" role="status">
+                  {!other && hold.phase !== "none"
+                    ? holdNotice(hold, calendar?.timezone)
+                    : ""}
+                </p>
+                {blockedReason && (
+                  <p className="agenda-new-blocked">{blockedReason}</p>
+                )}
+                <Button
+                  className="agenda-new-cta"
+                  disabled={!canSubmit}
+                  loading={busy}
+                  type="submit"
+                >
+                  {ctaLabel}
+                </Button>
+              </div>
+            )}
           </form>
         </div>
       )}
-      {conflict && (
-        <ConflictPanel
-          busy={busy}
-          entries={conflict.entries}
-          interval={{ date, durationMinutes, startTime: conflict.startTime }}
-          loading={conflict.loading}
-          onChooseAnother={() => resetSlotChoice()}
-          onOverride={submitOverride}
-          onReasonChange={(value) =>
-            setConflict((current) =>
-              current
-                ? { ...current, reason: value, reasonError: null }
-                : current,
-            )
-          }
-          reason={conflict.reason}
-          reasonError={conflict.reasonError}
-        />
-      )}
     </AppointmentFlowShell>
+  );
+}
+
+/**
+ * A recusa `409 SLOT_UNAVAILABLE` chega do BFF real como `UPSTREAM_ERROR` com
+ * o código de origem em `details.upstreamCode`; os dois formatos valem.
+ */
+function isSlotRefusal(caught: unknown): boolean {
+  if (isSlotConflictError(caught)) return true;
+  if (!(caught instanceof BffHttpError) || caught.code !== "UPSTREAM_ERROR") {
+    return false;
+  }
+  const details = caught.details;
+  return (
+    typeof details === "object" &&
+    details !== null &&
+    (details as { upstreamCode?: unknown }).upstreamCode === "SLOT_UNAVAILABLE"
   );
 }
 

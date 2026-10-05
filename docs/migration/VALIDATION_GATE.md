@@ -6893,3 +6893,95 @@ Conferência em aparelho real; o Goal pede as capturas do `visual:compare`, não
 - **Rodada 1.** A WU-13 (`validate:integration`) reprovou no G-8 nas cinco larguras, pelo `menuitem` "Agendamento", o que levou ao ajuste autorizado acima. Os gates WU-06 a WU-12 e WU-14 passaram, mas sobre árvore incompleta, e não contam como prova.
 - **Conferência do Tech Lead, rodada 2.** Com a pilha descartável descrita em "Ambiente" (os três `/health` com `200`), `npm run visual:compare` de A2, A3, A4 e A12: os 16 `side-by-side.png` foram abertos. A3, A4 e A12 batem com os quadros nos quatro devices; A2 bate em mobile, tablet paisagem e desktop. No A2 em tablet retrato, a faixa da semana e o resumo têm recuo lateral de 24 px e cerca de 10 px a mais abaixo das abas, e o botão flutuante fica 8 px à direita, iguais ao A1 aceito; corrigir mudaria o A1, que o Goal manda manter igual à captura de antes. A1, A10, A11, A5, A6, AG1, K5, K6 e H7 foram comparados pixel a pixel com as capturas de antes da WU-01: K5, K6, H7, AG1 e A6 com 0 pixel diferente; A1, A10 e A11 só nos 28 pixels do chevron; A5 de 72 a 156 pixels, na hora do histórico.
 - **Aceito sem prova completa.** Os três controles negativos e as contagens da tabela "Execução final" vêm do Developer, na rodada 2, e não foram refeitos pelo Tech Lead. Detalhe no [review118](reviews/118-review.md).
+
+## O conflito de horário no novo agendamento igual ao protótipo, do Goal119
+
+Texto do Goal119 (decisão [D-133](DECISIONS.md), `PROPOSED`), escrito na rodada 2 (FIX-001) e atualizado na rodada 3 (FIX-001). A execução final abaixo é a da rodada 3, sobre a árvore completa, depois da última edição de código.
+
+### Ambiente
+
+Rodada 2: pilha descartável própria, fora do repositório: um cluster PostgreSQL 18 criado com `initdb` no scratchpad da sessão, em `127.0.0.1:55437`, com os bancos `bff`, `sched`, `ai` (e `avenly_bff_test` para o `validate:integration`), `prisma migrate deploy` e `prisma generate` nos três serviços, o Scheduling em 3500, a IA em 3503 e o BFF em 3502, o `next dev` em 3011. O `visual:compare` rodou com `--app-url`, `VISUAL_BFF_URL` e `VISUAL_BFF_ORIGIN` apontando para essa pilha, porque o BFF de desenvolvimento em `localhost:3002` não respondia. O cluster de 55433 ficou parado e não foi tocado. O `next dev` reescreve `apps/frontend/AGENTS.md`, que foi restaurado com `git checkout`. Na rodada 3, os gates da execução final rodaram como Work Units do harness (WU-04 a WU-13) na worktree do Goal.
+
+### Correções da rodada 2 (blockers 1 a 6)
+
+- **CSS do rodapé do A7** (`avenly-agenda.css`, só em `.agenda-new-footer.is-conflict`): "Escolher outro horário" transparente (hover `#EFEAE2`, ativo `#E5DED4`) e com 54 px de altura (52 px de conteúdo e 2 px de borda); `letter-spacing: 0` nos dois botões; texto de "Encaixar mesmo assim" em `#F7F4EF`. O CTA do A6 não mudou.
+- **`entrySentence`** (`SlotConflictNotice.tsx`): o nome do bloqueio ou do compromisso é o título, senão o motivo, senão só o tipo, como em `describeEntry`. A asserção de `goal016-appointment-create` de que "Almoço" aparece voltou, em `Bloqueio "Almoço" das 12:00 às 13:00.`.
+- **Testes novos em `goal119-novo-agendamento-conflito.test.tsx`:** trocar a data e trocar o cliente saem do conflito; compromisso pessoal com e sem título e bloqueio só com motivo (cinco blocos no mesmo teste); depois de "Escolher outro horário" o chip volta ao normal (sem `is-conflict`, sem chip manual extra) e o motivo está limpo quando o conflito reabre.
+
+### Correção da rodada 3
+
+Em `avenly-agenda.css`, `.agenda-new-conflict-title` passou de `line-height: 1.25` para `line-height: normal`, como o título do quadro (`<span style="font-size:15px;font-weight:600">`, sem line-height). Medido em `prototype.png` e `app.png` do `visual:compare` do A7, protótipo contra app. Mobile: caixa âmbar de 130 px nos dois; linhas de texto a partir do topo da caixa: protótipo 19-31, 42-53, 62-74, 81-90, 101-113; app 19-31, 42-53, 61-73, 81-90, 100-112. Tablet em retrato: caixa de 91 px nos dois; protótipo 19-31, 42-54, 62-74; app 19-31, 42-54, 61-73. Diferença de no máximo 1 px. Os controles negativos são os da rodada 2: a rodada 3 não tocou `AppointmentForm.tsx`, o arquivo das mutações.
+
+### Controles negativos (§3.2)
+
+Rodados na rodada 2, depois da última edição de código daquela rodada, por mutação de uma linha em `src/features/agenda/AppointmentForm.tsx` (cópia de segurança fora do repositório), com `npx vitest run tests/goal119-novo-agendamento-conflito.test.tsx` em `apps/frontend`. Depois de cada reprovação, o arquivo voltou da cópia (`cp`) e `cmp` contra a cópia saiu sem diferença nos quatro. Sem mutação, o arquivo tem 24 de 24 testes passando.
+
+| Controle | Mutação | Reprovou |
+| --- | --- | --- |
+| (a) encaixar sem motivo | `if (!reason) {` virou `if (false) {` em `submitOverride` | 2 de 24: `sem motivo não envia e mostra a mensagem junto ao campo` e `motivo só com espaços também não envia` (`AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times`) |
+| (b) leitura falhada tratada como lista vazia | em `readOccupancy`, o `return null;` do `catch` virou `return [];` | 1 de 24: `leitura da ocupação falhou: nunca vira 'nada ocupa'` (`expect(element).toHaveTextContent()`, que esperava o título "Não foi possível ver o que ocupa este horário") |
+| (c1) "Escolher outro horário" chama `create` | em `chooseAnotherTime`, `resetSlotChoice();` virou `resetSlotChoice(); void create("motivo");` | 2 de 24: `não escreve, libera a reserva e leva o foco ao primeiro horário livre` e `sem horários livres, o foco vai para a legenda Horário` (`expected "vi.fn()" to not be called at all, but actually been called 1 times`) |
+| (c2) "Escolher outro horário" não sai do conflito | em `chooseAnotherTime`, `resetSlotChoice();` virou `void 0;` | 4 de 24: `não escreve, libera a reserva e leva o foco …`, `o chip do horário oferecido volta ao normal e o motivo fica limpo …`, `o chip extra de 'Outro horário' some …` e `sem horários livres, o foco vai para a legenda Horário` (`expect(element).not.toBeInTheDocument()`) |
+
+Limite registrado: a liberação do hold em "Escolher outro horário" não tem controle isolado. O conflito nunca convive com um hold vivo (a recusa do hold é justamente a ausência dele), então `releaseHold` não é chamado nesse caminho, e o teste prova a ausência de qualquer gravação e a saída do conflito. O controle (c) foi demonstrado pelos dois lados que o teste enxerga: chamar `create` e não sair do conflito.
+
+### Execução final
+
+| Comando | Resultado |
+| --- | --- |
+| `npx tsc --noEmit` em `apps/frontend` (WU-04) | saída 0 |
+| `npm run lint` em `apps/frontend` (WU-05) | saída 0 |
+| `npm test` em `apps/frontend` (WU-08) e `npx vitest run goal119` (WU-06) | **162** arquivos, **2092** testes passando (`goal119-novo-agendamento-conflito.test.tsx`: 24) |
+| `node --test scripts/tests/visual-responses.test.mjs` | 34 de 34 (rodada 2; o arquivo não mudou depois) |
+| `npm run test:gate` (WU-09) | **267** de 267, 0 falhas |
+| `npm run validate:core` (WU-10) | `PASSED`: 17 passos, 15 passaram, 0 falharam, 2 pulados e reportados (`test:bff` e `test:health-worker`) |
+| `npm run validate:ui`, nas cinco larguras (WU-11) | **169** passed, 21 skipped |
+| `npm run validate:integration` (WU-12) | `PASSED`, **36** de 36 passos. Gate autenticado: **274** passaram de primeira e 1 flaky, G-7 (detalhe do agendamento a partir de /agenda) em mobile-360. Na primeira tentativa, "Cancelar" mediu 21 px de altura; passou na nova tentativa. O G-7 não usa nada que este Goal mudou. |
+| `git diff --check` (WU-13) | saída 0 |
+
+Rodada 2: uma primeira execução do `validate:integration` também passou 36 de 36 (275 do gate autenticado, 0 novas tentativas), mas os controles negativos mutaram `AppointmentForm.tsx` durante o estágio do gate autenticado, e por isso ela não conta como prova. A tabela da rodada 2 era da segunda execução, com a fonte igual à cópia (`cmp` sem diferença) do começo ao fim. A tabela acima é da rodada 3: os WU-04 a WU-13 registram a mesma impressão da fonte (`codeFingerprint`) do começo ao fim.
+
+### Testes existentes ajustados
+
+Só para o novo nome, o novo lugar ou o novo texto, sem afrouxar asserção:
+
+- `goal016-appointment-create`: o painel "O intervalo 12:00–13:00 não está livre nesta agenda" virou o aviso `role="alert"` com "Esse horário já está ocupado" e a frase completa do atendimento e do bloqueio "Almoço" (a asserção do nome "Almoço" foi mantida); "Sobrepor mesmo assim" virou "Encaixar mesmo assim", "Motivo da sobreposição" virou "Motivo do encaixe", e a mensagem passou a "Descreva o motivo do encaixe. Sem motivo, o agendamento não é enviado.".
+- `goal083-new-appointment`: os mesmos nomes; a região do painel virou o `alert`, e o teste da criação de "Outro, sem cadastro" agora também afirma os dois botões do rodapé, a ausência do CTA "Criar agendamento" e o texto "Nada na sua agenda ocupa 11:30–11:55, mas o horário fica fora da grade de atendimento.".
+- `goal016-a11y`: o botão e o campo com os novos nomes, e a ordem de tabulação passou à do quadro A7: motivo, "Encaixar mesmo assim", "Escolher outro horário". O teste de axe continua cobrindo o estado de conflito.
+
+Os testes da remarcação não mudaram, e `goal101-novo-agendamento` e `goal112-agenda` passam sem ajuste.
+
+### Conferência visual (`visual:compare`)
+
+`npm run visual:compare -- --target A7,A6,A5,A8,A9,A1,AG1` com a pilha acima: 28 pares (7 alvos × 4 devices), nenhum com erro. Percentual de pixels diferentes por device:
+
+| Quadro | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| A7 (rodada 3) | 15,9% | 4,9% | 8,3% | 6,6% |
+| A6 | 16,0% | 9,0% | 12,4% | 10,3% |
+| A5 | 7,9% | 3,2% | 7,8% | 6,1% |
+| A8 | 6,4% | 4,7% | 7,9% | 5,9% |
+| A9 | 13,6% | 8,0% | 11,7% | 9,6% |
+| A1 | 10,4% | 4,8% | 5,4% | 3,9% |
+| AG1 | 8,3% | 3,7% | 6,1% | 5,1% |
+
+Capturas abertas: os quatro `side-by-side.png` do A7, com o rodapé do A7 medido pixel a pixel contra o quadro nos quatro devices (posição e tamanho dentro de 1 px; cor, fonte e `letter-spacing` iguais), e os `side-by-side.png` de A6, A5, A8, A9, A1 e AG1.
+
+- **A7** bate com o quadro nos quatro devices no chip âmbar, no aviso, nos dois botões e no rodapé, salvo as divergências de D-133; aviso medido por pixel no mobile e no tablet em retrato, dentro de 1 px; no tablet em paisagem e no desktop, o aviso fica abaixo da dobra da captura e não foi medido. O que não bate: a cliente (Ana Paula, da conta visual), a data e os horários da conta; o aviso de WhatsApp desconectado e a casca; no desktop, a coluna do Dia; o campo "Motivo do encaixe" entre o aviso e o rodapé; e, no tablet em paisagem e no desktop, o aviso fica abaixo da dobra do formulário (a faixa de datas e "Outro horário" do A6 aceito empurram o aviso para baixo, e o formulário rola com o rodapé fixo), enquanto o quadro o mostra à vista. Os percentuais acima vêm desses fatores, não do rodapé.
+- **A6, A5, A8, A9, A1 e AG1:** capturados e abertos, sem divergência nova visível. Nada do que mudou toca esses quadros (o CSS novo só vale com `.is-conflict`, e o CTA do A6 não mudou). Esta rodada não refez a comparação pixel a pixel contra as capturas de antes da baseline.
+
+### Escopo
+
+Os arquivos alterados estão dentro do critério do Goal: `apps/frontend/src/features/agenda/` (`AppointmentForm.tsx` e `SlotConflictNotice.tsx`), `apps/frontend/src/shared/styles/avenly-agenda.css`, `apps/frontend/tests/`, `apps/frontend/e2e/visual/targets.json`, `scripts/tests/visual-responses.test.mjs` e os três registros.
+
+### Não executado
+
+Conferência em aparelho real; o Goal pede as capturas do `visual:compare`, não aparelho.
+
+**Nota de fechamento — review119, 2026-10-05.** Registrado no fechamento, a partir dos resultados do IA Loop. O texto acima recebeu, neste fechamento, as correções que o review da rodada 3 pediu (abertura, "Correção da rodada 3", "Execução final" e o A7 na conferência visual), e as marcas de rodada 2 em "Ambiente" e "Controles negativos":
+
+- **Decisão.** D-133 ACCEPTED na rodada 3, depois de 9 blockers na rodada 1 e 1 na rodada 2 (o `line-height` do título do aviso). O review da rodada 3 terminou `CHANGES_REQUIRED` com 1 blocker só de registro, e o IA Loop aceitou a rodada com ele adiado para este fechamento, onde foi aplicado.
+- **Gates do IA Loop, rodada 3, todos com saída 0 na árvore final:** `typecheck` (WU-04), `lint` (WU-05), testes alvo `goal119` (WU-06), suíte do frontend (WU-08), `test:gate` (WU-09), `validate:core` (WU-10), `validate:ui` (WU-11), `validate:integration` (WU-12, 710 s) e `git diff --check` (WU-13). A WU-07 (`test:ia-loop`) foi pulada: o repositório não tem o script. Snapshot aceito: 12 arquivos (10 rastreados e 2 novos), hash do diff `e329d35b…`.
+- **Rodada 1.** Os gates WU-04 a WU-13 passaram, mas sobre árvore incompleta (a WU-02 terminou `BLOCKED` sem `visual:compare`, e a WU-03 não rodou), e não contam como prova.
+- **Conferência do Tech Lead.** Rodada 1: A6, A8, A9, A1 e AG1 com 0 pixel diferente contra as capturas de antes da WU-01, e A5 só no horário do histórico. Rodada 2: rodapé, chip e espaço até o aviso do A7 iguais ao quadro nos quatro devices. Rodada 3, na pilha do Developer (cluster 55437): `visual:compare` de A7 e A6, 8 pares sem erro, e o aviso do A7 dentro de 1 px no mobile e no tablet em retrato.
+- **Aceito sem prova completa.** Os controles negativos vêm do Developer, na rodada 2; as contagens da execução final vêm dos gates do IA Loop da rodada 3, sem reexecução pelo Tech Lead; o aviso no tablet em paisagem e no desktop não foi medido. Detalhe no [review119](reviews/119-review.md).

@@ -498,12 +498,12 @@ test("targets.json: H7 abre a confirmação de pausa por steps com a IA ativa e 
   assertServiceColors("H7", bodies);
 });
 
-function agendaTarget(code) {
+function agendaTarget(code, route = "/agenda") {
   const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "frontend", "e2e", "visual", "targets.json");
   const targets = validateTargetResponses(JSON.parse(readFileSync(file, "utf8")).targets);
   const target = targets.find((candidate) => candidate.code === code && candidate.file === "Agenda.dc.html");
   assert.ok(target, `alvo Agenda:${code} ausente`);
-  assert.equal(target.route, "/agenda");
+  assert.equal(target.route, route);
   assert.equal(target.clock, "13:45");
   return target;
 }
@@ -552,6 +552,21 @@ test("targets.json: Agenda:A3 abre o calendário pelo título e A4 abre o menu N
   assert.equal(a4Step.clickRole.name, "Novo");
   assert.equal(a4Step.clickRole.role, "button");
   assert.notEqual(a4Step.optional, true);
+});
+
+test("targets.json: Agenda:A7 leva ao conflito do formulário pelos passos, sem responses e com o waitFor obrigatório", () => {
+  const target = agendaTarget("A7", "/agenda/novo");
+  assert.equal(target.label, "Novo agendamento · conflito");
+  assert.equal(target.responses, undefined);
+  assert.deepEqual(
+    target.steps.map((step) => step.click ?? step.fill?.label ?? step.waitFor),
+    ["Ana Paula", "Hidratação", "Outro horário", "Outro horário, fora dos oferecidos", "Usar este horário", "Esse horário já está ocupado"],
+  );
+  assert.equal(target.steps.find((step) => step.fill).fill.value, "16:30");
+  const wait = target.steps.at(-1);
+  assert.equal(wait.waitFor, "Esse horário já está ocupado");
+  assert.notEqual(wait.optional, true, "A7: sem o conflito a captura tem de falhar, não sair com o formulário livre");
+  assert.ok(target.steps.every((step) => step.optional !== true));
 });
 
 test("targets.json: Agenda:A12 abre a Semana com o domingo oculto e sem regra no domingo", () => {

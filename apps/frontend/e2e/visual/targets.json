@@ -1366,6 +1366,38 @@
       "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
     },
     {
+      "code": "A7",
+      "file": "Agenda.dc.html",
+      "label": "Novo agendamento · conflito",
+      "route": "/agenda/novo",
+      "clock": "13:45",
+      "steps": [
+        {
+          "click": "Ana Paula"
+        },
+        {
+          "click": "Hidratação"
+        },
+        {
+          "click": "Outro horário",
+          "exact": true
+        },
+        {
+          "fill": {
+            "label": "Outro horário, fora dos oferecidos",
+            "value": "16:30"
+          }
+        },
+        {
+          "click": "Usar este horário"
+        },
+        {
+          "waitFor": "Esse horário já está ocupado"
+        }
+      ],
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro. Sem responses: a conta visual tem Pedro Alves às 16:30 com Corte masculino e o passo 'Usar este horário' leva ao conflito real, pela recusa do BFF. O waitFor é obrigatório: se a conta não tiver o atendimento das 16:30 (por exemplo, num dia em que o dia semeado fecha antes), a captura falha em vez de sair sem o conflito."
+    },
+    {
       "code": "A8",
       "file": "Agenda.dc.html",
       "label": "Agendamento · cancelar",

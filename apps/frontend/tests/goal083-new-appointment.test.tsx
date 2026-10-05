@@ -435,7 +435,7 @@ describe("prova 4 — Outro, sem cadastro", () => {
 });
 
 describe("prova 5 — conflito na criação", () => {
-  test("abre o ConflictPanel; sobrepor sem motivo não envia e, com motivo, vai com overlapOverride", async () => {
+  test("abre o conflito no formulário; encaixar sem motivo não envia e, com motivo, vai com overlapOverride", async () => {
     createHold.mockRejectedValue(conflictError());
     listAppointments.mockResolvedValue([
       appointmentFixture({
@@ -459,27 +459,28 @@ describe("prova 5 — conflito na criação", () => {
     );
     await user.click(screen.getByRole("button", { name: "Usar este horário" }));
 
-    const panel = await screen.findByRole("region", {
-      name: "O intervalo 12:00–13:00 não está livre nesta agenda",
+    const notice = await screen.findByRole("alert");
+    await waitFor(() => expect(notice).toHaveTextContent("Dora Lima"));
+    expect(within(notice).getByText("Dora Lima")).toBeVisible();
+    const override = screen.getByRole("button", {
+      name: "Encaixar mesmo assim",
     });
-    expect(within(panel).getByText("Dora Lima")).toBeVisible();
+    await waitFor(() => expect(override).toBeEnabled());
 
-    await user.click(
-      screen.getByRole("button", { name: "Sobrepor mesmo assim" }),
-    );
+    await user.click(override);
     expect(
       await screen.findByText(
-        "Descreva o motivo da sobreposição. Sem motivo, o agendamento não é enviado.",
+        "Descreva o motivo do encaixe. Sem motivo, o agendamento não é enviado.",
       ),
     ).toBeVisible();
     expect(createAppointment).not.toHaveBeenCalled();
 
     await user.type(
-      screen.getByLabelText("Motivo da sobreposição"),
+      screen.getByLabelText("Motivo do encaixe"),
       "Encaixe combinado",
     );
     await user.click(
-      screen.getByRole("button", { name: "Sobrepor mesmo assim" }),
+      screen.getByRole("button", { name: "Encaixar mesmo assim" }),
     );
 
     await waitFor(() => expect(createAppointment).toHaveBeenCalledTimes(1));
@@ -490,7 +491,7 @@ describe("prova 5 — conflito na criação", () => {
     expect(body.holdId).toBeUndefined();
   });
 
-  test("recusa na criação de Outro, sem cadastro, abre o painel com a duração digitada", async () => {
+  test("recusa na criação de Outro, sem cadastro, abre o conflito com a duração digitada", async () => {
     createAppointment.mockRejectedValueOnce(conflictError());
     renderForm("cus-ana");
     const user = userEvent.setup();
@@ -507,11 +508,19 @@ describe("prova 5 — conflito na criação", () => {
     await user.click(screen.getByRole("button", { name: "Usar este horário" }));
     await user.click(createButton());
 
+    const notice = await screen.findByRole("alert");
+    await waitFor(() =>
+      expect(notice).toHaveTextContent(
+        "Nada na sua agenda ocupa 11:30–11:55, mas o horário fica fora da grade de atendimento.",
+      ),
+    );
     expect(
-      await screen.findByRole("region", {
-        name: "O intervalo 11:30–11:55 não está livre nesta agenda",
-      }),
+      screen.getByRole("button", { name: "Encaixar mesmo assim" }),
     ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Escolher outro horário" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: /^Criar agendamento/ })).toBeNull();
     expect(replace).not.toHaveBeenCalled();
   });
 });

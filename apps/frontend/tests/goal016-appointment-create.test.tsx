@@ -531,37 +531,40 @@ describe("conflito e sobreposição por decisão humana", () => {
   test("o conflito mostra o que ocupa o intervalo", async () => {
     await openConflict();
 
-    const panel = await screen.findByRole("region", {
-      name: "O intervalo 12:00–13:00 não está livre nesta agenda",
-    });
-    expect(within(panel).getByText("Ana Paula")).toBeVisible();
-    expect(within(panel).getByText("Atendimento")).toBeVisible();
-    expect(within(panel).getByText("Almoço")).toBeVisible();
-    expect(within(panel).getByText("Bloqueio")).toBeVisible();
+    const notice = await screen.findByRole("alert");
+    await waitFor(() =>
+      expect(notice).toHaveTextContent(/Corte feminino às 12:00/),
+    );
+    expect(within(notice).getByText("Esse horário já está ocupado")).toBeVisible();
+    expect(within(notice).getByText("Ana Paula")).toBeVisible();
     // Atendimento e bloqueio cobrem o mesmo intervalo: os dois são mostrados.
-    expect(within(panel).getAllByText("12:00–13:00")).toHaveLength(2);
+    expect(notice).toHaveTextContent('Bloqueio "Almoço" das 12:00 às 13:00.');
+    expect(notice).toHaveTextContent(
+      'Ana Paula tem Corte feminino às 12:00 (em confirmação). Bloqueio "Almoço" das 12:00 às 13:00. Você pode encaixar mesmo assim — todos vão ficar no mesmo horário na sua agenda.',
+    );
   });
 
-  test("sobrepor sem motivo não envia; com motivo, overlapOverride vai no corpo", async () => {
+  test("encaixar sem motivo não envia; com motivo, overlapOverride vai no corpo", async () => {
     const user = await openConflict();
-    await screen.findByText(
-      "O intervalo 12:00–13:00 não está livre nesta agenda",
-    );
+    const override = await screen.findByRole("button", {
+      name: "Encaixar mesmo assim",
+    });
+    await waitFor(() => expect(override).toBeEnabled());
 
-    await user.click(screen.getByRole("button", { name: "Sobrepor mesmo assim" }));
+    await user.click(override);
 
     expect(
       await screen.findByText(
-        "Descreva o motivo da sobreposição. Sem motivo, o agendamento não é enviado.",
+        "Descreva o motivo do encaixe. Sem motivo, o agendamento não é enviado.",
       ),
     ).toBeVisible();
     expect(createAppointment).not.toHaveBeenCalled();
 
     await user.type(
-      screen.getByLabelText("Motivo da sobreposição"),
+      screen.getByLabelText("Motivo do encaixe"),
       "Cliente antigo, encaixe combinado",
     );
-    await user.click(screen.getByRole("button", { name: "Sobrepor mesmo assim" }));
+    await user.click(screen.getByRole("button", { name: "Encaixar mesmo assim" }));
 
     await waitFor(() => expect(createAppointment).toHaveBeenCalledTimes(1));
     const body = createAppointment.mock.calls[0][0];
@@ -574,9 +577,7 @@ describe("conflito e sobreposição por decisão humana", () => {
 
   test("escolher outro horário sai do conflito sem enviar nada", async () => {
     const user = await openConflict();
-    await screen.findByText(
-      "O intervalo 12:00–13:00 não está livre nesta agenda",
-    );
+    await screen.findByText("Esse horário já está ocupado");
 
     await user.click(
       screen.getByRole("button", { name: "Escolher outro horário" }),
@@ -584,9 +585,7 @@ describe("conflito e sobreposição por decisão humana", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByText(
-          "O intervalo 12:00–13:00 não está livre nesta agenda",
-        ),
+        screen.queryByText("Esse horário já está ocupado"),
       ).not.toBeInTheDocument(),
     );
     expect(createAppointment).not.toHaveBeenCalled();
@@ -735,7 +734,7 @@ describe("acessibilidade das superfícies desta unidade", () => {
       "12:00",
     );
     await user.click(screen.getByRole("button", { name: "Usar este horário" }));
-    await screen.findByRole("button", { name: "Sobrepor mesmo assim" });
+    await screen.findByRole("button", { name: "Encaixar mesmo assim" });
 
     await expectNoA11yViolations(container);
   });

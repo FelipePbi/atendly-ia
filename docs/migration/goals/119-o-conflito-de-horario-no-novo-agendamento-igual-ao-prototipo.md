@@ -1,6 +1,6 @@
 # Goal 119 — O conflito de horário no novo agendamento igual ao protótipo
 
-**Status: READY.** Preparado em 2026-10-05 pelo Tech Lead Agent após [Goal118 ACCEPTED](../reviews/118-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED.** Preparado em 2026-10-05 pelo Tech Lead Agent após [Goal118 ACCEPTED](../reviews/118-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: SONNET_HIGH
 

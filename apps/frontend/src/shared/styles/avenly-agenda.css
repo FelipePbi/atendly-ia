@@ -2744,6 +2744,70 @@
   font-size: 16px;
   font-weight: 600;
 }
+.agenda-new-footer.is-conflict {
+  gap: 10px;
+}
+.agenda-new-footer.is-conflict .btn.agenda-new-cta {
+  letter-spacing: 0;
+}
+.agenda-new-footer.is-conflict .btn-primary.agenda-new-cta {
+  color: #f7f4ef;
+}
+.agenda-new-footer.is-conflict .btn-secondary.agenda-new-cta {
+  height: 54px;
+  min-height: 54px;
+  background: transparent;
+}
+.agenda-new-footer.is-conflict .btn-secondary.agenda-new-cta:hover {
+  background: #efeae2;
+  border-color: #c9c0b3;
+}
+.agenda-new-footer.is-conflict .btn-secondary.agenda-new-cta:active {
+  background: #e5ded4;
+}
+
+/* Conflito dentro do formulário (Goal119, quadro A7): o horário recusado vira
+ * chip âmbar e o aviso âmbar fica abaixo das duas colunas. Valores portados de
+ * Agenda.dc.html, Agenda-Tablet.dc.html e Agenda-Desktop.dc.html. */
+.agenda-new-chip.is-conflict > span,
+.agenda-new-chip.is-conflict input:checked + span {
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: #b7791b;
+  color: #7a4e0a;
+  background: #f8ecd5;
+}
+.agenda-new-chip.is-conflict > span .agenda-new-conflict-glyph {
+  flex: none;
+}
+.agenda-new-conflict {
+  padding: 14px 16px;
+  border-radius: 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #7a4e0a;
+  background: #f8ecd5;
+}
+.agenda-new-conflict > .agenda-new-conflict-glyph {
+  flex: none;
+}
+.agenda-new-conflict-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.agenda-new-conflict-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: normal;
+}
+.agenda-new-conflict-body {
+  color: #6b4509;
+  font-size: 14px;
+  line-height: 1.4;
+}
 
 @media (min-width: 768px) {
   .agenda-new-screen-body {

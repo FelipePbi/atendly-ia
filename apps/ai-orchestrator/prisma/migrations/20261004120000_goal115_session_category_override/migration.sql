@@ -1,0 +1,13 @@
+-- Goal115, WU-01: decisao manual de categoria "so esta conversa".
+--
+-- ADITIVA: uma coluna anulavel nova em `ConversationSession`. Nada e apagado,
+-- renomeado nem preenchido; toda linha existente fica nula e continua se
+-- comportando como antes (vale a decisao do contato, depois a sugestao).
+-- Toda sessao nova nasce nula, entao a conversa seguinte volta a regra do
+-- contato sem codigo de limpeza.
+--
+-- ROLLBACK: a coluna pode ser removida sem perda alem das decisoes por sessao
+-- que ela guarda.
+--
+-- RETOMAVEL/IDEMPOTENTE: `IF NOT EXISTS` deixa reaplicar sem falhar.
+ALTER TABLE "ConversationSession" ADD COLUMN IF NOT EXISTS "categoryOverride" "SessionCategory";

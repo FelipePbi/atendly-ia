@@ -5,6 +5,7 @@ import {
   categoryFromClassification,
   executionGuardReason,
   isSessionExpired,
+  resolveCategoryScope,
   resolveEffectiveCategory,
   type SessionPolicy,
   sessionExpiresAt,
@@ -86,6 +87,69 @@ describe("categoria vigente", () => {
     expect(categoryFromClassification("unknown")).toBe("UNCLASSIFIED");
     expect(categoryFromClassification(undefined)).toBeNull();
     expect(categoryFromClassification("algo_que_o_modelo_inventou")).toBeNull();
+  });
+});
+
+describe("categoria vigente com decisao da sessao (Goal115)", () => {
+  it("sessao, contato e sugestao: vale a decisao da sessao", () => {
+    expect(
+      resolveEffectiveCategory({
+        sessionOverride: "PERSONAL",
+        override: "COMMERCIAL",
+        suggestion: "COMMERCIAL",
+      }),
+    ).toEqual({ category: "PERSONAL", source: "MANUAL" });
+  });
+
+  it("sessao sem contato: a decisao da sessao vence a sugestao", () => {
+    expect(
+      resolveEffectiveCategory({
+        sessionOverride: "PERSONAL",
+        override: null,
+        suggestion: "COMMERCIAL",
+      }),
+    ).toEqual({ category: "PERSONAL", source: "MANUAL" });
+    expect(resolveEffectiveCategory({ sessionOverride: "COMMERCIAL" })).toEqual(
+      { category: "COMMERCIAL", source: "MANUAL" },
+    );
+  });
+
+  it("sem decisao da sessao vale a do contato, acima da sugestao", () => {
+    expect(
+      resolveEffectiveCategory({
+        sessionOverride: null,
+        override: "COMMERCIAL",
+        suggestion: "PERSONAL",
+      }),
+    ).toEqual({ category: "COMMERCIAL", source: "MANUAL" });
+  });
+
+  it("sem decisao manual nenhuma vale a sugestao, e sem ela Nao classificadas", () => {
+    expect(
+      resolveEffectiveCategory({
+        sessionOverride: null,
+        override: null,
+        suggestion: "PERSONAL",
+      }),
+    ).toEqual({ category: "PERSONAL", source: "AUTOMATIC" });
+    expect(
+      resolveEffectiveCategory({
+        sessionOverride: null,
+        override: null,
+        suggestion: null,
+      }),
+    ).toEqual({ category: "UNCLASSIFIED", source: "AUTOMATIC" });
+  });
+
+  it("o escopo diz de quem e a decisao que vale", () => {
+    expect(
+      resolveCategoryScope({ sessionOverride: "PERSONAL", override: "COMMERCIAL" }),
+    ).toBe("CONVERSATION");
+    expect(resolveCategoryScope({ sessionOverride: null, override: "PERSONAL" })).toBe(
+      "CONTACT",
+    );
+    expect(resolveCategoryScope({ sessionOverride: null, override: null })).toBeNull();
+    expect(resolveCategoryScope({})).toBeNull();
   });
 });
 

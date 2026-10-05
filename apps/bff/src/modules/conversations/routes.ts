@@ -36,6 +36,8 @@ const querySchema = z.object({
 const messageSchema = z.object({ text: z.string().trim().min(1).max(4_000) });
 const categorySchema = z.object({
   category: z.enum(["COMMERCIAL", "UNCLASSIFIED", "PERSONAL"]).nullable(),
+  // Goal115: ausente vale `CONTACT`, decidido pela IA; so repassado se vier.
+  scope: z.enum(["CONVERSATION", "CONTACT"]).optional(),
 });
 const ignoreSchema = z.object({ ignored: z.boolean() });
 // Goal019/WU-07: mesmo limite de `tenantPhone` do teste real — validar aqui

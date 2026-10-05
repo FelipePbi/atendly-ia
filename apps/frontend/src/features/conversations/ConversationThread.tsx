@@ -27,6 +27,10 @@ import {
 import { Dialog } from "@/shared/ui/Dialog";
 import { StatePanel } from "@/shared/ui/States";
 
+import {
+  type CategoryWriteScope,
+  ConversationActionsSheet,
+} from "./ConversationActionsSheet";
 import { ConversationContextPanel } from "./ConversationContextPanel";
 import {
   ConversationListColumn,
@@ -90,6 +94,8 @@ export function ConversationThread({
   const [ignoredBusy, setIgnoredBusy] = useState(false);
   const [ignoredError, setIgnoredError] = useState<string | null>(null);
   const [ignoreOpen, setIgnoreOpen] = useState(false);
+  const [sheetBusy, setSheetBusy] = useState(false);
+  const [sheetError, setSheetError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -197,10 +203,10 @@ export function ConversationThread({
     setCategoryBusy(true);
     setCategoryError(null);
     try {
-      const result = await getProductServices().conversations.setCategory(
-        conversation.id,
-        category,
-      );
+      const conversations = getProductServices().conversations;
+      const result = category
+        ? await conversations.setCategory(conversation.id, category, "CONTACT")
+        : await conversations.setCategory(conversation.id, null);
       setConversation(result);
     } catch (caught: unknown) {
       setCategoryError(
@@ -209,6 +215,40 @@ export function ConversationThread({
     } finally {
       setCategoryBusy(false);
     }
+  }
+
+  /**
+   * A gravação da folha "Mais ações": só acontece no botão que a pessoa toca,
+   * com o escopo que ela escolheu, e a folha só fecha depois do sucesso — o
+   * erro fica nela, não some junto com ela.
+   */
+  async function setCategoryFromSheet(
+    category: SessionCategory,
+    scope: CategoryWriteScope,
+  ) {
+    if (!conversation || sheetBusy) return;
+    setSheetBusy(true);
+    setSheetError(null);
+    try {
+      const result = await getProductServices().conversations.setCategory(
+        conversation.id,
+        category,
+        scope,
+      );
+      setConversation(result);
+      setActionsOpen(false);
+    } catch (caught: unknown) {
+      setSheetError(
+        requestError(caught, "Não foi possível alterar a categoria."),
+      );
+    } finally {
+      setSheetBusy(false);
+    }
+  }
+
+  function toggleActions() {
+    setSheetError(null);
+    setActionsOpen((open) => !open);
   }
 
   /**
@@ -467,9 +507,10 @@ export function ConversationThread({
             <div className="dropdown chat-header-more">
               <button
                 aria-expanded={actionsOpen}
+                aria-haspopup="dialog"
                 aria-label="Mais ações"
                 className="chat-header-icon"
-                onClick={() => setActionsOpen((open) => !open)}
+                onClick={toggleActions}
                 type="button"
               >
                 <svg
@@ -484,55 +525,6 @@ export function ConversationThread({
                   <circle cx="19" cy="12" r="1.9" />
                 </svg>
               </button>
-              {actionsOpen && (
-                <div className="menu">
-                  {!closed && (
-                    <button
-                      className="menu-item"
-                      disabled={busy}
-                      onClick={() => void mutate("takeover")}
-                      type="button"
-                    >
-                      <Icon name="user" />
-                      Assumir conversa
-                    </button>
-                  )}
-                  <Link className="menu-item" href="/agenda/novo">
-                    <Icon name="calendar" />
-                    Criar agendamento
-                  </Link>
-                  <button
-                    className="menu-item"
-                    onClick={() => {
-                      setActionsOpen(false);
-                      setContextOpen(true);
-                    }}
-                    type="button"
-                  >
-                    <Icon name="chat" />
-                    Mudar categoria
-                  </button>
-                  <button
-                    className="menu-item"
-                    onClick={openIgnore}
-                    type="button"
-                  >
-                    <Icon name="eye" />
-                    {conversation.ignored
-                      ? "Voltar a usar na IA"
-                      : "Ignorar contato na IA"}
-                  </button>
-                  <button
-                    className="menu-item"
-                    disabled={busy || closed}
-                    onClick={() => void mutate("resolve")}
-                    type="button"
-                  >
-                    <Icon name="check" />
-                    Marcar como resolvida
-                  </button>
-                </div>
-              )}
             </div>
           )}
         </header>
@@ -710,10 +702,35 @@ export function ConversationThread({
                 ignoredError={ignoredError}
                 onResolve={() => void mutate("resolve")}
                 onSetCategory={(category) => void setCategory(category)}
+                onTakeover={() => {
+                  setContextOpen(false);
+                  void mutate("takeover");
+                }}
                 onToggleIgnored={openIgnore}
+                takeoverBusy={busy}
               />
             </div>
           </Dialog>
+          <ConversationActionsSheet
+            busy={sheetBusy}
+            category={conversation.category ?? "UNCLASSIFIED"}
+            error={sheetError}
+            ignored={Boolean(conversation.ignored)}
+            onClose={() => setActionsOpen(false)}
+            onIgnore={openIgnore}
+            onMarkPersonal={(scope) =>
+              void setCategoryFromSheet("PERSONAL", scope)
+            }
+            onMoveToCommercial={() =>
+              void setCategoryFromSheet("COMMERCIAL", "CONTACT")
+            }
+            onViewContact={() => {
+              setActionsOpen(false);
+              setContextOpen(true);
+            }}
+            open={actionsOpen}
+            person={person}
+          />
           <Dialog
             eyebrow={
               conversation.ignored ? "Voltar a usar na IA" : "Ignorar na IA"

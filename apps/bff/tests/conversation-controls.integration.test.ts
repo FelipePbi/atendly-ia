@@ -129,6 +129,65 @@ describe.skipIf(!RUN_INTEGRATION)("conversation controls", () => {
     expect(upstream[0].method).toBe("PUT");
   });
 
+  it("repassa scope CONVERSATION e CONTACT à IA e devolve categoryScope", async () => {
+    const owner = created[0]!;
+
+    for (const scope of ["CONVERSATION", "CONTACT"] as const) {
+      stubOrchestrator(
+        conversationPayload({
+          category: "PERSONAL",
+          categorySource: "MANUAL",
+          categoryScope: scope,
+        }),
+      );
+      const response = await app.inject({
+        method: "PUT",
+        url: "/v1/conversations/conversation-1/category",
+        headers: browserMutation(owner),
+        payload: { category: "PERSONAL", scope },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.categoryScope).toBe(scope);
+      expect(JSON.parse(upstream[0].body!)).toEqual({
+        category: "PERSONAL",
+        scope,
+      });
+      vi.unstubAllGlobals();
+      upstream.length = 0;
+    }
+  });
+
+  it("sem scope, o corpo enviado à IA é o mesmo de antes", async () => {
+    const owner = created[0]!;
+    stubOrchestrator(conversationPayload({ category: "COMMERCIAL" }));
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/v1/conversations/conversation-1/category",
+      headers: browserMutation(owner),
+      payload: { category: "COMMERCIAL" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(upstream[0].body!)).toEqual({ category: "COMMERCIAL" });
+  });
+
+  it("recusa scope inválido com 400, antes de chamar a IA", async () => {
+    const owner = created[0]!;
+    stubOrchestrator(conversationPayload());
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/v1/conversations/conversation-1/category",
+      headers: browserMutation(owner),
+      payload: { category: "PERSONAL", scope: "EVERYONE" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(upstream).toHaveLength(0);
+  });
+
   it("recusa a mutação por cookie sem CSRF, antes de chamar a IA", async () => {
     const owner = created[0] ?? (await registerBusiness(app, "controls-c"));
     if (!created.includes(owner)) created.push(owner);

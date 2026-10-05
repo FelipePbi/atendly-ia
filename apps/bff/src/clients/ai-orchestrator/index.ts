@@ -102,6 +102,8 @@ const conversationSchema = z.object({
   // continua valida, e o consumidor trata a ausencia como padrao seguro.
   category: sessionCategorySchema.optional(),
   categorySource: z.enum(["AUTOMATIC", "MANUAL"]).optional(),
+  // Goal115: de quem e a decisao manual vigente; opcional como os demais.
+  categoryScope: z.enum(["CONVERSATION", "CONTACT"]).nullish().optional(),
   suggestedCategory: sessionCategorySchema.nullish().optional(),
   handling: z.enum(["AI", "HUMAN"]).optional(),
   ignored: z.boolean().optional(),
@@ -476,7 +478,10 @@ export class AiOrchestratorClient {
   async setCategory(
     context: InternalRequestContext,
     id: string,
-    input: { category: "COMMERCIAL" | "UNCLASSIFIED" | "PERSONAL" | null },
+    input: {
+      category: "COMMERCIAL" | "UNCLASSIFIED" | "PERSONAL" | null;
+      scope?: "CONVERSATION" | "CONTACT";
+    },
   ) {
     return (
       await this.http.request({

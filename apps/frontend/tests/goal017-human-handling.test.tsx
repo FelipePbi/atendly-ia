@@ -214,8 +214,11 @@ describe("takeover, release e resolve continuam alcançáveis", () => {
     );
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: "Mais ações" }));
-    await user.click(screen.getByRole("button", { name: "Assumir conversa" }));
+    // Goal115: assumir mora no contexto, aberto pelo nome no cabeçalho.
+    const context = await openContext(user);
+    await user.click(
+      within(context).getByRole("button", { name: "Assumir conversa" }),
+    );
 
     expect(takeover).toHaveBeenCalledWith("conv-1");
   });
@@ -253,14 +256,10 @@ describe("takeover, release e resolve continuam alcançáveis", () => {
     );
     const user = userEvent.setup();
 
-    const moreButton = screen.getByRole("button", { name: "Mais ações" });
-    await user.click(moreButton);
-    const dropdown = moreButton.closest(".dropdown");
-    expect(dropdown).not.toBeNull();
+    // Goal115: resolver mora no contexto, aberto pelo nome no cabeçalho.
+    const context = await openContext(user);
     await user.click(
-      within(dropdown as HTMLElement).getByRole("button", {
-        name: "Marcar como resolvida",
-      }),
+      within(context).getByRole("button", { name: "Marcar como resolvida" }),
     );
 
     expect(resolve).toHaveBeenCalledWith("conv-1");
@@ -313,7 +312,7 @@ describe("override de categoria", () => {
 
     await user.click(screen.getByRole("button", { name: "Pessoal" }));
 
-    expect(setCategory).toHaveBeenCalledWith("conv-1", "PERSONAL");
+    expect(setCategory).toHaveBeenCalledWith("conv-1", "PERSONAL", "CONTACT");
     expect(await screen.findByText("Definida manualmente")).toBeVisible();
 
     setCategory.mockResolvedValue(

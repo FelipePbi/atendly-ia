@@ -26,6 +26,7 @@ interface Row {
     ignored: boolean;
     ignoredAt: Date | null;
     aiPaused: boolean;
+    categoryOverride?: Category | null;
   };
   session: {
     id: string;
@@ -35,6 +36,7 @@ interface Row {
     category: Category;
     categorySource: "AUTOMATIC" | "MANUAL";
     suggestedCategory: Category | null;
+    categoryOverride?: Category | null;
     humanHandling: boolean;
     humanHandlingSince: Date | null;
   };
@@ -137,8 +139,10 @@ function fakeSessions(rows: Row[]) {
       (item) => item.tenantId === tenantId && item.id === conversationId,
     );
   const calls: string[] = [];
+  const categoryCalls: Array<Record<string, unknown>> = [];
   return {
     calls,
+    categoryCalls,
     port: {
       resolveContext: async (scope: {
         tenantId: string;
@@ -162,12 +166,20 @@ function fakeSessions(rows: Row[]) {
         tenantId: string;
         conversationId: string;
         category: Category | null;
+        scope?: "CONVERSATION" | "CONTACT";
       }) => {
+        categoryCalls.push(input);
         const item = find(input.tenantId, input.conversationId);
         if (!item) return null;
         item.session.category =
           input.category ?? item.session.suggestedCategory ?? "UNCLASSIFIED";
         item.session.categorySource = input.category ? "MANUAL" : "AUTOMATIC";
+        if (input.scope === "CONVERSATION") {
+          item.session.categoryOverride = input.category;
+        } else {
+          item.contact.categoryOverride = input.category;
+          item.session.categoryOverride = null;
+        }
         return null;
       },
       setIgnored: async (input: {
@@ -407,5 +419,111 @@ describe("contratos de categoria, ignore e atendimento", () => {
       "conversations:write",
     );
     expect(scopeOf("PUT", "/internal/unknown")).toBe("internal:unmapped");
+  });
+});
+
+describe("escopo da decisao de categoria (Goal115)", () => {
+  let app: FastifyInstance;
+  let rows: Row[];
+  let sessions: ReturnType<typeof fakeSessions>;
+
+  beforeEach(async () => {
+    rows = [row("conversation-a", "tenant-a"), row("conversation-b", "tenant-b")];
+    ({ app, sessions } = await buildApp(rows));
+  });
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  function putCategory(payload: Record<string, unknown>, id = "conversation-a") {
+    return app.inject({
+      method: "PUT",
+      url: `/internal/conversations/${id}/category`,
+      headers: headers("tenant-a"),
+      payload,
+    });
+  }
+
+  it("sem decisao manual o DTO devolve categoryScope null", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/conversations/conversation-a",
+      headers: headers("tenant-a"),
+    });
+
+    expect(response.json().data).toMatchObject({ categoryScope: null });
+  });
+
+  it("scope CONVERSATION chega ao servico e o DTO devolve CONVERSATION", async () => {
+    const response = await putCategory({
+      category: "PERSONAL",
+      scope: "CONVERSATION",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(sessions.categoryCalls).toEqual([
+      expect.objectContaining({
+        tenantId: "tenant-a",
+        conversationId: "conversation-a",
+        category: "PERSONAL",
+        scope: "CONVERSATION",
+      }),
+    ]);
+    expect(response.json().data).toMatchObject({
+      category: "PERSONAL",
+      categorySource: "MANUAL",
+      categoryScope: "CONVERSATION",
+    });
+  });
+
+  it("scope CONTACT chega ao servico e o DTO devolve CONTACT", async () => {
+    const response = await putCategory({ category: "COMMERCIAL", scope: "CONTACT" });
+
+    expect(sessions.categoryCalls[0]).toMatchObject({ scope: "CONTACT" });
+    expect(response.json().data).toMatchObject({
+      category: "COMMERCIAL",
+      categoryScope: "CONTACT",
+    });
+  });
+
+  it("sem scope a chamada ao servico e a mesma da baseline", async () => {
+    const response = await putCategory({ category: "PERSONAL" });
+
+    expect(response.statusCode).toBe(200);
+    expect(sessions.categoryCalls).toHaveLength(1);
+    expect(sessions.categoryCalls[0]).not.toHaveProperty("scope");
+    expect(response.json().data).toMatchObject({ categoryScope: "CONTACT" });
+  });
+
+  it("a decisao da sessao prevalece no categoryScope sobre a do contato", async () => {
+    rows[0].contact.categoryOverride = "COMMERCIAL";
+    rows[0].session.categoryOverride = "PERSONAL";
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/conversations/conversation-a",
+      headers: headers("tenant-a"),
+    });
+
+    expect(response.json().data).toMatchObject({ categoryScope: "CONVERSATION" });
+  });
+
+  it("recusa scope invalido com 400 sem chamar o servico", async () => {
+    const response = await putCategory({ category: "PERSONAL", scope: "TENANT" });
+
+    expect(response.statusCode).toBe(400);
+    expect(sessions.categoryCalls).toHaveLength(0);
+  });
+
+  it("scope nao atravessa o tenant: conversa de outro negocio e 404", async () => {
+    const response = await putCategory(
+      { category: "PERSONAL", scope: "CONVERSATION" },
+      "conversation-b",
+    );
+
+    expect(response.statusCode).toBe(404);
+    expect(sessions.categoryCalls).toHaveLength(0);
+    expect(rows[1].session.category).toBe("UNCLASSIFIED");
   });
 });

@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import type { Conversation, SessionCategory } from "@/data";
 
+import { conversationState } from "./conversationState";
 import { conversationLabel, formatPhone, initials } from "./format";
 
 const categoryValues = [
@@ -34,7 +35,9 @@ export function ConversationContextPanel({
   ignoredError,
   onResolve,
   onSetCategory,
+  onTakeover,
   onToggleIgnored,
+  takeoverBusy,
 }: {
   categoryBusy: boolean;
   categoryError: string | null;
@@ -43,11 +46,24 @@ export function ConversationContextPanel({
   ignoredError: string | null;
   onResolve: () => void;
   onSetCategory: (category: SessionCategory | null) => void;
+  onTakeover?: () => void;
   onToggleIgnored: () => void;
+  takeoverBusy?: boolean;
 }) {
   const person = conversationLabel(conversation);
   const category = conversation.category ?? "UNCLASSIFIED";
   const categorySource = conversation.categorySource ?? "AUTOMATIC";
+  const canTakeover =
+    Boolean(onTakeover) &&
+    conversation.status !== "CLOSED" &&
+    conversationState(conversation) !== "you-handling";
+  const categoryStamp =
+    conversation.categoryScope === "CONVERSATION"
+      ? "Só nesta conversa"
+      : categorySource === "MANUAL" || conversation.categoryScope === "CONTACT"
+        ? "Definida manualmente"
+        : "Classificação automática";
+  const categoryDecided = categoryStamp !== "Classificação automática";
   const suggestedCategory = conversation.suggestedCategory ?? null;
   return (
     <>
@@ -82,12 +98,10 @@ export function ConversationContextPanel({
           <span
             className={clsx(
               "badge",
-              categorySource === "MANUAL" ? "badge-success" : "badge-ai",
+              categoryDecided ? "badge-success" : "badge-ai",
             )}
           >
-            {categorySource === "MANUAL"
-              ? "Definida manualmente"
-              : "Classificação automática"}
+            {categoryStamp}
           </span>
         </div>
         {suggestedCategory && suggestedCategory !== category && (
@@ -121,7 +135,7 @@ export function ConversationContextPanel({
         </div>
         <button
           className="btn btn-tertiary"
-          disabled={categoryBusy || categorySource !== "MANUAL"}
+          disabled={categoryBusy || !categoryDecided}
           onClick={() => onSetCategory(null)}
           type="button"
         >
@@ -168,6 +182,16 @@ export function ConversationContextPanel({
         </button>
       </section>
       <section className="context-section context-actions">
+        {canTakeover && (
+          <button
+            className="btn btn-secondary"
+            disabled={Boolean(takeoverBusy)}
+            onClick={onTakeover}
+            type="button"
+          >
+            Assumir conversa
+          </button>
+        )}
         <Link className="btn btn-secondary" href="/agenda/novo">
           Criar agendamento
         </Link>

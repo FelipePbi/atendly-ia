@@ -1927,6 +1927,180 @@
       ]
     },
     {
+      "code": "K6",
+      "file": "Conversas-e-Chat.dc.html",
+      "label": "Chat · opções",
+      "route": "/conversas/visual-compare-k6-renata",
+      "clock": "13:45",
+      "notes": "Respostas fixas de GET (a conversa, as mensagens, os eventos, a lista da coluna de 1024 px em diante e /v1/status conectado, que tira o banner da casca), só no navegador da captura; a conta de teste não tem conversa nem número. A conversa é a Renata, UNCLASSIFIED, sem atendimento humano. Os passos abrem o menu \"Mais ações\" e tocam \"Marcar como pessoal\", que abre as duas opções no lugar, como o quadro. As datas e horas usam {today}, trocado pelo dia semeado. A linha de estado do cabeçalho atrás da folha diz o estado da conversa da resposta fixa, e não \"Não classificada\" (divergência declarada 3 do Goal115).",
+      "steps": [
+        {
+          "clickRole": {
+            "name": "Mais ações",
+            "role": "button"
+          }
+        },
+        {
+          "click": "Marcar como pessoal"
+        }
+      ],
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/conversations",
+          "json": {
+            "data": [
+              {
+                "id": "visual-compare-c2-numero",
+                "externalContactId": "5511976543210",
+                "customerName": null,
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c2-numero-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Oi",
+                  "createdAt": "{today}T09:12:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T09:12:00-03:00",
+                "category": "UNCLASSIFIED",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-k6-renata",
+                "externalContactId": "5511900000007",
+                "customerName": "Renata",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-k6-m1",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Oi Camila, tudo bem? 🙂",
+                  "createdAt": "{today}T08:40:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T08:40:00-03:00",
+                "category": "UNCLASSIFIED",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false
+              },
+              {
+                "id": "visual-compare-c2-outro",
+                "externalContactId": "5521998881122",
+                "customerName": null,
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-c2-outro-last",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Bom dia",
+                  "createdAt": "{today-1}T10:05:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today-1}T10:05:00-03:00",
+                "category": "UNCLASSIFIED",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "aiPaused": false
+              }
+            ],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/visual-compare-k6-renata",
+          "json": {
+            "data": {
+              "id": "visual-compare-k6-renata",
+              "externalContactId": "5511900000007",
+              "customerName": "Renata",
+              "status": "ACTIVE",
+              "humanHandoff": false,
+              "handoffReason": null,
+              "lastMessage": {
+                "id": "visual-compare-k6-m1",
+                "direction": "INBOUND",
+                "source": "CUSTOMER",
+                "body": "Oi Camila, tudo bem? 🙂",
+                "createdAt": "{today}T08:40:00-03:00"
+              },
+              "unreadCount": 0,
+              "updatedAt": "{today}T08:40:00-03:00",
+              "category": "UNCLASSIFIED",
+              "categorySource": "AUTOMATIC",
+              "handling": "AI",
+              "ignored": false,
+              "aiPaused": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/visual-compare-k6-renata/messages",
+          "json": {
+            "data": [
+              {
+                "id": "visual-compare-k6-m1",
+                "direction": "INBOUND",
+                "source": "CUSTOMER",
+                "body": "Oi Camila, tudo bem? 🙂",
+                "createdAt": "{today}T08:40:00-03:00"
+              }
+            ],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/visual-compare-k6-renata/events",
+          "json": {
+            "data": [],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T13:45:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "NT1",
       "file": "Notificacoes.dc.html",
       "label": "Notificações",

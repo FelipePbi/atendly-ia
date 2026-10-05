@@ -880,3 +880,17 @@ Diff109, aceito no [review109](reviews/109-review.md) ([D-120](DECISIONS.md)). D
 **Janela de deploy, declarada e não medida** (D-120 (h)). A migration roda no `buildCommand`, antes de o código novo do serviço subir. Enquanto uma instância antiga do Scheduling ou da IA continuar no ar depois da migration, ela não reconhece `AVENLY` no tipo do banco. A ordem recomendada é frontend, BFF, Scheduling e IA. Ela reduz a janela de leitura, mas não as duas janelas de escrita: o frontend novo envia `"AVENLY"` a um BFF antigo, e o BFF novo envia `"AVENLY"` a um Scheduling antigo, e os dois recusam com `400`. Ainda não há usuário real; com usuário real antes do deploy, a decisão volta à pessoa.
 
 **Limite declarado.** O deploy real no Render e a duração da janela não foram medidos. O valor antigo não foi removido dos decodificadores nem das reservas; isso só vem com motivo medido (D-120, "Revisar se" (2)).
+
+## 24. Decisão de categoria por conversa: coluna `ConversationSession.categoryOverride` (Goal115)
+
+Diff115, aceito no [review115](reviews/115-review.md) ([D-129](DECISIONS.md)). Uma migration nova, no AI Orchestrator:
+
+| Migration | App | O que faz | Reescrita de linha |
+| --- | --- | --- | --- |
+| `20261004120000_goal115_session_category_override` | AI Orchestrator | `ALTER TABLE "ConversationSession" ADD COLUMN IF NOT EXISTS "categoryOverride" "SessionCategory"` | Nenhuma |
+
+- **Aditiva e anulável, sem backfill.** Toda sessão existente fica com `categoryOverride` nulo, que é "sem decisão por conversa"; a categoria efetiva continua a de antes (contato, depois sugestão). O comando é idempotente (`IF NOT EXISTS`). Nenhum enum muda: a coluna reusa `SessionCategory`.
+- **Rollback.** Remover a coluna (`ALTER TABLE "ConversationSession" DROP COLUMN "categoryOverride"`) volta ao comportamento do Goal114 sem perda além das decisões "Só esta conversa" já gravadas; as decisões por contato ficam em `Contact.categoryOverride`, que não é tocada. O código novo precisa sair antes da remoção, porque `SessionService` lê a coluna.
+- **Ensaio.** `scripts/goal074-human-takeover-migration-rehearsal.mjs` aplica a migration ao banco `_goal004` da suíte de durabilidade (`alignAiDurabilityTargetWithGoal115`, mesmo padrão de `alignAiDurabilityTargetWithGoal109`) e registra "durability target aligned with the Goal115 ConversationSession.categoryOverride column". O teste de integração `goal109-avenly-human-control-source` aplica a migration depois das anteriores ao Goal109, porque semeia pela `SessionService` real.
+
+**Nota de fechamento — review115, 2026-10-04.** A migration aplicou em bancos vazios com o histórico inteiro, por `prisma migrate deploy` na pilha descartável do Developer e na do Tech Lead, e no ensaio `rehearse:goal028-release-migrations` de `validate:integration` (36 de 36 passos). No banco do Tech Lead, a coluna é `SessionCategory`, anulável e sem default. A prova de que nenhuma linha existente muda é o SQL, que não tem `UPDATE` nem default; nenhum banco com dados reais foi migrado. Toda migration futura da IA lida pela `SessionService` precisa do mesmo alinhamento do banco `_goal004` no ensaio `goal074` (é o segundo caso, depois do Goal109). O deploy real e a ordem entre a IA e o BFF não foram medidos.

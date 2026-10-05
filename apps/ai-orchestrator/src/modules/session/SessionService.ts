@@ -6,6 +6,7 @@ import type {
 import {
   type AiEligibilityReason,
   categoryFromClassification,
+  type CategoryScope,
   type CategorySource,
   executionGuardReason,
   type HumanControlSource,
@@ -114,8 +115,10 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
    *
    * Cria o que faltar e rotaciona a sessao expirada por inatividade **do
    * contato**. A sessao nova volta a `Nao classificadas` a menos que exista
-   * override manual, que atravessa a troca — e por isso que "nova sessao pode
-   * reavaliar a intencao" nao desfaz uma decisao da profissional.
+   * override manual do contato, que atravessa a troca — e por isso que "nova
+   * sessao pode reavaliar a intencao" nao desfaz uma decisao da profissional.
+   * A decisao "so esta conversa" (`ConversationSession.categoryOverride`) nao
+   * atravessa: a sessao nova nasce sem ela.
    */
   async resolveContext(
     scope: SessionScope,
@@ -157,7 +160,13 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
     });
 
     if (open && !isSessionExpired({ expiresAt: open.expiresAt, now })) {
-      return this.refreshCategory(open, contact);
+      const refreshed = await this.writeEffectiveCategory(
+        scope.tenantId,
+        open.id,
+        {},
+        { session: open, contact },
+      );
+      return toSnapshot(refreshed.session, refreshed.contact);
     }
 
     if (open) {
@@ -331,9 +340,10 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
   /**
    * Sugestao do agente gravada com proveniencia.
    *
-   * Nunca toca `categoryOverride` nem `categorySource: MANUAL`: se existe
-   * override, a categoria vigente continua sendo a da profissional e a sugestao
-   * fica registrada ao lado, para o painel poder explicar a divergencia.
+   * Nunca toca `categoryOverride` (do contato ou da sessao) nem
+   * `categorySource: MANUAL`: se existe decisao manual, a categoria vigente
+   * continua sendo a da profissional e a sugestao fica registrada ao lado,
+   * para o painel poder explicar a divergencia.
    */
   async recordCategorySuggestion(input: {
     tenantId: string;
@@ -354,59 +364,68 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
       orderBy: { startedAt: "desc" },
     });
     if (!session) return;
-    const contact = await this.requireContact(input.tenantId, session.contactId);
-    const effective = resolveEffectiveCategory({
-      override: contact.categoryOverride,
-      suggestion,
-    });
-    await this.prisma.conversationSession.update({
-      where: { tenantId_id: { tenantId: input.tenantId, id: session.id } },
-      data: {
-        suggestedCategory: suggestion,
-        suggestionProvenance: input.provenance,
-        suggestedAt: now,
-        category: effective.category,
-        categorySource: effective.source,
+    await this.writeEffectiveCategory(
+      input.tenantId,
+      session.id,
+      {
+        suggestion: {
+          category: suggestion,
+          provenance: input.provenance,
+          at: now,
+        },
       },
-    });
+      { session },
+    );
   }
 
-  /** Override manual da categoria: decisao da profissional, vale por contato. */
+  /**
+   * Decisao manual da categoria.
+   *
+   * `scope` diz de quem e a decisao. Sem `scope` vale `CONTACT`, exatamente o
+   * comportamento anterior ao Goal115:
+   *
+   * - `CONTACT` grava no contato (atravessa a troca de sessao) e **limpa** a
+   *   decisao da sessao aberta, para "Mover para Comercial" depois de "So esta
+   *   conversa" tirar a conversa de Pessoal. `category: null` limpa as duas.
+   * - `CONVERSATION` grava so na sessao aberta e nao toca o contato.
+   *   `category: null` limpa so a decisao da sessao.
+   */
   async setCategoryOverride(input: {
     tenantId: string;
     conversationId: string;
     category: SessionCategory | null;
+    scope?: CategoryScope;
     actor?: string | null;
     now?: Date;
   }): Promise<SessionSnapshot | null> {
     const now = input.now ?? new Date();
+    const scope = input.scope ?? "CONTACT";
     const session = await this.currentSession(
       input.tenantId,
       input.conversationId,
     );
     if (!session) return null;
-    const contact = await this.prisma.contact.update({
-      where: { tenantId_id: { tenantId: input.tenantId, id: session.contactId } },
-      data: {
-        categoryOverride: input.category,
-        categoryOverrideAt: input.category ? now : null,
-        categoryOverrideBy: input.category ? (input.actor ?? null) : null,
+    if (scope === "CONTACT") {
+      await this.prisma.contact.update({
+        where: {
+          tenantId_id: { tenantId: input.tenantId, id: session.contactId },
+        },
+        data: {
+          categoryOverride: input.category,
+          categoryOverrideAt: input.category ? now : null,
+          categoryOverrideBy: input.category ? (input.actor ?? null) : null,
+        },
+      });
+    }
+    const updated = await this.writeEffectiveCategory(
+      input.tenantId,
+      session.id,
+      {
+        sessionOverride: scope === "CONVERSATION" ? input.category : null,
+        decision: { at: now, actor: input.actor ?? null },
       },
-    });
-    const effective = resolveEffectiveCategory({
-      override: contact.categoryOverride,
-      suggestion: session.suggestedCategory,
-    });
-    const updated = await this.prisma.conversationSession.update({
-      where: { tenantId_id: { tenantId: input.tenantId, id: session.id } },
-      data: {
-        category: effective.category,
-        categorySource: effective.source,
-        categoryUpdatedAt: input.category ? now : null,
-        categoryUpdatedBy: input.category ? (input.actor ?? null) : null,
-      },
-    });
-    return toSnapshot(updated, contact);
+    );
+    return toSnapshot(updated.session, updated.contact);
   }
 
   /**
@@ -602,25 +621,110 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
     });
   }
 
-  private async refreshCategory(
-    session: SessionRow,
-    contact: ContactRow,
-  ): Promise<SessionSnapshot> {
-    const effective = resolveEffectiveCategory({
-      override: contact.categoryOverride,
-      suggestion: session.suggestedCategory,
-    });
-    if (
-      session.category === effective.category &&
-      session.categorySource === effective.source
-    ) {
-      return toSnapshot(session, contact);
+  /**
+   * Recalcula e grava a categoria vigente da sessao sem regravar dado velho.
+   *
+   * Toda escrita que recalcula a categoria passa por aqui: `resolveContext`,
+   * `recordCategorySuggestion` e `setCategoryOverride`. A escrita e
+   * condicional ao que foi lido — decisao da sessao, sugestao, categoria,
+   * origem e `updatedAt` da linha —, entao uma categoria calculada antes de
+   * uma decisao manual mais nova nao a apaga: a condicao falha, sessao e
+   * contato sao relidos e o calculo recomeca sobre o estado novo.
+   *
+   * A decisao do contato mora em outra tabela. `setCategoryOverride` grava o
+   * contato **antes** de recalcular a sessao, e esse recalculo muda a linha da
+   * sessao: quem leu o contato antigo ou escreve antes dele (e e sobrescrito)
+   * ou encontra a linha mudada e relê.
+   */
+  private async writeEffectiveCategory(
+    tenantId: string,
+    sessionId: string,
+    change: {
+      /** Ausente preserva a decisao da sessao; `null` a limpa. */
+      sessionOverride?: SessionCategory | null;
+      suggestion?: { category: SessionCategory; provenance: string; at: Date };
+      /** Autoria da decisao manual que motivou esta escrita. */
+      decision?: { at: Date; actor: string | null };
+    },
+    firstRead: { session?: SessionRow; contact?: ContactRow } = {},
+  ): Promise<{ session: SessionRow; contact: ContactRow }> {
+    let read = firstRead;
+    for (let attempt = 0; attempt < CATEGORY_WRITE_ATTEMPTS; attempt += 1) {
+      const session =
+        read.session ??
+        (await this.prisma.conversationSession.findUniqueOrThrow({
+          where: { tenantId_id: { tenantId, id: sessionId } },
+        }));
+      const contact =
+        read.contact ?? (await this.requireContact(tenantId, session.contactId));
+      read = {};
+
+      const sessionOverride =
+        change.sessionOverride !== undefined
+          ? change.sessionOverride
+          : (session.categoryOverride ?? null);
+      const effective = resolveEffectiveCategory({
+        sessionOverride,
+        override: contact.categoryOverride,
+        suggestion: change.suggestion?.category ?? session.suggestedCategory,
+      });
+      const unchanged =
+        change.sessionOverride === undefined &&
+        !change.suggestion &&
+        !change.decision &&
+        session.category === effective.category &&
+        session.categorySource === effective.source;
+      if (unchanged) return { session, contact };
+
+      const data: Prisma.ConversationSessionUpdateManyMutationInput = {
+        category: effective.category,
+        categorySource: effective.source,
+      };
+      if (change.sessionOverride !== undefined) {
+        data.categoryOverride = change.sessionOverride;
+      }
+      if (change.suggestion) {
+        data.suggestedCategory = change.suggestion.category;
+        data.suggestionProvenance = change.suggestion.provenance;
+        data.suggestedAt = change.suggestion.at;
+      }
+      if (change.decision) {
+        // Autoria de quem decide a categoria vigente: a decisao da sessao
+        // agora tomada, a do contato que vale, ou ninguem.
+        const manualStamp = sessionOverride
+          ? change.decision
+          : contact.categoryOverride
+            ? {
+                at: contact.categoryOverrideAt,
+                actor: contact.categoryOverrideBy,
+              }
+            : null;
+        data.categoryUpdatedAt = manualStamp?.at ?? null;
+        data.categoryUpdatedBy = manualStamp?.actor ?? null;
+      }
+
+      const written = await this.prisma.conversationSession.updateMany({
+        where: {
+          tenantId,
+          id: session.id,
+          categoryOverride: session.categoryOverride ?? null,
+          suggestedCategory: session.suggestedCategory,
+          category: session.category,
+          categorySource: session.categorySource,
+          updatedAt: session.updatedAt,
+        },
+        data,
+      });
+      if (written.count === 1) {
+        const fresh = await this.prisma.conversationSession.findUniqueOrThrow({
+          where: { tenantId_id: { tenantId, id: session.id } },
+        });
+        return { session: fresh, contact };
+      }
     }
-    const updated = await this.prisma.conversationSession.update({
-      where: { tenantId_id: { tenantId: session.tenantId, id: session.id } },
-      data: { category: effective.category, categorySource: effective.source },
-    });
-    return toSnapshot(updated, contact);
+    throw new Error(
+      "Conversation session category kept changing while it was being written.",
+    );
   }
 
   /**
@@ -678,6 +782,13 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
     return contact;
   }
 }
+
+/**
+ * Tentativas da escrita condicional da categoria. Cada falha rele sessao e
+ * contato; contencao real entre decisoes da mesma conversa e rara, entao o
+ * teto so existe para nao girar para sempre.
+ */
+const CATEGORY_WRITE_ATTEMPTS = 5;
 
 type SessionRow = Awaited<
   ReturnType<PrismaClient["conversationSession"]["create"]>

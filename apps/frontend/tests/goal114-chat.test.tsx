@@ -9,7 +9,8 @@
  *   barra de estado e o botão "Contexto" não existem mais;
  * - "Retomar IA" fica no cabeçalho com você atendendo e abre o diálogo de
  *   devolver; assumir, resolver, criar agendamento, mudar a categoria e
- *   ignorar continuam alcançáveis pelo menu "Mais ações" ou pelo contexto;
+ *   ignorar continuam alcançáveis pelo menu "Mais ações" ou pelo contexto
+ *   (Goal115: assumir, criar agendamento e resolver moraram no contexto);
  * - o nome no cabeçalho abre o contexto;
  * - autoria "IA · hh:mm" e "Você · hh:mm", linhas de evento (reserva,
  *   agendamento com "Ver", "Você assumiu a conversa" e o motivo da espera),
@@ -277,47 +278,67 @@ describe("toda ação de hoje continua alcançável", () => {
     expect(release).toHaveBeenCalledWith("conv-1");
   });
 
-  test("o menu Mais ações traz assumir, criar agendamento, categoria, ignorar e resolver", async () => {
+  test("o menu Mais ações é a folha do K6: ver contato, categoria e ignorar; o resto mora no contexto", async () => {
     takeover.mockResolvedValue(conversationFixture({ handling: "HUMAN" }));
-    await renderThread(conversationFixture({ session: liveSession }));
+    await renderThread(
+      conversationFixture({ category: "UNCLASSIFIED", session: liveSession }),
+    );
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: "Mais ações" }));
-    const menu = document.querySelector(".chat-header-more .menu") as HTMLElement;
-    expect(menu).not.toBeNull();
+    const sheet = await screen.findByRole("dialog", { name: "Mais ações" });
     expect(
-      within(menu).getByRole("link", { name: "Criar agendamento" }),
-    ).toHaveAttribute("href", "/agenda/novo");
-    expect(
-      within(menu).getByRole("button", { name: "Mudar categoria" }),
+      within(sheet).getByRole("button", { name: "Ver contato" }),
     ).toBeVisible();
     expect(
-      within(menu).getByRole("button", { name: "Ignorar contato na IA" }),
+      within(sheet).getByRole("button", { name: "Mover para Comercial" }),
     ).toBeVisible();
     expect(
-      within(menu).getByRole("button", { name: "Marcar como resolvida" }),
-    ).toBeEnabled();
+      within(sheet).getByRole("button", { name: "Marcar como pessoal" }),
+    ).toBeVisible();
+    expect(
+      within(sheet).getByRole("button", { name: "Ignorar IA para este contato" }),
+    ).toBeVisible();
+    for (const moved of [
+      "Assumir conversa",
+      "Criar agendamento",
+      "Marcar como resolvida",
+      "Mudar categoria",
+    ]) {
+      expect(within(sheet).queryByText(moved)).toBeNull();
+    }
 
+    await user.click(within(sheet).getByRole("button", { name: "Ver contato" }));
+    const context = await screen.findByRole("dialog", {
+      name: "Contexto da conversa",
+    });
+    expect(
+      within(context).getByRole("link", { name: "Criar agendamento" }),
+    ).toHaveAttribute("href", "/agenda/novo");
     await user.click(
-      within(menu).getByRole("button", { name: "Assumir conversa" }),
+      within(context).getByRole("button", { name: "Assumir conversa" }),
     );
     expect(takeover).toHaveBeenCalledWith("conv-1");
   });
 
-  test("resolver pelo menu chama resolve", async () => {
+  test("resolver pelo contexto chama resolve", async () => {
     resolve.mockResolvedValue(conversationFixture({ status: "CLOSED" }));
     await renderThread(conversationFixture());
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: "Mais ações" }));
+    await user.click(screen.getByRole("button", { name: "Ver contato" }));
+    const context = await screen.findByRole("dialog", {
+      name: "Contexto da conversa",
+    });
     await user.click(
-      screen.getByRole("button", { name: "Marcar como resolvida" }),
+      within(context).getByRole("button", { name: "Marcar como resolvida" }),
     );
 
     expect(resolve).toHaveBeenCalledWith("conv-1");
   });
 
-  test("Mudar categoria abre o contexto com o grupo de categorias", async () => {
+  test("Ver contato abre o contexto com o grupo de categorias", async () => {
     setCategory.mockResolvedValue(
       conversationFixture({ category: "PERSONAL", categorySource: "MANUAL" }),
     );
@@ -325,7 +346,7 @@ describe("toda ação de hoje continua alcançável", () => {
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: "Mais ações" }));
-    await user.click(screen.getByRole("button", { name: "Mudar categoria" }));
+    await user.click(screen.getByRole("button", { name: "Ver contato" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Contexto da conversa",
     });
@@ -334,17 +355,17 @@ describe("toda ação de hoje continua alcançável", () => {
     });
     await user.click(within(group).getByRole("button", { name: "Pessoal" }));
 
-    expect(setCategory).toHaveBeenCalledWith("conv-1", "PERSONAL");
+    expect(setCategory).toHaveBeenCalledWith("conv-1", "PERSONAL", "CONTACT");
   });
 
-  test("Ignorar contato na IA pelo menu pede confirmação antes do efeito", async () => {
+  test("Ignorar IA para este contato pelo menu pede confirmação antes do efeito", async () => {
     setIgnored.mockResolvedValue(conversationFixture({ ignored: true }));
     await renderThread(conversationFixture());
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: "Mais ações" }));
     await user.click(
-      screen.getByRole("button", { name: "Ignorar contato na IA" }),
+      screen.getByRole("button", { name: "Ignorar IA para este contato" }),
     );
     const dialog = await screen.findByRole("dialog", {
       name: "Ignorar este contato na IA?",

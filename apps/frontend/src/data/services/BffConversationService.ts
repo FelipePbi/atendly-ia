@@ -10,6 +10,8 @@ import {
   type SessionCategory,
 } from "../mappers/publicApiSchemas";
 
+export type CategoryScope = "CONVERSATION" | "CONTACT";
+
 export interface ConversationQuery {
   category?: SessionCategory;
   /** Só as conversas desta pessoa do Scheduling (Goal075). */
@@ -109,15 +111,18 @@ export class BffConversationService {
 
   /**
    * Override manual da categoria. `null` limpa o override e devolve a conversa
-   * a classificacao automatica.
+   * a classificacao automatica. `scope` diz onde a decisão vale: `CONTACT`
+   * (padrão do BFF) atravessa a troca de sessão; `CONVERSATION` vale só para a
+   * sessão aberta.
    */
   setCategory(
     id: string,
     category: SessionCategory | null,
+    scope?: CategoryScope,
     signal?: AbortSignal,
   ) {
     return this.http.request({
-      body: { category },
+      body: scope ? { category, scope } : { category },
       method: "PUT",
       path: `/v1/conversations/${encodeURIComponent(id)}/category`,
       schema: routeSchema<Conversation>(

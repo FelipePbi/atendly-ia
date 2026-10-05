@@ -737,12 +737,13 @@ O DTO de conversa ganhou campos **opcionais**; respostas anteriores a esta vers�
 | `ignored`, `ignoredAt` | booleano, data ou `null` | contato ignorado, regra do contato |
 | `aiPaused` | booleano | pausa explícita da IA para o contato (`/bot off`, `/ia_pause`) |
 | `customerId` | string ou `null` | vínculo do contato com a pessoa do Scheduling (Goal017); `null` quando o contato ainda não está vinculado, ausente no estoque anterior a este campo |
+| `categoryScope` | `CONVERSATION`, `CONTACT` ou `null` | de quem é a decisão manual vigente (Goal115): `CONVERSATION` vale só para a sessão aberta, `CONTACT` vale para o contato e atravessa a troca de sessão, `null` é a classificação automática. Opcional: ausente no estoque anterior a este campo |
 | `session` | objeto ou `null` | `id`, `startedAt`, `expiresAt`, `lastContactMessageAt`, `humanHandlingSince` |
 | `contentExpiredThrough` | data ISO ou `null` | até quando o conteúdo desta conversa já foi purgado (Goal023); `null` enquanto nada expirou. Só avança, nunca retrocede. É o campo que a interface lê para dizer que mensagens antigas expiraram — não se infere expiração pela ausência de mensagem. A exclusão é assíncrona e irreversível: o conteúdo apagado não volta, nem aumentando o prazo depois |
 
-Precedência: `ignored` do contato prevalece sobre a sessão; o override manual (`categorySource: MANUAL`) prevalece sobre `suggestedCategory` e atravessa a troca de sessão. A classificação automática nunca escreve override.
+Precedência: `ignored` do contato prevalece sobre a sessão; o override manual (`categorySource: MANUAL`) prevalece sobre `suggestedCategory`. Entre os overrides manuais, o da conversa (`categoryScope: CONVERSATION`) prevalece sobre o do contato (`CONTACT`); só o do contato atravessa a troca de sessão. A classificação automática nunca escreve override.
 
-`PUT /v1/conversations/:id/category` recebe `{ "category": "COMMERCIAL" | "UNCLASSIFIED" | "PERSONAL" | null }`; `null` limpa o override e devolve a conversa à classificação automática. `PUT /v1/conversations/:id/ignore` recebe `{ "ignored": true | false }`. As duas respondem com o DTO de conversa completo.
+`PUT /v1/conversations/:id/category` recebe `{ "category": "COMMERCIAL" | "UNCLASSIFIED" | "PERSONAL" | null, "scope"?: "CONVERSATION" | "CONTACT" }`. `scope` é opcional: ausente vale `CONTACT`, o comportamento anterior, e o corpo repassado à IA é o mesmo de antes; `CONVERSATION` grava só na sessão aberta e não toca o contato; `CONTACT` grava no contato e limpa a decisão da sessão aberta. Um `scope` fora dessa lista é recusado com `400` antes de chamar a IA. `category: null` com `CONTACT` limpa as duas decisões e devolve a conversa à classificação automática; com `CONVERSATION` limpa só a da sessão. `PUT /v1/conversations/:id/ignore` recebe `{ "ignored": true | false }`. As duas respondem com o DTO de conversa completo.
 
 Como as demais mutações, ambas resolvem o negócio pela sessão autenticada e exigem CSRF quando a credencial é o cookie. Nenhuma delas aceita `tenantId` por header, body ou query.
 

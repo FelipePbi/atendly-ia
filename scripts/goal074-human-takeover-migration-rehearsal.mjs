@@ -27,6 +27,11 @@
 //      "invalid input value for enum". O ensaio proprio daquele rename e a
 //      prova 2 do Goal109, na propria suite de integracao da IA.
 //
+//   6. e o leva a coluna `ConversationSession.categoryOverride` (Goal115): a
+//      decisao de categoria "so esta conversa". Sem isto a suite de
+//      persistencia falha com "The column ConversationSession.categoryOverride
+//      does not exist in the current database".
+//
 // Nenhuma credencial aparece na saida: so contagens e rotulos. Sondas
 // (`probe-%`) nunca entram nas contagens de fixture.
 
@@ -67,6 +72,16 @@ const GOAL109_MIGRATION_SQL = path.join(
   "prisma",
   "migrations",
   "20261003120000_goal109_avenly_human_control_source",
+  "migration.sql",
+);
+
+const GOAL115_MIGRATION_SQL = path.join(
+  repositoryRoot,
+  "apps",
+  "ai-orchestrator",
+  "prisma",
+  "migrations",
+  "20261004120000_goal115_session_category_override",
   "migration.sql",
 );
 
@@ -371,12 +386,60 @@ async function alignAiDurabilityTargetWithGoal109(target) {
   }
 }
 
+/**
+ * Leva o banco de durabilidade da IA a coluna `categoryOverride` da sessao
+ * (Goal115). A migration usa `ADD COLUMN IF NOT EXISTS`, entao reaplicar sobre
+ * banco ja alinhado nao muda nada.
+ */
+async function alignAiDurabilityTargetWithGoal115(target) {
+  const database = decodeURIComponent(
+    target.maintenance.pathname.replace(/^\//u, ""),
+  );
+  const durability = new URL(target.maintenance.href);
+  durability.pathname = `/${database}_goal004`;
+
+  const client = new Client({ connectionString: durability.href });
+  try {
+    await client.connect();
+  } catch {
+    console.log(
+      "durability target not provisioned yet — skipping the Goal115 column",
+    );
+    return;
+  }
+  try {
+    const sessionTable = await client.query(
+      `SELECT to_regclass('"ConversationSession"') AS present`,
+    );
+    if (!sessionTable.rows[0].present) {
+      console.log(
+        "durability target has no ConversationSession table yet — skipping the Goal115 column",
+      );
+      return;
+    }
+    const applied = await applyMigrationFile(client, GOAL115_MIGRATION_SQL);
+    if (applied !== true) {
+      console.error(
+        `goal074:human-takeover-migration-rehearsal FAILED — durability target column failed applying ${GOAL115_MIGRATION_SQL}: ${applied}`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    console.log(
+      `durability target aligned with the Goal115 ConversationSession.categoryOverride column: ${database}_goal004`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
 export async function main() {
   const target = rehearsalTarget(process.env);
 
   await rehearse(target);
   await prepareAiDurabilityTarget(target);
   await alignAiDurabilityTargetWithGoal109(target);
+  await alignAiDurabilityTargetWithGoal115(target);
 
   if (process.exitCode) {
     console.error(

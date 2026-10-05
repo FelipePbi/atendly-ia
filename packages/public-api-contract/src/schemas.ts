@@ -713,6 +713,9 @@ export const conversationSchema = z.object({
   // schema so passa a aceitar os campos e as operacoes novas.
   category: sessionCategorySchema.optional(),
   categorySource: z.enum(["AUTOMATIC", "MANUAL"]).optional(),
+  // Goal115: de quem e a decisao manual vigente. `null` na classificacao
+  // automatica, ausente no estoque anterior a este campo.
+  categoryScope: z.enum(["CONVERSATION", "CONTACT"]).nullish().optional(),
   suggestedCategory: sessionCategorySchema.nullish().optional(),
   handling: z.enum(["AI", "HUMAN"]).optional(),
   ignored: z.boolean().optional(),

@@ -6543,3 +6543,98 @@ Não houve conferência humana em aparelho real.
 - **Escopo.** Os 25 arquivos estão dentro do critério 7 do Goal, sem exceção. Nada mudou em `e2e/` além de `targets.json`, nem em `scripts/` além de `visual-responses.test.mjs`.
 - **Aceito sem prova completa.** Os três controles negativos, a execução de controle do §3.3, as capturas de antes e a comparação por pixel de C1 e C4 contra o antes vêm da execução do Developer e não foram refeitos pelo Tech Lead. `test:gate`, `validate:core`, `validate:ui`, `validate:integration` e `git diff --check` foram aceitos pelo exit 0, não por veredito `PASSED`.
 - **Ambiente.** `test:gate` exige `npx prisma generate` em `apps/ai-orchestrator`. A guarda dos testes de integração recusa o PostgreSQL do Docker, cuja porta interna é 5432, e por isso `validate:integration` rodou num cluster criado com `initdb`. O BFF de desenvolvimento em `localhost:3002` respondia 500 no login da conta visual. Detalhe no [review114](reviews/114-review.md).
+
+## O menu do chat e "Marcar como pessoal" por conversa ou por contato, do Goal115
+
+Texto do Goal115 (decisão [D-129](DECISIONS.md), `PROPOSED`), escrito na rodada 2 (FIX-001) contra os cinco blockers do review115 da rodada 1. A rodada 1 entregou o código e os testes de unidade, sem a conferência visual, sem `validate:integration` verde, sem os controles negativos depois da última edição e sem os registros. Toda contagem abaixo é de execução da rodada 2, depois da última edição de código; nenhuma foi copiada de rodada anterior.
+
+### Ambiente
+
+Pilha própria para o `visual:compare`: BFF em 3012, Scheduling em 3013 e IA em 3010, código da worktree, sobre bancos descartáveis (`g115_bff`, `g115_sched` e `g115_ai`) num PostgreSQL 18 local em `127.0.0.1:55444`, com `prisma migrate deploy` nos três serviços (22, 26 e 20 migrations, a do Goal115 entre as da IA). O PostgreSQL de antes, na porta 55433, não subiu (`could not bind IPv4 address: Permission denied`), e o mesmo diretório de dados foi aberto na 55444. O BFF de desenvolvimento não foi tocado. O `validate:integration` rodou com `BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55444/avenly_bff_test`.
+
+### Migration aplicada em banco descartável
+
+- A migration `20261004120000_goal115_session_category_override` entrou em `prisma migrate deploy` do `g115_ai` (banco vazio, histórico inteiro) e no ensaio `rehearse:goal028-release-migrations` do `validate:integration`, que aplica todo o histórico do zero.
+- A primeira execução de `validate:integration` falhou em `test:ai-orchestrator-transport-durability` com `The column ConversationSession.categoryOverride does not exist`, porque o banco `avenly_bff_test_goal004` da suíte de durabilidade é montado pelo ensaio da Goal074 e não tinha a coluna. Exceção autorizada: `alignAiDurabilityTargetWithGoal115` em `scripts/goal074-human-takeover-migration-rehearsal.mjs`, no padrão de `alignAiDurabilityTargetWithGoal109`. Saída do ensaio: `durability target aligned with the Goal115 ConversationSession.categoryOverride column: avenly_bff_test_goal004`.
+- Com isso restou uma falha em `apps/ai-orchestrator/tests/integration/goal109-avenly-human-control-source.test.ts` (prova 2): o teste aplica só as migrations anteriores ao Goal109 e semeia pela `SessionService` real, que lê `categoryOverride`. Ajuste: o preparo aplica também a migration do Goal115, com `const GOAL115_MIGRATION` e uma chamada `client.query(migrationSql(GOAL115_MIGRATION))` depois do laço das migrations anteriores (3 linhas). A asserção da prova não mudou.
+
+### Conferência visual (`visual:compare`)
+
+Execução final: `npm run visual:compare -- --target K6,K1,K2,K3,K4,Conversas:C1,C4` com `VISUAL_BFF_URL=http://127.0.0.1:3012` e `VISUAL_BFF_ORIGIN=http://localhost:3001`, 28 pares (7 alvos × 4 devices), nenhum com erro, saída 0. Percentual de pixels diferentes por device:
+
+| Quadro | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| K6, antes (menu "Mais ações" da rodada 1) | 43,1% | 72,9% | 75,0% | 81,0% |
+| K6, depois | 0,5% | 0,6% | 0,8% | 1,3% |
+| K1 | 0,5% | 2,8% | 0,4% | 0,5% |
+| K2 | 2,1% | 0,9% | 2,0% | 1,0% |
+| K3 | 6,2% | 2,7% | 2,9% | 2,4% |
+| K4 | 0,0% | 0,0% | 0,5% | 0,5% |
+| Conversas:C1 | 1,5% | 0,4% | 0,2% | 0,3% |
+| Conversas:C4 | 1,0% | 0,1% | 0,7% | 0,3% |
+
+K1 a K4, C1 e C4 saíram com os mesmos números da captura de antes (a do Goal114, repetida nesta rodada). Comparação por pixel do `app.png` de antes e de depois (`sharp`, limiar 30 na soma RGB): 21 dos 24 pares são idênticos; K1, K2 e K3 no desktop diferem em 43 pixels, todos na região x 20 a 40 e y 110 a 751, o serrilhado dos ícones da barra lateral.
+
+**O que as capturas do K6 mostraram.** Abri o `side-by-side.png` dos quatro devices. Na primeira execução do K6 o tablet paisagem deu 4,9%: no quadro paisagem do protótipo o diálogo tem 440 px e o app usava 480 px, porque o ponto dos 440 px estava em 1280 px. Corrigido em `avenly-conversations.css`: `.chat-sheet` tem 440 px de 1024 px em diante e 480 px de 768 a 1023 px (o quadro retrato). Depois disso o paisagem deu 0,8%. É o desvio da folha centrada a partir de 768 px, em D-129 (7).
+
+**Divergências que restam no K6**, as quatro primeiras declaradas no Goal e em D-129:
+
+- o subtítulo do cabeçalho atrás do escurecido, "IA ativa" no app e "Não classificada" no quadro;
+- a barra de status do iPhone nos quadros mobile;
+- o item "Notificações" e a casca, e, de 1024 px em diante, a coluna da lista com as divergências de D-127;
+- dias da semana e datas calculados de `{today}`;
+- **não declaradas no Goal, observadas e mantidas** (registradas em D-129): atrás do escurecido o quadro desenha uma conversa simplificada e o app mostra a conversa real, com a pílula "Hoje", a hora da mensagem e o campo de mensagem; a aba "Comercial" da coluna da lista atrás do escurecido não traz o contador; no celular o botão "Marcar como pessoal" aparece em `#0b484c`, a cor de `:hover`, contra `#0f5f63` no quadro, porque o ponteiro do Playwright fica onde estava a linha antes de a folha expandir. Nenhuma dessas é diferença do menu em si. Não afirmo igualdade perfeita: o número do K6 vai de 0,5% a 1,3%, e o que sobra é o que está listado acima.
+
+### Controles negativos (§5.2)
+
+Rodados depois da última edição de código (a do ponto dos 440 px no CSS; depois dela só mudaram um teste de integração e um script de ensaio), por mutação na fonte, teste dirigido, reprovação lida e arquivo devolvido por `cp` da cópia e conferido com `cmp` (sem diferença nos três):
+
+| Controle | Mutação | Comando | Reprovou |
+| --- | --- | --- | --- |
+| (a) sem a decisão da sessão na precedência | removido o bloco `if (input.sessionOverride) { return { category: input.sessionOverride, source: "MANUAL" }; }` de `resolveEffectiveCategory` em `session-policy.ts` | `npx vitest run tests/session` em `apps/ai-orchestrator` | 8 testes, entre eles `mensagem nova na mesma sessao e sugestao do agente nao desfazem a decisao`: `AssertionError: expected {id: 'conversationSession-1', …} to match object { category: 'PERSONAL', …}` |
+| (b) `CONVERSATION` grava o contato | em `SessionService.setCategoryOverride`, `if (scope === "CONTACT")` virou `if (scope === "CONTACT" or scope === "CONVERSATION")`, com o operador `\|\|` | `npx vitest run tests/session` em `apps/ai-orchestrator` | 4 testes, entre eles `a sessao seguinte volta a decisao do contato, que nao foi tocada` e `deixa a sessao aberta Pessoal sem tocar o contato, e a IA nao responde` (`expected … to match { categoryOverride: null …}`) |
+| (c) o botão grava sempre `CONTACT` | em `ConversationActionsSheet.tsx`, `onClick={() => onMarkPersonal(scope)}` virou `onMarkPersonal("CONTACT")` | `npx vitest run tests/goal115-chat-menu.test.tsx` em `apps/frontend` | 1 de 21: `o botão grava Só esta conversa com scope CONVERSATION e a folha fecha no sucesso` (`expected "vi.fn()" to be called with arguments`) |
+
+Depois dos três, `tests/session` voltou a 77 de 77 e `goal115-chat-menu` a 21 de 21.
+
+### Testes novos e ajustes
+
+- Novos: `apps/ai-orchestrator/tests/session/goal115-session-category-scope.test.ts` (precedência, escopo, escritas condicionais entrelaçadas, sessão seguinte) e `apps/frontend/tests/goal115-chat-menu.test.tsx` (21 testes: folha, escolha padrão, nada gravado antes do botão, erro, foco, `Escape`, novo destino das ações).
+- Ampliados: `tests/session/session-policy.test.ts` e `tests/internal/conversation-controls.routes.test.ts` (IA), `apps/bff/tests/conversation-controls.integration.test.ts` (9 testes, executados, ver abaixo) e `scripts/tests/visual-responses.test.mjs` (K6; 23 testes).
+- Ajustes em testes existentes, só pelo lugar novo das ações e sem afrouxar asserção: `goal114-chat.test.tsx` e `goal017-human-handling.test.tsx` (assumir, criar agendamento e resolver passam a ser provados no contexto, e o menu é a folha do K6), `goal017-contact-profile.test.tsx` (o rótulo de ignorar passou de "Ignorar contato na IA" para "Ignorar IA para este contato"); a chamada de `setCategory` em `goal017-human-handling` passou a esperar o terceiro argumento, `"CONTACT"`; `assistant.service.test.ts` só mudou o número de linha de `modules/internal/routes.ts` de 775 para 779 no conjunto de emissores de texto; `goal109-avenly-human-control-source.test.ts` (preparo, descrito acima).
+
+### Execução final
+
+Todas as linhas rodaram na rodada 2 sobre a árvore final (tipo e lint foram repetidos depois das duas últimas edições, a do teste da Goal109 e a do ensaio).
+
+| Comando | Resultado |
+| --- | --- |
+| `npm run typecheck` em `apps/ai-orchestrator`, `apps/bff` e `apps/frontend` | saída 0 nos três |
+| `rtk proxy npm run lint` nos três | saída 0 nos três |
+| `npm test` em `apps/ai-orchestrator` | 96 arquivos passaram, 14 pulados; **1223** testes passaram, 101 pulados (integração, rodada no `validate:integration`) |
+| `npm test` em `apps/bff` | 20 arquivos passaram, 48 pulados; **157** passaram, 361 pulados (integração) |
+| `npx vitest run tests/conversation-controls.integration.test.ts` em `apps/bff` com `BFF_RUN_INTEGRATION_TESTS=true` e o banco descartável | 1 arquivo, **9** testes passando, **nenhum pulado**; sem as variáveis, o mesmo arquivo sai "9 skipped" |
+| `npm test` em `apps/frontend` | **158** arquivos, **1975** testes passando |
+| `node --test scripts/tests/visual-responses.test.mjs` | 23 testes, 23 passando |
+| `npm run test:gate` | **256** testes, 256 passando, 0 falhas |
+| `npm run validate:core` | `PASSED`: 17 passos, 15 passaram, 0 falharam, 2 pulados e reportados; testes dos serviços dentro dele: IA 1223, Scheduling 543, frontend 1975 |
+| `npm run validate:ui`, nas cinco larguras 360, 390, 768, 1024 e 1440 | **169** passed, "public UI gate retries: 0 — every test passed on its first attempt" |
+| `npm run validate:integration` com `BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55444/avenly_bff_test` | `PASSED`: **36** de 36 passos, 0 falharam, 0 pulados. Testes: BFF integração 68 arquivos e **518** passando (as nove de `conversation-controls` entre elas, sem pulo), Scheduling 20 arquivos e 152, IA durabilidade 11 arquivos e 77, IA depuração de conteúdo 3 arquivos e 24; o gate autenticado (`rehearse:goal033-authenticated-ui`) passou **275** testes, "authenticated gate retries: 0 — every test passed on its first attempt" |
+| `git diff --check` | saída 0 |
+
+A primeira execução de `validate:integration` da rodada saiu 1 pelos dois motivos descritos em "Migration aplicada em banco descartável" e não vale como veredito; a da tabela é a segunda, depois dos dois ajustes.
+
+Arquivos mudados nesta rodada: `avenly-conversations.css` (ponto dos 440 px), `scripts/goal074-human-takeover-migration-rehearsal.mjs`, `goal109-avenly-human-control-source.test.ts` e os quatro registros (D-129, delta de `CURRENT_STATE.md`, esta seção e `DATA_MIGRATION.md` §24).
+
+### Não executado
+
+Conferência em aparelho real; o Goal pede as capturas do `visual:compare`, não aparelho.
+
+**Nota de fechamento — review115, 2026-10-04.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima:
+
+- **Decisão.** D-129 ACCEPTED na rodada 2, sem blocker, depois de 5 blockers na rodada 1. Na rodada 1 a WU-04 (menu) e a WU-05 (provas e registros) ficaram `BLOCKED`, e a WU-17 (`validate:integration`) saiu com exit 1 pela coluna ausente no banco `_goal004`.
+- **Gates do IA Loop, rodada 2, sobre a árvore final, todos `PASSED` com exit 0:** `typecheck` da IA, do BFF e do frontend (WU-06 a WU-08), `lint` do frontend (WU-09, 20 s), testes alvo `session` da IA (WU-10, 77 passando e 12 pulados), `conversation-controls` do BFF (WU-11, 9 pulados, porque o gate não recebe as variáveis de integração), `goal115` do frontend (WU-12, 21 de 21), suíte do frontend (WU-13, 158 arquivos e 1975 testes), `test:gate` (WU-14), `validate:core` (WU-15, 114 s), `validate:ui` (WU-16, 49 s), `validate:integration` (WU-17, 751 s) e `git diff --check` (WU-18). Snapshot aceito: 31 arquivos (27 rastreados e 4 novos não rastreados), hash do diff `c20ac04c…`.
+- **Conferência do Tech Lead.** Pilha própria descartável: PostgreSQL 18 com `initdb` em `127.0.0.1:55471`, bancos `g115r_*`, `prisma migrate deploy` nos três serviços, BFF em 3022, IA em 3020 e Scheduling em 3023. No banco da IA, `categoryOverride` é `SessionCategory`, anulável e sem default. `npm run visual:compare -- --target K6,K1,K2,K3,K4,Conversas:C1,C4` deu 28 pares, exit 0, com os percentuais da tabela acima. Os quatro `side-by-side.png` do K6, mais K1 tablet-retrato e K3 mobile, foram abertos. Reexecutados: `tests/session` mais `conversation-controls.routes` da IA, 96 de 96; `goal115`, `goal114` e os `goal017` ajustados do frontend, 74 de 74; `conversation-controls.integration` do BFF, 9 de 9 executados contra banco descartável com o env sintético do `validate:integration` (com o env herdado do shell, 6 falhas com 502, por ambiente). A pilha e os dados foram removidos no fim.
+- **Escopo.** Os 31 arquivos estão dentro do critério 9 do Goal, com uma exceção autorizada no review da rodada 1: `alignAiDurabilityTargetWithGoal115` em `scripts/goal074-human-takeover-migration-rehearsal.mjs`. Nada mudou em `e2e/` além de `targets.json`.
+- **Aceito sem prova completa.** Os três controles negativos, as capturas de antes e a comparação por pixel contra o antes vêm da execução do Developer e não foram refeitos pelo Tech Lead. `validate:integration` foi aceito pelo `PASSED` da WU-17, sem reexecução completa pelo Tech Lead.
+- **Ambiente.** O BFF de desenvolvimento em `localhost:3002` não respondia nas duas rodadas, e o `visual:compare` só rodou com pilhas próprias e `VISUAL_BFF_URL` e `VISUAL_BFF_ORIGIN`. Migration nova da IA lida pela `SessionService` exige alinhar o banco `_goal004` no ensaio `goal074` e o preparo dos testes de integração que aplicam só parte do histórico. Detalhe no [review115](reviews/115-review.md).

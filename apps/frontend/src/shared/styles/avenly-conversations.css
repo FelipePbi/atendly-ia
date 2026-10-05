@@ -1083,11 +1083,6 @@
 .chat-header-more {
   flex: none;
 }
-@media (min-width: 768px) {
-  .chat-header-more .menu {
-    right: -6px;
-  }
-}
 @media (min-width: 1024px) {
   .chat-header-back {
     visibility: hidden;
@@ -1964,5 +1959,274 @@ button.message-image-tile:focus-visible {
   .conversation-row-avatar .avatar {
     width: 40px;
     height: 40px;
+  }
+}
+
+/* Folha "Mais ações" do chat (Goal115, quadro K6). Valores portados do
+   markup do quadro; as medidas com padding e borda são content-box, como lá. */
+@keyframes at-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes at-sheet {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes at-dialog {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes at-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.chat-sheet-wrap {
+  position: fixed;
+  z-index: var(--at-z-dialog);
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(34, 30, 26, 0.38);
+  animation: at-fade 0.2s ease-out both;
+}
+.chat-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 20px max(46px, calc(12px + env(safe-area-inset-bottom, 0px)));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 24px 24px 0 0;
+  background: #fffdfa;
+  box-shadow: 0 -12px 40px rgba(34, 30, 26, 0.18);
+  color: #221e1a;
+  line-height: normal;
+  animation: at-sheet 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.chat-sheet * {
+  box-sizing: content-box;
+}
+.chat-sheet-handle {
+  width: 40px;
+  height: 4px;
+  margin-bottom: 8px;
+  flex: none;
+  align-self: center;
+  border-radius: 2px;
+  background: #d6cec2;
+}
+.chat-sheet-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 4px;
+  border: 0;
+  border-bottom: 1px solid #e5ded4;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: normal;
+  text-align: left;
+  cursor: pointer;
+}
+.chat-sheet-row svg {
+  flex: none;
+}
+.chat-sheet-row:hover:not(:disabled) {
+  background: #f7f4ef;
+}
+.chat-sheet-row:focus-visible {
+  outline-offset: -2px;
+}
+.chat-sheet-row:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.chat-sheet-row.is-last {
+  border-bottom: 0;
+}
+.chat-sheet-personal.is-open {
+  margin: 0 -8px;
+  padding: 14px 12px 6px;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid #e5ded4;
+  border-radius: 12px;
+  background: #f7f4ef;
+}
+.chat-sheet-personal.is-open > .chat-sheet-row {
+  padding: 0;
+  border: 0;
+  font-weight: 600;
+}
+.chat-sheet-personal.is-open > .chat-sheet-row:hover {
+  background: transparent;
+}
+.chat-sheet-options {
+  padding: 12px 0 8px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: at-reveal 0.25s ease-out both;
+}
+.chat-sheet-radios {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-sheet-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e5ded4;
+  border-radius: 12px;
+  background: #fffdfa;
+  cursor: pointer;
+}
+.chat-sheet-option.is-checked {
+  border: 1.5px solid #0f5f63;
+  background: #edf4f3;
+}
+.chat-sheet-option:has(input:focus-visible) {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: var(--at-focus-ring-offset);
+}
+.chat-sheet-dot {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+.chat-sheet .chat-sheet-option:not(.is-checked) .chat-sheet-dot {
+  box-sizing: border-box;
+  border: 1.5px solid #d6cec2;
+}
+.chat-sheet-option.is-checked .chat-sheet-dot {
+  background: #0f5f63;
+}
+.chat-sheet-option-copy {
+  display: flex;
+  flex-direction: column;
+}
+.chat-sheet-option-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.chat-sheet-option-hint {
+  color: #5f574e;
+  font-size: 13px;
+}
+.chat-sheet-submit {
+  height: 52px;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0f5f63;
+  color: #f7f4ef;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: normal;
+  cursor: pointer;
+  transition:
+    background-color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1),
+    border-color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1),
+    color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.12s ease,
+    box-shadow 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.chat-sheet-submit:hover:not(:disabled) {
+  background: #0b484c;
+}
+.chat-sheet-submit:active:not(:disabled) {
+  background: #0b484c;
+  transform: scale(0.98);
+}
+.chat-sheet-submit:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.chat-sheet-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in oklch, var(--danger), white 70%);
+  color: var(--danger);
+  font-size: 14px;
+}
+@media (min-width: 768px) {
+  .chat-sheet-wrap {
+    align-items: center;
+  }
+  .chat-sheet {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    width: 480px;
+    max-width: calc(100vw - 32px);
+    max-height: calc(100dvh - 80px);
+    padding: 22px 24px 24px;
+    border-radius: 20px;
+    box-shadow: 0 24px 64px rgba(34, 30, 26, 0.28);
+    animation: at-dialog 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  .chat-sheet-handle {
+    display: none;
+  }
+}
+@media (min-width: 1024px) {
+  .chat-sheet {
+    width: 440px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-sheet-wrap,
+  .chat-sheet,
+  .chat-sheet-options,
+  .chat-sheet-submit {
+    animation: none;
+    transition: none;
   }
 }

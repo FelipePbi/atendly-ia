@@ -73,6 +73,7 @@ import {
   purgeExpiredInboxEvents,
 } from "../retention/inbox-retention.js";
 import { SchedulingClient } from "../scheduling-service/client.js";
+import { resolveCategoryScope } from "../session/session-policy.js";
 import { SessionService } from "../session/SessionService.js";
 import {
   AI_CONVERSATION_STYLES,
@@ -136,6 +137,9 @@ const awaitingHumanQuerySchema = z.object({
 
 const categoryOverrideSchema = z.object({
   category: z.enum(["COMMERCIAL", "UNCLASSIFIED", "PERSONAL"]).nullable(),
+  // Goal115: de quem e a decisao. Ausente vale `CONTACT`, o comportamento
+  // anterior; `CONVERSATION` vale so na sessao aberta.
+  scope: z.enum(["CONVERSATION", "CONTACT"]).optional(),
 });
 
 const ignoreContactSchema = z.object({ ignored: z.boolean() });
@@ -899,6 +903,9 @@ export async function registerInternalRoutes(
   /**
    * Override manual da categoria. `category: null` limpa o override e devolve a
    * conversa a classificacao automatica; qualquer valor prevalece sobre ela.
+   * `scope` (Goal115) escolhe entre a decisao "so esta conversa"
+   * (`CONVERSATION`) e a do contato (`CONTACT`, o padrao); ver
+   * `SessionService.setCategoryOverride`.
    */
   app.put("/internal/conversations/:id/category", async (request) => {
     const { tenantId, userId } = trustedTenantContext(request);
@@ -916,6 +923,7 @@ export async function registerInternalRoutes(
       tenantId,
       conversationId: id,
       category: body.category,
+      ...(body.scope ? { scope: body.scope } : {}),
       actor: userId,
     });
     return internalData(
@@ -1638,6 +1646,7 @@ interface ConversationDtoInput {
     ignored: boolean;
     ignoredAt: Date | null;
     aiPaused: boolean;
+    categoryOverride?: "COMMERCIAL" | "UNCLASSIFIED" | "PERSONAL" | null;
   } | null;
   sessions?: Array<{
     id: string;
@@ -1647,6 +1656,7 @@ interface ConversationDtoInput {
     category: "COMMERCIAL" | "UNCLASSIFIED" | "PERSONAL";
     categorySource: "AUTOMATIC" | "MANUAL";
     suggestedCategory: "COMMERCIAL" | "UNCLASSIFIED" | "PERSONAL" | null;
+    categoryOverride?: "COMMERCIAL" | "UNCLASSIFIED" | "PERSONAL" | null;
     humanHandling: boolean;
     humanHandlingSince: Date | null;
   }>;
@@ -1683,6 +1693,15 @@ function conversationDto(conversation: ConversationDtoInput) {
     category: session?.category ?? "UNCLASSIFIED",
     categorySource: session?.categorySource ?? "AUTOMATIC",
     suggestedCategory: session?.suggestedCategory ?? null,
+    // Goal115: de quem e a decisao manual vigente — `CONVERSATION` (so esta
+    // sessao), `CONTACT` ou `null` (classificacao automatica). Sem sessao
+    // aberta nao ha categoria vigente para explicar.
+    categoryScope: session
+      ? resolveCategoryScope({
+          sessionOverride: session.categoryOverride,
+          override: conversation.contact?.categoryOverride,
+        })
+      : null,
     // "Voce atendendo" x "IA atendendo": estado de atendimento, nao ciclo de
     // vida. Aberto ou lido nao muda nada disto.
     handling: humanHandling ? "HUMAN" : "AI",

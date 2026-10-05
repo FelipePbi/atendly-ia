@@ -334,6 +334,10 @@ model ConversationSession {
   categorySource    CategorySource  @default(AUTOMATIC)
   categoryUpdatedAt DateTime?
   categoryUpdatedBy String?
+  /// Decisao manual "so esta conversa" (Goal115). Vale apenas nesta sessao e
+  /// prevalece sobre `Contact.categoryOverride`; toda sessao nova nasce nula,
+  /// por isso a conversa seguinte volta a regra do contato e a classificacao.
+  categoryOverride  SessionCategory?
 
   /// Sugestao do agente, com proveniencia. Nunca vira override manual.
   suggestedCategory    SessionCategory?

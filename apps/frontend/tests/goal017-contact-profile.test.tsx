@@ -254,7 +254,7 @@ describe("ignorar na IA pela tela real, com confirmação antes do efeito", () =
       screen.getByRole("button", {
         name: conversation.ignored
           ? "Voltar a usar na IA"
-          : "Ignorar contato na IA",
+          : "Ignorar IA para este contato",
       }),
     );
     return { dialog: await screen.findByRole("dialog"), user };

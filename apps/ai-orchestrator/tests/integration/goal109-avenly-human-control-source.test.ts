@@ -33,6 +33,7 @@ const migrationsRoot = path.resolve(
   "../../prisma/migrations",
 );
 const GOAL109_MIGRATION = "20261003120000_goal109_avenly_human_control_source";
+const GOAL115_MIGRATION = "20261004120000_goal115_session_category_override";
 
 const TENANT = "tenant-goal109-human-control";
 const CHANNEL = "channel-goal109-human-control";
@@ -127,6 +128,8 @@ describe.skipIf(!databaseUrl)(
       for (const directory of previousMigrations()) {
         await client.query(migrationSql(directory));
       }
+      // Coluna aditiva e alheia ao enum: o `SessionService` do semeio a lê.
+      await client.query(migrationSql(GOAL115_MIGRATION));
 
       // Canal, conversa, contato e sessão pelo caminho do produto; nenhuma
       // dessas tabelas usa o enum, então o client atual escreve nelas.

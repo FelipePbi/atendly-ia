@@ -44,22 +44,44 @@ export function isSessionExpired(input: {
 }
 
 /**
+ * De quem e a decisao manual vigente: so desta sessao (`CONVERSATION`), do
+ * contato (`CONTACT`), ou de ninguem (`null`, classificacao automatica).
+ */
+export type CategoryScope = "CONVERSATION" | "CONTACT";
+
+/**
  * Categoria vigente da sessao.
  *
- * O override manual prevalece sobre qualquer classificacao automatica e
- * atravessa a troca de sessao; a sugestao do agente so vale quando ninguem
- * decidiu manualmente. Sem override nem sugestao, a conversa fica em
- * `Nao classificadas` — nunca em um palpite.
+ * Precedencia: decisao da sessao > decisao do contato > sugestao >
+ * `Nao classificadas`. A decisao mais especifica e mais recente vence: "so
+ * esta conversa" vale apenas na sessao em que foi tomada, e a sessao seguinte
+ * nasce sem ela; o override do contato atravessa a troca de sessao; a sugestao
+ * do agente so vale quando ninguem decidiu manualmente. Sem decisao nem
+ * sugestao, a conversa fica em `Nao classificadas` — nunca em um palpite.
  */
 export function resolveEffectiveCategory(input: {
+  sessionOverride?: SessionCategory | null;
   override?: SessionCategory | null;
   suggestion?: SessionCategory | null;
 }): { category: SessionCategory; source: CategorySource } {
+  if (input.sessionOverride) {
+    return { category: input.sessionOverride, source: "MANUAL" };
+  }
   if (input.override) return { category: input.override, source: "MANUAL" };
   if (input.suggestion) {
     return { category: input.suggestion, source: "AUTOMATIC" };
   }
   return { category: "UNCLASSIFIED", source: "AUTOMATIC" };
+}
+
+/** Escopo da decisao manual que `resolveEffectiveCategory` faria valer. */
+export function resolveCategoryScope(input: {
+  sessionOverride?: SessionCategory | null;
+  override?: SessionCategory | null;
+}): CategoryScope | null {
+  if (input.sessionOverride) return "CONVERSATION";
+  if (input.override) return "CONTACT";
+  return null;
 }
 
 /**

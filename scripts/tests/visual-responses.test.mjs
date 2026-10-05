@@ -112,9 +112,9 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, I1, C1 a C4 e K1 a K4 declaram responses", () => {
+test("targets.json: só W1, I1, C1 a C4 e K1 a K4 e K6 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["C1", "C2", "C3", "C4", "I1", "K1", "K2", "K3", "K4", "W1"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["C1", "C2", "C3", "C4", "I1", "K1", "K2", "K3", "K4", "K6", "W1"]);
   for (const target of declaring) {
     const owner = ["W1", "I1"].includes(target.code) ? "Mais-WhatsApp-Importacao-Conta.dc.html" : "Conversas-e-Chat.dc.html";
     assert.equal(target.file, owner, `${target.code} declara responses no arquivo errado`);
@@ -293,8 +293,22 @@ test("targets.json: K4 é conversa pessoal ignorada", () => {
   assert.deepEqual(messages.map((message) => message.source), ["CUSTOMER", "OWNER", "CUSTOMER"]);
 });
 
+test("targets.json: K6 abre o menu da Renata não classificada e toca em Marcar como pessoal", () => {
+  const { target, conversation, messages, events } = chatFrame("K6");
+  assert.equal(target.label, "Chat · opções");
+  assert.deepEqual(target.steps, [{ clickRole: { name: "Mais ações", role: "button" } }, { click: "Marcar como pessoal" }]);
+  assert.equal(conversation.customerName, "Renata");
+  assert.equal(conversation.category, "UNCLASSIFIED");
+  assert.equal(conversation.ignored, false);
+  assert.equal(conversation.humanHandoff, false);
+  assert.notEqual(conversation.handling, "HUMAN");
+  assert.deepEqual(messages.map((message) => message.body), ["Oi Camila, tudo bem? 🙂"]);
+  assert.deepEqual(events, []);
+  for (const entry of target.responses) assert.equal(entry.method, "GET");
+});
+
 test("targets.json: a resposta de cada Chat só vale para o GET exato da sua conversa", () => {
-  for (const code of ["K1", "K2", "K3", "K4"]) {
+  for (const code of ["K1", "K2", "K3", "K4", "K6"]) {
     const { target, id } = chatFrame(code);
     for (const own of [`/v1/conversations/${id}`, `/v1/conversations/${id}/messages`, `/v1/conversations/${id}/events`]) {
       assert.ok(pickFixedResponse(target, "GET", own), `${code}: ${own} precisa casar`);

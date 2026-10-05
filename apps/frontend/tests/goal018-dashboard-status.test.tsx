@@ -219,7 +219,7 @@ describe("checklist pós-onboarding da Home", () => {
     // Quarto item do vault, agora com produtor real (Goal019 §9): `false` na
     // leitura é "ainda não testou", nunca "concluído".
     expect(
-      screen.getByRole("listitem", { name: "Concluir o teste da IA: pendente" }),
+      screen.getByRole("listitem", { name: "Fazer o teste real: pendente" }),
     ).toBeInTheDocument();
     expect(screen.getByText("1 de 4 passos concluídos")).toBeVisible();
     expect(screen.queryByText(/teste concluído/i)).toBeNull();

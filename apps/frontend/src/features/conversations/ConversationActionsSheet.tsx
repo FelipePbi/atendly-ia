@@ -69,13 +69,17 @@ export function ChatSheetShell({
   className,
   onClose,
   title,
+  titleId: visibleTitleId,
 }: {
   children: ReactNode;
   className?: string;
   onClose: () => void;
   title: string;
+  /** Id de um título visível dentro de `children`; sem ele a casca traz um título só para leitor de tela. */
+  titleId?: string;
 }) {
-  const titleId = useId();
+  const ownTitleId = useId();
+  const titleId = visibleTitleId ?? ownTitleId;
   const panelRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
 
@@ -131,9 +135,11 @@ export function ChatSheetShell({
         ref={panelRef}
         role="dialog"
       >
-        <h2 className="sr-only" id={titleId}>
-          {title}
-        </h2>
+        {!visibleTitleId && (
+          <h2 className="sr-only" id={titleId}>
+            {title}
+          </h2>
+        )}
         <div aria-hidden="true" className="chat-sheet-handle" />
         {children}
       </section>

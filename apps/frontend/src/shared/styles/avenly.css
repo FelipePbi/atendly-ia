@@ -4709,6 +4709,7 @@ p {
 }
 .dashboard-date {
   color: var(--muted);
+  line-height: normal;
   font-size: 14px;
 }
 .home-bell {
@@ -4767,6 +4768,7 @@ p {
 .operational-copy strong,
 .operational-copy span {
   display: block;
+  line-height: normal;
 }
 .operational-copy strong {
   font-size: 15px;
@@ -4798,8 +4800,90 @@ p {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+button.operational-link {
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+button.operational-link:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
 .operational-action {
   margin-top: 10px;
+}
+.operational-strip.is-paused {
+  border: 0;
+  background: #efeae2;
+}
+.operational-strip.is-paused .operational-copy span {
+  line-height: 1.4;
+}
+.operational-ring-off {
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  flex: none;
+  border: 2.5px solid #716859;
+  border-radius: 50%;
+}
+.operational-resume {
+  position: relative;
+  height: 44px;
+  margin: -4px 0;
+  padding: 0 14px;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  color: #f7f4ef;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: normal;
+  cursor: pointer;
+  isolation: isolate;
+}
+.operational-resume::before {
+  content: "";
+  position: absolute;
+  inset: 4px 0;
+  z-index: -1;
+  border-radius: 10px;
+  background: #0f5f63;
+  transition: background-color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.operational-resume:hover:not(:disabled)::before {
+  background: #0b484c;
+}
+.operational-resume:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.operational-copy .operational-note,
+.operational-copy .operational-error {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.operational-copy .operational-note {
+  color: var(--fg-soft);
+}
+.operational-copy .operational-error {
+  color: var(--at-color-danger-ink);
+}
+.operational-error a {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .operational-resume::before,
+  .checklist-action::before {
+    transition: none;
+  }
 }
 .operational-strip.is-disconnected {
   display: flex;
@@ -4854,10 +4938,14 @@ p {
   background: var(--at-color-danger-hover);
   transform: scale(0.98);
 }
+/* O AppShell foca o <main> (tabindex=-1) ao trocar de rota; ele não é operável,
+   e a Home é curta o bastante para o anel aparecer como linha no pé da tela. */
+.dashboard-main:focus-visible {
+  outline: none;
+}
 .dashboard-body {
-  display: grid;
-  grid-template-areas: "attention" "hoje" "semana";
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 26px;
 }
 .dashboard-card {
@@ -4883,24 +4971,26 @@ p {
     padding-top: 28px;
   }
   .dashboard-body {
-    grid-template-areas: none;
+    display: grid;
     grid-template-columns: minmax(0, 1fr) 320px;
-    grid-template-rows: auto auto 1fr;
+    grid-template-rows: auto auto auto 1fr;
     gap: 0 32px;
     align-items: start;
   }
   .dashboard-body > .today-card {
     grid-area: auto;
     grid-column: 1;
-    grid-row: 1 / span 3;
+    grid-row: 1 / span 4;
   }
   .dashboard-body > .attention-card,
+  .dashboard-body > .checklist-card,
   .dashboard-body > .week-card {
     grid-area: auto;
     grid-column: 2;
   }
-  .dashboard-body > .attention-card {
-    margin-bottom: 26px;
+  .dashboard-body > .attention-card,
+  .dashboard-body > .checklist-card {
+    margin-bottom: 24px;
   }
 }
 @media (min-width: 1024px) {
@@ -4929,6 +5019,7 @@ p {
 }
 .dashboard-body > .dashboard-card > .dashboard-card-head {
   margin-bottom: 8px;
+  line-height: normal;
   align-items: baseline;
 }
 .dashboard-body > .dashboard-card > .dashboard-card-head h2 {
@@ -4940,7 +5031,8 @@ p {
 .today-title {
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  /* O quadro: um espaço e margin-left 4px antes do "· n". */
+  gap: 8px;
 }
 .today-count {
   color: var(--muted);
@@ -4973,78 +5065,278 @@ p {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.dashboard-card-head a {
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-}
+/* Checklist "Ative sua IA" (Goal117, quadro H4). Valores portados do markup do
+   quadro; o app é border-box, o quadro é content-box, então cada medida com
+   padding ou borda foi conferida contra o quadro. */
 .checklist-card {
-  margin-bottom: 16px;
+  grid-area: checklist;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e5ded4;
+  border-radius: 16px;
+  background: #fffdfa;
+  color: #221e1a;
+  line-height: normal;
+}
+.checklist-head {
+  padding: 16px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.checklist-head h2 {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: normal;
+  letter-spacing: 0;
+}
+.checklist-count {
+  color: #5f574e;
+  font-size: 13px;
+}
+.checklist-progress {
+  margin-top: 6px;
+  display: flex;
+  gap: 4px;
+}
+.checklist-segment {
+  height: 4px;
+  flex: 1;
+  border-radius: 2px;
+  background: #e5ded4;
+}
+.checklist-segment.is-done {
+  background: #0f5f63;
 }
 .checklist-list {
-  display: grid;
-  gap: 8px;
-  list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  list-style: none;
 }
 .checklist-item {
+  padding: 12px 16px;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 4px 12px;
-  padding: 4px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-input);
-  background: var(--surface-secondary);
-  color: var(--fg);
+  gap: 12px;
+  border-top: 1px solid #e5ded4;
+  color: #716859;
 }
-.checklist-item.is-done {
-  color: var(--fg-soft);
-  text-decoration: line-through;
+.checklist-item.is-current {
+  color: #221e1a;
 }
 .checklist-marker {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 1.5px solid var(--border);
+  width: 24px;
+  height: 24px;
+  box-sizing: border-box;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: none;
+  border: 1.5px solid #d6cec2;
+  border-radius: 50%;
+}
+.checklist-item.is-done .checklist-marker {
+  border: 0;
+  background: #2e7d4f;
+  color: #fffdfa;
 }
 .checklist-link {
-  flex: 1 1 0;
   min-width: 0;
-  min-height: 44px;
+  margin: -13px 0;
+  padding: 13px 0;
+  flex: 1;
   display: flex;
   align-items: center;
   color: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.checklist-item.is-current .checklist-link {
   font-weight: 600;
-  text-decoration: inherit;
+}
+.checklist-item.is-done .checklist-link {
+  text-decoration: line-through;
+}
+.checklist-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.checklist-item.is-done .checklist-link:hover {
+  text-decoration: line-through;
 }
 .checklist-hint {
-  color: var(--fg-soft);
   font-size: 13px;
 }
-.checklist-item .btn {
-  min-height: 44px;
+.checklist-action {
+  position: relative;
+  height: 44px;
+  margin: -5px 0;
+  padding: 0 14px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  color: #f7f4ef;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  isolation: isolate;
 }
-.checklist-item.is-done .checklist-marker {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--surface);
+.checklist-action::before {
+  content: "";
+  position: absolute;
+  inset: 5px 0;
+  z-index: -1;
+  border-radius: 10px;
+  background: #0f5f63;
+  transition: background-color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.checklist-item.is-done .checklist-marker .icon {
-  width: 12px;
-  height: 12px;
+.checklist-action:hover::before {
+  background: #0b484c;
+}
+.pendency-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pendency-label {
+  margin: 0;
+  color: #7a4e0a;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.pendency-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pendency-row {
+  padding: 14px 16px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: inherit;
+  line-height: normal;
+  text-decoration: none;
+}
+.pendency-row.is-conversation {
+  background: #f8ecd5;
+  color: #7a4e0a;
+}
+.pendency-row.is-conversation:hover {
+  background: #f3e2bf;
+}
+.pendency-row.is-service {
+  border: 1px solid #e5ded4;
+  background: #fffdfa;
+  color: #221e1a;
+}
+.pendency-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: #b7791b;
+}
+.pendency-warning {
+  flex: none;
+  color: #b7791b;
+}
+.pendency-text {
+  min-width: 0;
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.pendency-text strong {
+  color: #221e1a;
+  font-weight: 700;
+}
+.pendency-sub {
+  display: block;
+  font-size: 13px;
+}
+.pendency-row.is-service .pendency-sub {
+  color: #5f574e;
+}
+.pendency-action {
+  margin: -13px 0;
+  padding: 13px 0;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  color: #0f5f63;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.pendency-action:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.today-empty {
+  padding: 22px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  line-height: normal;
+  text-align: center;
+}
+.today-empty-art {
+  width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.today-empty-line {
+  height: 1px;
+  background: #d6cec2;
+}
+.today-empty-slot {
+  height: 22px;
+  margin: 0 18px;
+  box-sizing: content-box;
+  border: 1.5px dashed #b9b1a6;
+  border-radius: 6px;
+}
+.today-empty-title {
+  margin: 4px 0 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: normal;
+  letter-spacing: 0;
+}
+.today-empty-action {
+  margin: -13px 0;
+  padding: 13px 0;
+  display: inline-flex;
+  align-items: center;
+  color: #0f5f63;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.today-empty-action:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .agenda-stack {
   display: flex;
   flex-direction: column;
 }
-.agenda-row {
+.today-row {
   padding: 12px 0;
   border-bottom: 1px solid var(--border);
   display: grid;
@@ -5059,8 +5351,15 @@ p {
   font-variant-numeric: tabular-nums;
 }
 .agenda-bar {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-radius: 2px;
-  background: var(--accent);
+}
+/* Cor do serviço (D-108 (f)): um trecho por serviço; sem cor, traço neutro. */
+.agenda-bar-part {
+  flex: 1;
+  background: var(--swatch, #b9b1a6);
 }
 .agenda-row-body {
   min-width: 0;
@@ -5072,6 +5371,7 @@ p {
 .agenda-copy strong,
 .agenda-copy span {
   display: block;
+  line-height: normal;
 }
 .agenda-copy strong {
   font-size: 15px;
@@ -5168,55 +5468,6 @@ p {
 .week-stat-label {
   color: var(--fg-soft);
   font-size: 12px;
-}
-.attention-list {
-  display: grid;
-  gap: 10px;
-}
-.attention-row {
-  min-height: 58px;
-  padding: 10px 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid var(--border);
-}
-.attention-row:last-child {
-  border-bottom: 0;
-}
-.attention-row-main {
-  flex: 1;
-  min-width: 0;
-}
-.attention-row-main strong,
-.attention-row-main span {
-  display: block;
-}
-.attention-row-main span {
-  color: var(--muted);
-  font-size: 13px;
-}
-.dashboard-empty {
-  min-height: 140px;
-  display: grid;
-  place-items: center;
-  text-align: center;
-}
-.today-card .dashboard-empty {
-  min-height: 190px;
-}
-.dashboard-empty-inner {
-  max-width: 380px;
-}
-.dashboard-empty .state-icon {
-  margin-bottom: 14px;
-}
-.dashboard-empty h3 {
-  margin-bottom: 5px;
-}
-.dashboard-empty p {
-  color: var(--muted);
-  font-size: 14px;
 }
 .dashboard-skeleton-grid {
   display: grid;

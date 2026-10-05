@@ -343,14 +343,11 @@ describe("Goal087 prova 5: a faixa da Home", () => {
     return { ...utils, band };
   }
 
-  test("com a IA ativa, tem Pausar para as configurações da IA e não tem a linha de pontos de estado", async () => {
+  test("com a IA ativa, tem o botão Pausar (abre a confirmação) e não tem a linha de pontos de estado", async () => {
     const { band } = await renderHome();
 
     expect(within(band).getByText("IA ativa")).toBeVisible();
-    expect(within(band).getByRole("link", { name: "Pausar" })).toHaveAttribute(
-      "href",
-      "/configuracoes/ia",
-    );
+    expect(within(band).getByRole("button", { name: "Pausar" })).toBeVisible();
     expect(band.querySelector(".operational-points, .status-line, .status-dot")).toBeNull();
     expect(within(band).queryByText(/WhatsApp conectado|Agenda indisponível/)).toBeNull();
     expect(within(band).queryByText(/^Agenda$/)).toBeNull();

@@ -159,7 +159,7 @@ async function reconcile(
   ) {
     await prisma.aiSettings.update({
       where: { tenantId: tenant.tenantId },
-      data: { enabled: false, activatedByRunId: null },
+      data: { enabled: false, activatedByRunId: null, pausedAt: null },
     });
     await project(request, deps, false);
     return "DEACTIVATED_BY_CHANNEL_CHANGE";
@@ -190,8 +190,9 @@ async function reconcile(
           tenantId: tenant.tenantId,
           enabled: true,
           activatedByRunId: run.id,
+          pausedAt: null,
         },
-        update: { enabled: true, activatedByRunId: run.id },
+        update: { enabled: true, activatedByRunId: run.id, pausedAt: null },
       });
       await materialize(tx, tenant.tenantId, [
         {

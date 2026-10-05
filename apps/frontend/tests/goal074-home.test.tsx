@@ -225,7 +225,7 @@ describe("Goal074/WU-04: Home conforme o protótipo", () => {
     await expectNoA11yViolations(container);
   });
 
-  test("com pendência, 'Precisa da sua atenção' aparece primeiro, na ordem completa", async () => {
+  test("com pendência, 'Precisa da sua atenção' aparece primeiro e a coluna termina em Hoje (Goal117, H2)", async () => {
     dashboardGet.mockResolvedValue(
       dashboardFixture({
         ai: {
@@ -266,7 +266,10 @@ describe("Goal074/WU-04: Home conforme o protótipo", () => {
     const headings = screen
       .getAllByRole("heading", { level: 2 })
       .map((heading) => heading.textContent);
-    expect(headings).toEqual(["Precisa da sua atenção", "Hoje", "Esta semana"]);
+    expect(headings).toEqual(["Precisa da sua atenção", "Hoje"]);
+    expect(
+      screen.queryByRole("heading", { level: 2, name: "Esta semana" }),
+    ).toBeNull();
     expect(screen.getByText("Ana")).toBeVisible();
   });
 
@@ -391,7 +394,7 @@ describe("Goal074/WU-04: 'Hoje' vazio e marcador 'agora'", () => {
 
     expect(screen.getByText("Nenhum atendimento hoje.")).toBeVisible();
     expect(
-      screen.getByRole("link", { name: "Novo agendamento" }),
+      screen.getByRole("link", { name: "Criar agendamento" }),
     ).toHaveAttribute("href", "/agenda/novo");
   });
 
@@ -614,7 +617,7 @@ describe("Goal074: faixa de estado quando a IA não está ativa", () => {
 });
 
 describe("Goal087: 'Pausar' na faixa e sem pontos de estado", () => {
-  test("IA ativa: 'Pausar' é link para /configuracoes/ia e não há linha de pontos", async () => {
+  test("IA ativa: 'Pausar' é botão da faixa (abre a confirmação) e não há linha de pontos", async () => {
     dashboardGet.mockResolvedValue(dashboardFixture());
     statusGet.mockResolvedValue(systemStatusFixture());
 
@@ -622,10 +625,7 @@ describe("Goal087: 'Pausar' na faixa e sem pontos de estado", () => {
 
     const band = container.querySelector("#operational-status") as HTMLElement;
     expect(within(band).getByText("IA ativa")).toBeVisible();
-    expect(within(band).getByRole("link", { name: "Pausar" })).toHaveAttribute(
-      "href",
-      "/configuracoes/ia",
-    );
+    expect(within(band).getByRole("button", { name: "Pausar" })).toBeVisible();
     expect(container.querySelector(".operational-points")).toBeNull();
     expect(container.querySelector(".status-dot")).toBeNull();
   });
@@ -646,6 +646,6 @@ describe("Goal087: 'Pausar' na faixa e sem pontos de estado", () => {
     await renderHome();
 
     await screen.findAllByText(/IA (inativa|pausada)/);
-    expect(screen.queryByRole("link", { name: "Pausar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pausar" })).toBeNull();
   });
 });

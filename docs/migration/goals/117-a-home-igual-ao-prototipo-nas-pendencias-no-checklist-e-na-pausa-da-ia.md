@@ -1,6 +1,6 @@
 # Goal 117 — A Home igual ao protótipo nas pendências, no checklist e na pausa da IA
 
-**Status: READY.** Preparado em 2026-10-05 pelo Tech Lead Agent após [Goal116 ACCEPTED](../reviews/116-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED.** Preparado em 2026-10-05 pelo Tech Lead Agent após [Goal116 ACCEPTED](../reviews/116-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

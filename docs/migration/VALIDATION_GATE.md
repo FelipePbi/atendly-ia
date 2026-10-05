@@ -6710,3 +6710,89 @@ Conferência em aparelho real; o Goal pede as capturas do `visual:compare`, não
 - **Escopo.** A exceção ao critério 9 está no item "Escopo" acima.
 - **Aceito sem prova completa.** Os três controles negativos, a execução isolada no cluster 55561 e as contagens da tabela "Execução final" vêm do Developer e não foram refeitos pelo Tech Lead. `validate:integration` foi aceito pelo `PASSED` da WU-16-g2. K2, K4, `Conversas:C1` e `Conversas:C4` vêm só da execução do Developer.
 - **Ambiente.** O cluster do harness acumula os bancos dos ensaios anteriores, e o checkpoint de `DROP DATABASE ... WITH (FORCE)` passou dos 10 s padrão do hook. Teste de integração que cria e derruba banco próprio precisa de timeout de hook explícito. Detalhe no [review116](reviews/116-review.md).
+
+## A Home igual ao protótipo nas pendências, no checklist e na pausa da IA, do Goal117
+
+Texto do Goal117 (decisão [D-131](DECISIONS.md), `PROPOSED`), escrito na rodada 2 (FIX-001) contra os nove blockers do review da rodada 1 e atualizado nas rodadas 3 e 4 (FIX-001 de cada uma). Cada rodada tem o que ela mesma rodou. Os controles negativos, a execução final (typecheck, lint, suítes, `validate:core`, `validate:ui`, `validate:integration`) e as contagens delas vêm da execução da rodada 2, sobre a árvore completa, e nenhuma foi copiada da rodada 1. As rodadas 3 e 4 mudaram só `apps/frontend/src/shared/styles/avenly.css` (CSS do checklist e da Home): a rodada 3 para o blocker do review 2 e a rodada 4 para o do review 3. A rodada 3 não refez a execução final. A rodada 4 refez toda ela sobre a árvore final, pelos gates do harness, com saída 0 (typecheck, lint, suíte do frontend com 160 arquivos e 2038 testes, test:gate, validate:core, validate:ui com 169 passando e 21 pulados, validate:integration com 275 passando e git diff --check). Os controles negativos continuam sendo os da rodada 2, porque nenhuma mudança posterior tocou em código coberto por eles. A rodada 4 também rodou de novo os cinco arquivos de teste da Home (73 testes, todos passando) e o `visual:compare`. A tabela e as notas da conferência visual abaixo são da execução da rodada 4, sobre a árvore final. A última edição de código veio antes dos controles negativos. Depois dos controles e de toda a execução final, o `git diff` de `apps/`, `packages/` e `scripts/` é byte a byte igual ao de logo depois dos controles (`cmp`, sem diferença).
+
+### Ambiente
+
+A pilha do `visual:compare` usa os bancos descartáveis `g117_bff`, `g117_sched` e `g117_ai`, num cluster PostgreSQL 18 próprio em `127.0.0.1:55717`, com `prisma migrate deploy` nos três serviços (BFF em 3052, Scheduling em 3053 e IA em 3050), `VISUAL_BFF_URL=http://127.0.0.1:3052` e `VISUAL_BFF_ORIGIN=http://localhost:3001`. Esse cluster travou com o erro 487 do Windows (login da conta visual com 500 e o Scheduling sem resposta). Ele foi encerrado com `taskkill` no postmaster e religado com `pg_ctl start`, antes de qualquer comparação desta rodada. Os controles (a) e (b) rodaram no banco descartável `g117_bff_test` do mesmo cluster, com o histórico inteiro de migrations. O `validate:integration` rodou num cluster novo (`initdb` da rodada) em `127.0.0.1:55718`, com `BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55718/avenly_bff_test` e nenhuma outra execução ao mesmo tempo. Nenhum arquivo de `e2e/` além de `e2e/visual/targets.json` mudou.
+
+### Controles negativos (§4.2)
+
+Rodados depois da última edição de código, cada um por mutação na fonte e teste dirigido. Depois de ler a reprovação, o arquivo foi devolvido da cópia (`cp`) e conferido com `sha256sum -c` contra o hash de antes da mutação, com resultado `OK` nos três.
+
+| Controle | Mutação | Comando | Reprovou |
+| --- | --- | --- | --- |
+| (a) a pausa sem gravar `pausedAt` | em `apps/bff/src/modules/settings/routes.ts`, a passagem ligada → desligada passou a gravar `{}` no lugar de `{ pausedAt: new Date() }` | `npx vitest run tests/goal117-ai-paused-at.integration.test.ts` em `apps/bff`, com `BFF_RUN_INTEGRATION_TESTS=true` e `BFF_TEST_DATABASE_URL` no banco descartável | 3 de 9: `pausar (ligada -> desligada) grava o instante, e GET e PATCH o devolvem`, `ligar de novo (PATCH) grava pausedAt null` e `autoativação por teste novo grava pausedAt null`, todos com `AssertionError: expected null not to be null` |
+| (b) a autoativação sem limpar `pausedAt` | em `apps/bff/src/lib/ai-activation.ts`, o `update` da autoativação passou de `{ enabled: true, activatedByRunId: run.id, pausedAt: null }` para `{ enabled: true, activatedByRunId: run.id }` | o mesmo | 1 de 9: `autoativação por teste novo grava pausedAt null` (`AssertionError: expected 2026-10-05T16:17:25.718Z to be null`) |
+| (c) "Pausar" grava no toque | em `apps/frontend/src/features/dashboard/DashboardScreen.tsx`, `onPause` passou de `() => setPauseOpen(true)` para `() => void writeAi(false)` | `npx vitest run tests/goal117-home.test.tsx` em `apps/frontend` | 5 de 25, todos de `Goal117: confirmação de pausa (H7)`: `Pausar abre a confirmação sem gravar`, `Pausar IA grava { enabled: false, tone } e fecha`, `Continuar atendendo fecha sem gravar e o foco volta a Pausar`, `Escape fecha sem gravar e o foco volta a Pausar` e `a falha ao pausar fica na confirmação com role=alert` (`TestingLibraryElementError: Unable to find role="dialog" and name "Pausar sua IA?"`) |
+
+Com a fonte revertida, `goal117-ai-paused-at` voltou a 9 de 9 e `goal117-home` a 25 de 25.
+
+### Execução final
+
+Números medidos na rodada 2, sobre a árvore completa. A rodada 4 refez a execução pelos gates do harness, com as contagens citadas no início desta seção.
+
+| Comando | Resultado |
+| --- | --- |
+| `npm run typecheck` em `apps/bff`, `apps/frontend` e `apps/ai-orchestrator` | saída 0 nos três. A primeira chamada no BFF saiu com 2, porque rodou ao mesmo tempo que o `prisma generate` do `validate:integration`, que reescreve o cliente gerado. Rodada de novo sozinha, saiu com 0. |
+| `rtk proxy npm run lint` nos três | saída 0 nos três |
+| `npx vitest run` em `apps/frontend` | **160** arquivos, **2038** testes passando (`goal117-home.test.tsx`: 25) |
+| `npx vitest run` em `apps/bff` | 22 arquivos passaram, 49 pulados; **170** passaram, 370 pulados (integração) |
+| testes alvo da Home: `goal018-dashboard-status`, `goal063-home-checklist`, `goal074-home`, `goal087-shell-navigation` e `goal117-home` | 5 arquivos, **73** testes passando |
+| `node --test scripts/tests/visual-responses.test.mjs` | 30 testes, 30 passando |
+| `npx prisma generate` em `apps/ai-orchestrator`, depois `npm run test:gate` | **263** testes, 263 passando, 0 falhas |
+| `npm run validate:core` | `PASSED`: 17 passos, 15 passaram, 0 falharam, 2 pulados e reportados; testes dos serviços dentro dele: IA 1230 (101 pulados), Scheduling 543, frontend 2038 |
+| `npm run validate:ui`, nas cinco larguras 360, 390, 768, 1024 e 1440 | **169** passed, 21 skipped, "public UI gate retries: 0 — every test passed on its first attempt" |
+| `npm run validate:integration` com o banco descartável acima | `PASSED`: **36** de 36 passos, 0 falharam, 0 pulados. Testes: BFF integração 71 arquivos e **540** passando (com `goal117-ai-paused-at`), Scheduling 20 arquivos e 152, IA durabilidade 11 arquivos e 77, IA depuração de conteúdo 3 arquivos e 24. O gate autenticado (`rehearse:goal033-authenticated-ui`) passou **275** testes, "authenticated gate retries: 0 — every test passed on its first attempt". |
+| `git diff --check` | saída 0 |
+
+### Testes existentes ajustados
+
+Só para o novo texto ou o novo lugar, sem afrouxar asserção:
+
+- `goal018-dashboard-status`: o rótulo "Concluir o teste da IA" virou "Fazer o teste real", o rótulo do quadro H4.
+- `goal063-home-checklist`: o mesmo rótulo, no docblock e em três asserções. No teste "tudo pendente", `getByRole("link", { name: "Conectar" })` na linha do WhatsApp virou ausência (`queryByRole(...)` nulo), porque só o primeiro pendente tem ação (escolha 3 do Goal). Entrou uma asserção nova: "Cadastrar" → `/servicos` na linha do serviço, que é o primeiro pendente. No teste "WhatsApp conectado", a fixture passou de `{}` para `{ aiActivationReady: true, hoursConfigured: true }`. Com `{}`, o primeiro pendente seria "Cadastrar um serviço", e o teste não teria mais como conferir "Fazer o teste" na linha do teste. Com serviço e horários feitos, o teste é o primeiro pendente, e a asserção de `getByRole("link", { name: "Fazer o teste" })` com o `href` continua igual. Nenhuma asserção saiu sem uma substituta igual ou mais forte.
+- `goal074-home`: no teste de pendência, a ordem esperada passou de `["Precisa da sua atenção", "Hoje", "Esta semana"]` para `["Precisa da sua atenção", "Hoje"]`, com a ausência de "Esta semana" afirmada (D-131 (4)). "Novo agendamento" virou "Criar agendamento", o rótulo do quadro. "Pausar" deixou de ser link para `/configuracoes/ia` e virou botão da faixa (D-131 (9)), nos dois testes do Goal087.
+- `goal087-shell-navigation`: "Pausar" é botão da faixa, não mais link para `/configuracoes/ia`.
+
+### Conferência visual (`visual:compare`)
+
+`npm run visual:compare -- --target H2,H4,H5,H7,H1,H3,K5,K6,IA1` com a pilha acima, na rodada 4 (a pilha em 3052, 3053 e 3050 já estava de pé e respondeu `200` em `/health`): 36 pares (9 alvos × 4 devices), nenhum com erro, saída 0. Percentual de pixels diferentes por device:
+
+| Quadro | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| H2 | 9,3% | 2,0% | 2,3% | 1,9% |
+| H4 | 8,3% | 0,5% | 1,4% | 1,3% |
+| H5 | 8,2% | 1,1% | 1,3% | 1,0% |
+| H7 | 5,4% | 1,0% | 1,7% | 0,8% |
+| H1 | 12,2% | 6,4% | 7,8% | 6,7% |
+| H3 | 7,4% | 1,7% | 1,9% | 1,4% |
+| K5 | 32,3% | 17,7% | 12,5% | 9,6% |
+| K6 | 0,5% | 0,6% | 0,8% | 1,3% |
+| IA1 | 12,7% | 6,0% | 7,8% | 6,6% |
+
+Capturas abertas na rodada 4: H4 em tablet retrato, antes e depois da mudança, e H4 em mobile (lado a lado). Os outros pares só foram conferidos pelo percentual, que mudou desde a rodada 2 só em H2 (tablet retrato 2,1 para 2,0% e desktop 2,0 para 1,9%), H4 (tablet retrato 0,7 para 0,5%), H5 (tablet paisagem 1,4 para 1,3%), H7 (1,1/1,8/0,9 para 1,0/1,7/0,8%) e H3 (tablet paisagem 2,0 para 1,9%); as capturas abertas das rodadas anteriores ficam nos registros delas.
+
+**Blocker da rodada 3 (H4, tablet retrato 768×1024).** A linha "Fazer o teste real" do checklist ficava 16 px mais baixa que no quadro e o cartão terminava 16 px antes. O rótulo quebra em duas linhas nessa largura ("Fazer o teste" / "real") e o quadro deixa a linha crescer com o texto (`padding:12px 16px` com um `<span>` de 15px em fluxo normal), enquanto `.checklist-link` tinha `min-height: 44px` com `margin: -10px 0`, que fixava a linha em 48 px. A rodada 4 trocou isso por `padding: 13px 0` com `margin: -13px 0` (o mesmo recurso que o quadro usa em "Ver agenda"): o alvo de toque tem 45 px com uma linha de texto, e a linha passa a crescer com o texto. Depois da mudança, o cartão termina no mesmo ponto do quadro e a linha do teste fica na mesma altura; H4 em tablet retrato foi de 0,7% para 0,5%. Mobile, paisagem e desktop não quebram o rótulo e ficam como estavam.
+
+- **H2, H4, H5 e H7** batem com os quadros, salvo as divergências de D-131. H4 mostra a faixa clara "IA inativa · Falta conectar o WhatsApp e fazer o teste", com o anel vazado e sem botão. H2 e H4 não têm "Esta semana". Os traços de "Hoje" têm a cor do serviço: Ana Paula roxo, Juliana Mendes dividido em laranja e verde, Bia Castro laranja. H5 não tem a linha "Cliente · Dentista". H7 abre a confirmação pelo passo obrigatório. No mobile, todo o conteúdo fica cerca de 16 px mais baixo que no quadro. O `visual:compare` já recorta os 62 px da barra de status. O deslocamento vem do respiro de topo da casca do app, porque o quadro usa `padding:66px` (62 de barra mais 4). É uma divergência da casca e da barra de status, aceita nos reviews (D-131, primeira divergência).
+- **K5, K6 e IA1** saíram com os mesmos números da captura de antes (baseline `cf6704c`), e o `app.png` dos 12 pares é igual pixel a pixel ao de antes (0 pixel diferente).
+- **H1 e H3** mudaram contra a captura de antes, com o percentual menor nos oito pares: H1 de 12,7/7,4/8,4/7,1% para 12,2/6,4/7,8/6,7%, e H3 de 8,1/4,1/3,7/3,0% para 7,4/1,7/2,0/1,4%. As mudanças são duas. Primeira: o traço colorido de "Hoje" (D-131 (7)), autorizado no review117. Segunda: o checklist "Ative sua IA" entre a faixa e "Hoje", que a conta de teste mostrava na baseline, saiu. O motivo está em D-131 (10): a conta de teste está no estado do H4, e H1 e H3 passam a fixar `GET /v1/status` com a IA ligada. A faixa vermelha "WhatsApp desconectado" com "Reconectar WhatsApp", "Hoje" com "agora" e "Esta semana" continuam como antes. A sidebar não muda, porque a desconexão do WhatsApp vence o estado da IA em `aiCardView`.
+
+### Escopo
+
+Os arquivos alterados estão dentro do critério 8 do Goal: `apps/bff/prisma/`, `apps/bff/src/modules/settings/`, `apps/bff/src/lib/ai-activation.ts`, `apps/bff/src/modules/account/service.ts`, `apps/bff/PUBLIC_API_V1.md`, `apps/bff/tests/`, `packages/public-api-contract/src/schemas.ts`, `apps/frontend/src/`, `apps/frontend/tests/`, `apps/frontend/e2e/visual/targets.json`, `scripts/tests/visual-responses.test.mjs` e os quatro registros. Nenhum ensaio ou teste de integração fora disso precisou da coluna nova (achado do §1.6 em D-131).
+
+### Não executado
+
+Conferência em aparelho real; o Goal pede as capturas do `visual:compare`, não aparelho.
+
+**Nota de fechamento — review117, 2026-10-05.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima, salvo as duas correções de texto que o review da rodada 4 pediu (a frase sobre a execução final no primeiro parágrafo e a frase sobre o deslocamento do mobile em "Conferência visual"). A linha que atribui a tabela "Execução final" à rodada 2 entrou junto:
+
+- **Decisão.** D-131 ACCEPTED na rodada 4, depois de 9 blockers na rodada 1, 1 na rodada 2 e 2 na rodada 3. O review da rodada 4 terminou `CHANGES_REQUIRED` com 3 blockers só de registro, e o IA Loop aceitou a rodada com os três adiados para este fechamento, onde foram aplicados.
+- **Gates do IA Loop, rodada 4, todos com saída 0 na árvore final:** `typecheck` do BFF e do frontend (WU-05 e WU-06), `lint` do frontend (WU-07), testes alvo `goal117` do BFF e do frontend (WU-08 e WU-09), suíte do frontend (WU-10), `test:gate` (WU-11), `validate:core` (WU-12), `validate:ui` (WU-13), `validate:integration` (WU-14, 716 s) e `git diff --check` (WU-15). Snapshot aceito: 24 arquivos, hash do diff `c8f3462a…`.
+- **Conferência do Tech Lead, rodada 4.** `npm run visual:compare -- --target H2,H4,H5,H7`: 16 pares, saída 0, com os percentuais da tabela acima. Os 16 `side-by-side.png` foram abertos. No H4, as bordas das linhas do checklist em tablet retrato ficam iguais no quadro e no app (y 279/328/377/436/501, cartão até 501); em tablet paisagem e desktop, deslocadas 1 px; no mobile, com a mesma altura e um deslocamento uniforme de 17 px, que é o respiro de topo da casca.
+- **Aceito sem prova completa.** Os três controles negativos e as contagens da tabela "Execução final" vêm do Developer, na rodada 2, e não foram refeitos pelo Tech Lead. K5, K6 e IA1 vêm só do `visual:compare` do Developer. Detalhe no [review117](reviews/117-review.md).

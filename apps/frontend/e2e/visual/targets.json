@@ -164,7 +164,34 @@
       "label": "Home · IA ativa",
       "route": "/inicio",
       "clock": "10:30",
-      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro. GET /v1/status fixa a IA ligada com o WhatsApp desconectado (D-131): a conta de teste tem a IA desligada e o checklist em 2 de 4, que desde o Goal117 é o estado do H4 (faixa 'IA inativa' e checklist); com a IA ligada a Home volta à captura de antes, e o cartão da casca não muda porque a desconexão do WhatsApp vence o estado da IA.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "DISCONNECTED",
+                "phoneNumber": null,
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "reconciled": "NOOP",
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
     },
     {
       "code": "H3",
@@ -172,7 +199,1126 @@
       "label": "Home · WhatsApp desconectado",
       "route": "/inicio",
       "clock": "10:30",
-      "notes": "Este quadro É o estado da conta de teste (WhatsApp desconectado): o aviso deve bater com o quadro."
+      "notes": "Este quadro é o estado da conta de teste (WhatsApp desconectado): o aviso deve bater com o quadro. GET /v1/status fixa a IA ligada com o WhatsApp desconectado (D-131), que é o estado real de quem tinha a IA ativa e perdeu o número: a conta de teste tem a IA desligada e o checklist em 2 de 4, que desde o Goal117 é o estado do H4.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "DISCONNECTED",
+                "phoneNumber": null,
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "reconciled": "NOOP",
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "H2",
+      "file": "Home.dc.html",
+      "label": "Home · pendências",
+      "route": "/inicio",
+      "clock": "13:45",
+      "notes": "O quadro desenha duas linhas na agenda, mas o rótulo diz “3 restantes”; a resposta fixa traz três atendimentos (14:00, 15:00 e 16:30) para bater com o rótulo. As pendências vêm de GET /v1/dashboard (conversas) e GET /v1/services (serviço sem duração). GET /v1/services também traz a cor de cada serviço da agenda (traço da linha); Juliana Mendes tem dois serviços, Escova e Hidratação, como o traço dividido do quadro.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/dashboard",
+          "json": {
+            "data": {
+              "platform": {
+                "tenantName": "Studio Camila",
+                "timezone": "America/Sao_Paulo",
+                "onboardingCompleted": true
+              },
+              "degraded": false,
+              "ai": {
+                "status": "ok",
+                "data": {
+                  "conversationsNeedingAttention": [
+                    {
+                      "id": "visual-compare-h2-fernanda",
+                      "externalContactId": "5511900000021",
+                      "customerName": "Fernanda Lima",
+                      "status": "HUMAN_HANDOFF",
+                      "humanHandoff": true,
+                      "handoffReason": "Pediu para falar com você",
+                      "lastMessage": {
+                        "id": "visual-compare-h2-fernanda-last",
+                        "direction": "INBOUND",
+                        "source": "CUSTOMER",
+                        "body": "Oi, posso falar com alguém?",
+                        "createdAt": "{today}T13:33:00-03:00"
+                      },
+                      "unreadCount": 1,
+                      "updatedAt": "{today}T13:33:00-03:00",
+                      "category": "COMMERCIAL",
+                      "categorySource": "AUTOMATIC",
+                      "handling": "AI",
+                      "ignored": false,
+                      "aiPaused": false
+                    },
+                    {
+                      "id": "visual-compare-h2-marcos",
+                      "externalContactId": "5511900000022",
+                      "customerName": "Marcos Vieira",
+                      "status": "HUMAN_HANDOFF",
+                      "humanHandoff": true,
+                      "handoffReason": "A IA não negocia preço",
+                      "lastMessage": {
+                        "id": "visual-compare-h2-marcos-last",
+                        "direction": "INBOUND",
+                        "source": "CUSTOMER",
+                        "body": "Consegue um desconto?",
+                        "createdAt": "{today}T13:11:00-03:00"
+                      },
+                      "unreadCount": 1,
+                      "updatedAt": "{today}T13:11:00-03:00",
+                      "category": "COMMERCIAL",
+                      "categorySource": "AUTOMATIC",
+                      "handling": "AI",
+                      "ignored": false,
+                      "aiPaused": false
+                    }
+                  ],
+                  "conversationsNeedingAttentionCount": 2,
+                  "aiAppointmentsToday": 0,
+                  "aiAppointmentsThisWeek": 0,
+                  "automatedConversationsToday": 7,
+                  "conversationsTakenOverThisWeek": 0
+                }
+              },
+              "scheduling": {
+                "status": "ok",
+                "data": {
+                  "appointmentsToday": 3,
+                  "todayAppointments": [
+                    {
+                      "id": "visual-compare-h-ana",
+                      "source": "USER",
+                      "title": null,
+                      "date": "{today}",
+                      "startTime": "14:00",
+                      "endTime": "14:45",
+                      "durationMinutes": 45,
+                      "customerId": "visual-compare-h-ana-c",
+                      "customer": {
+                        "id": "visual-compare-h-ana-c",
+                        "name": "Ana Paula",
+                        "phone": "5511900000011"
+                      },
+                      "services": [
+                        {
+                          "serviceId": "visual-compare-h-corte",
+                          "name": "Corte feminino",
+                          "durationMinutes": null,
+                          "priceType": "NOT_INFORMED",
+                          "price": null
+                        }
+                      ],
+                      "totalPrice": null,
+                      "totalPriceType": "NONE",
+                      "comments": null,
+                      "status": "CONFIRMED"
+                    },
+                    {
+                      "id": "visual-compare-h-juliana",
+                      "source": "USER",
+                      "title": null,
+                      "date": "{today}",
+                      "startTime": "15:00",
+                      "endTime": "16:10",
+                      "durationMinutes": 70,
+                      "customerId": "visual-compare-h-juliana-c",
+                      "customer": {
+                        "id": "visual-compare-h-juliana-c",
+                        "name": "Juliana Mendes",
+                        "phone": "5511900000012"
+                      },
+                      "services": [
+                        {
+                          "serviceId": "visual-compare-h-escova",
+                          "name": "Escova",
+                          "durationMinutes": null,
+                          "priceType": "NOT_INFORMED",
+                          "price": null
+                        },
+                        {
+                          "serviceId": "visual-compare-h-hidratacao",
+                          "name": "Hidratação",
+                          "durationMinutes": null,
+                          "priceType": "NOT_INFORMED",
+                          "price": null
+                        }
+                      ],
+                      "totalPrice": null,
+                      "totalPriceType": "NONE",
+                      "comments": null,
+                      "status": "CONFIRMED"
+                    },
+                    {
+                      "id": "visual-compare-h2-bia",
+                      "source": "USER",
+                      "title": null,
+                      "date": "{today}",
+                      "startTime": "16:30",
+                      "endTime": "17:10",
+                      "durationMinutes": 40,
+                      "customerId": "visual-compare-h2-bia-c",
+                      "customer": {
+                        "id": "visual-compare-h2-bia-c",
+                        "name": "Bia Castro",
+                        "phone": "5511900000013"
+                      },
+                      "services": [
+                        {
+                          "serviceId": "visual-compare-h-escova",
+                          "name": "Escova",
+                          "durationMinutes": null,
+                          "priceType": "NOT_INFORMED",
+                          "price": null
+                        }
+                      ],
+                      "totalPrice": null,
+                      "totalPriceType": "NONE",
+                      "comments": null,
+                      "status": "CONFIRMED"
+                    }
+                  ],
+                  "appointmentsThisWeek": 12,
+                  "nextAppointment": {
+                    "id": "visual-compare-h-ana",
+                    "source": "USER",
+                    "title": null,
+                    "date": "{today}",
+                    "startTime": "14:00",
+                    "endTime": "14:45",
+                    "durationMinutes": 45,
+                    "customerId": "visual-compare-h-ana-c",
+                    "customer": {
+                      "id": "visual-compare-h-ana-c",
+                      "name": "Ana Paula",
+                      "phone": "5511900000011"
+                    },
+                    "services": [
+                      {
+                        "serviceId": "visual-compare-h-corte",
+                        "name": "Corte feminino",
+                        "durationMinutes": null,
+                        "priceType": "NOT_INFORMED",
+                        "price": null
+                      }
+                    ],
+                    "totalPrice": null,
+                    "totalPriceType": "NONE",
+                    "comments": null,
+                    "status": "CONFIRMED"
+                  },
+                  "estimatedRevenueToday": null,
+                  "calendar": {
+                    "source": "AVENLY",
+                    "timezone": "America/Sao_Paulo",
+                    "integration": null,
+                    "capabilities": {
+                      "manageAvailability": true,
+                      "manageServices": true,
+                      "manageCustomers": true,
+                      "createAppointments": true,
+                      "migrate": false,
+                      "aiActivationReady": true,
+                      "hoursConfigured": true,
+                      "activationTestCompleted": true
+                    }
+                  }
+                }
+              },
+              "whatsapp": {
+                "status": "ok",
+                "data": {
+                  "status": "CONNECTED",
+                  "phoneNumber": "5511987654321"
+                }
+              }
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "reconciled": "NOOP",
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/services",
+          "json": {
+            "data": {
+              "items": [
+                {
+                  "id": "visual-compare-h2-sobrancelha",
+                  "name": "Design de sobrancelha",
+                  "durationMinutes": null,
+                  "priceType": "NOT_INFORMED",
+                  "price": null,
+                  "active": true,
+                  "needsReview": true,
+                  "reviewOrigin": "MANUAL"
+                },
+                {
+                  "id": "visual-compare-h-corte",
+                  "name": "Corte feminino",
+                  "durationMinutes": 45,
+                  "priceType": "NOT_INFORMED",
+                  "price": null,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "colorToken": "SKY"
+                },
+                {
+                  "id": "visual-compare-h-escova",
+                  "name": "Escova",
+                  "durationMinutes": 40,
+                  "priceType": "NOT_INFORMED",
+                  "price": null,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "colorToken": "AMBER"
+                },
+                {
+                  "id": "visual-compare-h-hidratacao",
+                  "name": "Hidratação",
+                  "durationMinutes": 30,
+                  "priceType": "NOT_INFORMED",
+                  "price": null,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "colorToken": "EMERALD"
+                }
+              ],
+              "source": "AVENLY",
+              "editable": true
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "H4",
+      "file": "Home.dc.html",
+      "label": "Home · checklist",
+      "route": "/inicio",
+      "clock": "10:30",
+      "notes": "Quadro: “Olá, Camila” e IA inativa depois de pular o WhatsApp. A saudação segue o relógio (“Bom dia” às 10:30) e o contrato não distingue “pulou o WhatsApp” de “desconectado”: a resposta fixa traz WhatsApp DISCONNECTED sem número, serviço e horário feitos e teste pendente (2 de 4). O ajuste da faixa é da Home portada.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/dashboard",
+          "json": {
+            "data": {
+              "platform": {
+                "tenantName": "Studio Camila",
+                "timezone": "America/Sao_Paulo",
+                "onboardingCompleted": true
+              },
+              "degraded": false,
+              "ai": {
+                "status": "ok",
+                "data": {
+                  "conversationsNeedingAttention": [],
+                  "conversationsNeedingAttentionCount": 0,
+                  "aiAppointmentsToday": 0,
+                  "aiAppointmentsThisWeek": 0,
+                  "automatedConversationsToday": 0,
+                  "conversationsTakenOverThisWeek": 0
+                }
+              },
+              "scheduling": {
+                "status": "ok",
+                "data": {
+                  "appointmentsToday": 0,
+                  "todayAppointments": [],
+                  "appointmentsThisWeek": 0,
+                  "nextAppointment": null,
+                  "estimatedRevenueToday": null,
+                  "calendar": {
+                    "source": "AVENLY",
+                    "timezone": "America/Sao_Paulo",
+                    "integration": null,
+                    "capabilities": {
+                      "manageAvailability": true,
+                      "manageServices": true,
+                      "manageCustomers": true,
+                      "createAppointments": true,
+                      "migrate": false,
+                      "aiActivationReady": true,
+                      "hoursConfigured": true,
+                      "activationTestCompleted": false
+                    }
+                  }
+                }
+              },
+              "whatsapp": {
+                "status": "ok",
+                "data": null
+              }
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "DISCONNECTED",
+                "phoneNumber": null,
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "reconciled": "NOOP",
+                "desiredEnabled": false,
+                "effectiveEnabled": false,
+                "state": "OFF"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/services",
+          "json": {
+            "data": {
+              "items": [
+                {
+                  "id": "visual-compare-h4-corte",
+                  "name": "Corte feminino",
+                  "durationMinutes": 45,
+                  "priceType": "NOT_INFORMED",
+                  "price": null,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null
+                }
+              ],
+              "source": "AVENLY",
+              "editable": true
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "H5",
+      "file": "Home.dc.html",
+      "label": "Home · IA pausada",
+      "route": "/inicio",
+      "clock": "10:30",
+      "notes": "A hora da pausa vem de ai.pausedAt em GET /v1/settings (“Desde 09:12”). O quadro rotula “5 atendimentos” e desenha quatro linhas, a última o compromisso pessoal “Dentista”; GET /v1/dashboard não traz compromissos pessoais (divergência declarada na D-131), então a resposta fixa traz só os três atendimentos e a contagem segue o que é listado. GET /v1/services traz a cor de cada serviço para o traço da linha.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/dashboard",
+          "json": {
+            "data": {
+              "platform": {
+                "tenantName": "Studio Camila",
+                "timezone": "America/Sao_Paulo",
+                "onboardingCompleted": true
+              },
+              "degraded": false,
+              "ai": {
+                "status": "ok",
+                "data": {
+                  "conversationsNeedingAttention": [],
+                  "conversationsNeedingAttentionCount": 0,
+                  "aiAppointmentsToday": 2,
+                  "aiAppointmentsThisWeek": 8,
+                  "automatedConversationsToday": 0,
+                  "conversationsTakenOverThisWeek": 2
+                }
+              },
+              "scheduling": {
+                "status": "ok",
+                "data": {
+                  "appointmentsToday": 3,
+                  "todayAppointments": [
+                    {
+                      "id": "visual-compare-h5-bia",
+                      "source": "USER",
+                      "title": null,
+                      "date": "{today}",
+                      "startTime": "10:00",
+                      "endTime": "10:40",
+                      "durationMinutes": 40,
+                      "customerId": "visual-compare-h5-bia-c",
+                      "customer": {
+                        "id": "visual-compare-h5-bia-c",
+                        "name": "Bia Castro",
+                        "phone": "5511900000013"
+                      },
+                      "services": [
+                        {
+                          "serviceId": "visual-compare-h-escova",
+                          "name": "Escova",
+                          "durationMinutes": null,
+                          "priceType": "NOT_INFORMED",
+                          "price": null
+                        }
+                      ],
+                      "totalPrice": null,
+                      "totalPriceType": "NONE",
+                      "comments": null,
+                      "status": "CONFIRMED"
+                    },
+                    {
+                      "id": "visual-compare-h-ana",
+                      "source": "USER",
+                      "title": null,
+                      "date": "{today}",
+                      "startTime": "14:00",
+                      "endTime": "14:45",
+                      "durationMinutes": 45,
+                      "customerId": "visual-compare-h-ana-c",
+                      "customer": {
+                        "id": "visual-compare-h-ana-c",
+                        "name": "Ana Paula",
+                        "phone": "5511900000011"
+                      },
+                      "services": [
+                        {
+                          "serviceId": "visual-compare-h-corte",
+                          "name": "Corte feminino",
+                          "durationMinutes": null,
+                          "priceType": "NOT_INFORMED",
+                          "price": null
+                        }
+                      ],
+                      "totalPrice": null,
+                      "totalPriceType": "NONE",
+                      "comments": null,
+                      "status": "CONFIRMED"
+                    },
+                    {
+                      "id": "visual-compare-h-juliana",
+                      "source": "USER",
+                      "title": null,
+                      "date": "{today}",
+                      "startTime": "15:00",
+                      "endTime": "16:10",
+                      "durationMinutes": 70,
+                      "customerId": "visual-compare-h-juliana-c",
+                      "customer": {
+                        "id": "visual-compare-h-juliana-c",
+                        "name": "Juliana Mendes",
+                        "phone": "5511900000012"
+                      },
+                      "services": [
+                        {
+                          "serviceId": "visual-compare-h-escova",
+                          "name": "Escova",
+                          "durationMinutes": null,
+                          "priceType": "NOT_INFORMED",
+                          "price": null
+                        },
+                        {
+                          "serviceId": "visual-compare-h-hidratacao",
+                          "name": "Hidratação",
+                          "durationMinutes": null,
+                          "priceType": "NOT_INFORMED",
+                          "price": null
+                        }
+                      ],
+                      "totalPrice": null,
+                      "totalPriceType": "NONE",
+                      "comments": null,
+                      "status": "CONFIRMED"
+                    }
+                  ],
+                  "appointmentsThisWeek": 12,
+                  "nextAppointment": {
+                    "id": "visual-compare-h5-bia",
+                    "source": "USER",
+                    "title": null,
+                    "date": "{today}",
+                    "startTime": "10:00",
+                    "endTime": "10:40",
+                    "durationMinutes": 40,
+                    "customerId": "visual-compare-h5-bia-c",
+                    "customer": {
+                      "id": "visual-compare-h5-bia-c",
+                      "name": "Bia Castro",
+                      "phone": "5511900000013"
+                    },
+                    "services": [
+                      {
+                        "serviceId": "visual-compare-h-escova",
+                        "name": "Escova",
+                        "durationMinutes": null,
+                        "priceType": "NOT_INFORMED",
+                        "price": null
+                      }
+                    ],
+                    "totalPrice": null,
+                    "totalPriceType": "NONE",
+                    "comments": null,
+                    "status": "CONFIRMED"
+                  },
+                  "estimatedRevenueToday": null,
+                  "calendar": {
+                    "source": "AVENLY",
+                    "timezone": "America/Sao_Paulo",
+                    "integration": null,
+                    "capabilities": {
+                      "manageAvailability": true,
+                      "manageServices": true,
+                      "manageCustomers": true,
+                      "createAppointments": true,
+                      "migrate": false,
+                      "aiActivationReady": true,
+                      "hoursConfigured": true,
+                      "activationTestCompleted": true
+                    }
+                  }
+                }
+              },
+              "whatsapp": {
+                "status": "ok",
+                "data": {
+                  "status": "CONNECTED",
+                  "phoneNumber": "5511987654321"
+                }
+              }
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "reconciled": "NOOP",
+                "desiredEnabled": false,
+                "effectiveEnabled": false,
+                "state": "OFF"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/settings",
+          "json": {
+            "data": {
+              "business": {
+                "name": "Studio Camila",
+                "category": "Beleza",
+                "timezone": "America/Sao_Paulo",
+                "language": "pt-BR",
+                "currency": "BRL"
+              },
+              "ai": {
+                "enabled": false,
+                "tone": "BALANCED",
+                "pausedAt": "{today}T09:12:00-03:00"
+              },
+              "calendar": {
+                "source": "AVENLY",
+                "timezone": "America/Sao_Paulo",
+                "integration": null,
+                "capabilities": {
+                  "manageAvailability": true,
+                  "manageServices": true,
+                  "manageCustomers": true,
+                  "createAppointments": true,
+                  "migrate": false,
+                  "aiActivationReady": true,
+                  "hoursConfigured": true,
+                  "activationTestCompleted": true
+                }
+              },
+              "availability": null
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/services",
+          "json": {
+            "data": {
+              "items": [
+                {
+                  "id": "visual-compare-h-corte",
+                  "name": "Corte feminino",
+                  "durationMinutes": 45,
+                  "priceType": "NOT_INFORMED",
+                  "price": null,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "colorToken": "SKY"
+                },
+                {
+                  "id": "visual-compare-h-escova",
+                  "name": "Escova",
+                  "durationMinutes": 40,
+                  "priceType": "NOT_INFORMED",
+                  "price": null,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "colorToken": "AMBER"
+                },
+                {
+                  "id": "visual-compare-h-hidratacao",
+                  "name": "Hidratação",
+                  "durationMinutes": 30,
+                  "priceType": "NOT_INFORMED",
+                  "price": null,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "colorToken": "EMERALD"
+                }
+              ],
+              "source": "AVENLY",
+              "editable": true
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "H7",
+      "file": "Home.dc.html",
+      "label": "Home · pausar IA",
+      "route": "/inicio",
+      "clock": "10:30",
+      "notes": "Abre a Home com a IA ativa e aciona “Pausar”; a confirmação “Pausar sua IA?” abre sobre a Home. O passo é obrigatório: sem o botão, a captura falha em vez de passar sem a confirmação. GET /v1/services traz a cor de cada serviço para o traço da linha.",
+      "steps": [
+        {
+          "clickRole": {
+            "name": "Pausar",
+            "role": "button"
+          },
+          "timeout": 3000
+        }
+      ],
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/dashboard",
+          "json": {
+            "data": {
+              "platform": {
+                "tenantName": "Studio Camila",
+                "timezone": "America/Sao_Paulo",
+                "onboardingCompleted": true
+              },
+              "degraded": false,
+              "ai": {
+                "status": "ok",
+                "data": {
+                  "conversationsNeedingAttention": [],
+                  "conversationsNeedingAttentionCount": 0,
+                  "aiAppointmentsToday": 2,
+                  "aiAppointmentsThisWeek": 0,
+                  "automatedConversationsToday": 3,
+                  "conversationsTakenOverThisWeek": 0
+                }
+              },
+              "scheduling": {
+                "status": "ok",
+                "data": {
+                  "appointmentsToday": 5,
+                  "todayAppointments": [
+                    {
+                      "id": "visual-compare-h-ana",
+                      "source": "USER",
+                      "title": null,
+                      "date": "{today}",
+                      "startTime": "14:00",
+                      "endTime": "14:45",
+                      "durationMinutes": 45,
+                      "customerId": "visual-compare-h-ana-c",
+                      "customer": {
+                        "id": "visual-compare-h-ana-c",
+                        "name": "Ana Paula",
+                        "phone": "5511900000011"
+                      },
+                      "services": [
+                        {
+                          "serviceId": "visual-compare-h-corte",
+                          "name": "Corte feminino",
+                          "durationMinutes": null,
+                          "priceType": "NOT_INFORMED",
+                          "price": null
+                        }
+                      ],
+                      "totalPrice": null,
+                      "totalPriceType": "NONE",
+                      "comments": null,
+                      "status": "CONFIRMED"
+                    },
+                    {
+                      "id": "visual-compare-h-juliana",
+                      "source": "USER",
+                      "title": null,
+                      "date": "{today}",
+                      "startTime": "15:00",
+                      "endTime": "16:10",
+                      "durationMinutes": 70,
+                      "customerId": "visual-compare-h-juliana-c",
+                      "customer": {
+                        "id": "visual-compare-h-juliana-c",
+                        "name": "Juliana Mendes",
+                        "phone": "5511900000012"
+                      },
+                      "services": [
+                        {
+                          "serviceId": "visual-compare-h-escova",
+                          "name": "Escova",
+                          "durationMinutes": null,
+                          "priceType": "NOT_INFORMED",
+                          "price": null
+                        },
+                        {
+                          "serviceId": "visual-compare-h-hidratacao",
+                          "name": "Hidratação",
+                          "durationMinutes": null,
+                          "priceType": "NOT_INFORMED",
+                          "price": null
+                        }
+                      ],
+                      "totalPrice": null,
+                      "totalPriceType": "NONE",
+                      "comments": null,
+                      "status": "CONFIRMED"
+                    },
+                    {
+                      "id": "visual-compare-h7-a",
+                      "source": "USER",
+                      "title": null,
+                      "date": "{today}",
+                      "startTime": "16:00",
+                      "endTime": "16:40",
+                      "durationMinutes": 40,
+                      "customerId": "visual-compare-h7-a-c",
+                      "customer": {
+                        "id": "visual-compare-h7-a-c",
+                        "name": "Bia Castro",
+                        "phone": "5511900000013"
+                      },
+                      "services": [
+                        {
+                          "serviceId": "visual-compare-h-escova",
+                          "name": "Escova",
+                          "durationMinutes": null,
+                          "priceType": "NOT_INFORMED",
+                          "price": null
+                        }
+                      ],
+                      "totalPrice": null,
+                      "totalPriceType": "NONE",
+                      "comments": null,
+                      "status": "CONFIRMED"
+                    },
+                    {
+                      "id": "visual-compare-h7-b",
+                      "source": "USER",
+                      "title": null,
+                      "date": "{today}",
+                      "startTime": "17:00",
+                      "endTime": "17:30",
+                      "durationMinutes": 30,
+                      "customerId": "visual-compare-h7-b-c",
+                      "customer": {
+                        "id": "visual-compare-h7-b-c",
+                        "name": "Carla Nunes",
+                        "phone": "5511900000014"
+                      },
+                      "services": [
+                        {
+                          "serviceId": "visual-compare-h-corte",
+                          "name": "Corte feminino",
+                          "durationMinutes": null,
+                          "priceType": "NOT_INFORMED",
+                          "price": null
+                        }
+                      ],
+                      "totalPrice": null,
+                      "totalPriceType": "NONE",
+                      "comments": null,
+                      "status": "CONFIRMED"
+                    },
+                    {
+                      "id": "visual-compare-h7-c",
+                      "source": "USER",
+                      "title": null,
+                      "date": "{today}",
+                      "startTime": "18:00",
+                      "endTime": "18:30",
+                      "durationMinutes": 30,
+                      "customerId": "visual-compare-h7-c-c",
+                      "customer": {
+                        "id": "visual-compare-h7-c-c",
+                        "name": "Renata",
+                        "phone": "5511900000007"
+                      },
+                      "services": [
+                        {
+                          "serviceId": "visual-compare-h-manicure",
+                          "name": "Manicure",
+                          "durationMinutes": null,
+                          "priceType": "NOT_INFORMED",
+                          "price": null
+                        }
+                      ],
+                      "totalPrice": null,
+                      "totalPriceType": "NONE",
+                      "comments": null,
+                      "status": "CONFIRMED"
+                    }
+                  ],
+                  "appointmentsThisWeek": 12,
+                  "nextAppointment": {
+                    "id": "visual-compare-h-ana",
+                    "source": "USER",
+                    "title": null,
+                    "date": "{today}",
+                    "startTime": "14:00",
+                    "endTime": "14:45",
+                    "durationMinutes": 45,
+                    "customerId": "visual-compare-h-ana-c",
+                    "customer": {
+                      "id": "visual-compare-h-ana-c",
+                      "name": "Ana Paula",
+                      "phone": "5511900000011"
+                    },
+                    "services": [
+                      {
+                        "serviceId": "visual-compare-h-corte",
+                        "name": "Corte feminino",
+                        "durationMinutes": null,
+                        "priceType": "NOT_INFORMED",
+                        "price": null
+                      }
+                    ],
+                    "totalPrice": null,
+                    "totalPriceType": "NONE",
+                    "comments": null,
+                    "status": "CONFIRMED"
+                  },
+                  "estimatedRevenueToday": null,
+                  "calendar": {
+                    "source": "AVENLY",
+                    "timezone": "America/Sao_Paulo",
+                    "integration": null,
+                    "capabilities": {
+                      "manageAvailability": true,
+                      "manageServices": true,
+                      "manageCustomers": true,
+                      "createAppointments": true,
+                      "migrate": false,
+                      "aiActivationReady": true,
+                      "hoursConfigured": true,
+                      "activationTestCompleted": true
+                    }
+                  }
+                }
+              },
+              "whatsapp": {
+                "status": "ok",
+                "data": {
+                  "status": "CONNECTED",
+                  "phoneNumber": "5511987654321"
+                }
+              }
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "reconciled": "NOOP",
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/settings",
+          "json": {
+            "data": {
+              "business": {
+                "name": "Studio Camila",
+                "category": "Beleza",
+                "timezone": "America/Sao_Paulo",
+                "language": "pt-BR",
+                "currency": "BRL"
+              },
+              "ai": {
+                "enabled": true,
+                "tone": "BALANCED",
+                "pausedAt": null
+              },
+              "calendar": {
+                "source": "AVENLY",
+                "timezone": "America/Sao_Paulo",
+                "integration": null,
+                "capabilities": {
+                  "manageAvailability": true,
+                  "manageServices": true,
+                  "manageCustomers": true,
+                  "createAppointments": true,
+                  "migrate": false,
+                  "aiActivationReady": true,
+                  "hoursConfigured": true,
+                  "activationTestCompleted": true
+                }
+              },
+              "availability": null
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/services",
+          "json": {
+            "data": {
+              "items": [
+                {
+                  "id": "visual-compare-h-corte",
+                  "name": "Corte feminino",
+                  "durationMinutes": 45,
+                  "priceType": "NOT_INFORMED",
+                  "price": null,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "colorToken": "SKY"
+                },
+                {
+                  "id": "visual-compare-h-escova",
+                  "name": "Escova",
+                  "durationMinutes": 40,
+                  "priceType": "NOT_INFORMED",
+                  "price": null,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "colorToken": "AMBER"
+                },
+                {
+                  "id": "visual-compare-h-hidratacao",
+                  "name": "Hidratação",
+                  "durationMinutes": 30,
+                  "priceType": "NOT_INFORMED",
+                  "price": null,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "colorToken": "EMERALD"
+                },
+                {
+                  "id": "visual-compare-h-manicure",
+                  "name": "Manicure",
+                  "durationMinutes": 30,
+                  "priceType": "NOT_INFORMED",
+                  "price": null,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "colorToken": "ROSE"
+                }
+              ],
+              "source": "AVENLY",
+              "editable": true
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
     },
     {
       "code": "A1",

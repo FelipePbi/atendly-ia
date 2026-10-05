@@ -112,11 +112,15 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, I1, C1 a C4 e K1 a K6 declaram responses", () => {
+test("targets.json: só W1, I1, C1 a C4, K1 a K6 e H1 a H5 e H7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["C1", "C2", "C3", "C4", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "W1"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["C1", "C2", "C3", "C4", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "W1"]);
   for (const target of declaring) {
-    const owner = ["W1", "I1"].includes(target.code) ? "Mais-WhatsApp-Importacao-Conta.dc.html" : "Conversas-e-Chat.dc.html";
+    const owner = ["W1", "I1"].includes(target.code)
+      ? "Mais-WhatsApp-Importacao-Conta.dc.html"
+      : target.code.startsWith("H")
+        ? "Home.dc.html"
+        : "Conversas-e-Chat.dc.html";
     assert.equal(target.file, owner, `${target.code} declara responses no arquivo errado`);
     for (const entry of target.responses) {
       assert.equal(entry.method, "GET");
@@ -361,4 +365,133 @@ test("targets.json: a resposta de cada Conversas só vale para o seu GET exato",
     }
     assert.equal(pickFixedResponse(target, "PUT", "/v1/conversations"), null);
   }
+});
+
+function homeFrame(code) {
+  const target = declaringTargets().find((candidate) => candidate.code === code && candidate.file === "Home.dc.html");
+  assert.ok(target, `${code} precisa declarar responses para a Home`);
+  assert.equal(target.route, "/inicio");
+  assert.match(target.clock, /^\d{2}:\d{2}$/);
+  const bodies = new Map();
+  for (const entry of target.responses) {
+    assert.equal(entry.method, "GET", `${code}: só GET`);
+    assert.ok(!entry.path.includes("?") && entry.path.startsWith("/v1/"), `${code}: ${entry.path} precisa ser caminho exato em /v1/`);
+    assert.ok(!bodies.has(entry.path), `${code}: ${entry.path} repetido`);
+    bodies.set(entry.path, resolveRelativeDays(entry.json, "2026-10-05").data);
+  }
+  return { target, bodies };
+}
+
+test("targets.json: H2, H4, H5 e H7 abrem a Home com GET exato de dashboard e status", () => {
+  for (const code of ["H2", "H4", "H5", "H7"]) {
+    const { target, bodies } = homeFrame(code);
+    assert.equal(target.label, { H2: "Home · pendências", H4: "Home · checklist", H5: "Home · IA pausada", H7: "Home · pausar IA" }[code]);
+    assert.ok(bodies.has("/v1/dashboard"), `${code}: falta /v1/dashboard`);
+    assert.ok(bodies.has("/v1/status"), `${code}: falta /v1/status`);
+    for (const path of ["/v1/dashboard", "/v1/status"]) {
+      assert.ok(pickFixedResponse(target, "GET", path), `${code}: ${path} precisa casar`);
+    }
+    for (const other of ["/v1/dashboard/extra", "/v1/whatsapp", "/v1/conversations", "/v1/notifications"]) {
+      assert.equal(pickFixedResponse(target, "GET", other), null, `${code}: ${other} não deveria casar`);
+    }
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      assert.equal(pickFixedResponse(target, method, "/v1/dashboard"), null, `${code}: ${method} não deveria casar`);
+      assert.equal(pickFixedResponse(target, method, "/v1/settings"), null, `${code}: ${method} não deveria casar`);
+    }
+  }
+});
+
+test("targets.json: H1 e H3 fixam só GET /v1/status, com a IA ligada e o WhatsApp desconectado", () => {
+  for (const code of ["H1", "H3"]) {
+    const { target, bodies } = homeFrame(code);
+    assert.equal(target.label, { H1: "Home · IA ativa", H3: "Home · WhatsApp desconectado" }[code]);
+    assert.deepEqual(target.responses.map((entry) => `${entry.method} ${entry.path}`), ["GET /v1/status"]);
+    const status = bodies.get("/v1/status");
+    assert.equal(status.ai.state, "ACTIVE");
+    assert.equal(status.ai.effectiveEnabled, true);
+    assert.equal(status.whatsapp.status, "DISCONNECTED");
+    for (const other of ["/v1/dashboard", "/v1/settings", "/v1/services"]) {
+      assert.equal(pickFixedResponse(target, "GET", other), null, `${code}: ${other} vem da conta de teste`);
+    }
+  }
+});
+
+test("targets.json: H2 traz as duas pendências de conversa, o serviço sem duração e três atendimentos restantes", () => {
+  const { bodies } = homeFrame("H2");
+  const dashboard = bodies.get("/v1/dashboard");
+  assert.equal(dashboard.ai.data.conversationsNeedingAttentionCount, 2);
+  assert.deepEqual(dashboard.ai.data.conversationsNeedingAttention.map((item) => item.customerName), ["Fernanda Lima", "Marcos Vieira"]);
+  assert.deepEqual(dashboard.scheduling.data.todayAppointments.map((item) => item.startTime), ["14:00", "15:00", "16:30"]);
+  const pending = bodies.get("/v1/services").items.filter((service) => service.needsReview);
+  assert.deepEqual(pending.map((service) => [service.name, service.durationMinutes]), [["Design de sobrancelha", null]]);
+  assert.equal(bodies.get("/v1/status").ai.state, "ACTIVE");
+  assertServiceColors("H2", bodies);
+});
+
+function assertServiceColors(code, bodies) {
+  const colors = new Map(bodies.get("/v1/services").items.map((service) => [service.id, service.colorToken ?? null]));
+  const appointments = bodies.get("/v1/dashboard").scheduling.data.todayAppointments;
+  for (const appointment of appointments) {
+    assert.ok(appointment.services.length > 0, `${code}: ${appointment.startTime} precisa de serviço para ter traço`);
+    for (const service of appointment.services) {
+      assert.ok(colors.get(service.serviceId), `${code}: ${service.name} (${service.serviceId}) precisa de colorToken no catálogo`);
+    }
+  }
+  const juliana = appointments.find((appointment) => appointment.customer?.name === "Juliana Mendes");
+  assert.deepEqual(
+    juliana.services.map((service) => [service.name, colors.get(service.serviceId)]),
+    [["Escova", "AMBER"], ["Hidratação", "EMERALD"]],
+    `${code}: o traço de Juliana Mendes é dividido em laranja e verde`,
+  );
+}
+
+test("targets.json: H4 tem checklist com dois de quatro passos e a IA desligada", () => {
+  const { bodies } = homeFrame("H4");
+  const capabilities = bodies.get("/v1/dashboard").scheduling.data.calendar.capabilities;
+  assert.equal(capabilities.aiActivationReady, true);
+  assert.equal(capabilities.hoursConfigured, true);
+  assert.equal(capabilities.activationTestCompleted, false);
+  const status = bodies.get("/v1/status");
+  assert.equal(status.whatsapp.status, "DISCONNECTED");
+  assert.equal(status.whatsapp.phoneNumber, null);
+  assert.equal(status.ai.state, "OFF");
+  assert.deepEqual(bodies.get("/v1/dashboard").scheduling.data.todayAppointments, []);
+});
+
+test("targets.json: H5 traz ai.pausedAt em /v1/settings, com checklist completo, a IA desligada e sem o compromisso pessoal", () => {
+  const { bodies } = homeFrame("H5");
+  const settings = bodies.get("/v1/settings");
+  assert.equal(settings.ai.enabled, false);
+  assert.equal(settings.ai.pausedAt, "2026-10-05T09:12:00-03:00");
+  const capabilities = bodies.get("/v1/dashboard").scheduling.data.calendar.capabilities;
+  assert.equal(capabilities.aiActivationReady && capabilities.hoursConfigured && capabilities.activationTestCompleted, true);
+  assert.equal(bodies.get("/v1/status").ai.state, "OFF");
+  assert.equal(bodies.get("/v1/status").whatsapp.status, "CONNECTED");
+  const dashboard = bodies.get("/v1/dashboard");
+  assert.deepEqual(dashboard.scheduling.data.todayAppointments.map((item) => item.startTime), ["10:00", "14:00", "15:00"]);
+  assert.ok(
+    dashboard.scheduling.data.todayAppointments.every((item) => item.customer && item.title !== "Dentista"),
+    "H5: o compromisso pessoal não é atendimento; o dashboard não o traz",
+  );
+  assert.equal(dashboard.scheduling.data.appointmentsToday, 3);
+  assertServiceColors("H5", bodies);
+  assert.deepEqual(
+    [dashboard.scheduling.data.appointmentsThisWeek, dashboard.ai.data.aiAppointmentsThisWeek, dashboard.ai.data.conversationsTakenOverThisWeek],
+    [12, 8, 2],
+  );
+});
+
+test("targets.json: H7 abre a confirmação de pausa por steps com a IA ativa e a pausa em branco", () => {
+  const { target, bodies } = homeFrame("H7");
+  assert.equal(target.steps.length, 1);
+  assert.equal(target.steps[0].clickRole.name, "Pausar");
+  assert.equal(target.steps[0].clickRole.role, "button");
+  assert.notEqual(target.steps[0].optional, true, "H7: sem o botão Pausar a captura tem de falhar");
+  assert.equal(bodies.get("/v1/status").ai.state, "ACTIVE");
+  const settings = bodies.get("/v1/settings");
+  assert.equal(settings.ai.enabled, true);
+  assert.equal(settings.ai.pausedAt, null);
+  assert.equal(bodies.get("/v1/dashboard").ai.data.automatedConversationsToday, 3);
+  assert.equal(bodies.get("/v1/dashboard").scheduling.data.todayAppointments.length, 5);
+  assertServiceColors("H7", bodies);
 });

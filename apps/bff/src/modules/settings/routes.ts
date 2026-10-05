@@ -240,6 +240,15 @@ export async function registerV1SettingsRoutes(
           // Pausar segue sem a marcacao; nao e recusa de leitura como ligar.
         }
       }
+      // So a passagem ligada -> desligada grava o instante da pausa; ligar
+      // limpa; salvar so o estilo com a IA ja desligada nao toca a coluna
+      // (Goal117/WU-01).
+      const pausing = !body.enabled && Boolean(current?.enabled);
+      const pausedAtWrite = body.enabled
+        ? { pausedAt: null }
+        : pausing
+          ? { pausedAt: new Date() }
+          : {};
       const upsertArgs = {
         where: { tenantId: tenant.tenantId },
         create: {
@@ -247,11 +256,13 @@ export async function registerV1SettingsRoutes(
           enabled: body.enabled,
           tone: body.tone,
           ...(activatedByRunId ? { activatedByRunId } : {}),
+          ...pausedAtWrite,
         },
         update: {
           enabled: body.enabled,
           tone: body.tone,
           ...(activatedByRunId ? { activatedByRunId } : {}),
+          ...pausedAtWrite,
         },
       };
       if (activating) {
@@ -466,6 +477,7 @@ async function settingsState(
     ai: {
       enabled: Boolean(aiSettings?.enabled),
       tone: normalizeStoredAiConversationStyle(aiSettings?.tone),
+      pausedAt: aiSettings?.pausedAt?.toISOString() ?? null,
     },
     calendar: {
       ...calendar,

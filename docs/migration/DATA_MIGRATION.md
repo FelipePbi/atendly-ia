@@ -894,3 +894,16 @@ Diff115, aceito no [review115](reviews/115-review.md) ([D-129](DECISIONS.md)). U
 - **Ensaio.** `scripts/goal074-human-takeover-migration-rehearsal.mjs` aplica a migration ao banco `_goal004` da suíte de durabilidade (`alignAiDurabilityTargetWithGoal115`, mesmo padrão de `alignAiDurabilityTargetWithGoal109`) e registra "durability target aligned with the Goal115 ConversationSession.categoryOverride column". O teste de integração `goal109-avenly-human-control-source` aplica a migration depois das anteriores ao Goal109, porque semeia pela `SessionService` real.
 
 **Nota de fechamento — review115, 2026-10-04.** A migration aplicou em bancos vazios com o histórico inteiro, por `prisma migrate deploy` na pilha descartável do Developer e na do Tech Lead, e no ensaio `rehearse:goal028-release-migrations` de `validate:integration` (36 de 36 passos). No banco do Tech Lead, a coluna é `SessionCategory`, anulável e sem default. A prova de que nenhuma linha existente muda é o SQL, que não tem `UPDATE` nem default; nenhum banco com dados reais foi migrado. Toda migration futura da IA lida pela `SessionService` precisa do mesmo alinhamento do banco `_goal004` no ensaio `goal074` (é o segundo caso, depois do Goal109). O deploy real e a ordem entre a IA e o BFF não foram medidos.
+
+## 25. Hora da pausa humana da IA: coluna `AiSettings.pausedAt` (Goal117)
+
+Diff117 ([D-131](DECISIONS.md), `PROPOSED`). Uma migration nova, no BFF:
+
+| Migration | App | O que faz | Reescrita de linha |
+| --- | --- | --- | --- |
+| `20261005000000_goal117_ai_settings_paused_at` | BFF | `ALTER TABLE "AiSettings" ADD COLUMN "pausedAt" TIMESTAMP(3)` | Nenhuma |
+
+- **Aditiva e anulável, sem default e sem backfill.** Toda linha existente fica com `pausedAt` nulo, que quer dizer "não há pausa humana registrada". A migration não inventa instante para quem já estava pausado antes dela: a Home mostra "IA pausada" sem "Desde", até a próxima pausa. O SQL não tem `UPDATE` nem default, então nenhuma linha muda.
+- **Quem grava.** Só `PATCH /v1/settings/ai` na passagem ligada → desligada grava o instante. Toda outra escrita que muda `enabled` grava `null`: ligar à mão, a autoativação e o desligamento por troca de canal (`lib/ai-activation.ts`) e a exclusão de conta (`account/service.ts`). Escrita que não muda `enabled` não toca a coluna.
+- **Rollback.** A coluna pode ser removida (`ALTER TABLE "AiSettings" DROP COLUMN "pausedAt"`) sem perda de regra: nenhuma decisão do produto depende dela, e só a hora mostrada em "Desde {hora}" some. O código novo precisa sair antes da remoção, porque `settings/routes.ts`, `ai-activation.ts` e `account/service.ts` gravam a coluna. O contrato já trata `ai.pausedAt` como opcional, então um BFF sem o campo continua válido para o frontend.
+- **Ensaio.** A migration aplicou com o histórico inteiro por `prisma migrate deploy` nos bancos descartáveis da pilha do `visual:compare` e de `validate:integration`. Nenhum ensaio aplica só parte do histórico do BFF e precisa da coluna: `scripts/goal011-ai-style-migration-rehearsal.mjs` cria `AiSettings` à mão e lê só `id` e `tone` por SQL. Nenhum banco com dados reais foi migrado; o deploy real não foi medido.

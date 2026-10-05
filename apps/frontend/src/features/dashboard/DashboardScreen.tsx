@@ -2,16 +2,36 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { type RefObject, useEffect, useId, useRef, useState } from "react";
 
 import {
+  type AiTone,
   type Appointment,
   appointmentStatusLabel,
   BffHttpError,
   type CalendarState,
+  type Conversation,
   type Dashboard,
+  type ServiceList,
 } from "@/data";
 import { durationLabel } from "@/features/agenda/NewAppointmentFields";
+import {
+  appointmentServiceColors,
+  type ServiceColorMap,
+  serviceColorMap,
+} from "@/features/agenda/occupancy";
+import { ChatSheetShell } from "@/features/conversations/ConversationActionsSheet";
+import {
+  conversationState,
+  handoffReasonCopy,
+  needsAttention,
+  waitingNoticeCopy,
+} from "@/features/conversations/conversationState";
+import {
+  businessDaysAgo,
+  conversationLabel,
+  formatWaitingTime,
+} from "@/features/conversations/format";
 import {
   useNotificationsDrawer,
   useNotificationsDrawerViewport,
@@ -254,12 +274,14 @@ function dashboardNeedsAttention(
 type OperationalState = {
   action?: { href: string; label: string };
   alert: boolean;
+  /** Controle que grava `PATCH /v1/settings/ai`: "Pausar" (H7) ou "Reativar" (H5). */
+  control?: "pause" | "resume";
   description: string;
   icon: IconName;
   title: string;
   tone: "error" | "info" | "ok" | "warning";
-  /** Faixa de desconexão do quadro H3: ícone e texto em cima, ação em largura total embaixo. */
-  variant?: "disconnected";
+  /** "disconnected": faixa do H3; "inactive"/"paused": anel vazado dos quadros H4 e H5. */
+  variant?: "disconnected" | "inactive" | "paused";
 };
 
 /**
@@ -274,6 +296,9 @@ function resolveOperationalState({
   automatedConversationsToday,
   calendarUnavailable,
   checklistComplete,
+  checklistWaitsWhatsapp,
+  missingPhrase,
+  pausedSince,
   whatsappIssue,
 }: {
   aiUnavailable: boolean;
@@ -281,6 +306,12 @@ function resolveOperationalState({
   automatedConversationsToday: number;
   calendarUnavailable: boolean;
   checklistComplete: boolean;
+  /** O checklist está na tela com "Conectar o WhatsApp" pendente (quadro H4). */
+  checklistWaitsWhatsapp: boolean;
+  /** "Falta conectar o WhatsApp e fazer o teste": derivada dos passos pendentes. */
+  missingPhrase: string;
+  /** "Desde 09:12." quando `pausedAt` é conhecido. */
+  pausedSince: string | null;
   whatsappIssue: "off" | "unknown" | null;
 }): OperationalState {
   if (calendarUnavailable) {
@@ -293,6 +324,13 @@ function resolveOperationalState({
       title: "Não foi possível consultar a agenda",
       tone: "error",
     };
+  }
+  // Exceção do H4 (review117, rodada 1): com o checklist na tela e
+  // "Conectar o WhatsApp" pendente, a configuração ainda não terminou e a
+  // faixa diz o que falta em vez de "WhatsApp desconectado". Com o checklist
+  // completo, a ordem abaixo não muda.
+  if (whatsappIssue === "off" && checklistWaitsWhatsapp) {
+    return inactiveState(missingPhrase);
   }
   if (whatsappIssue === "off") {
     return {
@@ -361,23 +399,18 @@ function resolveOperationalState({
     return checklistComplete
       ? {
           alert: true,
-          description:
-            "As conversas continuam chegando; ninguém recebe resposta automática.",
+          control: "resume",
+          description: `${pausedSince ? `${pausedSince} ` : ""}As conversas continuam chegando; ninguém recebe resposta automática.`,
           icon: "shield",
           title: "IA pausada",
           tone: "warning",
+          variant: "paused",
         }
-      : {
-          alert: true,
-          description: "Termine a configuração abaixo para a IA responder no WhatsApp.",
-          icon: "shield",
-          title: "IA inativa",
-          tone: "warning",
-        };
+      : inactiveState(missingPhrase);
   }
   return {
-    action: { href: "/configuracoes/ia", label: "Pausar" },
     alert: false,
+    control: "pause",
     description: `Atendendo pelo WhatsApp · ${automatedConversationsToday} ${
       automatedConversationsToday === 1 ? "conversa hoje" : "conversas hoje"
     }`,
@@ -387,7 +420,38 @@ function resolveOperationalState({
   };
 }
 
-function OperationalBand({ state }: { state: OperationalState }) {
+function inactiveState(missingPhrase: string): OperationalState {
+  return {
+    alert: true,
+    description: missingPhrase,
+    icon: "shield",
+    title: "IA inativa",
+    tone: "warning",
+    variant: "inactive",
+  };
+}
+
+type ResumeFailure = "failed" | "needs-test";
+
+type BandControls = {
+  busy: boolean;
+  onPause: () => void;
+  onResume: () => void;
+  /** `GET /v1/settings` respondeu: sem o estilo lido, nada é gravado. */
+  ready: boolean;
+  readFailed: boolean;
+  resumeFailure: ResumeFailure | null;
+};
+
+function OperationalBand({
+  controls,
+  pauseRef,
+  state,
+}: {
+  controls: BandControls;
+  pauseRef: RefObject<HTMLButtonElement | null>;
+  state: OperationalState;
+}) {
   const active = state.tone === "ok";
   if (state.variant === "disconnected") {
     return (
@@ -411,20 +475,24 @@ function OperationalBand({ state }: { state: OperationalState }) {
       </section>
     );
   }
+  const hollow = state.variant === "paused" || state.variant === "inactive";
   return (
     <section
       id="operational-status"
       className={clsx(
         "operational-strip",
         active && "is-active",
+        state.variant === "paused" && "is-paused",
+        state.variant === "inactive" && "is-inactive",
         state.tone === "error" && "alert-error",
         state.tone === "info" && "alert-info",
-        state.tone === "warning" && "banner-warning",
       )}
-      role={state.alert ? "alert" : undefined}
+      role={state.alert && !controls.resumeFailure ? "alert" : undefined}
     >
       {active ? (
         <span className="ia-dot is-active operational-ring" aria-hidden="true" />
+      ) : hollow ? (
+        <span className="operational-ring-off" aria-hidden="true" />
       ) : (
         <span
           className={clsx(
@@ -439,6 +507,22 @@ function OperationalBand({ state }: { state: OperationalState }) {
       <div className="operational-copy">
         <strong>{state.title}</strong>
         <span>{state.description}</span>
+        {state.control && controls.readFailed && (
+          <p className="operational-note" role="status">
+            Não foi possível ler as configurações da IA agora.
+          </p>
+        )}
+        {controls.resumeFailure === "needs-test" && (
+          <p className="operational-error" role="alert">
+            A IA só liga depois de um teste real que terminou bem.{" "}
+            <Link href="/configuracoes/ia#teste-real">Fazer o teste</Link>
+          </p>
+        )}
+        {controls.resumeFailure === "failed" && (
+          <p className="operational-error" role="alert">
+            Não foi possível reativar a IA.
+          </p>
+        )}
         {state.action && !active && (
           <Link
             className="btn btn-primary operational-action"
@@ -448,10 +532,26 @@ function OperationalBand({ state }: { state: OperationalState }) {
           </Link>
         )}
       </div>
-      {state.action && active && (
-        <Link className="operational-link" href={state.action.href}>
-          {state.action.label}
-        </Link>
+      {state.control === "pause" && (
+        <button
+          className="operational-link"
+          disabled={!controls.ready}
+          onClick={controls.onPause}
+          ref={pauseRef}
+          type="button"
+        >
+          Pausar
+        </button>
+      )}
+      {state.control === "resume" && (
+        <button
+          className="operational-resume"
+          disabled={!controls.ready || controls.busy}
+          onClick={controls.onResume}
+          type="button"
+        >
+          Reativar
+        </button>
       )}
     </section>
   );
@@ -488,26 +588,44 @@ function AgendaStatus({ status }: { status: string }) {
 function AgendaToday({
   appointments,
   nowLabel,
+  serviceColors,
+  showNowMarker,
 }: {
   appointments: Appointment[];
   nowLabel: string;
+  /** Cor de cada serviço lida de `GET /v1/services` (D-108 (f)); sem cor, traço neutro. */
+  serviceColors: ServiceColorMap;
+  showNowMarker: boolean;
 }) {
   const markerIndex = appointments.findIndex(
     (appointment) => appointment.endTime > nowLabel,
   );
-  const insertAt = markerIndex === -1 ? appointments.length : markerIndex;
+  const insertAt = !showNowMarker
+    ? -1
+    : markerIndex === -1
+      ? appointments.length
+      : markerIndex;
 
   return (
     <div className="agenda-stack">
       {appointments.flatMap((appointment, index) => {
+        const colors = appointmentServiceColors(appointment, serviceColors);
         const row = (
           <Link
-            className="agenda-row"
+            className="today-row"
             href={`/agenda/agendamento?id=${encodeURIComponent(appointment.id)}`}
             key={appointment.id}
           >
             <strong className="agenda-time">{appointment.startTime}</strong>
-            <span className="agenda-bar" aria-hidden="true" />
+            <span className="agenda-bar" aria-hidden="true">
+              {(colors.length > 0 ? colors : [null]).map((color, part) => (
+                <span
+                  className="agenda-bar-part"
+                  data-color={color ?? undefined}
+                  key={part}
+                />
+              ))}
+            </span>
             <div className="agenda-row-body">
               <div className="agenda-copy">
                 <strong>{appointment.customer?.name ?? "Cliente"}</strong>
@@ -515,7 +633,7 @@ function AgendaToday({
                   {appointment.services.length > 0
                     ? appointment.services
                         .map((service) => service.name)
-                        .join(", ")
+                        .join(" + ")
                     : (appointment.title ?? "Atendimento")}
                   {" · "}
                   {durationLabel(appointment.durationMinutes)}
@@ -534,7 +652,7 @@ function AgendaToday({
             ]
           : [row];
       })}
-      {insertAt === appointments.length && (
+      {showNowMarker && insertAt === appointments.length && (
         <div className="agenda-now-marker" key="agora">
           agora
         </div>
@@ -580,6 +698,191 @@ function HomeBell({ unreadCount }: { unreadCount: number }) {
   );
 }
 
+type SettingsRead =
+  | { phase: "error" }
+  | { phase: "loading" }
+  | { pausedAt: string | null; phase: "ready"; tone: AiTone };
+
+type ServiceToReview = ServiceList["items"][number];
+
+/** "Desde 09:12." se a pausa é de hoje no fuso do negócio; "Desde 04/10, 09:12." se de outro dia. */
+function pausedSinceLabel(
+  pausedAt: string | null,
+  timezone: string,
+): string | null {
+  if (!pausedAt) return null;
+  const instant = new Date(pausedAt);
+  if (Number.isNaN(instant.getTime())) return null;
+  const time = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    hourCycle: "h23",
+    minute: "2-digit",
+    timeZone: timezone,
+  }).format(instant);
+  if (businessDaysAgo(pausedAt, timezone) === 0) return `Desde ${time}.`;
+  const day = new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: timezone,
+  }).format(instant);
+  return `Desde ${day}, ${time}.`;
+}
+
+function ChevronIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
+function ConversationPendency({
+  conversation,
+  state,
+}: {
+  conversation: Conversation;
+  state: "ai-unstable" | "waiting-you";
+}) {
+  const reason =
+    state === "ai-unstable"
+      ? handoffReasonCopy(conversation.handoffReason)
+      : waitingNoticeCopy(conversation.handoffReason);
+  const elapsed = formatWaitingTime(conversation.updatedAt);
+  return (
+    <Link
+      className="pendency-row is-conversation"
+      href={`/conversas/${encodeURIComponent(conversation.id)}`}
+    >
+      <span aria-hidden="true" className="pendency-dot" />
+      <div className="pendency-text">
+        <strong>{conversationLabel(conversation)}</strong>
+        {reason ? ` ${reason}` : null}
+        <span className="pendency-sub">
+          {state === "waiting-you"
+            ? `Aguardando ${elapsed}`
+            : `A IA não conseguiu responder · ${elapsed}`}
+        </span>
+      </div>
+      <ChevronIcon />
+    </Link>
+  );
+}
+
+function ServicePendency({ service }: { service: ServiceToReview }) {
+  const textId = useId();
+  return (
+    <div className="pendency-row is-service">
+      <svg
+        aria-hidden="true"
+        className="pendency-warning"
+        fill="none"
+        height="18"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.75"
+        viewBox="0 0 24 24"
+        width="18"
+      >
+        <path d="M12 4 21 20H3z" />
+        <path d="M12 10v4M12 17v.5" />
+      </svg>
+      <div className="pendency-text" id={textId}>
+        <strong>{service.name}</strong> está sem duração
+        <span className="pendency-sub">A IA não consegue marcar esse serviço</span>
+      </div>
+      <Link
+        aria-describedby={textId}
+        className="pendency-action"
+        href={`/servicos/editar?id=${encodeURIComponent(service.id)}`}
+      >
+        Corrigir
+      </Link>
+    </div>
+  );
+}
+
+function PauseConfirmation({
+  busy,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  busy: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const titleId = useId();
+  return (
+    <ChatSheetShell
+      className="is-pause"
+      onClose={onCancel}
+      title="Pausar sua IA?"
+      titleId={titleId}
+    >
+      <div className="pause-sheet-head">
+        <span aria-hidden="true" className="pause-sheet-icon">
+          <svg
+            fill="none"
+            height="22"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+            viewBox="0 0 24 24"
+            width="22"
+          >
+            <path d="M9 6v12M15 6v12" />
+          </svg>
+        </span>
+        <div className="pause-sheet-copy">
+          <h2 className="pause-sheet-title" id={titleId}>
+            Pausar sua IA?
+          </h2>
+          <p>
+            Enquanto estiver pausada, seus clientes não recebem respostas
+            automáticas. As conversas continuam chegando normalmente e você
+            reativa quando quiser.
+          </p>
+        </div>
+      </div>
+      {error && (
+        <p className="chat-sheet-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="pause-sheet-actions">
+        <button
+          className="pause-sheet-confirm"
+          disabled={busy}
+          onClick={onConfirm}
+          type="button"
+        >
+          Pausar IA
+        </button>
+        <button
+          className="pause-sheet-cancel"
+          onClick={onCancel}
+          type="button"
+        >
+          Continuar atendendo
+        </button>
+      </div>
+    </ChatSheetShell>
+  );
+}
+
 function RealDashboard({
   dashboard,
   onRetry,
@@ -596,9 +899,8 @@ function RealDashboard({
   const calendarUnavailable = dashboard.scheduling.status === "error";
   const aiUnavailable = dashboard.ai.status === "error";
   const whatsappIssue = whatsappBannerIssue(status.whatsappView);
+  const timezone = dashboard.platform.timezone;
   const todayAppointments = scheduling?.todayAppointments ?? [];
-  const attention = ai?.conversationsNeedingAttention ?? [];
-  const attentionCount = ai?.conversationsNeedingAttentionCount ?? 0;
   const weekAppointments = calendarUnavailable
     ? null
     : (scheduling?.appointmentsThisWeek ?? 0);
@@ -621,26 +923,165 @@ function RealDashboard({
    */
   const checklistVisible =
     status.phase !== "loading" && status.aiView !== "active" && !checklistComplete;
-  const greeting = homeGreeting(dashboard.platform.timezone, session?.user.name);
+  const greeting = homeGreeting(timezone, session?.user.name);
   const todayLong = new Intl.DateTimeFormat("pt-BR", {
     day: "numeric",
     month: "long",
-    timeZone: dashboard.platform.timezone,
+    timeZone: timezone,
     weekday: "long",
   })
     .format(new Date())
     .replace("-feira", "");
   const today = todayLong.charAt(0).toUpperCase() + todayLong.slice(1);
-  const nowLabel = currentTimeLabel(dashboard.platform.timezone);
+  const nowLabel = currentTimeLabel(timezone);
+
+  const [settings, setSettings] = useState<SettingsRead>({ phase: "loading" });
+  const [catalog, setCatalog] = useState<ServiceToReview[]>([]);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [resumeFailure, setResumeFailure] = useState<ResumeFailure | null>(
+    null,
+  );
+  const [pauseOpen, setPauseOpen] = useState(false);
+  const [pauseError, setPauseError] = useState<string | null>(null);
+  const pauseRef = useRef<HTMLButtonElement>(null);
+  const pauseWasOpen = useRef(false);
+
+  /**
+   * O estilo (`tone`) e a hora da pausa vêm de `GET /v1/settings`, lido de novo
+   * a cada painel novo e a cada mudança do estado da IA. A falha não derruba a
+   * Home: sem a leitura, só "Pausar" e "Reativar" ficam desabilitados.
+   */
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.resolve()
+      .then(() => getProductServices().settings.get(controller.signal))
+      .then((state) => {
+        setSettings({
+          pausedAt: state.ai.pausedAt ?? null,
+          phase: "ready",
+          tone: state.ai.tone ?? "BALANCED",
+        });
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setSettings((current) =>
+          current.phase === "ready" ? current : { phase: "error" },
+        );
+      });
+    return () => controller.abort();
+  }, [dashboard, status.aiView]);
+
+  /**
+   * A falha de `GET /v1/services` só tira a linha de serviço das pendências e
+   * deixa o traço dos atendimentos neutro; a agenda continua na tela.
+   */
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.resolve()
+      .then(() => getProductServices().serviceCatalog.list(controller.signal))
+      .then((list) => setCatalog(list.items))
+      .catch(() => {
+        if (!controller.signal.aborted) setCatalog([]);
+      });
+    return () => controller.abort();
+  }, [dashboard]);
+
+  useEffect(() => {
+    if (pauseWasOpen.current && !pauseOpen) pauseRef.current?.focus();
+    pauseWasOpen.current = pauseOpen;
+  }, [pauseOpen]);
+
+  const servicesToReview = catalog.filter((service) => service.needsReview);
+  const serviceColors = serviceColorMap(catalog);
+  const attention = (ai?.conversationsNeedingAttention ?? [])
+    .map((conversation) => ({ conversation, state: conversationState(conversation) }))
+    .filter(
+      (
+        entry,
+      ): entry is {
+        conversation: Conversation;
+        state: "ai-unstable" | "waiting-you";
+      } => needsAttention(entry.state),
+    );
+  const pendencyConversations = [
+    ...attention.filter((entry) => entry.state === "ai-unstable"),
+    ...attention.filter((entry) => entry.state === "waiting-you"),
+  ];
+  const hasPendencies =
+    pendencyConversations.length + servicesToReview.length > 0;
+  const remainingAppointments = todayAppointments.filter(
+    (appointment) => appointment.startTime > nowLabel,
+  );
+  const listedAppointments = hasPendencies
+    ? remainingAppointments
+    : todayAppointments;
+  const todayCount = hasPendencies
+    ? `· ${remainingAppointments.length} ${remainingAppointments.length === 1 ? "restante" : "restantes"}`
+    : todayAppointments.length > 0
+      ? `· ${todayAppointments.length} ${todayAppointments.length === 1 ? "atendimento" : "atendimentos"}`
+      : null;
+
   const operationalState = resolveOperationalState({
     aiUnavailable,
     aiView: status.aiView,
     automatedConversationsToday: ai?.automatedConversationsToday ?? 0,
     calendarUnavailable,
     checklistComplete,
+    checklistWaitsWhatsapp:
+      checklistVisible &&
+      checklistItems.some((item) => item.key === "whatsapp" && !item.done),
+    missingPhrase: missingStepsPhrase(checklistItems),
+    pausedSince: pausedSinceLabel(
+      settings.phase === "ready" ? settings.pausedAt : null,
+      timezone,
+    ),
     whatsappIssue,
   });
   const unreadCount = status.notificationsSummary?.unreadCount ?? 0;
+
+  async function writeAi(enabled: boolean): Promise<boolean> {
+    if (settings.phase !== "ready" || aiBusy) return false;
+    setAiBusy(true);
+    try {
+      await getProductServices().settings.updateAi({
+        enabled,
+        tone: settings.tone,
+      });
+      status.refresh();
+      onRetry();
+      return true;
+    } catch (caught) {
+      if (enabled) {
+        setResumeFailure(
+          caught instanceof BffHttpError &&
+            caught.code === "AI_ACTIVATION_TEST_REQUIRED"
+            ? "needs-test"
+            : "failed",
+        );
+      } else {
+        setPauseError("Não foi possível pausar a IA.");
+      }
+      return false;
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  async function resume() {
+    setResumeFailure(null);
+    await writeAi(true);
+  }
+
+  async function confirmPause() {
+    setPauseError(null);
+    if (await writeAi(false)) setPauseOpen(false);
+  }
+
+  function cancelPause() {
+    if (aiBusy) return;
+    setPauseError(null);
+    setPauseOpen(false);
+  }
 
   return (
     <div className="dashboard-page">
@@ -652,65 +1093,60 @@ function RealDashboard({
         <HomeBell unreadCount={unreadCount} />
       </header>
 
-      <OperationalBand state={operationalState} />
-
-      {checklistVisible && (
-        <PostOnboardingChecklist items={checklistItems} />
-      )}
+      <OperationalBand
+        controls={{
+          busy: aiBusy,
+          onPause: () => setPauseOpen(true),
+          onResume: () => void resume(),
+          readFailed: settings.phase === "error",
+          ready: settings.phase === "ready",
+          resumeFailure,
+        }}
+        pauseRef={pauseRef}
+        state={operationalState}
+      />
 
       <div className="dashboard-body">
-        {attentionCount > 0 && (
-          <article
+        {hasPendencies && (
+          <section
+            aria-labelledby="attention-heading"
+            className="attention-card pendency-block"
             id="attention"
-            className="card dashboard-card attention-card"
           >
-            <header className="dashboard-card-head">
-              <h2>Precisa da sua atenção</h2>
-              <span className="badge badge-attention">
-                {`${attentionCount} ${attentionCount === 1 ? "conversa" : "conversas"}`}
-              </span>
-            </header>
-            <div className="attention-list">
-              {attention.map((conversation) => (
-                <Link
-                  className="attention-row"
-                  href={`/conversas/${encodeURIComponent(conversation.id)}`}
+            <h2 className="pendency-label" id="attention-heading">
+              Precisa da sua atenção
+            </h2>
+            <div className="pendency-list">
+              {pendencyConversations.map(({ conversation, state }) => (
+                <ConversationPendency
+                  conversation={conversation}
                   key={conversation.id}
-                >
-                  <span className="avatar">
-                    <Icon name="chat" />
-                  </span>
-                  <div className="attention-row-main">
-                    <strong>
-                      {conversation.customerName ??
-                        conversation.externalContactId}
-                    </strong>
-                    <span>
-                      {conversation.lastMessage?.body ??
-                        conversation.handoffReason ??
-                        "Aguardando atendimento humano"}
-                    </span>
-                  </div>
-                </Link>
+                  state={state}
+                />
+              ))}
+              {servicesToReview.map((service) => (
+                <ServicePendency key={service.id} service={service} />
               ))}
             </div>
-          </article>
+          </section>
         )}
+
+        {checklistVisible && <PostOnboardingChecklist items={checklistItems} />}
 
         <article id="agenda-today" className="card dashboard-card today-card">
           <header className="dashboard-card-head today-head">
             <div className="today-title">
               <h2>Hoje</h2>
-              <span
-                className={clsx(
-                  "today-count",
-                  calendarUnavailable && "is-danger",
-                )}
-              >
-                {calendarUnavailable
-                  ? "· Indisponível"
-                  : `· ${todayAppointments.length} ${todayAppointments.length === 1 ? "atendimento" : "atendimentos"}`}
-              </span>
+              {(calendarUnavailable || todayCount) && (
+                <span
+                  className={clsx(
+                    "today-count",
+                    calendarUnavailable && "is-danger",
+                  )}
+                >
+                  {calendarUnavailable ? "· Indisponível" : todayCount}
+                </span>
+              )}
             </div>
             <Link className="dashboard-link" href="/agenda">
               Ver agenda
@@ -731,64 +1167,86 @@ function RealDashboard({
                 Tentar novamente
               </button>
             </div>
-          ) : todayAppointments.length === 0 ? (
-            <div className="dashboard-empty">
-              <div className="dashboard-empty-inner">
-                <span className="state-icon">
-                  <Icon name="calendar" />
-                </span>
-                <h3>Nenhum atendimento hoje.</h3>
-                <p>
-                  Agendamentos criados manualmente ou pela Avenly aparecerão
-                  aqui.
-                </p>
-                <Link className="btn btn-secondary" href="/agenda/novo">
-                  Novo agendamento
-                </Link>
+          ) : listedAppointments.length === 0 ? (
+            <div className="today-empty">
+              <div aria-hidden="true" className="today-empty-art">
+                <span className="today-empty-line" />
+                <span className="today-empty-line" />
+                <span className="today-empty-slot" />
+                <span className="today-empty-line" />
+                <span className="today-empty-line" />
               </div>
+              <h3 className="today-empty-title">
+                {todayAppointments.length === 0
+                  ? "Nenhum atendimento hoje."
+                  : "Nenhum atendimento restante hoje."}
+              </h3>
+              <Link className="today-empty-action" href="/agenda/novo">
+                Criar agendamento
+              </Link>
             </div>
           ) : (
-            <AgendaToday appointments={todayAppointments} nowLabel={nowLabel} />
+            <AgendaToday
+              appointments={listedAppointments}
+              nowLabel={nowLabel}
+              serviceColors={serviceColors}
+              showNowMarker={!hasPendencies}
+            />
           )}
         </article>
 
-        <article className="card dashboard-card week-card">
-          <header className="dashboard-card-head week-head">
-            <h2>Esta semana</h2>
-          </header>
-          <div className="week-stats">
-            <div className="week-stat">
-              <span className="week-stat-value">
-                {weekAppointments ?? "—"}
-              </span>
-              <span className="week-stat-label">agendamentos</span>
+        {/* Os quadros H2 e H4 não têm "Esta semana": com pendências ou com o
+            checklist, a coluna termina neles. H1, H3 e H5 mantêm o bloco. */}
+        {!hasPendencies && !checklistVisible && (
+          <article className="card dashboard-card week-card">
+            <header className="dashboard-card-head week-head">
+              <h2>Esta semana</h2>
+            </header>
+            <div className="week-stats">
+              <div className="week-stat">
+                <span className="week-stat-value">
+                  {weekAppointments ?? "—"}
+                </span>
+                <span className="week-stat-label">agendamentos</span>
+              </div>
+              <div className="week-stat">
+                <span className="week-stat-value">
+                  {weekAiAppointments ?? "—"}
+                </span>
+                <span className="week-stat-label">marcados pela IA</span>
+              </div>
+              <div className="week-stat">
+                <span className="week-stat-value">{weekHandoffs ?? "—"}</span>
+                <span className="week-stat-label">conversas que você assumiu</span>
+              </div>
             </div>
-            <div className="week-stat">
-              <span className="week-stat-value">
-                {weekAiAppointments ?? "—"}
-              </span>
-              <span className="week-stat-label">marcados pela IA</span>
-            </div>
-            <div className="week-stat">
-              <span className="week-stat-value">{weekHandoffs ?? "—"}</span>
-              <span className="week-stat-label">conversas que você assumiu</span>
-            </div>
-          </div>
-        </article>
+          </article>
+        )}
       </div>
+
+      {pauseOpen && (
+        <PauseConfirmation
+          busy={aiBusy}
+          error={pauseError}
+          onCancel={cancelPause}
+          onConfirm={() => void confirmPause()}
+        />
+      )}
     </div>
   );
 }
 
 type ChecklistItem = {
-  /** Ação na própria linha, além do link do item, enquanto ela couber. */
-  action?: { href: string; label: string };
+  /** Ação da linha; só o primeiro passo pendente a mostra. */
+  action: { href: string; label: string };
   done: boolean;
   href: string;
-  /** Por que o item ainda não tem ação: dito, nunca escondido. */
+  /** Por que o passo ainda não tem ação: dito, nunca escondido. */
   hint?: string;
   key: string;
   label: string;
+  /** Como o passo entra na frase "Falta …" da faixa "IA inativa". */
+  missing: string;
 };
 
 /**
@@ -816,70 +1274,108 @@ function buildChecklistItems({
   const testDone = Boolean(capabilities?.activationTestCompleted);
   return [
     {
+      action: { href: "/servicos", label: "Cadastrar" },
       done: Boolean(capabilities?.aiActivationReady),
       href: "/servicos",
       key: "service",
       label: "Cadastrar um serviço",
+      missing: "cadastrar um serviço",
     },
     {
+      action: { href: "/configuracoes/disponibilidade", label: "Definir" },
       done: Boolean(capabilities?.hoursConfigured),
       href: "/configuracoes/disponibilidade",
       key: "hours",
       label: "Definir horários de atendimento",
+      missing: "definir os horários de atendimento",
     },
     {
-      action: whatsappActive
-        ? undefined
-        : { href: "/configuracoes/whatsapp", label: "Conectar" },
+      action: { href: "/configuracoes/whatsapp", label: "Conectar" },
       done: whatsappActive,
       href: "/configuracoes/whatsapp",
       key: "whatsapp",
       label: "Conectar o WhatsApp",
+      missing: "conectar o WhatsApp",
     },
     {
-      action:
-        whatsappActive && !testDone
-          ? { href: "/configuracoes/ia#teste-real", label: "Fazer o teste" }
-          : undefined,
+      action: { href: "/configuracoes/ia#teste-real", label: "Fazer o teste" },
       done: testDone,
       hint: whatsappActive || testDone ? undefined : "depois do WhatsApp",
       href: "/configuracoes/ia#teste-real",
       key: "activation-test",
-      label: "Concluir o teste da IA",
+      label: "Fazer o teste real",
+      missing: "fazer o teste",
     },
   ];
 }
 
+/** "Falta conectar o WhatsApp e fazer o teste": só os passos pendentes, na ordem do checklist. */
+function missingStepsPhrase(items: ChecklistItem[]): string {
+  const missing = items.filter((item) => !item.done).map((item) => item.missing);
+  if (missing.length === 0) return "";
+  const last = missing.at(-1);
+  const list =
+    missing.length === 1
+      ? last
+      : `${missing.slice(0, -1).join(", ")} e ${last}`;
+  return `Falta ${list}`;
+}
+
 function PostOnboardingChecklist({ items }: { items: ChecklistItem[] }) {
   const doneCount = items.filter((item) => item.done).length;
+  const firstPending = items.find((item) => !item.done);
 
   return (
-    <section
-      className="card dashboard-card checklist-card"
-      aria-labelledby="checklist-heading"
-    >
-      <header className="dashboard-card-head">
+    <section className="checklist-card" aria-labelledby="checklist-heading">
+      <div className="checklist-head">
         <h2 id="checklist-heading">Ative sua IA</h2>
-        <span className="badge">
+        <p className="checklist-count">
           {doneCount} de {items.length} passos concluídos
-        </span>
-      </header>
+        </p>
+        <div aria-hidden="true" className="checklist-progress">
+          {items.map((item) => (
+            <span
+              className={clsx("checklist-segment", item.done && "is-done")}
+              key={item.key}
+            />
+          ))}
+        </div>
+      </div>
       <ul className="checklist-list">
         {items.map((item) => (
           <li
             aria-label={`${item.label}: ${item.done ? "concluído" : "pendente"}`}
-            className={clsx("checklist-item", item.done && "is-done")}
+            className={clsx(
+              "checklist-item",
+              item.done && "is-done",
+              item === firstPending && "is-current",
+            )}
             key={item.key}
           >
             <span className="checklist-marker" aria-hidden="true">
-              {item.done && <Icon name="check" />}
+              {item.done && (
+                <svg
+                  fill="none"
+                  height="13"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="3"
+                  viewBox="0 0 24 24"
+                  width="13"
+                >
+                  <path d="M5 12.5l4.5 4.5L19 7.5" />
+                </svg>
+              )}
             </span>
             <Link className="checklist-link" href={item.href}>
               {item.label}
             </Link>
-            {item.hint && <span className="checklist-hint">{item.hint}</span>}
-            {item.action && (
-              <Link className="btn btn-secondary" href={item.action.href}>
+            {item.hint && item !== firstPending && (
+              <span className="checklist-hint">{item.hint}</span>
+            )}
+            {item === firstPending && (
+              <Link className="checklist-action" href={item.action.href}>
                 {item.action.label}
               </Link>
             )}

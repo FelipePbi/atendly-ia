@@ -211,6 +211,9 @@ export const settingsStateSchema = z.object({
   ai: z.object({
     enabled: z.boolean(),
     tone: aiToneSchema.nullable(),
+    // Instante da pausa humana (Goal117). Opcional e anulável: resposta
+    // anterior a este Goal continua válida sem o campo.
+    pausedAt: isoDateTimeSchema.nullable().optional(),
   }),
   calendar: calendarStateSchema,
   availability: availabilitySettingsSchema.nullable(),

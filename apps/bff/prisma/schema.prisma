@@ -223,6 +223,11 @@ model AiSettings {
   /// duas vezes, e trocar o WhatsApp invalida a execucao que autorizou, o que
   /// so e verificavel comparando o vinculo dela com o vinculo corrente.
   activatedByRunId String?
+  /// Instante da pausa humana (Goal117): so a passagem ligada -> desligada de
+  /// `PATCH /v1/settings/ai` grava. Qualquer outra escrita que muda `enabled`
+  /// (ligar, autoativacao, troca de canal, exclusao de conta) grava nulo. Nulo
+  /// tambem e "pausa anterior a este Goal": nenhum instante e inventado.
+  pausedAt  DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

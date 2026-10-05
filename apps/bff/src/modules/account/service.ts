@@ -303,8 +303,9 @@ export function accountDeletionStore(
             tenantId: input.tenantId,
             enabled: false,
             activatedByRunId: null,
+            pausedAt: null,
           },
-          update: { enabled: false, activatedByRunId: null },
+          update: { enabled: false, activatedByRunId: null, pausedAt: null },
         }),
       ]);
       return deletion;

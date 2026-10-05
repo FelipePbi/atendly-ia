@@ -7,7 +7,7 @@
  * - "Cadastrar um serviço" leva a `/servicos`, "Definir horários de
  *   atendimento" a `/configuracoes/disponibilidade`, "Conectar o WhatsApp" a
  *   `/configuracoes/whatsapp` (com "Conectar" na linha enquanto pendente) e
- *   "Concluir o teste da IA" ao teste em Configurações › IA;
+ *   "Fazer o teste real" ao teste em Configurações › IA;
  * - com o WhatsApp pendente, o último item diz "depois do WhatsApp" em vez de
  *   oferecer o teste;
  * - item concluído continua marcado e continua alcançável;
@@ -176,13 +176,15 @@ describe("checklist da Home: cada item é uma ação alcançável", () => {
     expect(
       within(whatsapp).getByRole("link", { name: "Conectar o WhatsApp" }),
     ).toHaveAttribute("href", "/configuracoes/whatsapp");
+    // Uma única ação viva (quadro H4): fica na primeira linha pendente.
+    expect(within(whatsapp).queryByRole("link", { name: "Conectar" })).toBeNull();
     expect(
-      within(whatsapp).getByRole("link", { name: "Conectar" }),
-    ).toHaveAttribute("href", "/configuracoes/whatsapp");
+      within(service).getByRole("link", { name: "Cadastrar" }),
+    ).toHaveAttribute("href", "/servicos");
 
-    const test = row(checklist, "Concluir o teste da IA: pendente");
+    const test = row(checklist, "Fazer o teste real: pendente");
     expect(
-      within(test).getByRole("link", { name: "Concluir o teste da IA" }),
+      within(test).getByRole("link", { name: "Fazer o teste real" }),
     ).toHaveAttribute("href", "/configuracoes/ia#teste-real");
     expect(within(test).getByText("depois do WhatsApp")).toBeVisible();
     expect(within(test).queryByRole("link", { name: "Fazer o teste" })).toBeNull();
@@ -192,7 +194,10 @@ describe("checklist da Home: cada item é uma ação alcançável", () => {
   });
 
   test("WhatsApp conectado: a linha dele não oferece 'Conectar' e o teste passa a ser oferecido", async () => {
-    const { checklist } = await renderHome({}, true);
+    const { checklist } = await renderHome(
+      { aiActivationReady: true, hoursConfigured: true },
+      true,
+    );
 
     const whatsapp = row(checklist, "Conectar o WhatsApp: concluído");
     expect(within(whatsapp).queryByRole("link", { name: "Conectar" })).toBeNull();
@@ -201,7 +206,7 @@ describe("checklist da Home: cada item é uma ação alcançável", () => {
       within(whatsapp).getByRole("link", { name: "Conectar o WhatsApp" }),
     ).toHaveAttribute("href", "/configuracoes/whatsapp");
 
-    const test = row(checklist, "Concluir o teste da IA: pendente");
+    const test = row(checklist, "Fazer o teste real: pendente");
     expect(within(test).queryByText("depois do WhatsApp")).toBeNull();
     expect(
       within(test).getByRole("link", { name: "Fazer o teste" }),
@@ -226,7 +231,7 @@ describe("checklist da Home: cada item é uma ação alcançável", () => {
     for (const [name, href] of [
       ["Cadastrar um serviço", "/servicos"],
       ["Conectar o WhatsApp", "/configuracoes/whatsapp"],
-      ["Concluir o teste da IA", "/configuracoes/ia#teste-real"],
+      ["Fazer o teste real", "/configuracoes/ia#teste-real"],
     ] as const) {
       const item = row(checklist, `${name}: concluído`);
       expect(within(item).getByRole("link", { name })).toHaveAttribute(

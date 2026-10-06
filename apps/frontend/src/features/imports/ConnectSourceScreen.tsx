@@ -3,6 +3,7 @@
 import { type FormEvent, useState } from "react";
 
 import { BffHttpError } from "@/data";
+import { schedulingRefusalCode } from "@/data/http/schedulingRefusal";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
 import { newIdempotencyKey } from "./idempotency";
@@ -51,7 +52,7 @@ function upstreamCode(error: BffHttpError): string | undefined {
  */
 function connectErrorMessage(error: unknown): string {
   if (error instanceof BffHttpError) {
-    if (error.code === "IMPORT_ALREADY_COMPLETED") {
+    if (schedulingRefusalCode(error) === "IMPORT_ALREADY_COMPLETED") {
       return "Este negócio já concluiu sua única importação do Minha Agenda.";
     }
     if (error.code === "VALIDATION_ERROR") {

@@ -6985,3 +6985,52 @@ Conferência em aparelho real; o Goal pede as capturas do `visual:compare`, não
 - **Rodada 1.** Os gates WU-04 a WU-13 passaram, mas sobre árvore incompleta (a WU-02 terminou `BLOCKED` sem `visual:compare`, e a WU-03 não rodou), e não contam como prova.
 - **Conferência do Tech Lead.** Rodada 1: A6, A8, A9, A1 e AG1 com 0 pixel diferente contra as capturas de antes da WU-01, e A5 só no horário do histórico. Rodada 2: rodapé, chip e espaço até o aviso do A7 iguais ao quadro nos quatro devices. Rodada 3, na pilha do Developer (cluster 55437): `visual:compare` de A7 e A6, 8 pares sem erro, e o aviso do A7 dentro de 1 px no mobile e no tablet em retrato.
 - **Aceito sem prova completa.** Os controles negativos vêm do Developer, na rodada 2; as contagens da execução final vêm dos gates do IA Loop da rodada 3, sem reexecução pelo Tech Lead; o aviso no tablet em paisagem e no desktop não foi medido. Detalhe no [review119](reviews/119-review.md).
+
+## As recusas do Scheduling chegam às telas como o BFF as entrega, do Goal120
+
+Texto do Goal120 (decisão [D-134](DECISIONS.md), `PROPOSED`), escrito na rodada 1, na WU-03, depois da última edição de código. Sem mudança visual: este Goal não tem quadro do protótipo, então não há `visual:compare`.
+
+### Busca da seção 1.2
+
+Repetida sobre a árvore final, em `apps/frontend/src`: `grep -rnE "\.code\s*(===|!==)|case \"[A-Z_]{6,}\"|switch \((\w+\.)?code\)"`. Resultado: nenhum ponto novo. As comparações de `error.code` que sobraram são todas de códigos que o próprio BFF emite (`apps/bff/src/lib/errors.ts`) e que não existem em `apps/scheduling-service/src`: `PASSWORD_RESET_TOKEN_INVALID` (`AuthScreen.tsx`), `AI_ACTIVATION_TEST_REQUIRED` (`DashboardScreen.tsx`, `AiSettings.tsx`), `BUSINESS_ADDRESS_REQUIRED` (`onboarding/blocks/shared.tsx`) e `WHATSAPP_QR_NOT_IN_PROGRESS` (`WhatsAppConnectionPanel.tsx`), mais os códigos genéricos do BFF (`VALIDATION_ERROR`, `CONFLICT`, `UPSTREAM_ERROR`). Os `case` de `ConnectSourceScreen.tsx` (`MINHA_AGENDA_*`), `ImportPreviewScreen.tsx` e `ImportRunScreen.tsx` (`IMPORT_PREVIEW_STALE`, `IMPORT_SESSION_NOT_EXECUTABLE`, `IMPORT_SESSION_NOT_SELECTABLE`) já leem `upstreamCode` dentro do ramo `UPSTREAM_ERROR`. Os demais `case` são status de lembrete e tipos de notificação, não códigos de erro. A busca da WU-01 antes da edição não foi relida aqui; esta repetição é a da árvore final.
+
+### Controles negativos (§2.2)
+
+Rodados depois da última edição de código, por mutação (cópia de segurança em `scratchpad/orig`, fora do repositório), com `npx vitest run tests/goal120-recusas-do-scheduling.test.tsx tests/goal120-importacao-recusas.test.tsx` em `apps/frontend`. Sem mutação, os dois arquivos têm 30 de 30 testes passando. Depois de cada controle, o arquivo voltou da cópia (`cp`) e `cmp` contra a cópia saiu sem diferença nos três; `git status` não lista `RescheduleFlow.tsx`.
+
+| Controle | Mutação | Reprovou |
+| --- | --- | --- |
+| (a) leitor sem o ramo do embrulho | em `schedulingRefusal.ts`, `return wrappedUpstreamCode(caught) ?? caught.code;` virou `return caught.code;`, e o detalhe passou a ser sempre `details` | 25 de 30. Remarcação: `a recusa do hold abre o ConflictPanel; sem motivo nada é enviado, com motivo envia uma vez` e `a recusa da remarcação libera a reserva e abre o ConflictPanel; o motivo reenvia uma vez` (`Unable to find role="region" and name /não está livre nesta agenda/`). Exceção: `indisponibilidade sobre atendimento confirmado só reenvia com decidedReason` (`Unable to find an element with the text: Esta indisponibilidade cobre atendimento já confirmado.`). Importação: `conexão: IMPORT_ALREADY_COMPLETED` (`Unable to find an element with the text: Este negócio já concluiu sua única importação do Minha Agenda.`), `conclusão` nos três códigos (`… Esta importação já foi concluída.`, `… Esta importação ainda não pode ser concluída. Aguarde o fim do processamento.`, e a confirmação pendente) e `conflitos: IMPORT_ITEM_ALREADY_DECIDED` (`… Este item já foi decidido antes de você confirmar.`). Também reprovaram o leitor (`expected 'UPSTREAM_ERROR' to be 'SLOT_UNAVAILABLE'`), a série (`expected 'The unavailability covers a confirmed…' to be 'A reserva da 2ª ocorrência (28 de set…'`) e a criação |
+| (b) detalhe só do nível de cima | em `schedulingRefusalDetails`, o ramo `wrappedUpstreamCode(caught) === undefined ? details : asRecord(details.upstreamDetails)` virou `return details;` | 9 de 30. `a perda do hold na criação … slotStillAvailable 'true'` e `'false'`, e as duas da remarcação (`expect(element).toHaveTextContent()`); a série de bloqueio na criação (`BlockSeriesForm`) e na edição (`OccurrenceActions`) (`Unable to find an element with the text: 1 ocorrência(s) cobrem um atendimento confirmado.`); e três do leitor (`expected { upstream: 'scheduling', …(2) } to deeply equal {}`, e o do `BffHttpClient`). O caso `'ausente'` passa, como esperado |
+| (c) "Sobrepor mesmo assim" sem motivo | em `RescheduleFlow.tsx`, `submitOverride`: `if (!reason) {` virou `if (false) {` | 2 de 30: `a recusa do hold abre o ConflictPanel; sem motivo nada é enviado, com motivo envia uma vez` (`Unable to find an element with the text: /Descreva o motivo da sobreposição/`) e `a recusa da remarcação libera a reserva e abre o ConflictPanel; o motivo reenvia uma vez` (`expected "vi.fn()" to be called 1 times, but got 2 times`) |
+
+### Execução
+
+As três primeiras linhas são da WU-03, depois da última edição de código. As demais são os gates determinísticos do IA Loop na rodada 1, sobre a árvore final.
+
+| Comando | Resultado |
+| --- | --- |
+| WU-03: `npx tsc --noEmit` em `apps/frontend` | saída 0 |
+| WU-03: `npx eslint src tests --max-warnings=0` em `apps/frontend` | saída 0 |
+| WU-03: `npx vitest run` em `apps/frontend` | **164** arquivos, **2122** testes passando (`goal120-recusas-do-scheduling.test.tsx`: 23; `goal120-importacao-recusas.test.tsx`: 7) |
+| WU-04: typecheck (`npx tsc --noEmit`) | saída 0 |
+| WU-05: lint (`npm run lint`, eslint via `rtk proxy`) | saída 0 |
+| WU-06: `npx vitest run goal120` | **2** arquivos, **30** testes passando |
+| WU-07: `npm test` em `apps/frontend` | **164** arquivos, **2122** testes passando |
+| WU-08: `npm run test:gate` | **267** pass, **0** fail. A primeira execução falhou (saída 1): a worktree nasceu sem o Prisma client de `apps/ai-orchestrator`, que é gitignored. A DIAG-001 rodou `npx prisma generate` em `apps/ai-orchestrator`, sem mudar arquivo versionado, e a reexecução passou |
+| WU-09: `npm run validate:core` | **15** passos passaram, **2** pulados (`test:bff`, `test:health-worker`) |
+| WU-10: `npm run validate:ui` | **169** passed, **21** skipped, **0** retries |
+| WU-11: `npm run validate:integration` | **36** de **36** passos; gate autenticado com **275** passed e **0** retries, contra um banco descartável em `127.0.0.1:55500` |
+| WU-12: `git diff --check` | saída 0 |
+
+### Testes existentes ajustados
+
+Nenhum. Nenhum arquivo de `apps/frontend/tests/` existente mudou (`git status` lista só os dois `goal120-*` como novos); os testes que montavam `BffHttpError` com o código cru seguem passando, porque o leitor aceita o formato cru.
+
+### Escopo
+
+Os arquivos alterados estão dentro do critério do Goal: `apps/frontend/src/` (`data/http/schedulingRefusal.ts` e os pontos de `features/agenda/` e `features/imports/`), `apps/frontend/tests/` e os três registros.
+
+### Não executado
+
+Conferência visual e em aparelho real: o Goal não muda tela.

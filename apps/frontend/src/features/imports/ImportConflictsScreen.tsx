@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { BffHttpError } from "@/data";
+import { schedulingRefusalCode } from "@/data/http/schedulingRefusal";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Badge } from "@/shared/ui/Badge";
 import { StatePanel } from "@/shared/ui/States";
@@ -286,10 +286,7 @@ function ConflictItemRow({
       );
       onDecided();
     } catch (caught: unknown) {
-      if (
-        caught instanceof BffHttpError &&
-        caught.code === "IMPORT_ITEM_ALREADY_DECIDED"
-      ) {
+      if (schedulingRefusalCode(caught) === "IMPORT_ITEM_ALREADY_DECIDED") {
         onAlreadyDecided();
         return;
       }

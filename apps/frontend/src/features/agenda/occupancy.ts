@@ -8,6 +8,10 @@ import {
   type TimeBlock,
   type TimeBlockKind,
 } from "@/data";
+import {
+  schedulingRefusalCode,
+  schedulingRefusalDetails,
+} from "@/data/http/schedulingRefusal";
 import type { IconName } from "@/shared/icons/Icon";
 import { displayPhone } from "@/shared/phone";
 
@@ -167,15 +171,12 @@ export interface SeriesOccurrenceConflict {
 export function seriesConflicts(
   caught: unknown,
 ): SeriesOccurrenceConflict[] | null {
-  if (
-    !(caught instanceof BffHttpError) ||
-    caught.code !== "BLOCK_SERIES_APPOINTMENT_CONFLICT"
-  ) {
+  if (schedulingRefusalCode(caught) !== "BLOCK_SERIES_APPOINTMENT_CONFLICT") {
     return null;
   }
-  const details = caught.details as { conflicts?: unknown } | undefined;
-  if (!Array.isArray(details?.conflicts)) return [];
-  return details.conflicts.filter(
+  const { conflicts } = schedulingRefusalDetails(caught);
+  if (!Array.isArray(conflicts)) return [];
+  return conflicts.filter(
     (item): item is SeriesOccurrenceConflict =>
       typeof item === "object" &&
       item !== null &&

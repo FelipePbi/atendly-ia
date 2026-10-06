@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { BffHttpError } from "@/data";
+import { schedulingRefusalCode } from "@/data/http/schedulingRefusal";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Dialog } from "@/shared/ui/Dialog";
 import { StatePanel } from "@/shared/ui/States";
@@ -65,15 +66,13 @@ function totalOf(counts: ImportProgress["counts"]): number {
 
 /** Só linguagem de produto: `error.message` da origem nunca chega à tela. */
 function completeErrorMessage(error: unknown): string {
-  if (error instanceof BffHttpError) {
-    switch (error.code) {
-      case "IMPORT_ALREADY_COMPLETED":
-        return "Esta importação já foi concluída.";
-      case "IMPORT_SESSION_NOT_COMPLETABLE":
-        return "Esta importação ainda não pode ser concluída. Aguarde o fim do processamento.";
-      default:
-        return "Não foi possível concluir agora. Nada foi concluído. Tente novamente.";
-    }
+  switch (schedulingRefusalCode(error)) {
+    case "IMPORT_ALREADY_COMPLETED":
+      return "Esta importação já foi concluída.";
+    case "IMPORT_SESSION_NOT_COMPLETABLE":
+      return "Esta importação ainda não pode ser concluída. Aguarde o fim do processamento.";
+    default:
+      break;
   }
   return "Não foi possível concluir agora. Nada foi concluído. Tente novamente.";
 }
@@ -258,10 +257,7 @@ export function ImportRunScreen({
     } catch (caught: unknown) {
       submitting.current = false;
       setCompleting(false);
-      if (
-        caught instanceof BffHttpError &&
-        caught.code === "IMPORT_PENDING_ACCEPTANCE_REQUIRED"
-      ) {
+      if (schedulingRefusalCode(caught) === "IMPORT_PENDING_ACCEPTANCE_REQUIRED") {
         // O banco viu pendência que a última leitura não tinha. A resposta é
         // pedir a confirmação ao negócio, nunca reenviar `acceptPending` por
         // conta própria.

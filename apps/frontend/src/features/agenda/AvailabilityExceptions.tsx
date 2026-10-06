@@ -3,11 +3,8 @@
 import clsx from "clsx";
 import { type FormEvent, useEffect, useState } from "react";
 
-import {
-  type AvailabilityException,
-  BffHttpError,
-  type CalendarState,
-} from "@/data";
+import { type AvailabilityException, type CalendarState } from "@/data";
+import { schedulingRefusalCode } from "@/data/http/schedulingRefusal";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
@@ -56,10 +53,7 @@ interface Conflict {
 }
 
 function isExceptionConflictError(caught: unknown): boolean {
-  return (
-    caught instanceof BffHttpError &&
-    caught.code === "EXCEPTION_APPOINTMENT_CONFLICT"
-  );
+  return schedulingRefusalCode(caught) === "EXCEPTION_APPOINTMENT_CONFLICT";
 }
 
 function sortExceptions(

@@ -9100,3 +9100,13 @@ O conflito de horário do novo agendamento fica igual ao quadro A7 nos quatro de
 - **Alvo.** A7 entra em `apps/frontend/e2e/visual/targets.json`, com o `waitFor` obrigatório em "Esse horário já está ocupado"; `scripts/tests/visual-responses.test.mjs` exige o alvo.
 - **Testes existentes ajustados só para o novo nome, lugar ou texto:** `goal016-a11y`, `goal016-appointment-create` e `goal083-new-appointment`, sem afrouxar asserção (lista em VALIDATION_GATE).
 - **Fora do escopo.** S1b, o conflito da remarcação, o de série de bloqueio e o de exceção, o aviso de dia oculto, e qualquer mudança no BFF, no Scheduling, no contrato, em `visual-seed.mjs` e no `visual:compare`.
+
+## Delta implementado — Goal120, 2026-10-05 ([D-134](DECISIONS.md), PROPOSED)
+
+As recusas nomeadas do Scheduling chegam às telas no formato que o BFF as entrega: `UPSTREAM_ERROR` com o código em `details.upstreamCode` e o detalhe em `details.upstreamDetails`. Só o frontend mudou: nenhuma mudança no BFF, no Scheduling, no contrato, no layout, no texto ou no fluxo de tela.
+
+- **Leitor único.** `apps/frontend/src/data/http/schedulingRefusal.ts` expõe `schedulingRefusalCode` e `schedulingRefusalDetails`. Aceita o embrulho e o formato cru; o detalhe é sempre um objeto.
+- **Agenda.** `holdSession.ts` (`isSlotConflictError`, `isHoldLostError`, `holdLostMessage`), `AppointmentForm.tsx` (`isSlotRefusal` delega), `AvailabilityExceptions.tsx`, `occupancy.ts` (`seriesConflicts`) e `SeriesConfirm.tsx` (`seriesFailure`, `failureDetails`) leem pelo leitor. Contra o BFF real, a remarcação passa a abrir o `ConflictPanel` (a observação 2 do review119) e a perda do hold volta à escolha do horário, na criação e na remarcação; a indisponibilidade sobre atendimento confirmado e a série de bloqueio (criação e edição) abrem a decisão com motivo; a confirmação da série dá a mensagem de hold vencido, de horário tomado e de limite. `RescheduleFlow.tsx` não mudou.
+- **Importação.** `ConnectSourceScreen.tsx`, `ImportConflictsScreen.tsx` e `ImportRunScreen.tsx` reconhecem `IMPORT_ALREADY_COMPLETED`, `IMPORT_ITEM_ALREADY_DECIDED` (chama `onAlreadyDecided()`), `IMPORT_PENDING_ACCEPTANCE_REQUIRED` (reabre a confirmação sem reenviar `acceptPending`) e `IMPORT_SESSION_NOT_COMPLETABLE`.
+- **Testes.** `goal120-recusas-do-scheduling.test.tsx` e `goal120-importacao-recusas.test.tsx`, com o envelope real. Nenhum teste existente foi alterado.
+- **Não mudou.** Os leitores de `upstreamCode` que já funcionavam, `requestError` (que ainda mostra a mensagem do serviço nas recusas que nenhuma tela trata pelo nome; registrado, sem Goal) e as comparações do `code` de erros que o próprio BFF emite.

@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { type AppointmentHold, type CreateHoldInput } from "@/data";
 import {
-  type AppointmentHold,
-  BffHttpError,
-  type CreateHoldInput,
-} from "@/data";
+  schedulingRefusalCode,
+  schedulingRefusalDetails,
+} from "@/data/http/schedulingRefusal";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
 /**
@@ -41,24 +41,22 @@ export const HOLD_EXPIRED_NOTICE =
   "A reserva deste horário venceu. O horário não está mais garantido — escolha o horário de novo.";
 
 export function isHoldLostError(caught: unknown): boolean {
-  return (
-    caught instanceof BffHttpError &&
-    caught.code === "APPOINTMENT_HOLD_EXPIRED"
-  );
+  return schedulingRefusalCode(caught) === "APPOINTMENT_HOLD_EXPIRED";
 }
 
 export function isSlotConflictError(caught: unknown): boolean {
-  return caught instanceof BffHttpError && caught.code === "SLOT_UNAVAILABLE";
+  return schedulingRefusalCode(caught) === "SLOT_UNAVAILABLE";
 }
 
 /**
- * `details.slotStillAvailable` é a única coisa que o contrato garante saber
- * depois da revalidação. Quando ele vem, a mensagem diz o que de fato
- * aconteceu; quando não vem, ela não inventa uma garantia.
+ * `slotStillAvailable` no detalhe da recusa é a única coisa que o contrato
+ * garante saber depois da revalidação. Quando ele vem, a mensagem diz o que de
+ * fato aconteceu; quando não vem, ela não inventa uma garantia.
  */
 export function holdLostMessage(caught: unknown): string {
-  const details = caught instanceof BffHttpError ? caught.details : undefined;
-  const stillAvailable = readSlotStillAvailable(details);
+  const stillAvailable = readSlotStillAvailable(
+    schedulingRefusalDetails(caught),
+  );
   if (stillAvailable === true) {
     return `${HOLD_LOST_MESSAGE} O horário continuava livre nesta verificação.`;
   }
@@ -68,9 +66,10 @@ export function holdLostMessage(caught: unknown): string {
   return HOLD_LOST_MESSAGE;
 }
 
-function readSlotStillAvailable(details: unknown): boolean | null {
-  if (typeof details !== "object" || details === null) return null;
-  const value = (details as Record<string, unknown>).slotStillAvailable;
+function readSlotStillAvailable(
+  details: Record<string, unknown>,
+): boolean | null {
+  const value = details.slotStillAvailable;
   return typeof value === "boolean" ? value : null;
 }
 

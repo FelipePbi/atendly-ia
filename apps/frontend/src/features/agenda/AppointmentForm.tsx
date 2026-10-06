@@ -6,7 +6,6 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import {
   type AvailabilitySlot,
-  BffHttpError,
   type CalendarState,
   type CreateAppointmentInput,
   type Customer,
@@ -811,16 +810,7 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
  * o código de origem em `details.upstreamCode`; os dois formatos valem.
  */
 function isSlotRefusal(caught: unknown): boolean {
-  if (isSlotConflictError(caught)) return true;
-  if (!(caught instanceof BffHttpError) || caught.code !== "UPSTREAM_ERROR") {
-    return false;
-  }
-  const details = caught.details;
-  return (
-    typeof details === "object" &&
-    details !== null &&
-    (details as { upstreamCode?: unknown }).upstreamCode === "SLOT_UNAVAILABLE"
-  );
+  return isSlotConflictError(caught);
 }
 
 interface ConflictState {

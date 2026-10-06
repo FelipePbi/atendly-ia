@@ -2,11 +2,11 @@
 
 import { useRef, useState } from "react";
 
+import { type Appointment, type SeriesOccurrencePreview } from "@/data";
 import {
-  type Appointment,
-  BffHttpError,
-  type SeriesOccurrencePreview,
-} from "@/data";
+  schedulingRefusalCode,
+  schedulingRefusalDetails,
+} from "@/data/http/schedulingRefusal";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
 
@@ -208,7 +208,7 @@ export function SeriesConfirm({
 export function seriesFailure(caught: unknown): SeriesFailure {
   const details = failureDetails(caught);
   const occurrence = describeFailedOccurrence(details);
-  const code = caught instanceof BffHttpError ? caught.code : "";
+  const code = schedulingRefusalCode(caught);
   if (code === "APPOINTMENT_HOLD_EXPIRED") {
     return {
       alternatives: readAlternatives(details),
@@ -240,19 +240,15 @@ export function seriesFailure(caught: unknown): SeriesFailure {
 }
 
 /**
- * O BFF encapsula o detalhe do Scheduling em `upstreamDetails`; ler os dois
- * níveis evita depender de qual camada respondeu.
+ * Detalhe da recusa pelo leitor; um `upstreamDetails` que sobrar dentro dele
+ * (adaptador que mistura o código cru com o embrulho) também é lido.
  */
 function failureDetails(caught: unknown): Record<string, unknown> {
-  if (!(caught instanceof BffHttpError)) return {};
-  const details = asRecord(caught.details);
-  return { ...details, ...asRecord(details.upstreamDetails) };
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  const details = schedulingRefusalDetails(caught);
+  const nested = details.upstreamDetails;
+  return typeof nested === "object" && nested !== null && !Array.isArray(nested)
+    ? { ...details, ...(nested as Record<string, unknown>) }
+    : details;
 }
 
 function describeFailedOccurrence(details: Record<string, unknown>): string {

@@ -1,6 +1,6 @@
 # Goal 120 — As recusas do Scheduling chegam às telas como o BFF as entrega
 
-**Status: READY.** Preparado em 2026-10-05 pelo Tech Lead Agent após [Goal119 ACCEPTED](../reviews/119-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED.** Preparado em 2026-10-05 pelo Tech Lead Agent após [Goal119 ACCEPTED](../reviews/119-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: SONNET_MEDIUM
 

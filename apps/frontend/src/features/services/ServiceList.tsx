@@ -11,6 +11,7 @@ import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
+import { ServiceEmptyState } from "./ServiceEmptyState";
 import { formatServiceLine } from "./serviceFormatting";
 
 type ServiceGroups = {
@@ -87,18 +88,20 @@ export function ServiceList() {
   const wide = useWideLayout();
   const state = useServiceListState();
   const { error, result } = state;
+  const emptyList = !error && result !== null && result.items.length === 0;
 
   useShellConfig({
-    action: result?.editable
-      ? { href: "/servicos/novo", icon: "plus", label: "Novo serviço" }
-      : undefined,
+    action:
+      result?.editable && !emptyList
+        ? { href: "/servicos/novo", icon: "plus", label: "Novo serviço" }
+        : undefined,
     active: "servicos",
     loading: !result && !error,
     module: "directory",
     title: "Serviços",
   });
 
-  if (wide) {
+  if (wide && !emptyList) {
     return (
       <ListDetailLayout
         detail={<ListDetailEmpty>Selecione um serviço</ListDetailEmpty>}
@@ -131,16 +134,17 @@ function ServiceListPanelView({
   showAdd?: boolean;
   state: ServiceListState;
 }) {
-  const { groups, result } = state;
+  const { error, groups, result } = state;
   const summary = result && result.items.length > 0 ? summaryLine(groups) : "";
+  const emptyList = !error && result !== null && result.items.length === 0;
   return (
-    <div className="service-panel">
+    <div className={clsx("service-panel", emptyList && "has-state")}>
       <div className="service-panel-header">
         <div className="service-panel-title">
           <Heading>Serviços</Heading>
           {summary && <span className="service-panel-summary">{summary}</span>}
         </div>
-        {showAdd && result?.editable && (
+        {showAdd && result?.editable && !emptyList && (
           <Link
             aria-label="Novo serviço"
             className="service-panel-add"
@@ -176,14 +180,7 @@ function ServiceListContent({
     );
   }
   if (result && result.items.length === 0) {
-    return (
-      <DirectoryState
-        actionHref={result.editable ? "/servicos/novo" : undefined}
-        actionLabel={result.editable ? "Cadastrar primeiro serviço" : undefined}
-        description="A IA só oferece serviços ativos com duração e preço ou valor sob consulta."
-        title="Cadastre seu primeiro serviço"
-      />
-    );
+    return <ServiceEmptyState canCreate={result.editable} />;
   }
   const editable = Boolean(result?.editable);
   return (

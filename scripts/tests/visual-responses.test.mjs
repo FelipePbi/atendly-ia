@@ -143,9 +143,9 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, I1, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6 e H1 a H5 e H7 declaram responses", () => {
+test("targets.json: só W1, I1, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["A12", "A2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "W1"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["A12", "A2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "S2", "S7", "W1"]);
   for (const target of declaring) {
     const owner = ["W1", "I1"].includes(target.code)
       ? "Mais-WhatsApp-Importacao-Conta.dc.html"
@@ -155,7 +155,9 @@ test("targets.json: só W1, I1, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6 e H1 a
           ? "Agenda.dc.html"
           : target.code.startsWith("CL")
             ? "Clientes.dc.html"
-            : "Conversas-e-Chat.dc.html";
+            : target.code.startsWith("S")
+              ? "Servicos.dc.html"
+              : "Conversas-e-Chat.dc.html";
     assert.equal(target.file, owner, `${target.code} declara responses no arquivo errado`);
     for (const entry of target.responses) {
       assert.equal(entry.method, "GET");

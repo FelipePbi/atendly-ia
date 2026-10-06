@@ -1959,6 +1959,52 @@
       "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
     },
     {
+      "code": "S2",
+      "file": "Servicos.dc.html",
+      "label": "Serviços · vazio",
+      "route": "/servicos",
+      "notes": "GET /v1/status conectado fixo tira o aviso de WhatsApp desconectado da casca (estado da conta de teste), só no navegador da captura. A conta de teste tem serviços; GET /v1/services fixo devolve a lista vazia de uma agenda do próprio Avenly (editable true), então “Criar primeiro serviço” aparece. No desktop e no tablet deitado (1024 px) o quadro mostra o vazio na largura toda, sem a coluna “Selecione um serviço”, e o app faz o mesmo enquanto a lista não tem serviço.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/services",
+          "json": {
+            "data": {
+              "items": [],
+              "source": "AVENLY",
+              "editable": true
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "S3",
       "file": "Servicos.dc.html",
       "label": "Novo serviço",
@@ -1988,6 +2034,168 @@
           "clickRole": {
             "name": "Instruções para a IA",
             "role": "button"
+          }
+        }
+      ]
+    },
+    {
+      "code": "S7",
+      "file": "Servicos.dc.html",
+      "label": "Serviço · precisa de revisão",
+      "route": "/servicos/editar?id=visual-compare-s7",
+      "notes": "Rota literal com id fixo (a conta de teste não tem serviço sem duração): GET /v1/services devolve a lista fixa do quadro, com “Design de sobrancelha” importado sem duração e preço fixo; GET /v1/services/visual-compare-s7/ai-instruction devolve a instrução vazia e GET /v1/status conectado tira o aviso de WhatsApp desconectado da casca, só no navegador da captura. A cor da bolinha usa o nome do app (Rosa-antigo), não o do quadro.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/services",
+          "json": {
+            "data": {
+              "items": [
+                {
+                  "id": "visual-compare-s7-1",
+                  "name": "Corte feminino",
+                  "durationMinutes": 45,
+                  "priceType": "FIXED",
+                  "price": 90,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "description": null,
+                  "colorToken": "SKY",
+                  "bufferBeforeMinutes": 0,
+                  "bufferAfterMinutes": 0,
+                  "recurrenceIntervalDays": null
+                },
+                {
+                  "id": "visual-compare-s7-2",
+                  "name": "Escova",
+                  "durationMinutes": 40,
+                  "priceType": "STARTING_AT",
+                  "price": 60,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "description": null,
+                  "colorToken": "AMBER",
+                  "bufferBeforeMinutes": 0,
+                  "bufferAfterMinutes": 0,
+                  "recurrenceIntervalDays": null
+                },
+                {
+                  "id": "visual-compare-s7-3",
+                  "name": "Hidratação",
+                  "durationMinutes": 30,
+                  "priceType": "NOT_INFORMED",
+                  "price": null,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "description": null,
+                  "colorToken": "EMERALD",
+                  "bufferBeforeMinutes": 0,
+                  "bufferAfterMinutes": 0,
+                  "recurrenceIntervalDays": null
+                },
+                {
+                  "id": "visual-compare-s7-4",
+                  "name": "Corte masculino",
+                  "durationMinutes": 30,
+                  "priceType": "FIXED",
+                  "price": 50,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "description": null,
+                  "colorToken": "SLATE",
+                  "bufferBeforeMinutes": 0,
+                  "bufferAfterMinutes": 0,
+                  "recurrenceIntervalDays": null
+                },
+                {
+                  "id": "visual-compare-s7-5",
+                  "name": "Coloração",
+                  "durationMinutes": 90,
+                  "priceType": "ON_REQUEST",
+                  "price": null,
+                  "active": true,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "description": null,
+                  "colorToken": null,
+                  "bufferBeforeMinutes": 0,
+                  "bufferAfterMinutes": 0,
+                  "recurrenceIntervalDays": 35
+                },
+                {
+                  "id": "visual-compare-s7",
+                  "name": "Design de sobrancelha",
+                  "durationMinutes": null,
+                  "priceType": "FIXED",
+                  "price": 45,
+                  "active": true,
+                  "needsReview": true,
+                  "reviewOrigin": "IMPORT",
+                  "description": null,
+                  "colorToken": "ROSE",
+                  "bufferBeforeMinutes": 0,
+                  "bufferAfterMinutes": 0,
+                  "recurrenceIntervalDays": null
+                },
+                {
+                  "id": "visual-compare-s7-7",
+                  "name": "Progressiva",
+                  "durationMinutes": 120,
+                  "priceType": "FIXED",
+                  "price": 250,
+                  "active": false,
+                  "needsReview": false,
+                  "reviewOrigin": null,
+                  "description": null,
+                  "colorToken": null,
+                  "bufferBeforeMinutes": 0,
+                  "bufferAfterMinutes": 0,
+                  "recurrenceIntervalDays": null
+                }
+              ],
+              "source": "AVENLY",
+              "editable": true
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/services/visual-compare-s7/ai-instruction",
+          "json": {
+            "data": {
+              "content": ""
+            },
+            "requestId": "visual-compare-fixed-response"
           }
         }
       ]

@@ -7117,3 +7117,76 @@ Conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não
 Os gates do IA Loop rodaram de novo na árvore final, todos com saída 0: `typecheck` (WU-05), `lint` (WU-06), `goal121` com 2 arquivos e 21 testes (WU-07), a suíte do frontend com 166 arquivos e 2143 testes (WU-09), `test:gate` com 271 de 271 (WU-10), `validate:core` com 15 passos e 2 pulados (WU-11), `validate:ui` com 169 passed, 21 skipped e 0 retentativas (WU-12), `validate:integration` com 36 de 36 passos (WU-13) e `git diff --check` (WU-14). A WU-08 (`test:ia-loop`) foi pulada: o repositório não declara o script.
 
 Na WU-13, o gate autenticado (`rehearse:goal033-authenticated-ui`) passou com **273** de primeira e **2 retentativas**: `onboarding-demonstracao-da-ia` em `tablet-768` e `configuracoes` em `desktop-1440`, nenhuma rota de Clientes. A baseline do Goal120 tinha 275 de primeira e 0 retentativas. A execução do Developer não registrou a contagem do gate autenticado. Detalhe no [review121](reviews/121-review.md).
+
+## Serviços igual ao protótipo no vazio e no serviço que precisa de revisão, do Goal122
+
+Rodada 2 (correção). Os blockers da rodada 1 eram a Work Unit de revisão (S7) e a de provas terminadas sem entregar, o `test:gate` vermelho e os três registros sem escrever; a árvore já trazia o S2 e o S7 e a rodada 2 os conferiu, refez a evidência e escreveu os registros. Nenhum código de produto mudou na rodada 2.
+
+Rodada 3 (correção, FIX-001). Cinco blockers da revisão da rodada 2: (1) com duração válida o texto "O botão ativa quando a duração for informada." e o `aria-describedby` do botão continuavam, e agora saem; (2) nenhum teste afirmava o foco do campo de duração nem a ausência de "Intervalo antes e depois", e agora afirmam; (3) o "‹" do cabeçalho do formulário de revisão aparecia a partir de 1024 px, onde os quadros S7 de paisagem e de desktop mostram só o título, e agora sai (`hideBackWide` do `PushedBar`, que o CSS já tratava em `avenly.css`); (4) no desktop a borda do rodapé do formulário de revisão ocupava a coluna toda (~755 px), e agora mede 640 px centrado (`max-width: 640px`, `align-self: center`, `padding: 12px 28px 24px` a partir de 1100 px); (5) os controles negativos, as capturas, a execução final e os registros foram refeitos sobre a árvore final, e a frase do S2 sobre o deslocamento foi corrigida.
+
+### Ambiente
+
+Pilha descartável própria, fora do repositório: um cluster PostgreSQL 18 criado com `initdb` no scratchpad da sessão, em `127.0.0.1:56722`, com os bancos `g122_bff`, `g122_sched`, `g122_ai` e `avenly_bff_test`, `prisma migrate deploy` e `prisma generate` nos três serviços, BFF em 3072, Scheduling em 3073 e IA em 3070 (`tsx src/server.ts`, laços de fundo desligados, OpenAI e Evolution apontados para `127.0.0.1:9`). O `visual:compare` rodou com `VISUAL_BFF_URL=http://127.0.0.1:3072` e `VISUAL_BFF_ORIGIN=http://localhost:3001`. A pilha da rodada 3 foi a mesma, reerguida sobre o mesmo cluster (porta 56722, BFF 3072, Scheduling 3073, IA 3070). A pilha foi parada antes do `validate:integration`, que usou `BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:56722/avenly_bff_test`. O `test:gate` passou sem ajuste (271 de 271); a falha dele na rodada 1 era a da árvore incompleta daquele momento.
+
+### Fidelidade visual
+
+Comandos: `npm run visual:compare -- --target S2,S7` (8 pares) e, para regressão, `npm run visual:compare -- --target Servicos:S1,S3,S4,Agenda:S1` (16 pares; `S1` sozinho é ambíguo entre `Agenda:S1` e `Servicos:S1`), sem erro de captura. Na rodada 3 o de S2 e S7 rodou depois das correções de código e foi repetido depois dos controles negativos, com os mesmos percentuais. Os `side-by-side.png` de S2 e S7 foram abertos no mobile, no tablet em retrato (S2), no tablet em paisagem (S7) e no desktop. O percentual é o `diff` do relatório; o julgamento é visual.
+
+| Quadro | mobile | tablet em retrato | tablet em paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| S2 (vazio) | 7,4% | 9,5% | 0,3% | 0,4% |
+| S7 (precisa de revisão) | 7,2% | 1,1% | 11,7% | 3,1% |
+
+**O que restou de diferença, por quadro** (de até 1 px não entra):
+
+- **S2.** A lista em esboço, o título, o texto e "Criar primeiro serviço" iguais ao quadro; no desktop e no tablet em paisagem o conteúdo cai dentro de 1 px e o diff de 0,3% e 0,4% é só a casca e o item "Notificações" da barra lateral. No mobile e no tablet em retrato o bloco centrado fica acima do do quadro (7,4% e 9,5%): ~20 px no mobile e ~50 px no tablet em retrato (o botão está em y=497 no quadro e em y=447 no app). O deslocamento acompanha o do título "Serviços", que não traz a linha "‹ Mais" (casca declarada); não é efeito só da barra de abas. Também a casca (barra de status do iPhone, respiro de topo).
+- **S7.** O aviso âmbar, "Nome", a duração em foco com "—", `−`/`+` e 20, 30 e 45, o preço com a nota da importação, "Cor na agenda" e o botão desabilitado com o texto de apoio, iguais ao quadro em estrutura, cor, tipografia e espaçamento (no mobile, todo o conteúdo do formulário fica a 11 a 12 px do quadro, o mesmo deslocamento do título do cabeçalho: é o respiro de topo da casca). Divergências declaradas: "Rosa-antigo" no lugar de "Rosa"; a casca; e de 1024 px em diante a coluna da lista é a do S1 de hoje (campo "Buscar serviço", Coloração primeiro, "5 ativos" onde o quadro diz "6 ativos"), e, em 1024 px, a barra de abas (11,7% no paisagem; 3,1% no desktop, que não tem barra de abas). O "‹" do cabeçalho do formulário só aparece no mobile e no tablet em retrato, como nos quadros; em paisagem e no desktop ele sai e o título fica centrado. No desktop a linha de cima do rodapé mede 641 px, de x=611 a 1308 e y=654 no app, contra x=612 a 1309 e y=655 no quadro (medido em `prototype.png` e `app.png`), dentro de 1 px.
+- **Regressão.** Servicos:S1 7,7 / 3,6 / 3,7 / 2,7, S3 6,3 / 2,8 / 12,8 / 4,3 e S4 9,9 / 6,0 / 13,7 / 5,3: os mesmos números das últimas execuções registradas neste arquivo (Goal097 e Goal121). Agenda:S1 11,7 / 5,9 / 15,1 / 6,1 (a última registrada, na linha do Goal114, é 12,2 / 6,2 / 15,3 / 6,4; a Agenda não foi tocada).
+
+### Controles negativos
+
+Rodados na rodada 3 sobre a árvore final, depois da última edição de código, cada um com um arquivo trocado e revertido por cópia, com `cmp` igual ao original (`sha256` de `ServiceForm.tsx` `c9d7be66…` e de `ServiceEmptyState.tsx` `987e907e…` antes e depois dos quatro, e dos dois extras).
+
+| Controle | Mudança | Comando | Resultado |
+| --- | --- | --- | --- |
+| (a) o botão sem a guarda da duração | `disabled={busy \|\| !durationReady}` virou `disabled={busy}` em `ServiceForm.tsx` | `npx vitest run tests/goal122-servicos-revisao.test.tsx` | 2 de 11 reprovaram: `botão desabilitado com duração vazia, ligado por atalho ou digitação` e `duração zero mantém o botão desabilitado`, com `expect(element).toBeDisabled()` |
+| (b) o `PATCH` sem manter `description` | `description: reviewMode ? null : …` no envio | o mesmo | 1 de 11: `PATCH leva a duração e os valores que o serviço já tinha, sem tocar a instrução da IA`, com `expected "vi.fn()" to be called with arguments: [ 's7', { active: false, …(9) } ]` |
+| (c) o aviso sempre com o texto de `IMPORT` | a condição `reviewOrigin === "IMPORT"` do texto virou `true` | o mesmo | 2 de 11: `MANUAL mostra o texto de serviço salvo sem o dado e não mostra a nota` e `origem ausente usa o texto de salvo sem o dado`, com `Unable to find an element with the text: Este serviço foi salvo sem esse dado…` |
+| (d) "Criar primeiro serviço" sem a guarda de `editable` | `{canCreate && (` virou `{true && (` em `ServiceEmptyState.tsx` | `npx vitest run tests/goal122-servicos-vazio.test.tsx` | 1 de 6: `sem permissão de edição, o botão não existe`, com `expect(element).not.toBeInTheDocument()` |
+| (e) o texto de apoio sempre na tela | `{!durationReady && (` virou `{true && (` em `ServiceForm.tsx` | `npx vitest run tests/goal122-servicos-revisao.test.tsx` | 1 de 11: `botão desabilitado com duração vazia, ligado por atalho ou digitação` (a asserção de que o texto some com o atalho 30) |
+| (f) a duração sem foco ao abrir | a linha `autoFocus` do campo de duração removida de `ServiceForm.tsx` | o mesmo | 1 de 11: `o campo de duração abre em foco`, com `toHaveFocus` |
+
+### Execução
+
+Contagens sobre a árvore final (as mutações todas revertidas):
+
+| Comando | Resultado |
+| --- | --- |
+| `npx vitest run tests/goal122` em `apps/frontend` | **2** arquivos, **17** testes passando (`goal122-servicos-vazio.test.tsx` com 6 e `goal122-servicos-revisao.test.tsx` com 11) |
+| `node --test scripts/tests/visual-responses.test.mjs` | **38** testes, **38** passando, 0 falhas |
+| `npx tsc --noEmit` em `apps/frontend` | saída 0, sem erro |
+| `npx eslint src tests --max-warnings=0` em `apps/frontend` (por `rtk proxy`) | saída 0, 0 avisos |
+| `npx vitest run` em `apps/frontend` (suíte completa) | **168** arquivos, **2160** testes passando |
+| `npm run test:gate` | **271** testes, **271** passando, 0 falhas |
+| `npm run validate:core` | PASSED: 17 passos, 15 passaram, 0 falharam, 2 pulados (`test:bff` e `test:health-worker`, que o próprio gate declara) |
+| `npm run validate:ui` | saída 0: **169** passaram, 21 pulados (os de alvo de toque, que o gate pula nos projetos sem toque), 0 retentativas |
+| `npm run validate:integration` | PASSED: **36** passos, 36 passaram, 0 falharam, 0 pulados, contra `127.0.0.1:56722/avenly_bff_test`; o gate autenticado (`rehearse:goal033-authenticated-ui`) passou **275** testes, "authenticated gate retries: 0 — every test passed on its first attempt" |
+| `git diff --check` | saída 0 |
+
+### Testes existentes ajustados
+
+Nenhum. O único arquivo de teste existente que mudou é `scripts/tests/visual-responses.test.mjs`, que passou a exigir S2 e S7 como donos de `responses` em `Servicos.dc.html`, sem afrouxar asserção.
+
+### Escopo
+
+Os arquivos alterados estão dentro do critério do Goal: `apps/frontend/src/features/services/` (`ServiceList.tsx`, `ServiceForm.tsx` e `ServiceEmptyState.tsx`, novo), `apps/frontend/src/shared/styles/avenly-services.css`, `apps/frontend/tests/goal122-*`, `apps/frontend/e2e/visual/targets.json`, `scripts/tests/visual-responses.test.mjs` e os três registros de `docs/migration/`.
+
+### Não executado
+
+Conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho. S5, S6, S8, S9 e S1b estão fora do Goal. O `format:check` do `prettier` não é gate do Goal.
+
+### Fechamento — review122
+
+Os gates do IA Loop rodaram de novo na árvore final da rodada 3, todos com saída 0: `typecheck` (WU-04), `lint` (WU-05), `goal122` com 2 arquivos e 17 testes (WU-06), a suíte do frontend com 168 arquivos e 2160 testes (WU-07), `test:gate` com 271 de 271 (WU-09), `validate:core` sem passo falho e 2 pulados (WU-10), `validate:ui` com 169 passed, 21 skipped e 0 retentativas (WU-11), `validate:integration` com saída 0 e o gate autenticado com 275 passed e 0 retentativas (WU-12) e `git diff --check` (WU-13). A WU-08 (`test:ia-loop`) foi pulada: o repositório não declara o script.
+
+O Tech Lead refez o `visual:compare --target S2,S7` na rodada 3, com BFF e Scheduling locais sobre o banco de desenvolvimento, e obteve os mesmos percentuais da tabela acima (S2 7,4 / 9,5 / 0,3 / 0,4; S7 7,2 / 1,1 / 11,7 / 3,1). A regressão deu Servicos:S1 7,5 / 3,6 / 3,7 / 2,6, S3 6,4 / 2,8 / 12,8 / 4,2, S4 9,7 / 6,0 / 13,7 / 5,2 e Agenda:S1 11,7 / 5,9 / 15,1 / 6,0, dentro de ±0,2 ponto dos números do Developer; a diferença é atribuída à conta do banco de desenvolvimento. Os controles negativos vêm da execução do Developer e não foram refeitos pelo Tech Lead. Detalhe no [review122](reviews/122-review.md).

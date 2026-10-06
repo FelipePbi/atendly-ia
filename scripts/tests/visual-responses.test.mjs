@@ -202,9 +202,9 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, W2, R2, I1, AG2, NT2, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1, W2, R2, I1, AG2, NT2, 2.6, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
   for (const target of declaring) {
     const owner = ["W1", "W2", "R2", "I1"].includes(target.code)
       ? "Mais-WhatsApp-Importacao-Conta.dc.html"
@@ -212,19 +212,21 @@ test("targets.json: só W1, W2, R2, I1, AG2, NT2, 4.4, 4.5, 4.7 a 4.9, A2, A12, 
         ? "Mais-Negocio-Agenda-IA.dc.html"
         : target.code === "NT2"
           ? "Notificacoes.dc.html"
-          : ["4.4", "4.5", "4.7", "4.8", "4.9"].includes(target.code)
-            ? "Onboarding-3-IA-e-WhatsApp.dc.html"
-            : ["L2", "L7"].includes(target.code)
-              ? "Login.dc.html"
-              : target.code.startsWith("H")
-                ? "Home.dc.html"
-                : target.code.startsWith("A")
-                  ? "Agenda.dc.html"
-                  : target.code.startsWith("CL")
-                    ? "Clientes.dc.html"
-                    : target.code.startsWith("S")
-                      ? "Servicos.dc.html"
-                      : "Conversas-e-Chat.dc.html";
+          : target.code === "2.6"
+            ? "Onboarding-1-Negocio-e-Agenda.dc.html"
+            : ["4.4", "4.5", "4.7", "4.8", "4.9"].includes(target.code)
+              ? "Onboarding-3-IA-e-WhatsApp.dc.html"
+              : ["L2", "L7"].includes(target.code)
+                ? "Login.dc.html"
+                : target.code.startsWith("H")
+                  ? "Home.dc.html"
+                  : target.code.startsWith("A")
+                    ? "Agenda.dc.html"
+                    : target.code.startsWith("CL")
+                      ? "Clientes.dc.html"
+                      : target.code.startsWith("S")
+                        ? "Servicos.dc.html"
+                        : "Conversas-e-Chat.dc.html";
     assert.equal(target.file, owner, `${target.code} declara responses no arquivo errado`);
     const postOwners = ["L2", "L7"];
     for (const entry of target.responses) {
@@ -1055,4 +1057,38 @@ test("targets.json: Agenda:A12 abre a Semana com o domingo oculto e sem regra no
   assert.equal(rules.some((rule) => rule.dayOfWeek === 0), false);
   assert.deepEqual(target.steps.map((step) => [step.clickRole.role, step.clickRole.name]), [["tab", "Semana"], ["button", "Seg–Sáb"]]);
   assert.ok(target.steps.every((step) => step.optional !== true));
+});
+
+test("targets.json: 2.6 é o único dono de responses em Onboarding-1-Negocio-e-Agenda.dc.html, só com o GET /v1/onboarding e sem passos; o 2.7 não declara responses nem passos", () => {
+  const all = JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "frontend", "e2e", "visual", "targets.json"), "utf8")).targets;
+  const inFile = all.filter((target) => target.file === "Onboarding-1-Negocio-e-Agenda.dc.html");
+  const owners = declaringTargets().filter((target) => target.file === "Onboarding-1-Negocio-e-Agenda.dc.html");
+  assert.deepEqual(owners.map((target) => target.code), ["2.6"]);
+  const [t26] = owners;
+  const t27 = inFile.find((target) => target.code === "2.7");
+  assert.ok(t27, "2.7 precisa estar em targets.json");
+  assert.equal(t26.route, "/onboarding/horarios");
+  assert.equal(t27.route, t26.route);
+  for (const target of [t26, t27]) {
+    assert.equal(target.account, "onboarding");
+    assert.equal(target.steps, undefined, `${target.code}: nenhum passo, nada toca em controle que grava`);
+  }
+  assert.equal(t27.responses, undefined, "2.7: a conta de onboarding já tem o horário do quadro");
+  assert.equal(t27.label, "Horários por dia");
+  assert.deepEqual(t26.responses.map((entry) => `${entry.method} ${entry.path}`), ["GET /v1/onboarding"]);
+  assert.equal(typeof t26.responses[0].json.requestId, "string");
+  assert.equal(pickFixedResponse(t26, "GET", "/v1/onboarding"), t26.responses[0]);
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    assert.equal(pickFixedResponse(t26, method, "/v1/onboarding"), null, `2.6: ${method} /v1/onboarding não deveria casar`);
+  }
+  for (const other of ["/v1/onboarding/complete", "/v1/settings", "/v1/whatsapp"]) {
+    assert.equal(pickFixedResponse(t26, "GET", other), null, `2.6: ${other} vem da conta de onboarding`);
+  }
+  assert.equal(pickFixedResponse(t27, "GET", "/v1/onboarding"), null, "2.7: a leitura vem da conta de onboarding");
+  for (const code of ["2.3", "2.4", "2.5"]) {
+    const other = inFile.find((target) => target.code === code);
+    assert.ok(other, `${code} precisa continuar em targets.json`);
+    assert.equal(other.responses, undefined, `${code} continua sem responses`);
+    assert.equal(other.steps, undefined, `${code} continua sem passos`);
+  }
 });

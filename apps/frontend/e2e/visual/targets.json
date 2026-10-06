@@ -175,7 +175,76 @@
       "file": "Onboarding-1-Negocio-e-Agenda.dc.html",
       "label": "Horário-base",
       "route": "/onboarding/horarios",
-      "account": "onboarding"
+      "account": "onboarding",
+      "notes": "A conta de onboarding tem sábado das 09:00 às 14:00 (AVAILABILITY de visual-seed.mjs, o horário do 2.7), então a leitura real abre a tela \"Horários por dia\" e não o horário-base. O quadro mostra o horário-base recolhido, com segunda a sábado das 09:00 às 18:00; por isso o estado vem de resposta fixa de GET /v1/onboarding (o estado real da conta de onboarding, com o sábado até as 18:00), só no navegador da captura. Nenhum passo: a tela abre pronta e nenhum toque chega a \"Personalizar dias diferentes\" nem a \"Continuar\", que gravaria na conta visual ou avançaria o onboarding. A divergência 8 de D-105 (o painel de dias aberto na captura) cai com este alvo; seguem as divergências 7 (\"AM/PM\" nos campos de hora, propriedade do harness) e 10 (cor das marcas da régua, #716859) de D-105. Divergências declaradas do Goal130: o preenchimento do segundo segmento da barra, derivado por chapterFraction (D-104); o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/onboarding",
+          "json": {
+            "data": {
+              "business": {
+                "name": "Studio Camila Reis",
+                "category": "Cabelo",
+                "timezone": "America/Sao_Paulo",
+                "modalities": ["ON_SITE"],
+                "address": "Rua Harmonia, 4 · Vila Madalena",
+                "contextVersion": 2,
+                "contextProjectedVersion": 0,
+                "contextProjectionStatus": "PENDING"
+              },
+              "calendar": {
+                "source": "AVENLY",
+                "timezone": "America/Sao_Paulo",
+                "integration": null
+              },
+              "ai": { "tone": null },
+              "service": {
+                "id": "visual-compare-service",
+                "name": "Corte feminino",
+                "durationMinutes": 45,
+                "priceType": "FIXED",
+                "price": 90,
+                "active": true,
+                "needsReview": false,
+                "reviewOrigin": null,
+                "description": null,
+                "colorToken": null,
+                "bufferBeforeMinutes": 0,
+                "bufferAfterMinutes": 0,
+                "recurrenceIntervalDays": null
+              },
+              "availability": {
+                "timezone": "America/Sao_Paulo",
+                "rules": [
+                  { "id": "visual-compare-rule-1", "dayOfWeek": 1, "startTime": "09:00", "endTime": "18:00", "active": true },
+                  { "id": "visual-compare-rule-2", "dayOfWeek": 2, "startTime": "09:00", "endTime": "18:00", "active": true },
+                  { "id": "visual-compare-rule-3", "dayOfWeek": 3, "startTime": "09:00", "endTime": "18:00", "active": true },
+                  { "id": "visual-compare-rule-4", "dayOfWeek": 4, "startTime": "09:00", "endTime": "18:00", "active": true },
+                  { "id": "visual-compare-rule-5", "dayOfWeek": 5, "startTime": "09:00", "endTime": "18:00", "active": true },
+                  { "id": "visual-compare-rule-6", "dayOfWeek": 6, "startTime": "09:00", "endTime": "18:00", "active": true }
+                ],
+                "minLeadMinutes": 0,
+                "maxLeadDays": 90,
+                "granularityMinutes": 30,
+                "customerChangeMinNoticeMinutes": 0
+              },
+              "whatsapp": null,
+              "completed": false,
+              "completedAt": null
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "2.7",
+      "file": "Onboarding-1-Negocio-e-Agenda.dc.html",
+      "label": "Horários por dia",
+      "route": "/onboarding/horarios",
+      "account": "onboarding",
+      "notes": "A conta de onboarding já tem o horário do quadro: AVAILABILITY de visual-seed.mjs (segunda a sexta das 09:00 às 18:00 e sábado das 09:00 às 14:00, sem domingo). Como a leitura traz um dia diferente do intervalo-base, a tela \"Horários por dia\" abre sozinha, igual ao quadro; por isso o alvo não declara responses nem passos, e nenhum toque chega a \"Personalizar dias diferentes\", a uma linha, a \"Copiar sábado para outros dias\", a \"Salvar horários\" nem a \"Continuar\", que gravariam na conta visual ou avançariam o onboarding. Divergências declaradas do Goal130: o preenchimento do segundo segmento da barra, derivado por chapterFraction (D-104); o \"Domingo\" e o \"Não atende\" da linha do domingo em #716859 (5,41:1 sobre #FFFDFA) no lugar de #948B80 (3,30:1), o mesmo desvio do item 10 de D-105; o rodapé com o padding da moldura de D-104; o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app."
     },
     {
       "code": "2.I1",

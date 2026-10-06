@@ -7784,3 +7784,81 @@ Arquivos do Goal: `apps/frontend/src/features/onboarding/{OnboardingScreen.tsx,O
 ### Não executado
 
 A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.
+
+## Os horários por dia do onboarding iguais ao protótipo, do Goal130
+
+Rodada 1, 2026-10-06, na worktree `goal-130`. Baseline `2130734`. A tela "Horários por dia", o chevron, o ajuste por linha, a cópia e "Salvar horários" são da WU-01; a captura (alvos 2.7 e 2.6), os testes da captura, o `visual:compare`, os controles negativos, a primeira execução dos gates e os registros são da WU-02; o ajuste do spec do gate autenticado é da DIAG-001. Os números abaixo são os da execução da WU-02 sobre a árvore completa, confirmados pelos gates do IA Loop da rodada 1 (WU-03 a WU-11); o `validate:integration` é o da reexecução da WU-10, depois da DIAG-001.
+
+### Contagens
+
+| Gate | Comando | Resultado |
+| --- | --- | --- |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0 |
+| Lint do frontend | `rtk proxy npx eslint src tests --max-warnings=0` (em `apps/frontend`) | saída 0 |
+| Testes do frontend | `npx vitest run` | **185** arquivos e **2464** testes passando (baseline 183 e 2431: +2 arquivos e +33 testes, os de `goal130`) |
+| Testes `goal130` | `goal130-horarios-por-dia.test.tsx` (WU-01), `goal130-alvos-captura.test.ts` (WU-02) | 2 arquivos e 33 testes (24 e 9) |
+| Testes da captura | `node --test scripts/tests/visual-responses.test.mjs` | **58** testes passando (baseline 57: +1) |
+| `test:gate` | `npm run test:gate` | **291** testes, 291 passando, 0 falhas, 0 pulados (baseline 290: +1, o da captura) |
+| `validate:core` | `env -u AI_TEST_DATABASE_URL npm run validate:core` | saída 0: 15 passando, 0 falhas, 2 pulados (`test:bff` e `test:health-worker`). Sem desligar `AI_TEST_DATABASE_URL`, que o ambiente da pilha aponta para um banco sem migração, `test:ai-orchestrator` reprova nas suítes de integração (não é do Goal) |
+| `validate:ui` | `env -u AI_TEST_DATABASE_URL npm run validate:ui` | saída 0: **169** passando e **21** pulados, 0 retentativas |
+| `validate:integration` | `npm run validate:integration` (WU-10 do IA Loop) | Execução final da rodada 1 (reexecução da WU-10 pelo IA Loop, depois da DIAG-001): saída 0, 36 de 36 passos, `rehearse:goal033-authenticated-ui` com **305** passando e 0 retentativas, incluindo `onboarding-horarios` nas cinco larguras, medindo a tela "Horários por dia". A primeira execução da rodada 1 (WU-10, tentativa 1, antes da DIAG-001) saiu com **saída 1**: 300 passando e 5 falhando, todas `onboarding-horarios`, uma por largura: `/onboarding/horarios: "Personalizar dias diferentes" did not open within 20000ms.` (`element(s) not found`: o spec esperava `aria-expanded="true"` no botão, e o clique abre a tela por dia e o botão sai da tela). Ver "Gate autenticado" |
+| `git diff --check` | `git diff --check` | saída 0 |
+
+Typecheck, lint, os testes `goal130` (33), os testes do frontend (185 arquivos e 2464 testes), `test:gate` (291), `validate:core` (15 passando, 2 pulados) e `validate:ui` (169 passando, 21 pulados, 0 retentativas) também passaram nos gates do IA Loop da rodada 1, WU-03 a WU-09, todos com saída 0; `git diff --check` na WU-11.
+
+### Gate autenticado
+
+O Goal supôs (evidência 5) que o gate mede só o horário-base e não alcança a tela por dia. O spec (`apps/frontend/e2e/authenticated-matrix.spec.ts`, em `onboarding-horarios`) clica "Personalizar dias diferentes" depois de medir a rota e espera `aria-expanded="true"` no mesmo botão, e com a tela por dia o botão sai da tela. Antes do ajuste, a WU-02 trocou, só em ensaio, a espera por "o título `Horários por dia` visível" e rodou `node scripts/goal033-authenticated-ui-rehearsal.mjs` (com `AI_TEST_DATABASE_URL` desligado): **304 passando e 1 `flaky`**, saída 0; o `flaky` é `mobile-360 › onboarding-teste-real-sucesso`, que passou na retentativa e não é desta rota. O spec do ensaio foi devolvido e conferido com `cmp` (saída 0).
+
+A DIAG-001 (rodada 1) alterou `apps/frontend/e2e/authenticated-matrix.spec.ts`, no bloco `onboarding-horarios`. O spec continua clicando de verdade em "Personalizar dias diferentes". Agora exige o h1 "Horários por dia" e o botão "Salvar horários" visíveis dentro de `CONTENT_TIMEOUT_MS`. Overflow, alvo de toque, contraste, foco e movimento reduzido passam a ser medidos na tela por dia; o horário-base, antes do clique, fica provado só pelo marcador da rota. O arquivo está fora da lista do critério 8; o Tech Lead aceitou o desvio no review130, rodada 1, porque a evidência 5 do Goal estava errada. Com o ajuste, a reexecução da WU-10 saiu com 0 e 305 passando, 0 retentativas (ver "Contagens").
+
+### `visual:compare`
+
+Comando: `npm run visual:compare -- --target 2.7,2.6` (saída 0, 8 pares, nenhum com erro), refeito depois da última edição de código, na pilha descartável do IA Loop. Percentual de pixels diferentes por device:
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| 2.7 | 0,5% | 0,2% | 0,6% | 0,4% |
+| 2.6 (depois, recolhido) | 2,1% | 0,8% | 1,0% | 0,9% |
+| 2.6 (antes, painel aberto) | 3,3% | 2,4% | 1,7% | 1,4% |
+
+As capturas lado a lado dos oito pares foram abertas (protótipo, app e diferenças). Divergências que restam:
+
+- 2.7: o "Domingo" e o "Não atende" da linha do domingo em `#716859` no lugar de `#948B80`; o segundo segmento da barra (`chapterFraction`); o "Sair" do topo abaixo de 1024 px e do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone. Linhas, tom do sábado, lápis, "Copiar sábado para outros dias", rodapé e título coincidem nos quatro devices.
+- 2.6: o "AM/PM" nos campos de hora (`09:00 AM`, `06:00 PM`, harness, divergência 7 de D-105); a cor das marcas da régua (divergência 10 de D-105); o segundo segmento da barra; o "Sair"; a barra de status. A divergência 8 de D-105 (painel aberto) caiu: o horário-base aparece recolhido, com a seta, como o quadro.
+
+Regressão: o `app.png` de antes foi capturado nesta mesma worktree com os cinco arquivos de produto da WU-01 (`OnboardingScreen.tsx`, `OnboardingShell.tsx`, `blocks/schedule.tsx`, `blocks/shared.tsx`, `avenly.css`) devolvidos temporariamente à baseline (cópia guardada fora do repositório; `cmp` idêntico e `git diff` idêntico ao de antes depois de devolver), nos alvos 2.3, 2.4, 2.5 e 2.6 (16 pares); o de depois, com a tela por dia. Os 12 pares de 2.3, 2.4 e 2.5 são **iguais byte a byte** (`cmp` do `app.png`, saída 0 nos 12), e os percentuais não mudaram:
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| 2.3 | 2,1% | 0,6% | 1,0% | 0,5% |
+| 2.4 | 2,9% | 1,3% | 1,7% | 1,3% |
+| 2.5 | 1,2% | 0,5% | 1,0% | 0,8% |
+
+O 2.6 mudou de propósito: de antes (painel aberto, com "Segunda · Início", "Segunda · Fim" e as linhas seguintes) para depois (recolhido, como o quadro).
+
+### Controles negativos
+
+Rodados na rodada 1, depois da última edição de código (a WU-02 só mudou `targets.json`, os testes e os registros depois da WU-01). Cada um teve o arquivo devolvido e conferido com `cmp` contra a cópia guardada antes da mudança (saída 0). (a) a (d) com `npx vitest run tests/goal130-horarios-por-dia.test.tsx` (em `apps/frontend`); (e) com `npx vitest run tests/goal130-alvos-captura.test.ts` e `node --test scripts/tests/visual-responses.test.mjs`.
+
+| # | Mudança | Teste que reprovou | Mensagem |
+| --- | --- | --- | --- |
+| a | a tela por dia não abre sozinha com a leitura de um dia diferente (`setHoursDayViewOpen(false)` no lugar de `draft.days.some(...)`, em `OnboardingScreen.tsx`) | 15 de 24 em `goal130-horarios-por-dia.test.tsx`, entre eles "a leitura com um dia diferente do intervalo-base abre a tela por dia" | `TestingLibraryElementError: Unable to find an accessible element with the role "heading" and name "Horários por dia"` |
+| b | o tom aplicado a todo dia marcado (`className` de `.hours-day` sempre com `is-different`, em `schedule.tsx`) | 3 de 24: "só o dia diferente do intervalo-base ganha o tom e o lápis", "mudar o fim muda a linha e o tom; voltar ao intervalo-base tira o tom" e "copiar iguala os dias marcados, esvazia as diferenças e o link some, sem gravar" | `expect(element).not.toHaveClass("is-different")` |
+| c | a cópia que não muda o intervalo-base (`dayHourOf(draft, copyDay)` trocado pelo intervalo-base, em `copyToOtherDays`); variante: a cópia que não esvazia `dayHours` (`dayHours: current.dayHours`) | na primeira, 2 de 24: "copiar iguala os dias marcados, esvazia as diferenças e o link some, sem gravar" e "copiar e salvar grava o intervalo copiado em todos os dias marcados"; a variante **não reprova** (24 de 24) | `expect(element).toHaveAccessibleName()` (a linha do sábado ficou com o intervalo antigo) e `AssertionError: expected [ { active: true, …(3) }, …(5) ] to deeply equal [ { active: true, …(3) }, …(5) ]` |
+| d | "Salvar horários" que grava só o intervalo-base (`persistScheduleStep("horarios")` com `ctx.draft.startTime`/`endTime` no lugar de `dayHourOf`, em `schedule.tsx`) | 1 de 24: "grava uma regra por dia marcado com o intervalo de cada um e segue para a agenda pronta" | `AssertionError: expected "vi.fn()" to be called with arguments: [ { availability: { …(2) } } ]` |
+| e | o 2.7 de `targets.json` com um passo que toca "Personalizar dias diferentes" (e, em segunda rodada do controle, "Salvar horários") | 1 de 9 em `goal130-alvos-captura.test.ts` ("alvo 2.7 … usa a rota do horário, na conta de onboarding, sem responses e sem passos") e 1 de 58 em `visual-responses.test.mjs`, nas duas variantes | `AssertionError: expected [ { clickRole: { …(2) } } ] to be undefined` e `AssertionError [ERR_ASSERTION]: 2.7: nenhum passo, nada toca em controle que grava` |
+
+A variante do controle (c) que só deixa de esvaziar `dayHours` não reprova: com o intervalo-base já igual ao do dia copiado, o `dayHours` que sobra tem os mesmos valores, e nada observável pela tela ou pela gravação muda (a tela volta ao horário-base e zera `dayHours` pelo chevron). O controle (c) fica provado pela variante do intervalo-base.
+
+### Testes ajustados
+
+Quatro arquivos existentes do frontend (WU-01), só no texto, na ordem ou na ação que o Goal muda, sem afrouxar asserção sobre os dias, o horário-base, a validação, a gravação ou a retomada: `goal065-onboarding-schedule.test.tsx` (tocar a linha do dia antes de achar "<Dia> · Início"; "Salvar horários" no lugar de "Continuar" na tela por dia; a leitura com um dia diferente abre "Horários por dia" e a com o mesmo intervalo abre o horário-base), `goal066-onboarding-sistema-atual.test.tsx` (o intervalo-base muda antes de abrir a tela por dia, que não o mostra), `goal072-onboarding-schedule-fields.test.tsx` ("Personalizar dias diferentes" abre a tela por dia, não mais `aria-expanded`) e `goal090-onboarding-steps.test.tsx` (tocar a linha de Quarta; "Salvar horários"). `scripts/tests/visual-responses.test.mjs`: o 2.6 entre os donos de `responses` e o teste novo dos alvos 2.6 e 2.7 (de 57 para 58). `goal079-onboarding-gate-routes.test.ts` passa sem mudança.
+
+### Escopo
+
+Arquivos do Goal: `apps/frontend/src/features/onboarding/{OnboardingScreen.tsx,OnboardingShell.tsx}`, `blocks/{schedule.tsx,shared.tsx}`, `apps/frontend/src/shared/styles/avenly.css`, `apps/frontend/e2e/visual/targets.json`, `scripts/tests/visual-responses.test.mjs`, os dois testes `goal130-*`, os quatro testes ajustados e os três registros em `docs/migration/`. `apps/frontend/e2e/authenticated-matrix.spec.ts`, alterado pela DIAG-001 no bloco `onboarding-horarios`, fora da lista do critério 8 e aceito pelo Tech Lead (ver "Gate autenticado").
+
+### Não executado
+
+A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.

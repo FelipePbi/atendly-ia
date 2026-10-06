@@ -2646,6 +2646,12 @@ p {
   width: 24px;
   height: 24px;
 }
+button.onboarding-back-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
 .onboarding-back-link.is-disabled {
   pointer-events: none;
   color: #948b80;
@@ -3060,8 +3066,113 @@ p {
   color: var(--muted);
   transition: transform 160ms var(--ease);
 }
-.hours-custom[aria-expanded="true"] .icon {
-  transform: rotate(90deg);
+/* Horários por dia (2.7): sete linhas num cartão. O dia marcado é um botão
+   de 52 px (24 de conteúdo e 14 de respiro); só o dia diferente do
+   intervalo-base ganha o tom da marca e o lápis; o dia sem atendimento diz
+   "Não atende" em --muted (5,41:1 sobre o cartão) e não é controle. */
+[data-step="horarios"] .onboarding-content:has(.hours-day-view),
+[data-step="horarios"] .hours-day-view {
+  gap: 20px;
+}
+.hours-day-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.hours-day + .hours-day {
+  border-top: 1px solid var(--border);
+}
+.hours-day.is-different {
+  background: var(--at-color-primary-tint);
+}
+.hours-day-row {
+  box-sizing: border-box;
+  width: 100%;
+  height: 52px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  color: var(--fg);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+button.hours-day-row {
+  cursor: pointer;
+}
+button.hours-day-row:hover {
+  background: var(--surface-secondary);
+}
+.hours-day.is-different button.hours-day-row:hover {
+  background: transparent;
+}
+button.hours-day-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.hours-day-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: normal;
+}
+.hours-day-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg-soft);
+  font-size: 15px;
+  line-height: normal;
+  font-variant-numeric: tabular-nums;
+}
+.hours-day.is-different .hours-day-range {
+  color: #0b4a4e;
+  font-weight: 600;
+}
+.hours-day-pencil,
+.hours-copy .icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
+}
+.hours-day.is-off .hours-day-row {
+  color: var(--muted);
+}
+.hours-day-quiet {
+  font-size: 14px;
+  line-height: normal;
+}
+.hours-day-fields {
+  padding: 0 16px 16px;
+}
+.hours-copy-row {
+  display: flex;
+  justify-content: center;
+}
+.hours-copy {
+  margin: -4px 0;
+  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--accent);
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: normal;
+  cursor: pointer;
+}
+.hours-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 /* O respiro do rodapé (12/20/46 do protótipo) é margem, não padding: a barra
    de ações tem a largura do botão, que o gate mede contra ela. */

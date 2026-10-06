@@ -31,7 +31,16 @@ export type OnboardingStepBody = (
   // Só contatos-ignorados usa isto: leva ao rodapé quantas pessoas estão
   // marcadas, para "Continuar · N pessoas".
   onIgnoredCountChange?: (count: number) => void,
+  // Só horarios usa isto: a tela "Horários por dia" (quadro 2.7) é da mesma
+  // etapa, e a tela precisa saber dela para trocar título, texto, rodapé e
+  // chevron.
+  hoursDayView?: HoursDayView,
 ) => React.ReactNode;
+
+export type HoursDayView = {
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+};
 
 export type OnboardingStepPersist = (
   scenario: OnboardingScenario,

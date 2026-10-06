@@ -545,13 +545,16 @@ describe("horarios: Personalizar dias diferentes grava uma regra por dia", () =>
     await user.click(
       await screen.findByRole("button", { name: "Personalizar dias diferentes" }),
     );
+    // Tocar a linha do dia abre só os campos daquele dia (quadro 2.7).
+    await user.click(screen.getByRole("button", { name: /^Segunda/ }));
     const mondayStart = screen.getByLabelText("Segunda · Início");
     await user.clear(mondayStart);
     await user.type(mondayStart, "08:00");
+    await user.click(screen.getByRole("button", { name: /^Sexta/ }));
     const fridayEnd = screen.getByLabelText("Sexta · Fim");
     await user.clear(fridayEnd);
     await user.type(fridayEnd, "20:00");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar horários" }));
 
     await waitFor(() => expect(updateOnboarding).toHaveBeenCalled());
     const [patch] = updateOnboarding.mock.calls.at(-1) as [
@@ -565,7 +568,7 @@ describe("horarios: Personalizar dias diferentes grava uma regra por dia", () =>
   });
 
   test("a retomada com intervalos diferentes por dia reconstrói cada um, não só o primeiro", async () => {
-    await renderStep(
+    const user = await renderStep(
       "horarios",
       stateFixture({
         availability: {
@@ -581,10 +584,13 @@ describe("horarios: Personalizar dias diferentes grava uma regra por dia", () =>
         },
       }),
     );
+    // A leitura com um dia diferente abre a tela "Horários por dia".
     expect(
-      await screen.findByRole("button", { name: "Personalizar dias diferentes" }),
-    ).toHaveAttribute("aria-expanded", "true");
+      await screen.findByRole("heading", { name: "Horários por dia" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /^Segunda/ }));
     expect(screen.getByLabelText("Segunda · Início")).toHaveValue("08:00");
+    await user.click(screen.getByRole("button", { name: /^Terça/ }));
     expect(screen.getByLabelText("Terça · Fim")).toHaveValue("20:00");
   });
 
@@ -601,10 +607,13 @@ describe("horarios: Personalizar dias diferentes grava uma regra por dia", () =>
         ),
       }),
     );
-    // Horário uniforme gravado não é personalização: começa fechado.
+    // Horário uniforme gravado não é personalização: abre o horário-base.
     expect(
       await screen.findByRole("button", { name: "Personalizar dias diferentes" }),
-    ).toHaveAttribute("aria-expanded", "false");
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Horários por dia" }),
+    ).toBeNull();
     const start = screen.getByLabelText("Começa");
     await user.clear(start);
     await user.type(start, "10:00");
@@ -638,11 +647,18 @@ describe("horarios: Personalizar dias diferentes grava uma regra por dia", () =>
         ]),
       }),
     );
-    const start = await screen.findByLabelText("Começa");
-    expect(start).toHaveValue("09:00");
-    await user.clear(start);
-    await user.type(start, "10:00");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    // A tela "Horários por dia" não mostra o intervalo-base: segunda e terça
+    // ganham o início novo pelas próprias linhas, e quarta segue personalizada.
+    await user.click(await screen.findByRole("button", { name: /^Segunda/ }));
+    const mondayStart = screen.getByLabelText("Segunda · Início");
+    expect(mondayStart).toHaveValue("09:00");
+    await user.clear(mondayStart);
+    await user.type(mondayStart, "10:00");
+    await user.click(screen.getByRole("button", { name: /^Terça/ }));
+    const tuesdayStart = screen.getByLabelText("Terça · Início");
+    await user.clear(tuesdayStart);
+    await user.type(tuesdayStart, "10:00");
+    await user.click(screen.getByRole("button", { name: "Salvar horários" }));
 
     await waitFor(() => expect(updateOnboarding).toHaveBeenCalled());
     const [patch] = updateOnboarding.mock.calls.at(-1) as [
@@ -654,7 +670,7 @@ describe("horarios: Personalizar dias diferentes grava uma regra por dia", () =>
     expect(byDay).toEqual({ 1: "10:00-18:00", 2: "10:00-18:00", 3: "08:00-13:00" });
   });
 
-  test("fechar a personalização volta todos os dias ao intervalo-base", async () => {
+  test("voltar ao horário-base devolve todos os dias ao intervalo-base", async () => {
     const user = await renderStep(
       "horarios",
       stateFixture({
@@ -665,11 +681,12 @@ describe("horarios: Personalizar dias diferentes grava uma regra por dia", () =>
         ]),
       }),
     );
-    const toggle = await screen.findByRole("button", {
-      name: "Personalizar dias diferentes",
-    });
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    await user.click(toggle);
+    // A leitura abre "Horários por dia"; o chevron volta ao horário-base e
+    // devolve todos os dias ao intervalo-base.
+    expect(
+      await screen.findByRole("heading", { name: "Horários por dia" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Voltar" }));
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     await waitFor(() => expect(updateOnboarding).toHaveBeenCalled());
@@ -704,20 +721,19 @@ describe("horarios: Personalizar dias diferentes grava uma regra por dia", () =>
     await user.click(
       await screen.findByRole("button", { name: "Personalizar dias diferentes" }),
     );
+    await user.click(screen.getByRole("button", { name: /^Quarta/ }));
     const wednesdayEnd = screen.getByLabelText("Quarta · Fim");
     await user.clear(wednesdayEnd);
     await user.type(wednesdayEnd, "07:00");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar horários" }));
 
     expect(wednesdayEnd).toHaveAttribute("aria-invalid", "true");
     expect(wednesdayEnd).toHaveAccessibleDescription(
       "O horário final deve ser depois do horário inicial.",
     );
     expect(wednesdayEnd).toHaveFocus();
-    expect(screen.getByLabelText("Termina")).not.toHaveAttribute("aria-invalid");
-    expect(screen.getByLabelText("Segunda · Fim")).not.toHaveAttribute(
-      "aria-invalid",
-    );
+    // Só o dia aberto tem campos na tela; os outros continuam sem erro.
+    expect(screen.queryByLabelText("Segunda · Fim")).toBeNull();
     expect(updateOnboarding).not.toHaveBeenCalled();
   });
 });

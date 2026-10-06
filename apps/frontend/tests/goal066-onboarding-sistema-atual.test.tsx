@@ -435,18 +435,19 @@ describe("horários: personalizar só o início (ou só o fim) não congela o ou
         ),
       }),
     );
+    // A tela "Horários por dia" não mostra o intervalo-base: ele muda antes
+    // de abri-la, e o início personalizado de segunda não congela o fim.
+    const end = await screen.findByLabelText("Termina");
+    await user.clear(end);
+    await user.type(end, "19:00");
     await user.click(
-      await screen.findByRole("button", { name: "Personalizar dias diferentes" }),
+      screen.getByRole("button", { name: "Personalizar dias diferentes" }),
     );
+    await user.click(screen.getByRole("button", { name: /^Segunda/ }));
     const mondayStart = screen.getByLabelText("Segunda · Início");
     await user.clear(mondayStart);
     await user.type(mondayStart, "08:00");
-
-    // O fim do intervalo-base muda depois da personalização do início.
-    const end = screen.getByLabelText("Termina");
-    await user.clear(end);
-    await user.type(end, "19:00");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar horários" }));
 
     await waitFor(() => expect(updateOnboarding).toHaveBeenCalled());
     const [patch] = updateOnboarding.mock.calls.at(-1) as [
@@ -475,18 +476,18 @@ describe("horários: personalizar só o início (ou só o fim) não congela o ou
         ),
       }),
     );
+    // O intervalo-base muda antes de abrir "Horários por dia".
+    const start = await screen.findByLabelText("Começa");
+    await user.clear(start);
+    await user.type(start, "10:00");
     await user.click(
-      await screen.findByRole("button", { name: "Personalizar dias diferentes" }),
+      screen.getByRole("button", { name: "Personalizar dias diferentes" }),
     );
+    await user.click(screen.getByRole("button", { name: /^Sexta/ }));
     const fridayEnd = screen.getByLabelText("Sexta · Fim");
     await user.clear(fridayEnd);
     await user.type(fridayEnd, "20:00");
-
-    // O início do intervalo-base muda depois da personalização do fim.
-    const start = screen.getByLabelText("Começa");
-    await user.clear(start);
-    await user.type(start, "10:00");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar horários" }));
 
     await waitFor(() => expect(updateOnboarding).toHaveBeenCalled());
     const [patch] = updateOnboarding.mock.calls.at(-1) as [

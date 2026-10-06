@@ -349,7 +349,7 @@ describe("horas: intervalo em texto e barra decorativa (§6.9)", () => {
     expect(updateOnboarding).not.toHaveBeenCalled();
   });
 
-  test("Personalizar dias diferentes continua botão com aria-expanded", async () => {
+  test("Personalizar dias diferentes continua botão e abre a tela por dia", async () => {
     const user = await renderStep("horarios", {
       ...emptyState(),
       availability: availabilityFor([1, 2, 3]),
@@ -357,9 +357,11 @@ describe("horas: intervalo em texto e barra decorativa (§6.9)", () => {
     const toggle = await screen.findByRole("button", {
       name: "Personalizar dias diferentes",
     });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
     await user.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("heading", { name: "Horários por dia" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /^Segunda/ }));
     expect(screen.getByLabelText("Segunda · Início")).toBeVisible();
   });
 });

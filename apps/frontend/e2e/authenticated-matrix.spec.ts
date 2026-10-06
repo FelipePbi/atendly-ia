@@ -941,18 +941,23 @@ for (const route of ONBOARDING_ROUTES) {
       await page.goto(route.path, { waitUntil: "networkidle" });
       await proveOnboardingScreen(page, route);
 
-      // "Horários" only shows its per-day fields once "Personalizar dias
+      // "Horários" only shows its per-day rows once "Personalizar dias
       // diferentes" is opened (WU-05's acceptance criteria names this state
-      // explicitly): the button starts collapsed, and opening it is a real
-      // click, not a seeded state — nothing about the account's onboarding
-      // progress can pre-open it.
+      // explicitly). Since Goal130 the button leads to the "Horários por dia"
+      // screen (frame 2.7), in the same step and URL, and the button itself
+      // leaves the page. Opening it is a real click, not a seeded state: the
+      // account's availability is the same range on every day, so nothing
+      // about its onboarding progress can pre-open it.
       if (route.name === "onboarding-horarios") {
-        const toggle = page.getByRole("button", { name: "Personalizar dias diferentes" });
-        await toggle.click();
+        await page.getByRole("button", { name: "Personalizar dias diferentes" }).click();
         await expect(
-          toggle,
-          `${route.path}: "Personalizar dias diferentes" did not open within ${CONTENT_TIMEOUT_MS}ms.`,
-        ).toHaveAttribute("aria-expanded", "true", { timeout: CONTENT_TIMEOUT_MS });
+          page.getByRole("heading", { level: 1, name: "Horários por dia" }),
+          `${route.path}: "Personalizar dias diferentes" did not open "Horários por dia" within ${CONTENT_TIMEOUT_MS}ms.`,
+        ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+        await expect(
+          page.getByRole("button", { name: "Salvar horários" }),
+          `${route.path}: "Horários por dia" has no "Salvar horários" within ${CONTENT_TIMEOUT_MS}ms.`,
+        ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
       }
 
       // 1. Nothing runs off the side.

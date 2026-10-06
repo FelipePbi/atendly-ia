@@ -81,13 +81,29 @@ export function OnboardingScreen({
   // Só lido em contatos-ignorados: quantas pessoas a escolha já soma, para o
   // "Continuar · N pessoas" do rodapé.
   const [ignoredCount, setIgnoredCount] = useState(0);
+  // Só lido em horarios: `null` até a leitura chegar; então abre a tela
+  // "Horários por dia" (quadro 2.7) quando algum dia marcado difere do
+  // intervalo-base, e o horário-base (quadro 2.6) quando não.
+  const [hoursDayViewOpen, setHoursDayViewOpen] = useState<boolean | null>(
+    null,
+  );
   const [phaseScenario, setPhaseScenario] = useState(scenario);
   // A tela é a mesma entre etapas: ao trocar de etapa, a fase recomeça.
   if (phaseScenario !== scenario) {
     setPhaseScenario(scenario);
     setWhatsappPhase("consent");
     setConsentReady(false);
+    setHoursDayViewOpen(null);
   }
+  if (
+    scenario === "horarios" &&
+    hoursDayViewOpen === null &&
+    !loading &&
+    !loadError
+  ) {
+    setHoursDayViewOpen(draft.days.some((day) => draft.dayHours[day]));
+  }
+  const inHoursDayView = scenario === "horarios" && hoursDayViewOpen === true;
   // Só lido em demonstracao-da-ia: "Continuar" aparece quando o último item da
   // conversa entra (ou de imediato, sem serviço e horário para simular).
   const [demoDone, setDemoDone] = useState(false);
@@ -104,14 +120,18 @@ export function OnboardingScreen({
     ? "Antes de conectar"
     : inConnectedPhase
       ? "WhatsApp conectado"
-      : staticTitle;
+      : inHoursDayView
+        ? "Horários por dia"
+        : staticTitle;
   const description = inConsentPhase
     ? ""
     : inConnectedPhase
       ? "É este o número que seus clientes usam para falar com você?"
-      : scenario === "horarios"
-      ? hoursStepDescription(draft.days)
-      : staticDescription;
+      : inHoursDayView
+        ? "Toque em um horário para ajustar só aquele dia."
+        : scenario === "horarios"
+          ? hoursStepDescription(draft.days)
+          : staticDescription;
   // "importacao" só existe para quem escolheu importar: aberta por URL direta
   // sem a fonte gravada, volta para "sistema-atual" sem tocar na importação.
   const importWithoutSource =
@@ -173,12 +193,21 @@ export function OnboardingScreen({
     isActivationTestSucceeded ||
     isWhatsappConclusion
   );
-  // Conectado, o espaço do chevron fica vazio, como no quadro 4.4.
+  // Conectado, o espaço do chevron fica vazio, como no quadro 4.4. Na tela
+  // "Horários por dia" o chevron volta ao horário-base, na mesma etapa, e
+  // devolve os dias ao intervalo-base (o que se grava é o que está na tela).
   const back: OnboardingBack | undefined = isWelcomeStep
     ? { disabled: true }
-    : showsBack && previous && !inConnectedPhase
-      ? { href: `/onboarding/${previous}` }
-      : undefined;
+    : inHoursDayView
+      ? {
+          onClick: () => {
+            setDraft((current) => ({ ...current, dayHours: {} }));
+            setHoursDayViewOpen(false);
+          },
+        }
+      : showsBack && previous && !inConnectedPhase
+        ? { href: `/onboarding/${previous}` }
+        : undefined;
 
   function go(step: OnboardingScenario) {
     router.push(`/onboarding/${step}`);
@@ -540,7 +569,9 @@ export function OnboardingScreen({
             ? `Continuar com ${toneLabel(effectiveTone(draft))}`
             : isServicoNome
               ? "Salvar serviço"
-              : "Continuar"}
+              : inHoursDayView
+                ? "Salvar horários"
+                : "Continuar"}
       </button>
     </>
   );
@@ -594,6 +625,10 @@ export function OnboardingScreen({
               phase: whatsappPhase,
             },
             setIgnoredCount,
+            {
+              onOpenChange: setHoursDayViewOpen,
+              open: inHoursDayView,
+            },
           )
         )
       }

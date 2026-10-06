@@ -476,10 +476,11 @@ describe("6. regressão de gravação: o corpo de cada PATCH e POST não mudou",
         name: /^Personalizar dias diferentes/,
       }),
     );
+    await user.click(screen.getByRole("button", { name: /^Quarta/ }));
     const start = screen.getByLabelText("Quarta · Início");
     await user.clear(start);
     await user.type(start, "10:00");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar horários" }));
     await waitFor(() =>
       expect(updateOnboarding).toHaveBeenCalledWith({
         availability: {

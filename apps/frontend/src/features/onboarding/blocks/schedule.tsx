@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import type { Service } from "@/data";
 import { ImportIllustration } from "@/features/imports/ImportIllustration";
+import type { WhatsAppConsentPhase } from "@/features/whatsapp/WhatsAppConnectionPanel";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { CurrencyInput } from "@/shared/ui/CurrencyInput";
@@ -10,6 +11,7 @@ import type { OnboardingDraft } from "../OnboardingRuntime";
 import type { OnboardingScenario } from "../scenarios";
 import {
   applyInlineValidation,
+  type HoursDayView,
   type OnboardingStepContext,
   Summary,
 } from "./shared";
@@ -611,94 +613,245 @@ function AdditionalServicesStepBody({ draft }: { draft: OnboardingDraft }) {
   );
 }
 
-function HoursStepBody({
+/** Muda um campo (início ou fim) de um dia. Igual ao intervalo-base não é
+ * personalização daquele campo: ele volta a acompanhar o intervalo-base, mesmo
+ * que o outro campo do mesmo dia continue personalizado. */
+function updateDayHour(
+  setDraft: (updater: (value: OnboardingDraft) => OnboardingDraft) => void,
+  day: number,
+  field: "startTime" | "endTime",
+  value: string,
+) {
+  setDraft((current) => {
+    const dayHours = { ...current.dayHours };
+    const override = { ...dayHours[day] };
+    if (value === current[field]) {
+      delete override[field];
+    } else {
+      override[field] = value;
+    }
+    if (Object.keys(override).length === 0) delete dayHours[day];
+    else dayHours[day] = override;
+    return { ...current, dayHours };
+  });
+}
+
+function hoursRangeText(hours: { startTime: string; endTime: string }): string {
+  return `${hours.startTime} – ${hours.endTime}`;
+}
+
+function PencilIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="icon hours-day-pencil"
+      viewBox="0 0 24 24"
+    >
+      <path d="M4 20h4l10-10-4-4L4 16z" />
+    </svg>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg aria-hidden="true" className="icon" viewBox="0 0 24 24">
+      <rect height="11" rx="2.5" width="11" x="9" y="9" />
+      <path d="M5 15V6.5A1.5 1.5 0 0 1 6.5 5H15" />
+    </svg>
+  );
+}
+
+/** Quadro 2.7: sete linhas de segunda a domingo. O dia marcado é um botão
+ * que abre, dentro do cartão, os campos só daquele dia (um por vez); o dia
+ * sem atendimento diz "Não atende" e não é controle — os dias se escolhem em
+ * "dias-de-atendimento". Só o dia diferente do intervalo-base ganha o tom. */
+function DayHoursView({
   draft,
   setDraft,
 }: {
   draft: OnboardingDraft;
   setDraft: (updater: (value: OnboardingDraft) => OnboardingDraft) => void;
 }) {
-  const hasCustomHours = draft.days.some((day) => draft.dayHours[day]);
-  const [customized, setCustomized] = useState(hasCustomHours);
-  const customId = useId();
+  const [openDay, setOpenDay] = useState<number | null>(null);
+  const [lastAdjusted, setLastAdjusted] = useState<number | null>(null);
+  const fieldsId = useId();
+  const markedDays = weekOrder.filter((day) => draft.days.includes(day));
+  const differs = (day: number) => {
+    const hours = dayHourOf(draft, day);
+    return hours.startTime !== draft.startTime || hours.endTime !== draft.endTime;
+  };
+  const differingDays = markedDays.filter(differs);
+  const copyDay =
+    lastAdjusted !== null && differingDays.includes(lastAdjusted)
+      ? lastAdjusted
+      : differingDays[differingDays.length - 1];
 
-  function setDayHour(day: number, field: "startTime" | "endTime", value: string) {
-    setDraft((current) => {
-      const dayHours = { ...current.dayHours };
-      const override = { ...dayHours[day] };
-      // Igual ao intervalo-base não é personalização daquele campo: ele
-      // volta a acompanhar o intervalo-base, mesmo que o outro campo do
-      // mesmo dia continue personalizado.
-      if (value === current[field]) {
-        delete override[field];
-      } else {
-        override[field] = value;
-      }
-      if (Object.keys(override).length === 0) delete dayHours[day];
-      else dayHours[day] = override;
-      return { ...current, dayHours };
-    });
+  function adjust(day: number, field: "startTime" | "endTime", value: string) {
+    setLastAdjusted(day);
+    updateDayHour(setDraft, day, field, value);
   }
 
-  function toggleCustomized() {
-    // Fechar a personalização volta todos os dias ao intervalo-base: o que
-    // se grava é o que está na tela.
-    if (customized) setDraft((current) => ({ ...current, dayHours: {} }));
-    setCustomized(!customized);
+  function copyToOtherDays() {
+    if (copyDay === undefined) return;
+    const hours = dayHourOf(draft, copyDay);
+    // O que se grava é o que está na tela: o intervalo do dia copiado vira o
+    // intervalo-base e nenhum dia fica personalizado.
+    setDraft((current) => ({
+      ...current,
+      dayHours: {},
+      endTime: hours.endTime,
+      startTime: hours.startTime,
+    }));
+    setLastAdjusted(null);
   }
 
   return (
-    <div className="onboarding-form">
-      <TimeRangeFields
-        endLabel="Termina"
-        endTime={draft.endTime}
-        hero
-        startLabel="Começa"
-        startTime={draft.startTime}
-        onChangeEnd={(value) =>
-          setDraft((current) => ({ ...current, endTime: value }))
-        }
-        onChangeStart={(value) =>
-          setDraft((current) => ({ ...current, startTime: value }))
-        }
-      />
-      <button
-        aria-describedby={`${customId}-hint`}
-        aria-expanded={customized}
-        aria-labelledby={`${customId}-title`}
-        className="hours-custom"
-        type="button"
-        onClick={toggleCustomized}
-      >
-        <span className="hours-custom-text">
-          <span className="hours-custom-title" id={`${customId}-title`}>
-            Personalizar dias diferentes
-          </span>
-          <span className="hours-custom-hint" id={`${customId}-hint`}>
-            Ex.: sábado até mais cedo
-          </span>
-        </span>
-        <Icon name="chevron-right" />
-      </button>
-      {customized && (
-        <div className="onboarding-form">
-          {weekOrder
-            .filter((day) => draft.days.includes(day))
-            .map((day) => {
-              const hours = dayHourOf(draft, day);
-              return (
-                <TimeRangeFields
-                  endLabel={`${weekdayLabels[day]} · Fim`}
-                  endTime={hours.endTime}
-                  key={day}
-                  startLabel={`${weekdayLabels[day]} · Início`}
-                  startTime={hours.startTime}
-                  onChangeEnd={(value) => setDayHour(day, "endTime", value)}
-                  onChangeStart={(value) => setDayHour(day, "startTime", value)}
-                />
-              );
-            })}
+    <>
+      <div className="hours-day-card">
+        {weekOrder.map((day) => {
+          const name = weekdayLabels[day] ?? "";
+          if (!draft.days.includes(day)) {
+            return (
+              <div className="hours-day is-off" key={day}>
+                <div className="hours-day-row">
+                  <span className="hours-day-name">{name}</span>
+                  <span className="hours-day-quiet">Não atende</span>
+                </div>
+              </div>
+            );
+          }
+          const hours = dayHourOf(draft, day);
+          const different = differs(day);
+          // Um dia com "fim antes do início" não fecha: o campo inválido
+          // precisa continuar na tela para o envio da etapa o conferir.
+          const invalid =
+            hours.startTime !== "" &&
+            hours.endTime !== "" &&
+            hours.endTime <= hours.startTime;
+          const expanded = openDay === day || invalid;
+          return (
+            <div
+              className={`hours-day${different ? " is-different" : ""}`}
+              key={day}
+            >
+              <button
+                aria-controls={expanded ? `${fieldsId}-${day}` : undefined}
+                aria-expanded={expanded}
+                aria-label={`${name} ${hoursRangeText(hours)}`}
+                className="hours-day-row"
+                type="button"
+                onClick={() => setOpenDay(openDay === day ? null : day)}
+              >
+                <span className="hours-day-name">{name}</span>
+                <span className="hours-day-range">
+                  {hoursRangeText(hours)}
+                  {different && <PencilIcon />}
+                </span>
+              </button>
+              {expanded && (
+                <div className="hours-day-fields" id={`${fieldsId}-${day}`}>
+                  <TimeRangeFields
+                    endLabel={`${name} · Fim`}
+                    endTime={hours.endTime}
+                    startLabel={`${name} · Início`}
+                    startTime={hours.startTime}
+                    onChangeEnd={(value) => adjust(day, "endTime", value)}
+                    onChangeStart={(value) => adjust(day, "startTime", value)}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {copyDay !== undefined && (
+        <div className="hours-copy-row">
+          <button
+            className="hours-copy"
+            type="button"
+            onClick={copyToOtherDays}
+          >
+            <CopyIcon />
+            {`Copiar ${(weekdayLabels[copyDay] ?? "").toLowerCase()} para outros dias`}
+          </button>
         </div>
+      )}
+    </>
+  );
+}
+
+function HoursStepBody({
+  dayView,
+  draft,
+  setDraft,
+}: {
+  dayView?: HoursDayView;
+  draft: OnboardingDraft;
+  setDraft: (updater: (value: OnboardingDraft) => OnboardingDraft) => void;
+}) {
+  const open = dayView?.open ?? false;
+  const customId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const customRef = useRef<HTMLButtonElement>(null);
+  const previousOpen = useRef(open);
+
+  // Só a troca de tela move o foco (não a abertura pela leitura): ao abrir, o
+  // título "Horários por dia"; ao voltar, o cartão que abriu a tela.
+  useEffect(() => {
+    if (previousOpen.current === open) return;
+    previousOpen.current = open;
+    if (open) {
+      const heading = rootRef.current
+        ?.closest("form")
+        ?.querySelector<HTMLElement>("h1");
+      heading?.setAttribute("tabindex", "-1");
+      heading?.focus();
+    } else {
+      customRef.current?.focus();
+    }
+  }, [open]);
+
+  return (
+    <div
+      className={`onboarding-form${open ? " hours-day-view" : ""}`}
+      ref={rootRef}
+    >
+      {open ? (
+        <DayHoursView draft={draft} setDraft={setDraft} />
+      ) : (
+        <>
+          <TimeRangeFields
+            endLabel="Termina"
+            endTime={draft.endTime}
+            hero
+            startLabel="Começa"
+            startTime={draft.startTime}
+            onChangeEnd={(value) =>
+              setDraft((current) => ({ ...current, endTime: value }))
+            }
+            onChangeStart={(value) =>
+              setDraft((current) => ({ ...current, startTime: value }))
+            }
+          />
+          <button
+            aria-describedby={`${customId}-hint`}
+            aria-labelledby={`${customId}-title`}
+            className="hours-custom"
+            ref={customRef}
+            type="button"
+            onClick={() => dayView?.onOpenChange(true)}
+          >
+            <span className="hours-custom-text">
+              <span className="hours-custom-title" id={`${customId}-title`}>
+                Personalizar dias diferentes
+              </span>
+              <span className="hours-custom-hint" id={`${customId}-hint`}>
+                Ex.: sábado até mais cedo
+              </span>
+            </span>
+            <Icon name="chevron-right" />
+          </button>
+        </>
       )}
     </div>
   );
@@ -708,6 +861,11 @@ export function scheduleStepBody(
   scenario: OnboardingScenario,
   draft: OnboardingDraft,
   setDraft: (updater: (value: OnboardingDraft) => OnboardingDraft) => void,
+  _onWhatsappStatusChange?: (connected: boolean) => void,
+  _onDemoDone?: (done: boolean) => void,
+  _whatsappConsentPhase?: WhatsAppConsentPhase,
+  _onIgnoredCountChange?: (count: number) => void,
+  hoursDayView?: HoursDayView,
 ) {
   if (scenario === "quando-importar")
     return <ImportIllustration />;
@@ -785,7 +943,9 @@ export function scheduleStepBody(
       </div>
     );
   if (scenario === "horarios")
-    return <HoursStepBody draft={draft} setDraft={setDraft} />;
+    return (
+      <HoursStepBody dayView={hoursDayView} draft={draft} setDraft={setDraft} />
+    );
   return (
     <Summary
       rows={[

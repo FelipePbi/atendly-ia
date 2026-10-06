@@ -9,9 +9,14 @@ import { Brand, BrandMark } from "@/shared/ui/Brand";
 import { chapterProgress } from "./blocks";
 import { type OnboardingScenario, onboardingScenarios } from "./scenarios";
 
-/** Voltar no topo da etapa: `href` navega; `disabled` é o chevron cinza da
- * Boas-vindas (sem destino e fora da ordem de Tab); ausente, não há chevron. */
-export type OnboardingBack = { href: string } | { disabled: true };
+/** Voltar no topo da etapa: `href` navega; `onClick` age na própria etapa, sem
+ * navegar (a tela "Horários por dia" volta ao horário-base); `disabled` é o
+ * chevron cinza da Boas-vindas (sem destino e fora da ordem de Tab); ausente,
+ * não há chevron. */
+export type OnboardingBack =
+  | { href: string }
+  | { onClick: () => void }
+  | { disabled: true };
 
 export function OnboardingShell({
   actions,
@@ -183,6 +188,18 @@ function OnboardingBackLink({ back }: { back?: OnboardingBack }) {
       >
         <Icon name="chevron-left" />
       </a>
+    );
+  }
+  if ("onClick" in back) {
+    return (
+      <button
+        aria-label="Voltar"
+        className="onboarding-back-link"
+        type="button"
+        onClick={back.onClick}
+      >
+        <Icon name="chevron-left" />
+      </button>
     );
   }
   return (

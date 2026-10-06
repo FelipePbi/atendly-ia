@@ -188,10 +188,10 @@ describe("contatos-ignorados: erro por telefone", () => {
       "contatos-ignorados",
       { ...emptyState(), ...whatsappConnected },
     );
-    await user.type(
-      await screen.findByPlaceholderText("+55 11 99999-0000"),
-      "123",
+    await user.click(
+      await screen.findByRole("button", { name: "Adicionar por telefone" }),
     );
+    await user.type(screen.getByPlaceholderText("+55 11 99999-0000"), "123");
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
     const formatMessage = await screen.findByText(
@@ -211,8 +211,11 @@ describe("contatos-ignorados: erro por telefone", () => {
       "contatos-ignorados",
       { ...emptyState(), ...whatsappConnected },
     );
+    await user.click(
+      await screen.findByRole("button", { name: "Adicionar por telefone" }),
+    );
     await user.type(
-      await screen.findByPlaceholderText("+55 11 99999-0000"),
+      screen.getByPlaceholderText("+55 11 99999-0000"),
       "+55 11 99999-0000",
     );
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
@@ -237,8 +240,11 @@ describe("contatos-ignorados: erro por telefone", () => {
       "contatos-ignorados",
       { ...emptyState(), ...whatsappConnected },
     );
+    await user.click(
+      await screen.findByRole("button", { name: "Adicionar por telefone" }),
+    );
     await user.type(
-      await screen.findByPlaceholderText("+55 11 99999-0000"),
+      screen.getByPlaceholderText("+55 11 99999-0000"),
       "+55 11 99999-0000",
     );
     await user.click(screen.getByRole("button", { name: "Adicionar" }));

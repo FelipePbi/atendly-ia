@@ -99,9 +99,9 @@ export const onboardingScenarios = {
     "whatsapp-connect",
   ],
   "contatos-ignorados": [
-    "Antes de testar",
+    "WhatsApp",
     "Quer impedir que a IA responda algumas pessoas?",
-    "Escolha conversas já existentes ou informe um número manualmente. A IA nunca responde a quem está nesta lista.",
+    "Adicione familiares, amigos ou qualquer contato que você prefira atender sempre pessoalmente.",
     "ignored-contacts",
   ],
   // Telas do teste real, na ordem do vault

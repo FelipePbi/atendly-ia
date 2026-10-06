@@ -7714,3 +7714,73 @@ Arquivos do Goal: `apps/frontend/src/features/activation-test/ActivationTestPane
 ### Não executado
 
 A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.
+
+## O WhatsApp conectado e os contatos ignorados iguais ao protótipo, do Goal129
+
+Rodadas 1 a 4, 2026-10-06, na worktree `goal-129`. Baseline `f25c6e0`. A captura, a fidelidade, os controles negativos e os registros da rodada 1 são da WU-03, e as WU-01 e WU-02 fizeram as telas 4.4 e 4.5; a rodada 2 (FIX-001) corrigiu os quatro blockers da revisão (a busca da 4.5 em tablet e desktop, o topo da 4.5, a contagem do rodapé com número por telefone e este registro) e a rodada 3 (FIX-001) a busca da 4.5 no celular (47 px, como no quadro); a rodada 4 (FIX-001) o círculo de "Adicionar por telefone" com 41 px (`.ignored-add-mark`) e o corte do cartão no celular nos registros. Os números abaixo são os da execução final, na rodada 4, sobre a árvore completa.
+
+### Contagens
+
+| Gate | Comando | Resultado |
+| --- | --- | --- |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0 |
+| Lint do frontend | `rtk proxy npx eslint src tests --max-warnings=0` (em `apps/frontend`) | saída 0 |
+| Testes do frontend | `npx vitest run` | **183** arquivos e **2431** testes passando (baseline 180 e 2384: +3 arquivos e +47 testes, os de `goal129`) |
+| Testes `goal129` | `goal129-whatsapp-conectado.test.tsx`, `goal129-contatos-ignorados.test.tsx`, `goal129-alvos-captura.test.ts` | 3 arquivos e 47 testes (10, 25 e 12) |
+| Testes da captura | `node --test scripts/tests/visual-responses.test.mjs` | **57** testes passando (baseline 56: +1) |
+| `test:gate` | `npm run test:gate` | **290** testes, 290 passando, 0 falhas, 0 pulados (baseline 289: +1, o da captura) |
+| `validate:core`, `validate:ui`, `validate:integration` (com o gate autenticado, que passa a medir `/onboarding/contatos-ignorados` nas cinco larguras) e `git diff --check` | os de sempre, rodados pelo IA Loop sobre a árvore completa na execução final da rodada 4 | `validate:core` saída 0; `validate:ui` **169** passando e **21** pulados, 0 retentativas; `validate:integration` saída 0, com o gate autenticado em **305** passando e 0 retentativas (baseline 299 passando mais 1 `flaky`; os 5 testes novos são `/onboarding/contatos-ignorados` nas cinco larguras); `git diff --check` saída 0 |
+
+### `visual:compare`
+
+Comando: `npm run visual:compare -- --target 4.4,4.5` (saída 0, 8 pares, nenhum com erro), refeito na rodada 4 depois da última edição de código (refeito também pelo review da rodada 4, com os mesmos percentuais), na pilha descartável do IA Loop. Percentual de pixels diferentes por device:
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| 4.4 | 3,8% | 1,5% | 2,0% | 1,5% |
+| 4.5 | 1,1% | 0,9% | 1,3% | 1,0% |
+
+As capturas lado a lado dos oito pares foram abertas (protótipo, app e diferenças). Divergências que restam:
+
+- Na 4.4, o disco com o ícone de pessoa no lugar das iniciais "CR" e o telefone na linha do nome, no lugar de "Camila Reis" mais o telefone: o contrato não traz nome nem foto. Com uma linha a menos, o grupo centrado na altura que sobra deixa o disco cerca de 12 px mais abaixo e o título cerca de 14 px mais acima que no quadro (mobile). O selo, as cores, os raios, a pílula, o texto e o rodapé coincidem.
+- Na 4.5, medido em `prototype.png` contra `app.png` (cor da borda da busca e do cartão, do título e do eyebrow) nos quatro devices, tudo a no máximo 1 px do quadro: eyebrow, título, descrição, topo da busca e do cartão. Em tablet em paisagem e desktop o cartão começa em y=303 nos dois, com a busca de 43 px; em tablet em retrato a busca tem 48 px e o cartão começa em y=308 nos dois. No mobile a busca tem 47 px nos dois (a coluna do quadro, com `overflow: hidden`, comprime a busca em 1 px, e o app usa essa altura abaixo de 768 px), o cartão começa em y=301 nos dois e o texto de "Adicionar por telefone" fica a 1 px do quadro (633 no app, 634 no quadro); nada passa de 1 px. Também no mobile, o quadro comprime o cartão por `overflow: hidden` e mostra a borda arredondada de baixo em y=661, enquanto o app deixa o cartão inteiro e a coluna rola (a mesma divergência de D-143, antes escrita só para 1024 px ou mais): o corte fica sob o rodapé, sem essa borda. O círculo tracejado de "Adicionar por telefone" tem 41 px nos dois (`.ignored-add-mark` com 41 px no total, como o content-box do quadro: 38 + 2×1,5); em tablet em retrato a borda de baixo do cartão fica em y=679 no app e y=678 no quadro, e o círculo começa em y=626 nos dois.
+- O preenchimento do 4º segmento da barra de progresso (mobile e tablet em retrato) é derivado por `chapterFraction` (D-104, que proíbe tabela copiada) e não copia o do quadro: na 4.4 o quadro tem 50% e o app 2/6,5 (cerca de 31%); na 4.5 o quadro tem 62% e o app 3/6,5 (cerca de 46%).
+- O "Sair" do topo abaixo de 1024 px e do rodapé da sidebar (D-104), a barra de status e o indicador de início do iPhone.
+
+Regressão da rodada 2: o `app.png` de antes foi capturado nesta mesma worktree com as regras de CSS da correção (`[data-step="contatos-ignorados"] .onboarding-top` e os dois `@media` da busca) retiradas temporariamente (cópia guardada e devolvida com `cmp` idêntico), nos alvos 4.1, 4.2, 4.6, W1 e W2 (20 pares); o de depois, com a correção. Os percentuais de antes e depois são os mesmos (tabela abaixo, inalterada desde a rodada 1). Os percentuais de antes e depois são os mesmos em todos os pares:
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| 4.1 | 1,3% | 1,4% | 1,3% | 1,4% |
+| 4.2 | 8,9% | 5,1% | 5,3% | 3,9% |
+| 4.6 | 5,4% | 2,3% | 2,7% | 1,9% |
+| W1 | 8,1% | 3,4% | 6,0% | 5,0% |
+| W2 | 2,3% | 6,1% | 7,7% | 6,3% |
+
+18 dos 20 pares são iguais byte a byte (`cmp`). Os dois que diferem (W1 desktop e W2 tablet em paisagem) foram medidos pixel a pixel: 8 e 7 pixels diferentes, diferença máxima por canal de 5 e de 3 em 255, em regiões de poucos pixels, ruído de antialiasing (o hash do PNG varia entre corridas iguais), sem mudança de posição, tamanho, cor ou texto.
+
+### Controles negativos
+
+Refeitos na rodada 2, depois da última edição de TypeScript de produto; as rodadas 3 e 4 só mudaram regras de `avenly.css` (a altura da busca no celular e o tamanho de `.ignored-add-mark`), que não alcançam a lógica que os controles (a) a (e) testam. Cada um teve o arquivo devolvido e conferido com `cmp` contra a cópia guardada antes da mudança (saída 0). (a) a (d) com `npx vitest run <arquivo>` (em `apps/frontend`); (e) com `npx vitest run tests/goal129-alvos-captura.test.ts` e `node --test scripts/tests/visual-responses.test.mjs`.
+
+| # | Mudança | Teste que reprovou | Mensagem |
+| --- | --- | --- | --- |
+| a | a caixa da 4.5 muda antes da resposta do `PUT` (`setKnown` logo depois de `setPendingId`, em `toggleConversation`) | 3 de 25 em `goal129-contatos-ignorados.test.tsx`: "marcar chama o PUT com o valor contrário e a caixa muda só depois da resposta", "desmarcar chama o PUT com `false` e a caixa muda só depois da resposta" e "com erro no PUT, a caixa não muda e mostra o erro de hoje" | falha de asserção na caixa lida antes da resposta |
+| b | a lista da 4.5 lida com `ignored: false` (`ignored: false` em `list`) | 2 de 25: "lê as conversas sem o filtro `ignored` e a caixa de cada linha reflete o `ignored` lido" e "a busca lê de novo com `search`, sem o filtro `ignored`" | `AssertionError: expected "vi.fn()" to be called with arguments: [ { limit: 20 } ]` |
+| c | o rodapé conta duas vezes o contato marcado pela lista e por telefone (`markedPhones.length` mais os marcados lidos); variante: conta também a conversa desmarcada (`ignoredContacts.add` sem o `if (entry.ignored)`) | na primeira, 3 de 25 ("não conta duas vezes o mesmo contato marcado pela lista e por telefone" e os dois testes novos da rodada 2); na variante, 10 de 25, entre elas "soma a escolha: Continuar, Continuar · 1 pessoa, Continuar · N pessoas". Duas variantes novas do blocker 3: `ignoreByPhone` sem marcar a conversa conhecida do mesmo `externalContactId` reprova 1 de 25 ("o número de uma conversa visível, adicionado por telefone, marca a caixa da linha e conta uma vez"), e `setIgnored(id, false)` sem tirar o número de `markedPhones` reprova 1 de 25 ("desmarcar a conversa tira o número adicionado por telefone e o rodapé volta a não contar") | falha de asserção no texto do rodapé |
+| d | a 4.4 trata qualquer leitura como conectada (`connected = Boolean(connection)` e o ramo de `renderConnected` sem o teste de `CONNECTED`, em `WhatsAppConnectionPanel.tsx`), com a leitura `WAITING_QR` | 1 de 10 em `goal129-whatsapp-conectado.test.tsx`: "com a leitura em outro estado que não CONNECTED, a pílula 'Conectado' não aparece" | `TestingLibraryElementError: Unable to find role="checkbox"` (o corpo conectado ocupa o lugar do consentimento) |
+| e | o 4.5 de `targets.json` com um passo que toca a caixa de "Tia Lú" (`clickRole` de `checkbox`) | 1 de 12 em `goal129-alvos-captura.test.ts` ("alvo 4.5 … a rota é a da etapa, na conta de onboarding, sem passos") e 1 de 57 em `visual-responses.test.mjs` | `AssertionError: expected [ { clickRole: { …(2) } } ] to be undefined` e `AssertionError [ERR_ASSERTION]: 4.5: nenhum passo, nada toca em controle que grava` |
+
+O controle (d) mostrou que o teste "com a leitura em outro estado que não CONNECTED" passava sem provar nada: esperava só o `h1`, que já existe na tela de carregamento, e por isso não reprovava nem com o ramo conectado errado. Ele passou a esperar a leitura assentar (`waitFor` de `getWhatsapp` e a caixa do consentimento) antes de afirmar que a pílula e "WhatsApp conectado" não aparecem; sem a mudança de produto ele passa (10 de 10), com a mudança reprova.
+
+### Testes ajustados
+
+Cinco arquivos existentes do frontend (WU-01 e WU-02), só no texto, na ordem ou na ação que o Goal muda, sem afrouxar asserção sobre consentimento, vinculação, desconexão, contatos ignorados, teste real ou conclusão do onboarding: `goal018-onboarding-reachability.test.tsx`, `goal063-onboarding-activation.test.tsx`, `goal065-onboarding-copy-whatsapp.test.tsx`, `goal071-onboarding-whatsapp.test.tsx` e `goal106-whatsapp.test.tsx`. `scripts/tests/visual-responses.test.mjs`: 4.4, 4.5, 4.7, 4.8 e 4.9 entre os donos de `responses` e o teste novo dos alvos 4.4 e 4.5 (de 56 para 57). `goal079-onboarding-gate-routes.test.ts` passa sem mudança.
+
+### Escopo
+
+Arquivos do Goal: `apps/frontend/src/features/onboarding/{OnboardingScreen.tsx,OnboardingShell.tsx,scenarios.ts}`, `blocks/{shared.tsx,whatsapp.tsx}`, `apps/frontend/src/features/whatsapp/{IgnoredContactsPanel.tsx,WhatsAppConnectionPanel.tsx}`, `apps/frontend/src/shared/styles/avenly.css`, `apps/frontend/e2e/routes.ts`, `apps/frontend/e2e/visual/targets.json`, `scripts/tests/visual-responses.test.mjs`, os três testes `goal129-*`, os cinco testes ajustados e os três registros em `docs/migration/`.
+
+### Não executado
+
+A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.

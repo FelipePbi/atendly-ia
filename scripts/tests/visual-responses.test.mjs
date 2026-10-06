@@ -202,9 +202,9 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, W2, R2, I1, AG2, NT2, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1, W2, R2, I1, AG2, NT2, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
   for (const target of declaring) {
     const owner = ["W1", "W2", "R2", "I1"].includes(target.code)
       ? "Mais-WhatsApp-Importacao-Conta.dc.html"
@@ -212,7 +212,7 @@ test("targets.json: só W1, W2, R2, I1, AG2, NT2, 4.7 a 4.9, A2, A12, C1 a C4, C
         ? "Mais-Negocio-Agenda-IA.dc.html"
         : target.code === "NT2"
           ? "Notificacoes.dc.html"
-          : ["4.7", "4.8", "4.9"].includes(target.code)
+          : ["4.4", "4.5", "4.7", "4.8", "4.9"].includes(target.code)
             ? "Onboarding-3-IA-e-WhatsApp.dc.html"
             : ["L2", "L7"].includes(target.code)
               ? "Login.dc.html"
@@ -405,9 +405,9 @@ test("targets.json: NT1 continua sem responses, com a lista da conta visual", ()
   assert.equal(nt1.responses, undefined);
 });
 
-test("targets.json: 4.7, 4.8 e 4.9 são os donos de responses em Onboarding-3-IA-e-WhatsApp.dc.html; 4.9 só com os dois GET, a execução SUCCEEDED, o status ativo e sem passos; o 4.10 não declara responses", () => {
+test("targets.json: 4.4, 4.5, 4.7, 4.8 e 4.9 são os donos de responses em Onboarding-3-IA-e-WhatsApp.dc.html; 4.9 só com os dois GET, a execução SUCCEEDED, o status ativo e sem passos; o 4.10 não declara responses", () => {
   const owners = declaringTargets().filter((target) => target.file === "Onboarding-3-IA-e-WhatsApp.dc.html");
-  assert.deepEqual(owners.map((target) => target.code).sort(), ["4.7", "4.8", "4.9"]);
+  assert.deepEqual(owners.map((target) => target.code).sort(), ["4.4", "4.5", "4.7", "4.8", "4.9"]);
   const t49 = owners.find((target) => target.code === "4.9");
   assert.equal(t49.label, "IA ativa");
   assert.equal(t49.route, "/onboarding/teste-real-sucesso");
@@ -505,6 +505,48 @@ test("targets.json: 4.7 e 4.8 declaram só o GET de /v1/activation-test, sem pas
   );
   assert.equal(byCode.has("4.10"), false);
   assert.equal(byCode.has("4.6"), false);
+});
+
+test("targets.json: 4.4 e 4.5 declaram só o GET de cada quadro, sem passos, e o 4.2 continua sem responses", () => {
+  const targets = JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "frontend", "e2e", "visual", "targets.json"), "utf8")).targets;
+  const onboarding = (code) => targets.find((target) => target.code === code && target.file === "Onboarding-3-IA-e-WhatsApp.dc.html");
+  const t44 = onboarding("4.4");
+  const t45 = onboarding("4.5");
+  assert.ok(t44 && t45, "4.4 e 4.5 precisam estar em targets.json");
+  assert.equal(t44.route, "/onboarding/whatsapp-conectar");
+  assert.equal(t45.route, "/onboarding/contatos-ignorados");
+  for (const target of [t44, t45]) {
+    assert.equal(target.account, "onboarding");
+    assert.equal(target.steps, undefined, `${target.code}: nenhum passo, nada toca em controle que grava`);
+    assert.equal(target.responses.length, 1, `${target.code}: um único GET`);
+    assert.equal(target.responses[0].method, "GET");
+    assert.ok(target.notes.includes("Goal129"), `${target.code}: as notes declaram as divergências do Goal129`);
+  }
+  assert.equal(t44.responses[0].path, "/v1/whatsapp");
+  assert.equal(t45.responses[0].path, "/v1/conversations");
+  const connection = t44.responses[0].json.data;
+  assert.equal(connection.status, "CONNECTED");
+  assert.equal(connection.phoneNumber, "5511987654321");
+  const conversations = resolveRelativeDays(t45.responses[0].json, "2026-10-06").data;
+  assert.deepEqual(conversations.map((conversation) => conversation.customerName), ["Mãe", "Dudu ❤️", "Tia Lú", "Ana Paula", "Marcos Vieira"]);
+  assert.deepEqual(conversations.filter((conversation) => conversation.ignored === true).map((conversation) => conversation.customerName), ["Mãe", "Dudu ❤️"]);
+  assert.deepEqual(conversations.filter((conversation) => conversation.customerId).map((conversation) => conversation.customerName), ["Ana Paula"]);
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    for (const [target, route] of [[t44, "/v1/whatsapp"], [t44, "/v1/whatsapp/disconnect"], [t45, "/v1/conversations"], [t45, "/v1/conversations/visual-compare-conversation-mae/ignore"], [t45, "/v1/conversations/ignored-contacts"]]) {
+      assert.equal(pickFixedResponse(target, method, route), null, `${target.code}: ${method} ${route} não deveria casar`);
+    }
+  }
+  for (const other of ["/v1/status", "/v1/settings", "/v1/onboarding"]) {
+    assert.equal(pickFixedResponse(t44, "GET", other), null, `4.4: ${other} vem da conta de onboarding`);
+    assert.equal(pickFixedResponse(t45, "GET", other), null, `4.5: ${other} vem da conta de onboarding`);
+  }
+  assert.equal(pickFixedResponse(t44, "GET", "/v1/conversations"), null);
+  assert.equal(pickFixedResponse(t45, "GET", "/v1/whatsapp"), null);
+  const t42 = onboarding("4.2");
+  assert.ok(t42);
+  assert.equal(t42.route, "/onboarding/whatsapp-conectar");
+  assert.equal(t42.responses, undefined, "4.2 mede a fase de consentimento da conta parada, sem número");
+  assert.equal(t42.steps, undefined);
 });
 
 const CONFIRMING_NAMES =["desconectar", "excluir minha conta", "reduzir os dois prazos"];

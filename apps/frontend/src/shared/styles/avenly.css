@@ -4109,6 +4109,373 @@ p {
   margin-top: 1px;
   color: var(--accent);
 }
+/* Número conectado do onboarding (quadro 4.4): o espaço do chevron vazio, o
+   disco com o selo ✓, o telefone, a pílula e, abaixo, o cabeçalho, tudo
+   centrado na altura que sobra. O cabeçalho continua primeiro no DOM; a ordem
+   visual vem de `order`. */
+.onboarding-top-row.is-connected::before {
+  content: "";
+  width: 40px;
+  height: 40px;
+  margin-left: -8px;
+  flex: none;
+}
+.onboarding-content.is-connected {
+  padding: 10px 20px 0;
+  justify-content: safe center;
+  gap: 28px;
+}
+.onboarding-content.is-connected .onboarding-step-body {
+  order: 1;
+}
+.onboarding-content.is-connected .onboarding-heading {
+  order: 2;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  animation: at-reveal 0.4s ease-out 0.3s both;
+}
+.onboarding-content.is-connected .onboarding-heading > p {
+  font-size: 15px;
+  line-height: 1.45;
+}
+.onboarding-content.is-connected > .onboarding-note {
+  order: 3;
+}
+.whatsapp-connected {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.whatsapp-connected-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  animation: at-pop 0.5s ease-out both;
+}
+.whatsapp-connected-art {
+  position: relative;
+  width: 104px;
+  height: 104px;
+}
+.whatsapp-connected-disc {
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--at-color-surface-active);
+  color: var(--at-color-ink-soft);
+}
+.whatsapp-connected-disc .icon {
+  width: 44px;
+  height: 44px;
+}
+.whatsapp-connected-seal {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--bg);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--at-color-success);
+  color: var(--at-color-surface);
+}
+.whatsapp-connected-lines {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.whatsapp-connected-phone {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.whatsapp-connected-pill {
+  height: 26px;
+  margin-top: 4px;
+  padding: 0 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #dfefe4;
+  color: var(--at-color-success-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.whatsapp-connected-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--at-color-success);
+}
+/* Rodapé do 4.4: "Sim, continuar" em largura total e o link de número errado
+   embaixo, a 14 px. */
+[data-step="whatsapp-conectar"] .onboarding-actions.is-stacked {
+  gap: 14px;
+}
+.whatsapp-wrong-number {
+  min-height: 24px;
+  align-self: center;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: normal;
+  cursor: pointer;
+}
+.whatsapp-wrong-number:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-content.is-connected .onboarding-heading,
+  .whatsapp-connected-identity {
+    animation: none;
+  }
+}
+/* Contatos que a IA nunca responde (quadro 4.5): busca, cartão de conversas
+   com caixa de marcar por linha e "Adicionar por telefone". O cabeçalho e o
+   corpo ficam a 14 px um do outro; o rodapé traz "Continuar · N pessoas" e o
+   link "Pular por agora". O topo usa 12 px entre a linha do topo e o eyebrow,
+   como a 3.2. */
+[data-step="contatos-ignorados"] .onboarding-top {
+  gap: 12px;
+}
+[data-step="contatos-ignorados"] .onboarding-content {
+  gap: 14px;
+  padding-top: 8px;
+}
+[data-step="contatos-ignorados"] .onboarding-heading > p {
+  line-height: 1.4;
+}
+.ignored-onboarding {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ignored-search {
+  height: 47px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-input);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 15px;
+}
+.ignored-search:focus-within {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--accent);
+}
+.ignored-search svg {
+  flex: none;
+}
+.ignored-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+}
+.ignored-search input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+.ignored-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  overflow: hidden;
+}
+.ignored-status {
+  margin: 0;
+  padding: 14px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.ignored-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ignored-list li + li .ignored-row {
+  border-top: 1px solid var(--border);
+}
+.ignored-row {
+  width: 100%;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+button.ignored-row {
+  cursor: pointer;
+}
+button.ignored-row:focus-visible,
+.ignored-add:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.ignored-avatar {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--at-color-surface-active);
+  color: var(--fg-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+.ignored-avatar.is-linked {
+  background: var(--at-color-primary-tint-strong);
+  color: var(--at-color-primary-ink);
+}
+.ignored-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ignored-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: normal;
+}
+.ignored-preview {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ignored-box {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--at-color-on-primary);
+}
+.ignored-box.is-checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.ignored-add {
+  width: 100%;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.ignored-card > .ignored-add:first-child {
+  border-top: 0;
+}
+.ignored-add-mark {
+  flex: none;
+  width: 41px;
+  height: 41px;
+  border: 1.5px dashed #b9b1a6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ignored-phone {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 14px 14px;
+}
+/* A busca do quadro tem `height:46px` de conteúdo mais a borda: 48 px no
+   tablet e no desktop, onde a coluna tem folga. No celular (402×812) a coluna
+   do quadro tem `overflow:hidden` e a comprime em 1 px, para 47 px: o app
+   começa nessa altura. */
+@media (min-width: 768px) {
+  .ignored-search {
+    height: 48px;
+  }
+}
+/* Na coluna de altura fixa (1024 px em diante) o quadro deixa a busca e o
+   cartão como filhos diretos da coluna com `overflow:hidden`: a busca, com o
+   `flex-shrink` padrão, encolhe para 43 px. O cartão não encolhe, para nunca
+   cortar uma conversa real, e a busca para em 43 px; a coluna rola. */
+@media (min-width: 1024px) {
+  .ignored-onboarding {
+    display: contents;
+  }
+  .ignored-search {
+    min-height: 43px;
+  }
+  .ignored-card {
+    flex: none;
+  }
+}
+/* "Pular por agora": o link do rodapé, sem caixa, na cor do principal. */
+.onboarding-link-action {
+  min-height: 24px;
+  align-self: center;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: normal;
+  cursor: pointer;
+}
+.onboarding-link-action:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
 /* Introdução do teste real (quadro 4.6): prévia da conversa e três itens. */
 [data-step="teste-real"] .onboarding-content {
   gap: 22px;

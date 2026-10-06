@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 
 import { activationTestStartAction } from "@/features/activation-test/ActivationTestPanels";
 import { Icon } from "@/shared/icons/Icon";
@@ -65,6 +70,17 @@ export function OnboardingScreen({
     "consent",
   );
   const [consentReady, setConsentReady] = useState(false);
+  // O link "Conectei o número errado" do rodapé abre a folha de desconexão que
+  // mora no painel: o corpo conectado registra aqui como abri-la.
+  const [openWrongNumber, setOpenWrongNumber] = useState<(() => void) | null>(
+    null,
+  );
+  const registerWrongNumber = useCallback((open: (() => void) | null) => {
+    setOpenWrongNumber(() => open);
+  }, []);
+  // Só lido em contatos-ignorados: quantas pessoas a escolha já soma, para o
+  // "Continuar · N pessoas" do rodapé.
+  const [ignoredCount, setIgnoredCount] = useState(0);
   const [phaseScenario, setPhaseScenario] = useState(scenario);
   // A tela é a mesma entre etapas: ao trocar de etapa, a fase recomeça.
   if (phaseScenario !== scenario) {
@@ -81,10 +97,19 @@ export function OnboardingScreen({
     scenario === "whatsapp-conectar" &&
     !whatsappConnected &&
     whatsappPhase === "consent";
-  const title = inConsentPhase ? "Antes de conectar" : staticTitle;
+  // Número conectado (quadro 4.4): título e texto próprios da pergunta de
+  // confirmação; a vinculação em curso mantém os de scenarios.ts.
+  const inConnectedPhase = scenario === "whatsapp-conectar" && whatsappConnected;
+  const title = inConsentPhase
+    ? "Antes de conectar"
+    : inConnectedPhase
+      ? "WhatsApp conectado"
+      : staticTitle;
   const description = inConsentPhase
     ? ""
-    : scenario === "horarios"
+    : inConnectedPhase
+      ? "É este o número que seus clientes usam para falar com você?"
+      : scenario === "horarios"
       ? hoursStepDescription(draft.days)
       : staticDescription;
   // "importacao" só existe para quem escolheu importar: aberta por URL direta
@@ -148,9 +173,10 @@ export function OnboardingScreen({
     isActivationTestSucceeded ||
     isWhatsappConclusion
   );
+  // Conectado, o espaço do chevron fica vazio, como no quadro 4.4.
   const back: OnboardingBack | undefined = isWelcomeStep
     ? { disabled: true }
-    : showsBack && previous
+    : showsBack && previous && !inConnectedPhase
       ? { href: `/onboarding/${previous}` }
       : undefined;
 
@@ -443,6 +469,22 @@ export function OnboardingScreen({
     >
       Continuar
     </button>
+  ) : inConnectedPhase ? (
+    // Quadro 4.4: "Sim, continuar" em largura total e, embaixo, o link de
+    // número errado. A folha de desconexão é a de hoje e pede confirmação.
+    <>
+      <button className="btn btn-primary" disabled={busy} type="submit">
+        {busy ? "Salvando..." : "Sim, continuar"}
+      </button>
+      <button
+        className="whatsapp-wrong-number"
+        disabled={busy}
+        type="button"
+        onClick={() => openWrongNumber?.()}
+      >
+        Conectei o número errado
+      </button>
+    </>
   ) : isWhatsappConnect ? (
     <>
       <button
@@ -470,17 +512,23 @@ export function OnboardingScreen({
       </button>
     </>
   ) : isIgnoredContactsStep ? (
+    // Quadro 4.5: "Continuar" soma a escolha e vem primeiro, no DOM e na tela;
+    // "Pular por agora" é o link de baixo.
     <>
+      <button className="btn btn-primary" disabled={busy} type="submit">
+        {busy
+          ? "Salvando..."
+          : ignoredCount === 0
+            ? "Continuar"
+            : `Continuar · ${ignoredCount} ${ignoredCount === 1 ? "pessoa" : "pessoas"}`}
+      </button>
       <button
-        className="btn btn-secondary"
+        className="onboarding-link-action"
         disabled={busy}
         type="button"
         onClick={() => void skipIgnoredContacts()}
       >
-        {busy ? "Salvando..." : "Pular esta etapa"}
-      </button>
-      <button className="btn btn-primary" disabled={busy} type="submit">
-        {busy ? "Salvando..." : "Ir para o teste"}
+        {busy ? "Salvando..." : "Pular por agora"}
       </button>
     </>
   ) : (
@@ -505,7 +553,9 @@ export function OnboardingScreen({
         isActivationTestIntro ||
         isActivationTestProgress ||
         isActivationTestFailed ||
-        isWhatsappConclusion
+        isWhatsappConclusion ||
+        isIgnoredContactsStep ||
+        inConnectedPhase
       }
       back={back}
       body={
@@ -540,12 +590,15 @@ export function OnboardingScreen({
                 setConsentReady(false);
                 setWhatsappPhase("consent");
               },
+              onWrongNumberChange: registerWrongNumber,
               phase: whatsappPhase,
             },
+            setIgnoredCount,
           )
         )
       }
       completion={isActivationTestSucceeded || isWhatsappConclusion}
+      connected={inConnectedPhase}
       description={description}
       error={error}
       eyebrow={eyebrow}

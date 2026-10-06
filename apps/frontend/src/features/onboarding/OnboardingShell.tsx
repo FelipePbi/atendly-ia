@@ -19,6 +19,7 @@ export function OnboardingShell({
   back,
   body,
   completion = false,
+  connected = false,
   description,
   error,
   eyebrow,
@@ -35,6 +36,9 @@ export function OnboardingShell({
   // Moldura de conclusão (quadros 4.9 e 4.10): sem eyebrow nem cabeçalho; o
   // corpo traz a arte, o `h1` e o texto, centrados.
   completion?: boolean;
+  // Número conectado (quadro 4.4): o espaço do chevron fica vazio e o
+  // cabeçalho vai para baixo do corpo, os dois centrados na altura que sobra.
+  connected?: boolean;
   description?: string;
   error?: string | null;
   eyebrow: string;
@@ -55,12 +59,13 @@ export function OnboardingShell({
           <OnboardingTop
             back={back}
             completion={completion}
+            connected={connected}
             eyebrow={eyebrow}
             onExit={onExit}
             scenario={scenario}
           />
           <div
-            className={`onboarding-content${completion ? " is-completion" : ""}`}
+            className={`onboarding-content${completion ? " is-completion" : ""}${connected ? " is-connected" : ""}`}
           >
             {!completion && (
               <header className="onboarding-heading">
@@ -125,12 +130,14 @@ export function OnboardingFrame({
 function OnboardingTop({
   back,
   completion = false,
+  connected = false,
   eyebrow,
   onExit,
   scenario,
 }: {
   back?: OnboardingBack;
   completion?: boolean;
+  connected?: boolean;
   eyebrow: string;
   onExit: () => void;
   scenario: OnboardingScenario;
@@ -138,7 +145,7 @@ function OnboardingTop({
   return (
     <div className="onboarding-top">
       <div
-        className={`onboarding-top-row${completion ? " is-completion" : ""}`}
+        className={`onboarding-top-row${completion ? " is-completion" : ""}${connected ? " is-connected" : ""}`}
       >
         <OnboardingBackLink back={back} />
         {scenario === "boas-vindas" && (

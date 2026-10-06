@@ -28,6 +28,9 @@ export type OnboardingStepBody = (
   onDemoDone?: (done: boolean) => void,
   // Só whatsapp-conectar usa isto: a fase de consentimento do onboarding.
   whatsappConsentPhase?: WhatsAppConsentPhase,
+  // Só contatos-ignorados usa isto: leva ao rodapé quantas pessoas estão
+  // marcadas, para "Continuar · N pessoas".
+  onIgnoredCountChange?: (count: number) => void,
 ) => React.ReactNode;
 
 export type OnboardingStepPersist = (

@@ -709,7 +709,12 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
 
   test("contatos-ignorados: marcar uma conversa existente chama o mesmo caminho de ignore já existente", async () => {
     listConversations.mockResolvedValue([
-      { id: "conv-1", externalContactId: "5511988880000", customerName: "Maria" },
+      {
+        id: "conv-1",
+        externalContactId: "5511988880000",
+        customerName: "Maria",
+        ignored: false,
+      },
     ]);
     setIgnoredConversation.mockResolvedValue({});
     const user = userEvent.setup();
@@ -724,10 +729,12 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
       }),
     );
 
-    await user.click(await screen.findByRole("button", { name: "Ignorar" }));
+    await user.click(await screen.findByRole("checkbox", { name: "Maria" }));
 
     expect(setIgnoredConversation).toHaveBeenCalledWith("conv-1", true);
-    expect(await screen.findByRole("button", { name: "Ignorado" })).toBeDisabled();
+    await waitFor(() =>
+      expect(screen.getByRole("checkbox", { name: "Maria" })).toBeChecked(),
+    );
   });
 
   test("contatos-ignorados: marcar por telefone cria o contato e mostra a confirmação só após a resposta", async () => {
@@ -749,7 +756,10 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
       }),
     );
 
-    expect(screen.queryByText(/ignorado/iu)).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    await user.click(
+      await screen.findByRole("button", { name: "Adicionar por telefone" }),
+    );
     await user.type(
       await screen.findByPlaceholderText("+55 11 99999-0000"),
       "+55 11 97777-0000",
@@ -757,7 +767,9 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
     expect(ignoreByPhone).toHaveBeenCalledWith("+55 11 97777-0000", true);
-    expect(await screen.findByText("5511977770000 ignorado")).toBeVisible();
+    expect(
+      await screen.findByRole("checkbox", { name: "+55 11 97777-0000" }),
+    ).toBeChecked();
   });
 
   test("contatos-ignorados: pular não bloqueia e não afirma ninguém ignorado sem marcação gravada", async () => {
@@ -774,7 +786,7 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
     );
 
     await user.click(
-      await screen.findByRole("button", { name: "Pular esta etapa" }),
+      await screen.findByRole("button", { name: "Pular por agora" }),
     );
 
     expect(setIgnoredConversation).not.toHaveBeenCalled();
@@ -785,7 +797,7 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
     expect(push).toHaveBeenCalledWith("/onboarding/teste-real");
   });
 
-  test("contatos-ignorados: Ir para o teste avança sem concluir o onboarding", async () => {
+  test("contatos-ignorados: Continuar avança sem concluir o onboarding", async () => {
     const user = userEvent.setup();
     renderScreen(
       "contatos-ignorados",
@@ -798,9 +810,7 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
       }),
     );
 
-    await user.click(
-      await screen.findByRole("button", { name: "Ir para o teste" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Continuar" }));
 
     expect(completeOnboarding).not.toHaveBeenCalled();
     expect(refreshSession).not.toHaveBeenCalled();

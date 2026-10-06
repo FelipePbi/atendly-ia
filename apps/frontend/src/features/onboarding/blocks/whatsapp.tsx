@@ -1,10 +1,13 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 
-import { IgnoredContactsPanel } from "@/features/whatsapp/IgnoredContactsPanel";
+import { OnboardingIgnoredContacts } from "@/features/whatsapp/IgnoredContactsPanel";
 import {
+  type WhatsAppConnectedContext,
   WhatsAppConnectionPanel,
   type WhatsAppConsentPhase,
 } from "@/features/whatsapp/WhatsAppConnectionPanel";
+import { Icon } from "@/shared/icons/Icon";
+import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
 import type { OnboardingDraft } from "../OnboardingRuntime";
@@ -134,6 +137,67 @@ function WhatsappConclusion({ text, title }: { text: string; title: string }) {
   );
 }
 
+/** Número conectado (quadro 4.4): o disco com o selo ✓, o telefone na linha do
+ * nome e a pílula "Conectado". O contrato não traz nome nem foto do perfil, por
+ * isso o disco leva o ícone de pessoa no lugar das iniciais. O título e o texto
+ * vêm da moldura da etapa; o rodapé tem "Sim, continuar" e o link de número
+ * errado, que abre a folha de desconexão do painel (nada desconecta sem
+ * confirmar). */
+function WhatsappConnectedBody({
+  context,
+  onWrongNumberChange,
+}: {
+  context: WhatsAppConnectedContext;
+  onWrongNumberChange?: (open: (() => void) | null) => void;
+}) {
+  const { error, openDisconnectDialog } = context;
+  useEffect(() => {
+    onWrongNumberChange?.(openDisconnectDialog);
+    return () => onWrongNumberChange?.(null);
+  }, [onWrongNumberChange, openDisconnectDialog]);
+
+  const phone = context.connection.phoneNumber
+    ? formatBrazilianPhone(context.connection.phoneNumber, "plus")
+    : null;
+  return (
+    <div className="whatsapp-connected">
+      <div className="whatsapp-connected-identity">
+        <div aria-hidden="true" className="whatsapp-connected-art">
+          <span className="whatsapp-connected-disc">
+            <Icon name="user" />
+          </span>
+          <span className="whatsapp-connected-seal">
+            <svg
+              fill="none"
+              height="16"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="3"
+              viewBox="0 0 24 24"
+              width="16"
+            >
+              <path d="M5 12.5l4.5 4.5L19 7.5" />
+            </svg>
+          </span>
+        </div>
+        <div className="whatsapp-connected-lines">
+          {phone && <span className="whatsapp-connected-phone">{phone}</span>}
+          <span className="whatsapp-connected-pill">
+            <span aria-hidden="true" className="whatsapp-connected-pill-dot" />
+            Conectado
+          </span>
+        </div>
+      </div>
+      {error && (
+        <p className="field-help" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function whatsappStepBody(
   scenario: OnboardingScenario,
   _draft: OnboardingDraft,
@@ -141,11 +205,18 @@ export function whatsappStepBody(
   onWhatsappStatusChange?: (connected: boolean) => void,
   _onDemoDone?: (done: boolean) => void,
   consentPhase?: WhatsAppConsentPhase,
+  onIgnoredCountChange?: (count: number) => void,
 ) {
   if (scenario === "whatsapp-conectar") {
     return (
       <WhatsAppConnectionPanel
         consentPhase={consentPhase}
+        renderConnected={(context) => (
+          <WhatsappConnectedBody
+            context={context}
+            onWrongNumberChange={consentPhase?.onWrongNumberChange}
+          />
+        )}
         onStatusChange={onWhatsappStatusChange}
       />
     );
@@ -158,7 +229,9 @@ export function whatsappStepBody(
       />
     );
   }
-  if (scenario === "contatos-ignorados") return <IgnoredContactsPanel />;
+  if (scenario === "contatos-ignorados") {
+    return <OnboardingIgnoredContacts onCountChange={onIgnoredCountChange} />;
+  }
   if (isActivationTestScenario(scenario)) {
     return activationTestStepBody(scenario);
   }

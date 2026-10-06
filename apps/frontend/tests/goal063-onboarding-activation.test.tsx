@@ -4,7 +4,7 @@
  *
  * O que esta suíte prova, pelo que a usuária encontra:
  *
- * - `Continuar` e `Pular esta etapa` em contatos-ignorados não concluem o
+ * - `Continuar` e `Pular por agora` em contatos-ignorados não concluem o
  *   onboarding: quem conclui é o teste real que termina bem;
  * - `Fazer isso depois` (WhatsApp) leva a `whatsapp-concluido` sem concluir
  *   ainda; só o CTA dessa tela conclui e leva a `/inicio`;
@@ -216,24 +216,22 @@ beforeEach(() => {
 });
 
 describe("contatos-ignorados não conclui: quem conclui é o teste real", () => {
-  test("Ir para o teste avança sem chamar onboarding.complete()", async () => {
+  test("Continuar avança sem chamar onboarding.complete()", async () => {
     const user = userEvent.setup();
     renderScreen("contatos-ignorados", readyState);
 
-    await user.click(
-      await screen.findByRole("button", { name: "Ir para o teste" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Continuar" }));
 
     expect(completeOnboarding).not.toHaveBeenCalled();
     expect(push).toHaveBeenCalledWith("/onboarding/teste-real");
   });
 
-  test("Pular esta etapa avança sem chamar onboarding.complete()", async () => {
+  test("Pular por agora avança sem chamar onboarding.complete()", async () => {
     const user = userEvent.setup();
     renderScreen("contatos-ignorados", readyState);
 
     await user.click(
-      await screen.findByRole("button", { name: "Pular esta etapa" }),
+      await screen.findByRole("button", { name: "Pular por agora" }),
     );
 
     expect(completeOnboarding).not.toHaveBeenCalled();

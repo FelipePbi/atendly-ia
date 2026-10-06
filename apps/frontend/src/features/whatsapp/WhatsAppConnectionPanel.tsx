@@ -53,11 +53,16 @@ export type WhatsAppConsentPhase = {
   onConsentReadyChange: (ready: boolean) => void;
   // Vinculação expirada, falha ou desfeita: o consentimento vale de novo.
   onConsentRequired: () => void;
+  // O número conectado do onboarding tem o link "Conectei o número errado" no
+  // rodapé da etapa, fora do painel: quem desenha o estado conectado registra
+  // aqui como abrir a folha de desconexão (e `null` ao sair de cena).
+  onWrongNumberChange?: (open: (() => void) | null) => void;
 };
 
-/** Ponto de extensão do estado conectado (só Configurações, sem
- * `consentPhase`): o painel segue dono da leitura, da vinculação e do diálogo
- * de desconexão, e quem estende só desenha o que fica no lugar do cartão. */
+/** Ponto de extensão do estado conectado (Configurações e o onboarding, que o
+ * usa também em fase): o painel segue dono da leitura, da vinculação e do
+ * diálogo de desconexão, e quem estende só desenha o que fica no lugar do
+ * cartão. */
 export type WhatsAppConnectedContext = {
   busy: boolean;
   connection: WhatsAppConnection;
@@ -105,6 +110,10 @@ export function WhatsAppConnectionPanel({
   );
   const [disconnectConfirmationOpen, setDisconnectConfirmationOpen] =
     useState(false);
+  const openDisconnectDialog = useCallback(
+    () => setDisconnectConfirmationOpen(true),
+    [],
+  );
 
   const onConnectedRef = useRef(onConnected);
   const onStatusChangeRef = useRef(onStatusChange);
@@ -521,11 +530,7 @@ export function WhatsAppConnectionPanel({
     />
   ) : null;
 
-  if (
-    renderConnected &&
-    !consentPhase &&
-    connection?.status === "CONNECTED"
-  ) {
+  if (renderConnected && connection?.status === "CONNECTED") {
     return (
       <>
         <ConnectedSlot
@@ -534,7 +539,7 @@ export function WhatsAppConnectionPanel({
             connection,
             disconnect,
             error,
-            openDisconnectDialog: () => setDisconnectConfirmationOpen(true),
+            openDisconnectDialog,
           }}
           render={renderConnected}
         />

@@ -18,7 +18,7 @@
  * 3. Contatos ignorados: a linha abre a folha com o componente movido; marcar
  *    por telefone e por conversa usa os mesmos pedidos; fechar volta à tela.
  * 4. Onboarding intacto: `/onboarding/whatsapp-conectar` conectado mostra o
- *    painel de hoje, sem a identidade do W1; a etapa de contatos ignorados
+ *    corpo próprio do quadro 4.4 (Goal129), sem a identidade do W1; a etapa de contatos ignorados
  *    mostra o componente movido com os mesmos pedidos.
  * 5. Casca: uma chamada de `useShellConfig` por árvore em
  *    `/configuracoes/whatsapp`, conectado e desconectado, nas duas faixas, e
@@ -689,17 +689,20 @@ describe("Goal106 prova 4: onboarding intacto", () => {
     );
   }
 
-  test("/onboarding/whatsapp-conectar conectado mostra o painel de hoje, sem a identidade do W1", async () => {
+  test("/onboarding/whatsapp-conectar conectado mostra o corpo do quadro 4.4, sem a identidade do W1", async () => {
     renderOnboarding("whatsapp-conectar");
 
     expect(await screen.findByText("WhatsApp conectado")).toBeVisible();
     expect(screen.getByRole("heading", { name: "WhatsApp conectado" })).toBeVisible();
+    // Goal129 (quadro 4.4): o corpo conectado do onboarding é próprio; o
+    // cartão e o "Desconectar número" de antes dão lugar à pergunta, ao
+    // telefone e ao link de número errado.
     expect(
-      screen.getByText("O atendimento automático pode operar neste número."),
+      screen.getByText("É este o número que seus clientes usam para falar com você?"),
     ).toBeVisible();
     expect(screen.getByText("+55 11 98765-4321")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Desconectar número" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Continuar" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Conectei o número errado" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Sim, continuar" })).toBeVisible();
 
     expect(screen.queryByText(/Conectado desde/)).toBeNull();
     expect(screen.queryByText("IA ativa neste número")).toBeNull();
@@ -723,8 +726,9 @@ describe("Goal106 prova 4: onboarding intacto", () => {
     const user = userEvent.setup();
     renderOnboarding("contatos-ignorados");
 
-    expect(await screen.findByText("Conversas já existentes")).toBeVisible();
-    expect(screen.getByText("Informar um número manualmente")).toBeVisible();
+    await user.click(
+      await screen.findByRole("button", { name: "Adicionar por telefone" }),
+    );
     await user.type(
       screen.getByPlaceholderText("+55 11 99999-0000"),
       "+55 11 97777-0000",
@@ -733,7 +737,9 @@ describe("Goal106 prova 4: onboarding intacto", () => {
 
     expect(ignoreByPhone).toHaveBeenCalledTimes(1);
     expect(ignoreByPhone).toHaveBeenCalledWith("+55 11 97777-0000", true);
-    expect(await screen.findByText("5511977770000 ignorado")).toBeVisible();
+    expect(
+      await screen.findByRole("checkbox", { name: "+55 11 97777-0000" }),
+    ).toBeChecked();
   });
 
   test("a etapa de contatos ignorados marca uma conversa com o mesmo pedido", async () => {
@@ -744,11 +750,13 @@ describe("Goal106 prova 4: onboarding intacto", () => {
     const user = userEvent.setup();
     renderOnboarding("contatos-ignorados");
 
-    await user.click(await screen.findByRole("button", { name: "Ignorar" }));
+    await user.click(await screen.findByRole("checkbox", { name: "Maria" }));
 
     expect(setIgnored).toHaveBeenCalledTimes(1);
     expect(setIgnored).toHaveBeenCalledWith("conv-1", true);
-    expect(await screen.findByRole("button", { name: "Ignorado" })).toBeDisabled();
+    await waitFor(() =>
+      expect(screen.getByRole("checkbox", { name: "Maria" })).toBeChecked(),
+    );
   });
 });
 

@@ -241,6 +241,16 @@ export const ONBOARDING_ROUTES = [
     name: "onboarding-whatsapp",
     contentMarker: "Agora vamos colocar sua IA para atender de verdade.",
   },
+  // Goal129: os contatos ignorados, pelo mesmo caminho. A conta parada não tem
+  // conversas, então a lista mede o estado vazio da etapa, com a busca, "Adicionar
+  // por telefone" e o rodapé "Continuar" / "Pular por agora". `whatsapp-conectar`
+  // fica fora: na conta parada ele mede a fase de consentimento (4.2), que não é
+  // desta tela, e o corpo conectado (4.4) depende de um número conectado.
+  {
+    path: "/onboarding/contatos-ignorados",
+    name: "onboarding-contatos-ignorados",
+    contentMarker: "Quer impedir que a IA responda algumas pessoas?",
+  },
   // Goal128: as duas etapas do teste real que vêm antes do resultado, pelo mesmo
   // caminho. Na conta parada, sem execução, a 4.7 mostra o `ErrorNote` "Nenhum
   // teste em andamento" e não sai da tela, e a 4.8 mostra o cartão genérico,

@@ -311,7 +311,7 @@ describe("whatsapp-conectar: 'Continuar' não compete com o CTA do painel", () =
     expect(primaries[0]).toHaveTextContent("Conectar WhatsApp");
   });
 
-  test("o painel lê o número conectado e 'Continuar' vira a ação principal", async () => {
+  test("o painel lê o número conectado e 'Sim, continuar' vira a ação principal", async () => {
     getWhatsapp.mockResolvedValue({
       connectedAt: "2026-09-27T12:00:00.000Z",
       id: "wa-1",
@@ -323,7 +323,7 @@ describe("whatsapp-conectar: 'Continuar' não compete com o CTA do painel", () =
 
     expect(await screen.findByText("WhatsApp conectado")).toBeVisible();
     expect(
-      await screen.findByRole("button", { name: "Continuar" }),
+      await screen.findByRole("button", { name: "Sim, continuar" }),
     ).toHaveClass("btn-primary");
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(document.body.querySelectorAll(".btn-primary")).toHaveLength(1);
@@ -343,7 +343,9 @@ describe("whatsapp-conectar: 'Continuar' não compete com o CTA do painel", () =
       { ...emptyState(), whatsapp: { phoneNumber: "+5511999990000", status: "CONNECTED" } },
     );
     await screen.findByText("WhatsApp conectado");
-    await user.click(await screen.findByRole("button", { name: "Continuar" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Sim, continuar" }),
+    );
     expect(push).toHaveBeenCalledWith("/onboarding/contatos-ignorados");
   });
 

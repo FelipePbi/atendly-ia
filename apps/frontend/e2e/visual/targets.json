@@ -214,6 +214,157 @@
       "account": "onboarding"
     },
     {
+      "code": "4.4",
+      "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
+      "label": "WhatsApp conectado",
+      "route": "/onboarding/whatsapp-conectar",
+      "account": "onboarding",
+      "notes": "O quadro mostra o WhatsApp já conectado; a conta de onboarding está parada antes do número, então o estado conectado vem de resposta fixa de GET /v1/whatsapp (CONNECTED em 5511987654321, como o W1), só no navegador da captura. Nenhum passo: a tela abre pronta e nenhum toque chega a \"Sim, continuar\" (que gravaria o passo da conta visual) nem a \"Conectei o número errado\" (que abre a folha que desconecta). Divergências declaradas do Goal129: o disco de 104 px traz o ícone de pessoa no lugar das iniciais e o telefone fica na linha do nome, porque o contrato (whatsappConnectionSchema) não traz nome nem foto do perfil; o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/whatsapp",
+          "json": {
+            "data": {
+              "id": "visual-compare-whatsapp",
+              "phoneNumber": "5511987654321",
+              "status": "CONNECTED",
+              "connectedAt": "2026-09-18T15:00:00.000Z",
+              "updatedAt": "2026-10-01T15:00:00.000Z"
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "4.5",
+      "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
+      "label": "Ignorar contatos",
+      "route": "/onboarding/contatos-ignorados",
+      "account": "onboarding",
+      "notes": "A conta de onboarding não tem conversas, então a lista vem de resposta fixa de GET /v1/conversations (as cinco conversas do quadro: \"Mãe\" e \"Dudu ❤️\" com ignored true, \"Ana Paula\" com customerId), só no navegador da captura. Nenhum passo: a tela abre pronta e nenhum toque chega a uma caixa, a \"Adicionar por telefone\", a \"Continuar · 2 pessoas\" nem a \"Pular por agora\", que gravariam na conta visual ou avançariam o onboarding. Divergências declaradas do Goal129: as conversas marcadas antes, em outra tela, aparecem já marcadas e contam no rodapé, e os números marcados por telefone em outra sessão não aparecem, porque o contrato não tem leitura deles; o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/conversations",
+          "json": {
+            "data": [
+              {
+                "id": "visual-compare-conversation-mae",
+                "externalContactId": "5511900000001",
+                "customerName": "Mãe",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-conversation-mae-message",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Filha, liga pra mim quando puder",
+                  "createdAt": "{today}T09:30:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T09:30:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": true,
+                "ignoredAt": "2026-10-01T15:00:00.000Z"
+              },
+              {
+                "id": "visual-compare-conversation-dudu",
+                "externalContactId": "5511900000002",
+                "customerName": "Dudu ❤️",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-conversation-dudu-message",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Chego às 20h",
+                  "createdAt": "{today}T09:30:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T09:30:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": true,
+                "ignoredAt": "2026-10-01T15:00:00.000Z"
+              },
+              {
+                "id": "visual-compare-conversation-tia-lu",
+                "externalContactId": "5511900000003",
+                "customerName": "Tia Lú",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-conversation-tia-lu-message",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Bom dia, família! ☀️",
+                  "createdAt": "{today}T09:30:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T09:30:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false
+              },
+              {
+                "id": "visual-compare-conversation-ana-paula",
+                "externalContactId": "5511900000004",
+                "customerName": "Ana Paula",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-conversation-ana-paula-message",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Obrigada, Camila! Até sexta",
+                  "createdAt": "{today}T09:30:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T09:30:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false,
+                "customerId": "visual-compare-customer-ana-paula"
+              },
+              {
+                "id": "visual-compare-conversation-marcos",
+                "externalContactId": "5511900000005",
+                "customerName": "Marcos Vieira",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": {
+                  "id": "visual-compare-conversation-marcos-message",
+                  "direction": "INBOUND",
+                  "source": "CUSTOMER",
+                  "body": "Tem horário sábado?",
+                  "createdAt": "{today}T09:30:00-03:00"
+                },
+                "unreadCount": 0,
+                "updatedAt": "{today}T09:30:00-03:00",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "ignored": false
+              }
+            ],
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "4.6",
       "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
       "label": "Introdução ao teste",

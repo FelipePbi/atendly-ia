@@ -86,6 +86,65 @@ test("responses recusa status com método que não é GET", () => {
   );
 });
 
+const PUBLIC_TARGET = { code: "L2", file: "Login-Erro.dc.html", session: false };
+const LOGIN_POST = { method: "POST", path: "/v1/auth/login", json: { error: { code: "INVALID_CREDENTIALS" } }, status: 401 };
+
+test("responses aceita POST sob /v1/auth/ só em alvo público (session:false)", () => {
+  const [entry] = validateResponses([LOGIN_POST], PUBLIC_TARGET);
+  assert.deepEqual(entry, LOGIN_POST);
+  const { status: _status, ...withoutStatus } = LOGIN_POST;
+  const [noStatus] = validateResponses([withoutStatus], PUBLIC_TARGET);
+  assert.equal("status" in noStatus, false);
+  assert.equal(validateResponses([{ ...OK, path: "/v1/auth/session" }, LOGIN_POST], PUBLIC_TARGET).length, 2);
+});
+
+test("responses recusa POST em alvo com sessão, mesmo sob /v1/auth/, com a mensagem de só GET", () => {
+  for (const session of [undefined, true]) {
+    assert.throws(
+      () => validateResponses([LOGIN_POST], { ...TARGET, session }),
+      (error) => /alvo W1/.test(error.message) && /responses\[0\]\.method/.test(error.message) && /só "GET"/.test(error.message),
+    );
+  }
+});
+
+test("responses recusa POST de alvo público fora de /v1/auth/, nomeando o alvo e o motivo", () => {
+  for (const bad of ["/v1/customers", "/v1/authx/login", "/v1/auth", "/auth/login", "/api/bff/v1/auth/login", undefined]) {
+    assert.throws(
+      () => validateResponses([{ ...LOGIN_POST, path: bad }], PUBLIC_TARGET),
+      (error) => /alvo L2/.test(error.message) && /responses\[0\]\.method/.test(error.message) && /\/v1\/auth\//.test(error.message) && !/só "GET"/.test(error.message),
+      `POST ${String(bad)} deveria ser recusado`,
+    );
+  }
+});
+
+test("responses recusa PUT, PATCH e DELETE também em alvo público", () => {
+  for (const method of ["PUT", "PATCH", "DELETE", "post", undefined]) {
+    assert.throws(
+      () => validateResponses([{ ...LOGIN_POST, method }], PUBLIC_TARGET),
+      (error) => /alvo L2/.test(error.message) && /responses\[0\]\.method/.test(error.message) && /só "GET"/.test(error.message),
+      `método ${String(method)} deveria ser recusado`,
+    );
+  }
+});
+
+test("POST em alvo público ainda passa pelas demais regras (json, status, campo)", () => {
+  assert.throws(() => validateResponses([{ method: "POST", path: "/v1/auth/login" }], PUBLIC_TARGET), /não tem "json"/);
+  assert.throws(() => validateResponses([{ ...LOGIN_POST, status: 200 }], PUBLIC_TARGET), /responses\[0\]\.status/);
+  assert.throws(() => validateResponses([{ ...LOGIN_POST, retry: 1 }], PUBLIC_TARGET), /campo desconhecido "retry"/);
+});
+
+test("pickFixedResponse serve o POST declarado só ao POST, e o GET só ao GET", () => {
+  const post = { ...LOGIN_POST, json: { error: { code: "X" } } };
+  const get = { method: "GET", path: "/v1/auth/login", json: { data: {} } };
+  const only = { ...PUBLIC_TARGET, responses: validateResponses([post], PUBLIC_TARGET) };
+  assert.equal(pickFixedResponse(only, "POST", "/v1/auth/login"), only.responses[0]);
+  assert.equal(pickFixedResponse(only, "GET", "/v1/auth/login"), null);
+  assert.equal(pickFixedResponse(only, "POST", "/v1/auth/logout"), null);
+  const both = { ...PUBLIC_TARGET, responses: validateResponses([get, post], PUBLIC_TARGET) };
+  assert.equal(pickFixedResponse(both, "GET", "/v1/auth/login").json.data !== undefined, true);
+  assert.equal(pickFixedResponse(both, "POST", "/v1/auth/login").status, 401);
+});
+
 test("pickFixedResponse devolve o item com o status declarado", () => {
   const target = { ...TARGET, responses: validateResponses([{ ...OK, status: 503 }], TARGET) };
   assert.equal(pickFixedResponse(target, "GET", "/v1/whatsapp").status, 503);
@@ -143,27 +202,72 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, I1, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1, I1, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["A12", "A2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "S2", "S7", "W1"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["A12", "A2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "S2", "S7", "W1"]);
   for (const target of declaring) {
     const owner = ["W1", "I1"].includes(target.code)
       ? "Mais-WhatsApp-Importacao-Conta.dc.html"
-      : target.code.startsWith("H")
-        ? "Home.dc.html"
-        : target.code.startsWith("A")
-          ? "Agenda.dc.html"
-          : target.code.startsWith("CL")
-            ? "Clientes.dc.html"
-            : target.code.startsWith("S")
-              ? "Servicos.dc.html"
-              : "Conversas-e-Chat.dc.html";
+      : ["L2", "L7"].includes(target.code)
+        ? "Login.dc.html"
+        : target.code.startsWith("H")
+          ? "Home.dc.html"
+          : target.code.startsWith("A")
+            ? "Agenda.dc.html"
+            : target.code.startsWith("CL")
+              ? "Clientes.dc.html"
+              : target.code.startsWith("S")
+                ? "Servicos.dc.html"
+                : "Conversas-e-Chat.dc.html";
     assert.equal(target.file, owner, `${target.code} declara responses no arquivo errado`);
+    const postOwners = ["L2", "L7"];
     for (const entry of target.responses) {
-      assert.equal(entry.method, "GET");
+      assert.equal(entry.method, postOwners.includes(target.code) ? "POST" : "GET");
       assert.equal(typeof entry.json.requestId, "string");
     }
   }
+});
+
+test("targets.json: L2 e L7 são os donos de responses em Login.dc.html, com o POST do próprio caminho", () => {
+  const declaring = declaringTargets().filter((target) => target.file === "Login.dc.html");
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["L2", "L7"]);
+  const [l2, l7] = ["L2", "L7"].map((code) => declaring.find((target) => target.code === code));
+  for (const target of [l2, l7]) {
+    assert.equal(target.session, false, `${target.code} é tela pública`);
+    assert.equal(target.responses.length, 1);
+    assert.ok(target.steps.every((step) => step.optional !== true), `${target.code}: sem o estado a captura tem de falhar`);
+  }
+  assert.deepEqual(
+    { method: l2.responses[0].method, path: l2.responses[0].path, status: l2.responses[0].status },
+    { method: "POST", path: "/v1/auth/login", status: 401 },
+  );
+  assert.deepEqual(Object.keys(l2.responses[0].json).sort(), ["error", "requestId"]);
+  assert.equal(l2.responses[0].json.error.code, "UNAUTHORIZED");
+  assert.deepEqual(
+    { method: l7.responses[0].method, path: l7.responses[0].path, status: l7.responses[0].status },
+    { method: "POST", path: "/v1/auth/reset-password", status: undefined },
+  );
+  assert.deepEqual(l7.responses[0].json.data, { ok: true });
+  assert.equal(typeof l7.responses[0].json.requestId, "string");
+  assert.equal(pickFixedResponse(l2, "POST", "/v1/auth/login"), l2.responses[0]);
+  assert.equal(pickFixedResponse(l2, "GET", "/v1/auth/login"), null);
+  assert.equal(pickFixedResponse(l7, "POST", "/v1/auth/reset-password"), l7.responses[0]);
+  assert.equal(pickFixedResponse(l7, "POST", "/v1/auth/login"), null);
+});
+
+test("targets.json: L2 preenche e-mail e senha, envia com Enter e espera o erro; L6 e L7 usam o mesmo token fixo", () => {
+  const all = JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "frontend", "e2e", "visual", "targets.json"), "utf8")).targets;
+  const byCode = (code) => all.find((target) => target.code === code && target.file === "Login.dc.html");
+  const [l2, l6, l7] = ["L2", "L6", "L7"].map(byCode);
+  assert.equal(l2.route, "/login");
+  assert.deepEqual(l2.steps.map((step) => step.fill?.label ?? step.press ?? step.waitFor), ["E-mail", "Senha", "Enter", "E-mail ou senha não conferem"]);
+  assert.equal(l2.steps[1].fill.value.length, 8);
+  assert.equal(l6.responses, undefined);
+  assert.equal(l6.route, l7.route);
+  assert.match(l6.route, /^\/nova-senha\?token=[\w-]+$/);
+  assert.deepEqual(l6.steps.map((step) => step.fill.label), ["Nova senha"]);
+  assert.deepEqual(l7.steps.map((step) => step.fill?.label ?? step.press ?? step.waitFor), ["Nova senha", "Enter", "Senha redefinida"]);
+  for (const target of [l2, l6, l7]) assert.match(target.notes, /[Dd]ivergência declarada/);
 });
 
 test("targets.json: W1 e I1 declaram só o seu GET", () => {

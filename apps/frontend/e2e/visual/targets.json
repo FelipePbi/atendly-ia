@@ -1,5 +1,5 @@
 {
-  "$comment": "Mapa de quadros do protótipo (docs/design-reference/claude-design/prototype/project) para rotas do app, usado por scripts/visual-compare.mjs. file + label identificam o quadro (data-screen-label); nas versões tablet/desktop o rótulo é '<Módulo> / <label> / Portrait|Landscape|Desktop'. steps são ações simples para levar a tela ao estado do quadro (click, clickRole, fill, press, waitFor, wait). clock fixa a hora do navegador no dia semeado. responses (Goal106) é uma lista de { method, path, json } que leva a tela a um estado que a conta de teste não alcança: só method GET, path exato do BFF sob /v1/ sem query (a query não conta), json é o corpo inteiro da resposta (envelope { data, requestId }); status opcional (inteiro de 400 a 599, só com GET) serve a recusa do BFF no lugar do 200 padrão; nas strings do json, {today} e {today-N} viram o dia semeado (menos N dias), para que o horário do clock e o \"ontem\" saiam iguais em qualquer dia; servida por route.fulfill só para o alvo que a declara e só no navegador da captura, nada é gravado; outro método, caminho fora de /v1/ ou campo desconhecido recusa este arquivo (scripts/lib/visual-responses.mjs). notes registra diferenças que são estado da conta de teste, não layout.",
+  "$comment": "Mapa de quadros do protótipo (docs/design-reference/claude-design/prototype/project) para rotas do app, usado por scripts/visual-compare.mjs. file + label identificam o quadro (data-screen-label); nas versões tablet/desktop o rótulo é '<Módulo> / <label> / Portrait|Landscape|Desktop'. steps são ações simples para levar a tela ao estado do quadro (click, clickRole, fill, press, waitFor, wait). clock fixa a hora do navegador no dia semeado. responses (Goal106) é uma lista de { method, path, json } que leva a tela a um estado que a conta de teste não alcança: method GET (POST só em alvo com session false e path sob /v1/auth/, Goal123), path exato do BFF sob /v1/ sem query (a query não conta), json é o corpo inteiro da resposta (envelope { data, requestId }); status opcional (inteiro de 400 a 599) serve a recusa do BFF no lugar do 200 padrão; nas strings do json, {today} e {today-N} viram o dia semeado (menos N dias), para que o horário do clock e o \"ontem\" saiam iguais em qualquer dia; servida por route.fulfill só para o alvo que a declara e só no navegador da captura, nada é gravado; outro método, POST fora dessa regra, caminho fora de /v1/ ou campo desconhecido recusa este arquivo (scripts/lib/visual-responses.mjs). notes registra diferenças que são estado da conta de teste, não layout.",
   "targets": [
     {
       "code": "L1",
@@ -7,6 +7,34 @@
       "label": "Login",
       "route": "/login",
       "session": false
+    },
+    {
+      "code": "L2",
+      "file": "Login.dc.html",
+      "label": "Login · erro",
+      "route": "/login",
+      "session": false,
+      "notes": "Os passos preenchem 'E-mail' e 'Senha' e enviam o formulário com Enter (um clique em 'Entrar' deixaria o ponteiro sobre o botão e o :hover o escureceria, o que o quadro não tem); POST /v1/auth/login responde 401 com o envelope de erro do BFF (UNAUTHORIZED, 'Invalid credentials.'), servido só no navegador da captura: nenhum login chega ao BFF e o limite de 10 tentativas em 15 minutos não é consumido. getByLabel('Senha') casa também com o botão 'Mostrar senha', mas o campo vem antes no DOM e o passo usa o primeiro. Divergência declarada: a saudação ('Boas-vindas de volta' no app, 'Bem-vinda de volta' no quadro, D-087), que no mobile quebra em duas linhas e sobe o cartão 20 px; o anel de foco no campo 'Senha', porque o foco vai ao campo com erro e o quadro o mostra sem foco; a barra de status e o indicador de início do iPhone, o painel de marca do tablet e do desktop e o contorno do glifo do hero (D-107, divergências 1, 2 e 9).",
+      "steps": [
+        { "fill": { "label": "E-mail", "value": "camila.reis@gmail.com" } },
+        { "fill": { "label": "Senha", "value": "senha123" } },
+        { "press": "Enter" },
+        { "waitFor": "E-mail ou senha não conferem" }
+      ],
+      "responses": [
+        {
+          "method": "POST",
+          "path": "/v1/auth/login",
+          "status": 401,
+          "json": {
+            "error": {
+              "code": "UNAUTHORIZED",
+              "message": "Invalid credentials."
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
     },
     {
       "code": "L3",
@@ -29,6 +57,40 @@
       "route": "/solicitacao-enviada",
       "session": false,
       "notes": "O app envia link por e-mail, não código (decisão de produto vigente); compare o restante da estrutura."
+    },
+    {
+      "code": "L6",
+      "file": "Login.dc.html",
+      "label": "Nova senha",
+      "route": "/nova-senha?token=visual-compare-token-fixo",
+      "session": false,
+      "notes": "O token não é conferido ao abrir: só no envio. O passo preenche 'Nova senha' com uma senha de 10 caracteres com letras e números (os 10 pontos do quadro), para 'Pelo menos 8 caracteres' e 'Letras e números' ficarem atendidas como no quadro; 'Diferente da senha anterior' fica neutra, conferida só ao salvar (BFF, D-064). getByLabel('Nova senha') casa só com o campo. Divergência declarada: 'Confirmar senha' não existe no app (U-10 e D-064), então o cartão do app é mais curto e o foco do quadro (no segundo campo) não tem equivalente e o anel de foco fica no campo único; no mobile o quadro tira o parágrafo do painel de marca para caber o cartão mais alto, e o app, de cartão mais curto, o mantém; a barra de status e o indicador de início do iPhone, o painel de marca do tablet e do desktop e o contorno do glifo do hero (D-107, divergências 1, 2 e 9).",
+      "steps": [
+        { "fill": { "label": "Nova senha", "value": "senha12345" } }
+      ]
+    },
+    {
+      "code": "L7",
+      "file": "Login.dc.html",
+      "label": "Senha redefinida",
+      "route": "/nova-senha?token=visual-compare-token-fixo",
+      "session": false,
+      "notes": "Os passos preenchem 'Nova senha', enviam o formulário com Enter (o ponteiro de um clique em 'Salvar nova senha' ficaria sobre o 'Entrar' do cartão de sucesso e o :hover o escureceria) e esperam 'Senha redefinida'; POST /v1/auth/reset-password responde o sucesso de BffAuthService.resetPassword ({ data: { ok: true }, requestId }), servido só no navegador da captura: nenhum token é consumido e nada é gravado. Divergência declarada: a barra de status e o indicador de início do iPhone, o painel de marca do tablet e do desktop e o contorno do glifo do hero (D-107, divergências 1, 2 e 9).",
+      "steps": [
+        { "fill": { "label": "Nova senha", "value": "senha12345" } },
+        { "press": "Enter" },
+        { "waitFor": "Senha redefinida" }
+      ],
+      "responses": [
+        {
+          "method": "POST",
+          "path": "/v1/auth/reset-password",
+          "json": {
+            "data": { "ok": true },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
     },
     {
       "code": "L8",

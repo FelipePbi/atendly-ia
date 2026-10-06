@@ -26,6 +26,27 @@ const PASSWORD_RULE_LABELS: Record<string, string> = {
   HAS_LETTER_AND_DIGIT: "Letras e números",
 };
 
+const INVALID_CREDENTIALS_MESSAGE =
+  "E-mail ou senha não conferem. Confira e tente de novo — ou recupere a senha.";
+
+function RuleCheck() {
+  return (
+    <svg
+      width="11"
+      height="11"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
+  );
+}
+
 function ArrowRight() {
   return (
     <svg
@@ -119,6 +140,7 @@ function PasswordField({
   id,
   label,
   error,
+  credentialsError,
   help,
   showRules,
   hint,
@@ -127,6 +149,7 @@ function PasswordField({
   id: string;
   label: string;
   error?: string;
+  credentialsError?: boolean;
   help?: string;
   showRules?: boolean;
   hint?: string;
@@ -139,63 +162,76 @@ function PasswordField({
   const describedBy = [error ? errorId : null, showRules ? rulesId : null]
     .filter(Boolean)
     .join(" ");
+  const rules = [
+    ...PASSWORD_POLICY_RULES.map((rule) => ({
+      id: rule.id,
+      label: PASSWORD_RULE_LABELS[rule.id],
+      met: rule.test(value),
+      status: rule.test(value) ? "Atendida" : "Pendente",
+    })),
+    {
+      id: "DIFFERENT_FROM_CURRENT",
+      label: "Diferente da senha anterior",
+      met: false,
+      status: "Conferida ao salvar",
+    },
+  ];
   return (
-    <label className={`field${error ? " field-error" : ""}`}>
-      <span className="label">{label}</span>
-      <span className="input-wrap">
-        <Icon name="lock" className="field-icon" />
-        <input
-          id={id}
-          name={id}
-          className="input input-with-icon input-with-action"
-          type={visible ? "text" : "password"}
-          autoComplete={
-            autoComplete ??
-            (id === "login-password" ? "current-password" : "new-password")
-          }
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={describedBy || undefined}
-        />
-        <button
-          className="field-action"
-          type="button"
-          onClick={() => setVisible((current) => !current)}
-          aria-label={visible ? "Ocultar senha" : "Mostrar senha"}
-        >
-          <Icon name="eye" />
-        </button>
-      </span>
-      {error && (
-        <span className="field-help" id={errorId} role="alert">
-          {error}
+    <>
+      <label
+        className={`field${error ? " field-error" : ""}${credentialsError ? " field-error--credentials" : ""}`}
+      >
+        <span className="label">{label}</span>
+        <span className="input-wrap">
+          <Icon name="lock" className="field-icon" />
+          <input
+            id={id}
+            name={id}
+            className="input input-with-icon input-with-action"
+            type={visible ? "text" : "password"}
+            autoComplete={
+              autoComplete ??
+              (id === "login-password" ? "current-password" : "new-password")
+            }
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={describedBy || undefined}
+          />
+          <button
+            className="field-action"
+            type="button"
+            onClick={() => setVisible((current) => !current)}
+            aria-label={visible ? "Ocultar senha" : "Mostrar senha"}
+          >
+            <Icon name="eye" />
+          </button>
         </span>
-      )}
-      {!error && help && <span className="field-help">{help}</span>}
-      {hint && <span className="auth-hint">{hint}</span>}
+        {error && (
+          <span className="field-help" id={errorId} role="alert">
+            {error}
+          </span>
+        )}
+        {!error && help && <span className="field-help">{help}</span>}
+        {hint && <span className="auth-hint">{hint}</span>}
+      </label>
       {showRules && (
         <ul className="password-rules" id={rulesId}>
-          {PASSWORD_POLICY_RULES.map((rule) => {
-            const met = rule.test(value);
-            return (
-              <li
-                key={rule.id}
-                className={`password-rule${met ? " is-met" : ""}`}
-              >
-                <span className="password-rule-mark" aria-hidden="true">
-                  {met && <Icon name="check" />}
-                </span>
-                {PASSWORD_RULE_LABELS[rule.id]}
-                <span className="password-rule-status">
-                  {met ? "Atendida" : "Pendente"}
-                </span>
-              </li>
-            );
-          })}
+          {rules.map((rule) => (
+            <li
+              key={rule.id}
+              className={`password-rule${rule.met ? " is-met" : ""}`}
+            >
+              <span className="password-rule-mark" aria-hidden="true">
+                {rule.met && <RuleCheck />}
+              </span>
+              {rule.label}
+              <span className="sr-only">: {rule.status}</span>
+            </li>
+          ))}
         </ul>
       )}
-    </label>
+    </>
   );
 }
 
@@ -412,14 +448,34 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
   if (newPassword && resetSucceeded) {
     return (
       <AuthLayout>
-        <div className="auth-card auth-state">
-          <span className="state-icon">
-            <Icon name="check" />
-          </span>
-          <h1>Senha redefinida</h1>
-          <p>Você já pode entrar na Avenly com sua nova senha.</p>
-          <Link className="btn btn-primary" href="/login">
-            Ir para entrar
+        <div className="auth-card">
+          <div className="auth-success">
+            <span className="auth-success-mark">
+              <svg
+                width="34"
+                height="34"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 12.5l4.5 4.5L19 7.5" />
+              </svg>
+            </span>
+            <header className="auth-heading">
+              <h1>Senha redefinida</h1>
+              <p>
+                Pronto. Você já pode entrar com a nova senha — e a IA segue
+                atendendo normalmente.
+              </p>
+            </header>
+          </div>
+          <Link className="btn btn-primary auth-cta" href="/login">
+            Entrar
+            <ArrowRight />
           </Link>
         </div>
       </AuthLayout>
@@ -427,6 +483,9 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
   }
 
   const signup = scenario === "signup";
+  const credentialsError =
+    scenario === "login" &&
+    fieldErrors["login-password"] === INVALID_CREDENTIALS_MESSAGE;
   const forgotPassword = scenario === "forgot-password";
   const passwordFieldId = newPassword
     ? "new-password"
@@ -443,7 +502,7 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
   const subtitle = signup
     ? "Configure o negócio e conecte seu WhatsApp em poucos minutos."
     : newPassword
-      ? "Diferente da senha anterior, com pelo menos 8 caracteres, letras e números."
+      ? "Ela substitui a anterior em todos os dispositivos conectados."
       : forgotPassword
         ? "Digite o e-mail da conta. Enviamos um link para você criar uma nova senha."
         : "Boas-vindas de volta. Sua agenda continua de onde parou.";
@@ -527,6 +586,7 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
                 newPassword ? "Nova senha" : signup ? "Crie uma senha" : "Senha"
               }
               error={fieldErrors[passwordFieldId]}
+              credentialsError={credentialsError}
               showRules={newPassword}
               hint={signup ? "Mínimo de 8 caracteres, com letras e números." : undefined}
             />
@@ -561,7 +621,10 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
           )}
           {scenario === "login" && (
             <div className="auth-row">
-              <Link className="auth-link auth-link--standalone" href="/recuperar-senha">
+              <Link
+                className={`auth-link auth-link--standalone${credentialsError ? " auth-link--emphasis" : ""}`}
+                href="/recuperar-senha"
+              >
                 Esqueci minha senha
               </Link>
             </div>
@@ -641,7 +704,7 @@ function mapAuthError(
     }
     if (scenario === "login" && error.status === 401) {
       return {
-        fieldErrors: { "login-password": "E-mail ou senha incorretos." },
+        fieldErrors: { "login-password": INVALID_CREDENTIALS_MESSAGE },
       };
     }
     if (scenario === "signup" && error.code === "CONFLICT") {

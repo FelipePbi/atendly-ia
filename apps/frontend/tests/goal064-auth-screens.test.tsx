@@ -334,7 +334,9 @@ describe("/solicitacao-enviada — copy neutra, sem afirmar troca de senha", () 
     expect(
       screen.getByRole("link", { name: "Voltar para entrar" }),
     ).toHaveAttribute("href", "/login");
-    expect(screen.queryByText("Ir para entrar")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Entrar" }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -363,7 +365,7 @@ describe("/nova-senha — sucesso só depois de resetPassword resolver", () => {
     expect(
       await screen.findByRole("heading", { name: "Senha redefinida" }),
     ).toBeVisible();
-    expect(screen.getByRole("link", { name: "Ir para entrar" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Entrar" })).toHaveAttribute(
       "href",
       "/login",
     );

@@ -475,47 +475,39 @@ p {
   padding-right: 44px;
 }
 .password-rules {
-  display: grid;
-  gap: 6px;
-  margin: 2px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 .password-rule {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: var(--muted);
+  gap: 10px;
+  color: #716859;
   font-size: 13px;
+  line-height: normal;
 }
 .password-rule-mark {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
-  border: 1.5px solid var(--border-strong);
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border: 1px solid #d6cec2;
   border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: var(--surface);
-}
-.password-rule-mark .icon {
-  width: 10px;
-  height: 10px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .password-rule.is-met {
-  color: var(--fg);
+  color: #221e1a;
 }
 .password-rule.is-met .password-rule-mark {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.password-rule-status {
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--muted);
-}
-.password-rule.is-met .password-rule-status {
-  color: var(--fg);
+  border-color: transparent;
+  background: #dceceb;
+  color: #0b4a4e;
 }
 .select {
   appearance: none;
@@ -6126,6 +6118,23 @@ button.operational-link:disabled {
 /* Link isolated in its own line (no surrounding sentence text), so the AA
    touch-target minimum applies: widen the pointer target with padding
    instead of raising font-size or changing the visual token. */
+.auth-form .field-error--credentials .label {
+  color: #8a2a21;
+}
+.auth-form .field-error--credentials .input {
+  border-color: #b8483d;
+}
+.auth-form .field-error--credentials .field-help {
+  color: #8a2a21;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.auth-link--emphasis {
+  text-decoration: underline;
+}
+.auth-link--emphasis:hover {
+  text-underline-offset: 3px;
+}
 .auth-link--standalone {
   display: inline-flex;
   align-items: center;
@@ -6170,6 +6179,24 @@ button.operational-link:disabled {
 .auth-inline-alert strong {
   display: block;
   margin-bottom: 2px;
+}
+.auth-success {
+  padding: 8px 0 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  text-align: center;
+}
+.auth-success-mark {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0b4a4e;
+  background: #dceceb;
 }
 .auth-state {
   display: block;

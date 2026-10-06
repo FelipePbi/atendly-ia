@@ -7190,3 +7190,83 @@ Conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não
 Os gates do IA Loop rodaram de novo na árvore final da rodada 3, todos com saída 0: `typecheck` (WU-04), `lint` (WU-05), `goal122` com 2 arquivos e 17 testes (WU-06), a suíte do frontend com 168 arquivos e 2160 testes (WU-07), `test:gate` com 271 de 271 (WU-09), `validate:core` sem passo falho e 2 pulados (WU-10), `validate:ui` com 169 passed, 21 skipped e 0 retentativas (WU-11), `validate:integration` com saída 0 e o gate autenticado com 275 passed e 0 retentativas (WU-12) e `git diff --check` (WU-13). A WU-08 (`test:ia-loop`) foi pulada: o repositório não declara o script.
 
 O Tech Lead refez o `visual:compare --target S2,S7` na rodada 3, com BFF e Scheduling locais sobre o banco de desenvolvimento, e obteve os mesmos percentuais da tabela acima (S2 7,4 / 9,5 / 0,3 / 0,4; S7 7,2 / 1,1 / 11,7 / 3,1). A regressão deu Servicos:S1 7,5 / 3,6 / 3,7 / 2,6, S3 6,4 / 2,8 / 12,8 / 4,2, S4 9,7 / 6,0 / 13,7 / 5,2 e Agenda:S1 11,7 / 5,9 / 15,1 / 6,0, dentro de ±0,2 ponto dos números do Developer; a diferença é atribuída à conta do banco de desenvolvimento. Os controles negativos vêm da execução do Developer e não foram refeitos pelo Tech Lead. Detalhe no [review122](reviews/122-review.md).
+
+## Entrar com erro, nova senha e senha redefinida iguais ao protótipo, do Goal123
+
+Registro da execução do [Goal123](goals/123-entrar-com-erro-nova-senha-e-senha-redefinida-iguais-ao-prototipo.md) sobre a baseline `f81db1c`, por acréscimo ([D-137](DECISIONS.md), PROPOSED). Só o frontend e a captura mudaram; nenhuma mudança no BFF, no Scheduling, na IA, no contrato ou no banco.
+
+### `visual:compare`
+
+Comandos, rodados na raiz da worktree contra o BFF, o Scheduling e a IA desta worktree sobre bancos descartáveis provisionados pelo harness: `npm run visual:compare -- --target L2,L6,L7` (a execução final, depois da última edição de código e dos controles negativos, sem passo opcional pulado, saída 0, 12 capturas) e `-- --target L1,L3,L4,L5` para regressão. Percentuais em mobile / tablet em retrato / tablet em paisagem / desktop:
+
+| Quadro | Diff | Leitura |
+| --- | --- | --- |
+| L2 | 6,3 / 1,2 / 1,7 / 1,7 | erro no campo "Senha" com texto, rótulo, borda e mensagem do quadro; "Esqueci minha senha" sublinhado. Restam a saudação e o anel de foco (abaixo) |
+| L6 | 14,8 / 7,0 / 6,1 / 5,3 | subtítulo, "Nova senha" e as três regras abaixo, a terceira neutra. Restam "Confirmar senha" e o foco do quadro (abaixo) |
+| L7 | 1,2 / 0,9 / 0,9 / 0,7 | círculo de 72 px, título, texto e "Entrar" com a seta; só o antialiasing do texto, dentro de 1 px |
+| L1 | 4,8 / 1,0 / 1,0 / 1,0 | igual à captura de antes |
+| L3 | 1,7 / 1,1 / 1,6 / 0,9 | igual à captura de antes |
+| L4 | 2,2 / 1,5 / 1,4 / 1,6 | igual à captura de antes |
+| L5 | 12,8 / 10,5 / 5,3 / 4,3 | igual à captura de antes |
+
+Regressão: a captura "de antes" foi feita na mesma worktree com `AuthScreen.tsx` e `avenly.css` trocados temporariamente pelos de `HEAD` (cópia guardada fora do repositório e restaurada com `cmp`, saída 0). Os percentuais de L1, L3, L4 e L5 coincidem e os 16 `app.png` são byte a byte iguais nos dois estados.
+
+Leitura dos `side-by-side.png` nos quatro devices. **Divergências que restam:**
+
+- L6, "Confirmar senha" (U-10 e D-064): o cartão do app é mais curto, o foco do quadro (no segundo campo) não tem equivalente e o anel de foco fica no campo único. No mobile o quadro tira o parágrafo do painel de marca para caber o cartão mais alto; o app o mantém.
+- L2, a saudação ("Boas-vindas de volta" no app, "Bem-vinda de volta" no quadro, D-087), que no mobile quebra em duas linhas e sobe o cartão 20 px; e o anel de foco no campo "Senha", porque o foco vai ao campo com erro e o quadro o mostra sem foco.
+- L2 (igual ao L1 já aceito): 'Esqueci minha senha' fica 2 px à esquerda do quadro. A causa é o `padding: 4px 2px` de `.auth-link--standalone` (alvo de toque AA, Goal031). Mudar isso mudaria o L1, que este Goal mantém igual à captura de antes.
+- A casca (D-107, divergências 1, 2 e 9): a barra de status e o indicador de início do iPhone, o painel de marca do tablet e do desktop e o contorno do glifo do hero. No tablet, o protótipo é capturado com o cartão ainda em fade-in.
+- Dentro de 1 px, não listadas: o deslocamento sub-pixel do texto do título em L2, L6 e L7.
+
+Dois achados da captura, corrigidos nos alvos: o clique em "Entrar" (L2) e em "Salvar nova senha" (L7) deixava o ponteiro sobre o botão e o `:hover` o escurecia, o que o quadro não tem; os passos passaram a enviar com Enter. Nas duas primeiras execuções (com clique) L2 e L7 mostravam o botão `#0B4A4E` em vez de `#0F5F63`.
+
+### Controles negativos
+
+Rodados depois da última edição de código; cada mutação foi revertida e conferida com `cmp` contra a cópia guardada antes (saída 0 nas quatro).
+
+| Controle | Mutação | Comando | Reprovou | `cmp` |
+| --- | --- | --- | --- | --- |
+| (a) texto antigo do 401 | `INVALID_CREDENTIALS_MESSAGE` de volta a "E-mail ou senha incorretos." | `npx vitest run tests/goal123-telas-de-acesso.test.tsx` | 3 testes: "mostra o texto do quadro ligado ao campo, mantém o e-mail e foca a senha", "'Esqueci minha senha' só ganha destaque com o erro de credenciais" e "o corpo enviado ao login não muda" (`Unable to find an element with the text: E-mail ou senha não conferem. Confira e tente de novo — ou recupere a senha.`) | ok |
+| (b) terceira regra marcada | `met` de "Diferente da senha anterior" igual ao das outras duas | o mesmo | 1 teste: "as duas primeiras passam de 'Pendente' a 'Atendida' ao digitar; a terceira fica 'Conferida ao salvar'" | ok |
+| (c) `POST` em alvo com sessão | `validateResponses` aceita `POST` sem olhar `session` | `node --test scripts/tests/visual-responses.test.mjs` | 2 testes: "responses recusa método que não é GET, com erro que nomeia o alvo" e "responses recusa POST em alvo com sessão, mesmo sob /v1/auth/, com a mensagem de só GET" (44 de 46 passaram) | ok |
+| (d) `POST` fora de `/v1/auth/` | o prefixo exigido passa a `/v1/` | o mesmo | 1 teste: "responses recusa POST de alvo público fora de /v1/auth/, nomeando o alvo e o motivo" (45 de 46 passaram) | ok |
+
+### Execução
+
+Contagens sobre a árvore final (as mutações todas revertidas):
+
+| Comando | Resultado |
+| --- | --- |
+| `npx vitest run tests/goal123-telas-de-acesso.test.tsx` em `apps/frontend` | **13** testes passando |
+| `node --test scripts/tests/visual-responses.test.mjs` | **46** testes, **46** passando, 0 falhas |
+| `npm run typecheck` em `apps/frontend` | saída 0, sem erro |
+| `npm run lint` em `apps/frontend` (por `rtk proxy`) | saída 0, 0 avisos |
+| `npx vitest run` em `apps/frontend` (suíte completa) | **169** arquivos, **2173** testes passando |
+| `npm run test:gate` | **279** testes, **279** passando, 0 falhas |
+| `git diff --check` | saída 0 (só o aviso de fim de linha do Git) |
+| `npm run validate:core` (WU-09 do IA Loop) | saída 0; 17 passos, **15** passando, 0 falhas, 2 pulados (`test:bff` e `test:health-worker`) |
+| `npm run validate:ui` (WU-10 do IA Loop) | saída 0; **169** passed, **21** skipped, 0 retentativas |
+| `npm run validate:integration` (WU-11 do IA Loop) | saída 0; 36 passos, **36** passando, 0 falhas; gate autenticado com **275** passed e 0 retentativas |
+
+### Testes existentes ajustados
+
+- `apps/frontend/tests/goal014-auth.test.tsx`: a asserção do 401 passa de "E-mail ou senha incorretos." ao texto do quadro ("E-mail ou senha não conferem. Confira e tente de novo — ou recupere a senha.").
+- `apps/frontend/tests/goal064-auth-screens.test.tsx`: o link "Ir para entrar" passa a "Entrar", na asserção de presença depois do sucesso e na de ausência antes dele (agora por papel `link`).
+- `scripts/tests/visual-responses.test.mjs`: a lista de donos de `responses` passa a incluir L2 e L7 (`Login.dc.html`, com `POST`), e ganha as provas do `POST`; a asserção de que `POST` é recusado num alvo com sessão continua.
+
+Nenhuma asserção foi afrouxada.
+
+### Escopo
+
+Os arquivos alterados estão dentro do critério do Goal: `apps/frontend/src/features/auth/AuthScreen.tsx`, `apps/frontend/src/shared/styles/avenly.css`, `apps/frontend/tests/goal123-*`, `goal014-auth` e `goal064-auth-screens`, `apps/frontend/e2e/visual/targets.json`, `scripts/lib/visual-responses.mjs`, `scripts/tests/visual-responses.test.mjs` e os três registros de `docs/migration/`. `scripts/visual-compare.mjs` não mudou.
+
+### Gates do IA Loop
+
+Os gates do IA Loop rodaram de novo na árvore final da rodada 1, todos com saída 0: `typecheck` (WU-04), `lint` (WU-05), `goal123` com 13 testes (WU-06), suíte do frontend com 169 arquivos e 2173 testes (WU-07), `test:gate` com 279 de 279 (WU-08), `validate:core` sem passo falho (WU-09), `validate:ui` com 169 passed, 21 skipped e 0 retentativas (WU-10), `validate:integration` com saída 0 e o gate autenticado com 275 passed e 0 retentativas (WU-11) e `git diff --check` (WU-12).
+
+Critério 7: `PUBLIC_ROUTES` (apps/frontend/e2e/routes.ts) não inclui `/nova-senha` e não chega ao estado de 401 do login nem à confirmação do L7. Por isso `validate:ui` mede o alvo de toque de 'Esqueci minha senha', 'Mostrar senha' e 'Entrar' em `/login`, mas não mede 'Salvar nova senha', o 'Entrar' do L7 nem o contraste de `#8A2A21` e da regra neutra `#716859`. O Tech Lead conferiu esses pontos no review123: `#8A2A21` dá ~8,5:1 sobre `#FFFDFA` e ~7,8:1 sobre `#F7F4EF`; `#716859` dá ~5,4:1 e ~5,0:1; os dois botões têm 52 px de altura. O critério 8 não autoriza mudar `routes.ts` neste Goal.
+
+### Não executado
+
+Conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.

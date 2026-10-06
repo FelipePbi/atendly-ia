@@ -8,6 +8,7 @@
 
 const ALLOWED_FIELDS = Object.freeze(["method", "path", "json", "status"]);
 const BFF_PREFIX = "/api/bff";
+const AUTH_PREFIX = "/v1/auth/";
 
 function describe(target) {
   return `alvo ${target?.code ?? "?"} (${target?.file ?? "?"})`;
@@ -15,7 +16,8 @@ function describe(target) {
 
 /**
  * Valida a lista `responses` de um alvo e a devolve. Recusa, com erro que nomeia
- * o alvo e o item: outro método que não GET, caminho fora de `/v1/`, campo
+ * o alvo e o item: outro método que não GET (POST só em alvo `session: false`
+ * e sob `/v1/auth/`), caminho fora de `/v1/`, campo
  * desconhecido ou ausente, `status` que não seja inteiro de 400 a 599.
  */
 export function validateResponses(responses, target) {
@@ -31,7 +33,11 @@ export function validateResponses(responses, target) {
         throw new Error(`targets.json: ${label} tem o campo desconhecido "${key}" (aceitos: ${ALLOWED_FIELDS.join(", ")})`);
       }
     }
-    if (entry.method !== "GET") {
+    if (entry.method === "POST" && target?.session === false) {
+      if (typeof entry.path !== "string" || !entry.path.startsWith(AUTH_PREFIX)) {
+        throw new Error(`targets.json: ${label}.method "POST" não é aceito em ${where}; o alvo público só aceita POST sob "${AUTH_PREFIX}", e o caminho ${JSON.stringify(entry.path)} está fora dele`);
+      }
+    } else if (entry.method !== "GET") {
       throw new Error(`targets.json: ${label}.method ${JSON.stringify(entry.method)} não é aceito; só "GET"`);
     }
     if (typeof entry.path !== "string" || !/^\/v1\/[^?#\s]+$/.test(entry.path)) {

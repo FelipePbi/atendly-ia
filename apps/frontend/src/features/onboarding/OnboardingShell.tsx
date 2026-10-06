@@ -18,6 +18,7 @@ export function OnboardingShell({
   actionsStacked = false,
   back,
   body,
+  completion = false,
   description,
   error,
   eyebrow,
@@ -31,6 +32,9 @@ export function OnboardingShell({
   actionsStacked?: boolean;
   back?: OnboardingBack;
   body: ReactNode;
+  // Moldura de conclusão (quadros 4.9 e 4.10): sem eyebrow nem cabeçalho; o
+  // corpo traz a arte, o `h1` e o texto, centrados.
+  completion?: boolean;
   description?: string;
   error?: string | null;
   eyebrow: string;
@@ -43,18 +47,27 @@ export function OnboardingShell({
     <main className="onboarding-layout" data-step={scenario}>
       <OnboardingSidebar scenario={scenario} />
       <div className="onboarding-panel">
-        <form className="onboarding-column" noValidate onSubmit={onSubmit}>
+        <form
+          className={`onboarding-column${completion ? " is-completion" : ""}`}
+          noValidate
+          onSubmit={onSubmit}
+        >
           <OnboardingTop
             back={back}
+            completion={completion}
             eyebrow={eyebrow}
             onExit={onExit}
             scenario={scenario}
           />
-          <div className="onboarding-content">
-            <header className="onboarding-heading">
-              <h1>{title}</h1>
-              {description && <p>{description}</p>}
-            </header>
+          <div
+            className={`onboarding-content${completion ? " is-completion" : ""}`}
+          >
+            {!completion && (
+              <header className="onboarding-heading">
+                <h1>{title}</h1>
+                {description && <p>{description}</p>}
+              </header>
+            )}
             <div className="onboarding-step-body">{body}</div>
             {error && (
               <div className="onboarding-note is-important" role="alert">
@@ -111,18 +124,22 @@ export function OnboardingFrame({
  * eyebrow do capítulo. */
 function OnboardingTop({
   back,
+  completion = false,
   eyebrow,
   onExit,
   scenario,
 }: {
   back?: OnboardingBack;
+  completion?: boolean;
   eyebrow: string;
   onExit: () => void;
   scenario: OnboardingScenario;
 }) {
   return (
     <div className="onboarding-top">
-      <div className="onboarding-top-row">
+      <div
+        className={`onboarding-top-row${completion ? " is-completion" : ""}`}
+      >
         <OnboardingBackLink back={back} />
         {scenario === "boas-vindas" && (
           <span aria-hidden="true" className="onboarding-welcome-brand">
@@ -140,7 +157,7 @@ function OnboardingTop({
           <span>Sair</span>
         </button>
       </div>
-      <p className="onboarding-eyebrow">{eyebrow}</p>
+      {!completion && <p className="onboarding-eyebrow">{eyebrow}</p>}
     </div>
   );
 }

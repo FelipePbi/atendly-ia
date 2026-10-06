@@ -113,9 +113,10 @@ function chapterSteps(block: OnboardingBlockId): OnboardingScenario[] {
  * `progressPercent`. */
 export function chapterFraction(scenario: OnboardingScenario): number {
   if (scenario === "boas-vindas") return 0;
-  if (scenario === "whatsapp-concluido" || scenario === "teste-real-sucesso") {
-    return 1;
-  }
+  // Quem conclui sem WhatsApp não percorreu o capítulo: o quarto segmento
+  // fica vazio (quadro 4.10). O teste real que termina bem fecha o capítulo.
+  if (scenario === "whatsapp-concluido") return 0;
+  if (scenario === "teste-real-sucesso") return 1;
   if (
     scenario === "teste-real-falha" ||
     scenario === "teste-real-interferencia"
@@ -142,7 +143,7 @@ export function chapterProgress(scenario: OnboardingScenario): Array<{
       : onboardingChapterOrder.indexOf(blockForScenario(scenario));
   return onboardingChapterOrder.map((id, index) => {
     const status: OnboardingChapterStatus =
-      index < currentIndex
+      index < currentIndex || scenario === "teste-real-sucesso"
         ? "done"
         : index === currentIndex
           ? "current"

@@ -221,6 +221,121 @@
       "account": "onboarding"
     },
     {
+      "code": "4.9",
+      "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
+      "label": "IA ativa",
+      "route": "/onboarding/teste-real-sucesso",
+      "account": "onboarding",
+      "notes": "GET /v1/activation-test (execução SUCCEEDED, terminal, os seis marcos alcançados e a limpeza CLEAN) e GET /v1/status (WhatsApp CONNECTED em 5511987654321 e IA ACTIVE) vêm de resposta fixa, só no navegador da captura: a conta de onboarding não fez o teste real nem conectou um número, e sem o status ativo a tela diria o estado honesto de IA desligada, sem a pílula \"IA ativa · +55 11 98765-4321\" e sem os anéis que respiram. Nenhum passo: a tela abre pronta e nenhum toque chega a \"Ir para o início\", que concluiria o onboarding da conta visual. Divergências declaradas do Goal127: a nota de limpeza abaixo da pílula (\"O agendamento e o cliente de teste foram removidos do seu negócio.\"), que o quadro não tem (Goal019 §6: a tela diz o que ficou); o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/activation-test",
+          "json": {
+            "data": {
+              "id": "visual-compare-activation-test",
+              "state": "SUCCEEDED",
+              "terminal": true,
+              "startedAt": "{today}T10:30:00-03:00",
+              "finishedAt": "{today}T10:31:00-03:00",
+              "pausedAt": null,
+              "currentStep": null,
+              "completedStep": "AI_CONFIRMS_APPOINTMENT",
+              "attempts": 1,
+              "maxAttempts": 3,
+              "failedStep": null,
+              "failedStepLabel": null,
+              "failureCode": null,
+              "appointmentId": "visual-compare-appointment",
+              "channelId": "visual-compare-channel",
+              "supersededByChannelChange": false,
+              "cleanupState": "CLEAN",
+              "cleanupAt": "{today}T10:31:30-03:00",
+              "cleanupResidue": [],
+              "milestones": [
+                {
+                  "milestone": "MESSAGE_SENT",
+                  "reached": true,
+                  "reachedAt": "{today}T10:30:05-03:00",
+                  "sourceKind": "MESSAGE",
+                  "sourceId": "visual-compare-message-1"
+                },
+                {
+                  "milestone": "SERVICE_IDENTIFIED",
+                  "reached": true,
+                  "reachedAt": "{today}T10:30:15-03:00",
+                  "sourceKind": "SERVICE",
+                  "sourceId": "visual-compare-service"
+                },
+                {
+                  "milestone": "PRICE_INFORMED",
+                  "reached": true,
+                  "reachedAt": "{today}T10:30:25-03:00",
+                  "sourceKind": "MESSAGE",
+                  "sourceId": "visual-compare-message-2"
+                },
+                {
+                  "milestone": "AVAILABILITY_CHECKED",
+                  "reached": true,
+                  "reachedAt": "{today}T10:30:35-03:00",
+                  "sourceKind": "AVAILABILITY",
+                  "sourceId": "visual-compare-availability"
+                },
+                {
+                  "milestone": "SLOT_SELECTED",
+                  "reached": true,
+                  "reachedAt": "{today}T10:30:45-03:00",
+                  "sourceKind": "MESSAGE",
+                  "sourceId": "visual-compare-message-3"
+                },
+                {
+                  "milestone": "APPOINTMENT_CONFIRMED",
+                  "reached": true,
+                  "reachedAt": "{today}T10:30:55-03:00",
+                  "sourceKind": "APPOINTMENT",
+                  "sourceId": "visual-compare-appointment"
+                }
+              ]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "reconciled": "NOOP",
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "4.10",
+      "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
+      "label": "Configurada sem WhatsApp",
+      "route": "/onboarding/whatsapp-concluido",
+      "account": "onboarding",
+      "notes": "A tela é estática: a conta de onboarding parada no meio a renderiza sem resposta fixa e sem passo (nenhum toque em \"Ir para o início\", que concluiria o onboarding da conta visual). Divergências declaradas do Goal127: o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app."
+    },
+    {
       "code": "H1",
       "file": "Home.dc.html",
       "label": "Home · IA ativa",

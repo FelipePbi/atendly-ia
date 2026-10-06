@@ -8,7 +8,7 @@ import {
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
 import type { OnboardingDraft } from "../OnboardingRuntime";
-import type { OnboardingScenario } from "../scenarios";
+import { type OnboardingScenario, onboardingScenarios } from "../scenarios";
 import {
   activationTestStepBody,
   persistActivationTestStep,
@@ -98,6 +98,42 @@ const PERSONAL_NUMBER_POINTS: Array<{
   },
 ];
 
+/** Conclusão sem WhatsApp (quadro 4.10): a tela só é alcançada sem número
+ * conectado, então a pílula diz "IA inativa" sempre e não lê o status. */
+function WhatsappConclusion({ text, title }: { text: string; title: string }) {
+  return (
+    <div className="onboarding-completion is-inactive">
+      <div aria-hidden="true" className="completion-art">
+        <span className="completion-disc">
+          <span className="completion-disc-mark" />
+        </span>
+        <span className="completion-badge">
+          <svg
+            fill="none"
+            height="18"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="3"
+            viewBox="0 0 24 24"
+            width="18"
+          >
+            <path d="M5 12.5l4.5 4.5L19 7.5" />
+          </svg>
+        </span>
+      </div>
+      <div className="completion-text">
+        <h1>{title}</h1>
+        <p>{text}</p>
+        <span className="completion-pill is-inactive">
+          <span aria-hidden="true" className="completion-pill-dot" />
+          IA inativa até conectar
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function whatsappStepBody(
   scenario: OnboardingScenario,
   _draft: OnboardingDraft,
@@ -114,7 +150,14 @@ export function whatsappStepBody(
       />
     );
   }
-  if (scenario === "whatsapp-concluido") return null;
+  if (scenario === "whatsapp-concluido") {
+    return (
+      <WhatsappConclusion
+        text={onboardingScenarios[scenario][2]}
+        title={onboardingScenarios[scenario][1]}
+      />
+    );
+  }
   if (scenario === "contatos-ignorados") return <IgnoredContactsPanel />;
   if (isActivationTestScenario(scenario)) {
     return activationTestStepBody(scenario);

@@ -5,8 +5,10 @@ import {
   type ActivationTestRun,
   type AiStateValue,
   BffHttpError,
+  type WhatsAppStatusValue,
 } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
+import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import {
   aiStatusView,
@@ -149,11 +151,23 @@ export function useActivationTestRun(poll: boolean) {
  * Confirmação real de ativação da IA, lida de `GET /v1/status` — a mesma
  * rota do poller do shell, aqui pedida uma vez. Nunca assume "ativa" antes
  * da resposta: falha ou resposta pendente ficam nos estados honestos que
- * `aiStatusView` já define para o resto do produto.
+ * `aiStatusView` já define para o resto do produto. A mesma resposta traz o
+ * WhatsApp (estado e número), sem segundo pedido; antes dela, ou em erro, os
+ * dois ficam `undefined`.
  */
-export function useAiActiveStatus(): { view: StatusView } {
+export function useAiActiveStatus(): {
+  phoneNumber: string | null | undefined;
+  view: StatusView;
+  whatsappStatus: WhatsAppStatusValue | undefined;
+} {
   const [phase, setPhase] = useState<StatusFetchPhase>("loading");
   const [state, setState] = useState<AiStateValue | undefined>(undefined);
+  const [whatsappStatus, setWhatsappStatus] = useState<
+    WhatsAppStatusValue | undefined
+  >(undefined);
+  const [phoneNumber, setPhoneNumber] = useState<string | null | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     let active = true;
@@ -166,6 +180,8 @@ export function useAiActiveStatus(): { view: StatusView } {
         );
         if (!active) return;
         setState(result.ai.state);
+        setWhatsappStatus(result.whatsapp.status);
+        setPhoneNumber(result.whatsapp.phoneNumber);
         setPhase("loaded");
       } catch {
         if (active) setPhase("error");
@@ -179,7 +195,7 @@ export function useAiActiveStatus(): { view: StatusView } {
     };
   }, []);
 
-  return { view: aiStatusView(phase, state) };
+  return { phoneNumber, view: aiStatusView(phase, state), whatsappStatus };
 }
 
 /** Copy honesta por estado: nunca afirma "ativa" fora do caso confirmado. */
@@ -593,17 +609,94 @@ export function ActivationTestSucceeded() {
   );
 }
 
+/**
+ * Conclusão do onboarding depois do teste (quadro 4.9): a arte, o título, o
+ * texto e a pílula, centrados na moldura de conclusão.
+ *
+ * A tela só afirma o que `GET /v1/status` confirma. O texto de baixo do título
+ * é o de `aiActiveCopy(view)`; os anéis que respiram só existem com a IA
+ * `ACTIVE`; e a pílula só aparece com a IA `ACTIVE` e o WhatsApp `CONNECTED`,
+ * com o número quando ele é reconhecível. O sucesso do teste, sozinho, não
+ * prova a ativação (D-080). A nota de limpeza fica abaixo da pílula: a tela
+ * diz o que ficou (Goal019 §6).
+ */
+export function ActivationTestOnboardingSucceeded({
+  title,
+}: {
+  title: string;
+}) {
+  const { error, run } = useActivationTestRun(false);
+  const { phoneNumber, view, whatsappStatus } = useAiActiveStatus();
+
+  const active = view === "active";
+  const formatted = phoneNumber
+    ? formatBrazilianPhone(phoneNumber, "plus")
+    : null;
+  const pill =
+    active && whatsappStatus === "CONNECTED"
+      ? formatted
+        ? `IA ativa · ${formatted}`
+        : "IA ativa"
+      : null;
+
+  return (
+    <div className="onboarding-completion">
+      <div
+        aria-hidden="true"
+        className={`completion-art${active ? " is-active" : ""}`}
+      >
+        {active && (
+          <>
+            <span className="completion-ring" />
+            <span className="completion-ring is-late" />
+          </>
+        )}
+        <span className="completion-disc">
+          <span className="completion-disc-mark" />
+        </span>
+      </div>
+      <div className="completion-text">
+        <h1>{title}</h1>
+        <p>{aiActiveCopy(view).text}</p>
+        {pill && (
+          <span className="completion-pill is-active">
+            <span aria-hidden="true" className="completion-pill-dot" />
+            {pill}
+          </span>
+        )}
+      </div>
+      <div className="completion-note">
+        {error ? (
+          <ErrorNote message={error} />
+        ) : run === undefined ? (
+          <LoadingNote />
+        ) : (
+          <ActivationTestCleanupNote run={run} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Corpo de cada tela do teste, o mesmo para todo consumidor. */
 export function ActivationTestPanelBody({
   panel,
   onboarding = false,
+  title,
 }: {
   panel: ActivationTestPanel;
   onboarding?: boolean;
+  title?: string;
 }) {
   if (panel === "progress") return <ActivationTestProgress />;
   if (panel === "paused") return <ActivationTestPaused />;
   if (panel === "failed") return <ActivationTestFailed />;
-  if (panel === "succeeded") return <ActivationTestSucceeded />;
+  if (panel === "succeeded") {
+    return onboarding && title ? (
+      <ActivationTestOnboardingSucceeded title={title} />
+    ) : (
+      <ActivationTestSucceeded />
+    );
+  }
   return onboarding ? <ActivationTestOnboardingIntro /> : <ActivationTestIntro />;
 }

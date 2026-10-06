@@ -334,6 +334,8 @@ export function OnboardingScreen({
     </>
   ) : isActivationTestSucceeded ? (
     // Sucesso: só o CTA do vault. Não há "voltar" para um teste que terminou.
+    // O texto de scenarios.ts não aparece: a moldura de conclusão o troca pelo
+    // texto honesto do status (4.9).
     <button className="btn btn-primary" disabled={busy} type="submit">
       {busy ? "Abrindo..." : "Ir para o início"}
     </button>
@@ -394,10 +396,8 @@ export function OnboardingScreen({
       </button>
     </>
   ) : isWhatsappConclusion ? (
+    // Principal primeiro, como no quadro 4.10, no DOM e na tela.
     <>
-      <Link className="btn btn-secondary" href="/onboarding/whatsapp">
-        Conectar agora
-      </Link>
       <button
         className="btn btn-primary"
         disabled={busy}
@@ -406,6 +406,9 @@ export function OnboardingScreen({
       >
         {busy ? "Abrindo..." : "Ir para o início"}
       </button>
+      <Link className="btn btn-secondary" href="/onboarding/whatsapp">
+        Conectar agora
+      </Link>
     </>
   ) : inConsentPhase ? (
     <button
@@ -472,7 +475,9 @@ export function OnboardingScreen({
   return (
     <OnboardingShell
       actions={actions}
-      actionsStacked={isWhatsappIntro || isActivationTestIntro}
+      actionsStacked={
+        isWhatsappIntro || isActivationTestIntro || isWhatsappConclusion
+      }
       back={back}
       body={
         isSistemaAtual ? (
@@ -511,6 +516,7 @@ export function OnboardingScreen({
           )
         )
       }
+      completion={isActivationTestSucceeded || isWhatsappConclusion}
       description={description}
       error={error}
       eyebrow={eyebrow}

@@ -7560,3 +7560,77 @@ Arquivos alterados do Goal: `apps/frontend/src/features/notifications/Notificati
 ### Não executado
 
 Conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.
+
+## As duas conclusões do onboarding iguais ao protótipo, do Goal127
+
+Rodada 1, 2026-10-06, na worktree `goal-127`. Baseline `c53a011`. A captura, a fidelidade, os controles negativos e os registros são da WU-03; as contagens dos gates abaixo são as da execução final, na verificação determinística do IA Loop (WU-04 a WU-13), sobre a árvore final da rodada. Decisão: [D-141](DECISIONS.md), PROPOSED.
+
+### Contagens
+
+| Gate | Comando | Resultado |
+| --- | --- | --- |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0 |
+| Lint do frontend | `rtk proxy npx eslint src tests --max-warnings=0` | saída 0 |
+| Testes do frontend | `npx vitest run` | **177** arquivos e **2318** testes passando (baseline 174 e 2273: +3 arquivos e +45 testes, os de `goal127`) |
+| Testes `goal127` | `goal127-conclusao-ia-ativa.test.tsx`, `goal127-conclusao-sem-whatsapp.test.tsx`, `goal127-alvos-captura.test.ts` | 3 arquivos e 45 testes |
+| Testes da captura | `node --test scripts/tests/visual-responses.test.mjs` | **55** testes passando (baseline 54: +1) |
+| `test:gate` | `npm run test:gate` | **288** testes, 288 passando, 0 falhas (baseline 287: +1, o da captura) |
+| `validate:core` | `env -u AI_TEST_DATABASE_URL npm run validate:core` | PASSED, 17 passos: 15 passando, 0 falhas, 2 pulados (`test:bff` e `test:health-worker`); `test:scheduling-service` 40 arquivos e 543 testes; `audit:static` 34 verificações, 33 passando e 1 pulada (`production_health`, sem `PRODUCTION_HEALTH_TARGETS`) |
+| `validate:ui` | `npm run validate:ui` | **169** `passed` e **21** pulados, retries 0 ("every test passed on its first attempt") |
+| `validate:integration` | `npm run validate:integration` | PASSED, **36** de 36 passos, 0 falhas, 0 pulados; gate autenticado (`rehearse:goal033-authenticated-ui`) com **290** `passed` e 0 retentativas (baseline 280: +10, as rotas `/onboarding/teste-real-sucesso` e `/onboarding/whatsapp-concluido` nas cinco larguras 360, 390, 768, 1024 e 1440) |
+| `git diff --check` | `git diff --check` | saída 0 (só o aviso de fim de linha de `targets.json`) |
+
+Uma primeira execução de `validate:core` com `AI_TEST_DATABASE_URL` apontando para o banco descartável não migrado falhou em `test:ai-orchestrator` (14 testes, por tabelas que não existem, por exemplo `public.AiToolCall`), sem relação com este Goal (observação 1 do review124); sem a variável, como o Goal manda, o gate passou.
+
+### `visual:compare`
+
+Comando: `npm run visual:compare -- --target 4.9,4.10` (conta `onboarding`, parada no meio). Percentual de pixels diferentes por device:
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| 4.9 | 0,7% | 0,6% | 0,7% | 0,5% |
+| 4.10 | 1,3% | 0,6% | 0,7% | 0,7% |
+
+Os oito `side-by-side.png` foram abertos, gerados depois da última mudança de código de produto (`blocks.ts`). A estrutura, a ordem, as cores, a tipografia, a arte, a pílula, o selo ✓, as ações (4.10: "Ir para o início" em cima, "Conectar agora" embaixo), a barra com o quarto segmento vazio (4.10) e a sidebar (4.10: WhatsApp sem ✓; 4.9: quatro ✓) batem com os quadros. O que resta, declarado em D-141:
+
+- A nota de limpeza "O agendamento e o cliente de teste foram removidos do seu negócio." abaixo da pílula (4.9).
+- O "Sair" do topo (mobile e tablet em retrato) e do rodapé da sidebar (a partir de 1024 px), nas duas telas.
+- A barra de status e o indicador de início do iPhone nos quadros mobile.
+- Ruído pequeno dos anéis animados e cerca de 1 px em alguns títulos.
+
+A primeira captura mostrou o WhatsApp como "4" na sidebar da 4.9, onde o quadro mostra ✓; foi corrigido em `chapterProgress` (os quatro capítulos `done` em `teste-real-sucesso`), com teste, e as capturas acima são as de depois da correção.
+
+Regressão: `npm run visual:compare -- --target 0,2.6,4.1,4.6` (16 pares, nenhum com erro):
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| 0 | 1,2% | 0,5% | 0,9% | 0,6% |
+| 2.6 | 3,3% | 2,4% | 1,7% | 1,4% |
+| 4.1 | 1,3% | 1,4% | 1,3% | 1,4% |
+| 4.6 | 5,4% | 2,3% | 2,7% | 1,9% |
+
+Contra a captura de antes, feita na mesma pilha com o trabalho do Goal revertido temporariamente e devolvido depois (`cmp` sem diferença), o `app.png` dos 16 pares é igual byte a byte, e os percentuais contra o protótipo não mudaram.
+
+### Controles negativos
+
+Rodados depois da última edição de código de produto, cada um com o arquivo devolvido e conferido com `cmp` (saída 0). (a) a (d) com `npx vitest run tests/goal127` (em `apps/frontend`); (e) em `targets.json`, com `node --test scripts/tests/visual-responses.test.mjs`.
+
+| # | Mudança | Teste que reprovou | Mensagem |
+| --- | --- | --- | --- |
+| a | pílula sem a condição da IA (`whatsappStatus === "CONNECTED"` sozinho, em `ActivationTestPanels.tsx`) | 3 de 45: "sem pílula com a IA OFF", "… PENDING" e "… UNKNOWN" | `expected document not to contain element, found <span` |
+| b | pílula sem a condição do WhatsApp (`active` sozinho) | 2 de 45: "sem pílula com o WhatsApp DISCONNECTED" e "… UNKNOWN, mesmo com a IA ACTIVE" | `expected document not to contain element, found <span` |
+| c | texto fixo de "ativa" no lugar de `aiActiveCopy(view)` | 6 de 45, entre eles "sem pílula enquanto o status carrega" e "texto e anéis seguem o estado da IA" (PENDING, OFF, UNKNOWN) | `Unable to find an element with the text: Sua IA está sendo ativada…` |
+| d | "Conectar agora" antes de "Ir para o início" em `OnboardingScreen.tsx` | 1 de 45: "4.10: as ações > 'Ir para o início' vem antes de 'Conectar agora' no DOM" | `AssertionError: expected +0 to be truthy` |
+| e | o 4.9 de `targets.json` com a execução `"state": "FAILED"` | 1 de 55 em `visual-responses.test.mjs` (o teste novo do 4.9) e 1 em `goal127-alvos-captura.test.ts` | `AssertionError [ERR_ASSERTION]: Expected values to be strictly equal: actual: 'FAILED', expected: 'SUCCEEDED'` |
+
+### Testes ajustados
+
+Nenhum teste existente do frontend foi alterado. `visual-responses.test.mjs`: o 4.9 entre os donos de `responses`, com `Onboarding-3-IA-e-WhatsApp.dc.html` como arquivo dono, e o teste do 4.9 e do 4.10 (de 54 para 55). `goal127-conclusao-sem-whatsapp.test.tsx` ganhou o teste dos quatro capítulos concluídos na 4.9.
+
+### Escopo
+
+Arquivos do Goal: `apps/frontend/src/features/onboarding/{OnboardingScreen,OnboardingShell}.tsx`, `blocks.ts`, `blocks/activation-test.tsx`, `blocks/whatsapp.tsx`, `apps/frontend/src/features/activation-test/ActivationTestPanels.tsx`, `apps/frontend/src/shared/styles/avenly.css`, `apps/frontend/e2e/routes.ts`, `apps/frontend/e2e/visual/targets.json`, `scripts/tests/visual-responses.test.mjs`, os três testes `goal127-*` e os três registros de `docs/migration/`. `scripts/visual-compare.mjs` e `scripts/lib/visual-responses.mjs` não mudaram; `goals/`, `reviews/` e `MIGRATION_STATUS.md` não foram tocados.
+
+### Não executado
+
+A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.

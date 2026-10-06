@@ -202,9 +202,9 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, W2, R2, I1, AG2, NT2, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1, W2, R2, I1, AG2, NT2, 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
   for (const target of declaring) {
     const owner = ["W1", "W2", "R2", "I1"].includes(target.code)
       ? "Mais-WhatsApp-Importacao-Conta.dc.html"
@@ -212,17 +212,19 @@ test("targets.json: só W1, W2, R2, I1, AG2, NT2, A2, A12, C1 a C4, CL2, CL3, CL
         ? "Mais-Negocio-Agenda-IA.dc.html"
         : target.code === "NT2"
           ? "Notificacoes.dc.html"
-          : ["L2", "L7"].includes(target.code)
-            ? "Login.dc.html"
-            : target.code.startsWith("H")
-              ? "Home.dc.html"
-              : target.code.startsWith("A")
-                ? "Agenda.dc.html"
-                : target.code.startsWith("CL")
-                  ? "Clientes.dc.html"
-                  : target.code.startsWith("S")
-                    ? "Servicos.dc.html"
-                    : "Conversas-e-Chat.dc.html";
+          : target.code === "4.9"
+            ? "Onboarding-3-IA-e-WhatsApp.dc.html"
+            : ["L2", "L7"].includes(target.code)
+              ? "Login.dc.html"
+              : target.code.startsWith("H")
+                ? "Home.dc.html"
+                : target.code.startsWith("A")
+                  ? "Agenda.dc.html"
+                  : target.code.startsWith("CL")
+                    ? "Clientes.dc.html"
+                    : target.code.startsWith("S")
+                      ? "Servicos.dc.html"
+                      : "Conversas-e-Chat.dc.html";
     assert.equal(target.file, owner, `${target.code} declara responses no arquivo errado`);
     const postOwners = ["L2", "L7"];
     for (const entry of target.responses) {
@@ -401,6 +403,54 @@ test("targets.json: NT1 continua sem responses, com a lista da conta visual", ()
   );
   assert.ok(nt1);
   assert.equal(nt1.responses, undefined);
+});
+
+test("targets.json: 4.9 é o único dono de responses em Onboarding-3-IA-e-WhatsApp.dc.html, só com os dois GET, a execução SUCCEEDED, o status ativo e sem passos; o 4.10 não declara responses", () => {
+  const owners = declaringTargets().filter((target) => target.file === "Onboarding-3-IA-e-WhatsApp.dc.html");
+  assert.deepEqual(owners.map((target) => target.code), ["4.9"]);
+  const [t49] = owners;
+  assert.equal(t49.label, "IA ativa");
+  assert.equal(t49.route, "/onboarding/teste-real-sucesso");
+  assert.equal(t49.account, "onboarding");
+  assert.equal(t49.steps, undefined, "4.9: nenhum passo, nada toca em Ir para o início");
+  assert.deepEqual(
+    t49.responses.map((entry) => `${entry.method} ${entry.path}`).sort(),
+    ["GET /v1/activation-test", "GET /v1/status"],
+  );
+  const bodies = new Map(t49.responses.map((entry) => [entry.path, resolveRelativeDays(entry.json, "2026-10-06").data]));
+  const run = bodies.get("/v1/activation-test");
+  assert.equal(run.state, "SUCCEEDED");
+  assert.equal(run.terminal, true);
+  assert.equal(run.cleanupState, "CLEAN");
+  assert.deepEqual(
+    run.milestones.map((milestone) => [milestone.milestone, milestone.reached]),
+    [["MESSAGE_SENT", true], ["SERVICE_IDENTIFIED", true], ["PRICE_INFORMED", true], ["AVAILABILITY_CHECKED", true], ["SLOT_SELECTED", true], ["APPOINTMENT_CONFIRMED", true]],
+  );
+  for (const field of ["id", "state", "terminal", "startedAt", "finishedAt", "pausedAt", "currentStep", "completedStep", "attempts", "maxAttempts", "failedStep", "failedStepLabel", "failureCode", "appointmentId", "channelId", "supersededByChannelChange", "cleanupState", "cleanupAt", "cleanupResidue", "milestones"]) {
+    assert.ok(field in run, `4.9: a execução precisa trazer ${field}`);
+  }
+  assert.ok(!Number.isNaN(Date.parse(run.startedAt)) && !Number.isNaN(Date.parse(run.finishedAt)));
+  const status = bodies.get("/v1/status");
+  assert.equal(status.whatsapp.status, "CONNECTED");
+  assert.equal(status.whatsapp.phoneNumber, "5511987654321");
+  assert.equal(status.ai.state, "ACTIVE");
+  assert.equal(status.ai.effectiveEnabled, true);
+  assert.equal(status.degraded, false);
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    for (const route of ["/v1/activation-test", "/v1/activation-test/restart", "/v1/status"]) {
+      assert.equal(pickFixedResponse(t49, method, route), null, `4.9: ${method} ${route} não deveria casar`);
+    }
+  }
+  for (const other of ["/v1/settings", "/v1/whatsapp", "/v1/onboarding"]) {
+    assert.equal(pickFixedResponse(t49, "GET", other), null, `4.9: ${other} vem da conta de onboarding`);
+  }
+  const t410 = JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "frontend", "e2e", "visual", "targets.json"), "utf8")).targets.find(
+    (target) => target.code === "4.10" && target.file === "Onboarding-3-IA-e-WhatsApp.dc.html",
+  );
+  assert.ok(t410);
+  assert.equal(t410.route, "/onboarding/whatsapp-concluido");
+  assert.equal(t410.responses, undefined);
+  assert.equal(t410.steps, undefined);
 });
 
 const CONFIRMING_NAMES =["desconectar", "excluir minha conta", "reduzir os dois prazos"];

@@ -241,4 +241,18 @@ export const ONBOARDING_ROUTES = [
     name: "onboarding-whatsapp",
     contentMarker: "Agora vamos colocar sua IA para atender de verdade.",
   },
+  // Goal127: as duas conclusões. `OnboardingScreen` não guarda a etapa contra o
+  // estado gravado, então a conta parada no meio as renderiza por URL direta.
+  // Na conta real a 4.9 mede o estado honesto da IA desligada: sem anéis e sem
+  // pílula, porque o status não tem IA `ACTIVE` nem WhatsApp `CONNECTED`.
+  {
+    path: "/onboarding/teste-real-sucesso",
+    name: "onboarding-teste-real-sucesso",
+    contentMarker: "Tudo pronto!",
+  },
+  {
+    path: "/onboarding/whatsapp-concluido",
+    name: "onboarding-whatsapp-concluido",
+    contentMarker: "Sua Avenly está configurada.",
+  },
 ] as const;

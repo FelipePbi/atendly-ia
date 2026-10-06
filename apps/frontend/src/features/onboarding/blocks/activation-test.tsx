@@ -9,7 +9,7 @@ import {
 } from "@/features/activation-test/ActivationTestPanels";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
-import type { OnboardingScenario } from "../scenarios";
+import { type OnboardingScenario, onboardingScenarios } from "../scenarios";
 import type { OnboardingStepContext } from "./shared";
 
 /**
@@ -42,7 +42,11 @@ export function activationTestScenarioFor(
 
 export function activationTestStepBody(scenario: OnboardingScenario) {
   return (
-    <ActivationTestPanelBody onboarding panel={panelForScenario(scenario)} />
+    <ActivationTestPanelBody
+      onboarding
+      panel={panelForScenario(scenario)}
+      title={onboardingScenarios[scenario][1]}
+    />
   );
 }
 

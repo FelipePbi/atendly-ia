@@ -9185,3 +9185,17 @@ A central de notificações sem nenhuma notificação fica igual ao quadro NT2 n
 - **Testes.** `goal126-notificacoes-vazio.test.tsx` (15 testes); em `goal022-notifications-screen.test.tsx`, só o texto esperado do vazio ("Nada por aqui") e o `useSystemStatus` simulado, sem afrouxar asserção.
 - **Divergências declaradas.** O terceiro exemplo do texto; a preferência abaixo do bloco em `/notificacoes` e o link no rodapé da gaveta; a Home da conta visual atrás da gaveta; a barra de status do iPhone.
 - **Fora do escopo.** `notificationViews.ts`, `NotificationsDrawer.tsx`, `NotificationPreferenceSection.tsx`, `systemStatus.tsx`, a Home, o NT3 e o H6 (sinal de IA instável) e as demais lacunas visuais sem ID.
+
+## Delta implementado — Goal127, 2026-10-06 ([D-141](DECISIONS.md), PROPOSED)
+
+As duas conclusões do onboarding ficam iguais aos quadros 4.9 ("IA ativa") e 4.10 (configurada sem WhatsApp) nos quatro devices, salvo as divergências declaradas em D-141. Nenhuma mudança no BFF, no Scheduling, na IA, no contrato nem no banco, e nenhum pedido novo: a 4.9 lê o status e o teste real uma vez cada, a 4.10 não lê nenhum.
+
+- **A moldura.** `OnboardingShell` ganha `completion` (ligada para `teste-real-sucesso` e `whatsapp-concluido` em `OnboardingScreen`): sem eyebrow e sem o cabeçalho `h1` e descrição comum; o corpo traz a arte, o `h1` e o texto centrados, e o rodapé de ações fica empilhado.
+- **A 4.9.** `ActivationTestOnboardingSucceeded` (`features/activation-test/ActivationTestPanels.tsx`): título "Tudo pronto!", texto de `aiActiveCopy(view)` (não o de `scenarios.ts`), anéis só com a IA `ACTIVE` e pílula "IA ativa · +55 …" só com a IA `ACTIVE` e o WhatsApp `CONNECTED`; `useAiActiveStatus` passa a devolver também `whatsappStatus` e `phoneNumber` da mesma resposta de `GET /v1/status`. A nota de limpeza fica abaixo da pílula.
+- **A 4.10.** `WhatsappConclusion` (`features/onboarding/blocks/whatsapp.tsx`): arte com o selo ✓, pílula fixa "IA inativa até conectar", sem ler status nem teste. Em `OnboardingScreen`, "Ir para o início" vem antes de "Conectar agora" (antes era o inverso).
+- **O progresso.** `blocks.ts`: `chapterFraction("whatsapp-concluido")` passa a 0 (quarto segmento vazio, WhatsApp sem ✓ na sidebar; revê D-104 só nisso) e, em `teste-real-sucesso`, os quatro capítulos ficam `done`. `progressPercent` não muda.
+- **O CSS e o movimento.** `shared/styles/avenly.css`: a moldura e a arte, `@keyframes at-breathe-lg` e `at-pop`, e a regra de `prefers-reduced-motion` que os deixa parados.
+- **Captura e gate.** `apps/frontend/e2e/visual/targets.json` (86 alvos) ganha a 4.9 (com `responses` só de `GET`: execução `SUCCEEDED` e status ativo) e a 4.10 (sem `responses`), ambas sem passos. `scripts/tests/visual-responses.test.mjs` exige a 4.9 como único dono de `responses` em `Onboarding-3-IA-e-WhatsApp.dc.html` (de 54 para 55 testes). `apps/frontend/e2e/routes.ts`: as duas rotas entram em `ONBOARDING_ROUTES`.
+- **Testes.** `goal127-conclusao-ia-ativa.test.tsx`, `goal127-conclusao-sem-whatsapp.test.tsx` e `goal127-alvos-captura.test.ts` (45 testes no total). Nenhum teste existente do frontend foi alterado.
+- **Divergências declaradas.** A nota de limpeza abaixo da pílula da 4.9; o "Sair" do topo e do rodapé da sidebar (D-104); a barra de status do iPhone.
+- **Fora do escopo.** As outras etapas do onboarding, Configurações › IA, o sinal de IA instável (H6) e as demais lacunas visuais sem ID.

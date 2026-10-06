@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import {
   BffHttpError,
@@ -17,12 +17,16 @@ import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Field } from "@/shared/ui/Field";
-import { Skeleton, StatePanel } from "@/shared/ui/States";
+import { Skeleton } from "@/shared/ui/States";
+
+import { CustomerEmptyState, CustomerErrorState } from "./CustomerStates";
+
+type CustomerListError = { reference: string | null };
 
 type CustomerListData = {
   canCreate: boolean;
   customers: Customer[];
-  error: string | null;
+  error: CustomerListError | null;
   filtered: Customer[];
   groups: CustomerGroup[];
   loading: boolean;
@@ -36,7 +40,7 @@ type CustomerListData = {
 export function useCustomerListData(enabled = true): CustomerListData {
   const [result, setResult] = useState<CustomerListResult | null>(null);
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<CustomerListError | null>(null);
   const [query, setQuery] = useState("");
   const [reload, setReload] = useState(0);
 
@@ -53,10 +57,7 @@ export function useCustomerListData(enabled = true): CustomerListData {
         setResult(list);
       })
       .catch((caught: unknown) => {
-        if (!controller.signal.aborted)
-          setError(
-            requestError(caught, "Não foi possível carregar os clientes."),
-          );
+        if (!controller.signal.aborted) setError(requestError(caught));
       });
     return () => controller.abort();
   }, [enabled, reload]);
@@ -94,19 +95,22 @@ export function CustomerList() {
   const wide = useWideLayout();
   const data = useCustomerListData();
   const { canCreate, loading } = data;
+  const emptyList = !loading && !data.error && data.customers.length === 0;
+  const searching = data.query.trim() !== "";
 
   useShellConfig({
     action:
-      canCreate && !wide
+      canCreate && !wide && !emptyList && !searching
         ? { href: "/clientes/novo", icon: "plus", label: "Novo cliente" }
         : undefined,
     active: "clientes",
     loading,
     module: "directory",
+    showBottomNav: !searching,
     title: "Clientes",
   });
 
-  if (wide) {
+  if (wide && !data.error && !emptyList) {
     return (
       <ListDetailLayout
         detail={
@@ -149,65 +153,77 @@ function CustomerListPanelView({
 }) {
   const { canCreate, customers, error, filtered, groups, loading, today } =
     data;
+  const showingState = Boolean(error) || (!loading && customers.length === 0);
+  const searchText = data.query.trim();
+  const searching = !showingState && !loading && searchText !== "";
   return (
-    <div className="customer-panel">
-      <div className="customer-panel-header">
-        <Heading>Clientes</Heading>
-        <div className="customer-panel-tools">
-          {!loading && !error && customers.length > 0 && (
-            <span className="customer-panel-count">
-              {customers.length}
-              <span className="sr-only">
-                {customers.length === 1 ? " cliente" : " clientes"}
+    <div className={clsx("customer-panel", showingState && "has-state")}>
+      {!searching && (
+        <div className="customer-panel-header">
+          <Heading>Clientes</Heading>
+          <div className="customer-panel-tools">
+            {!loading && !error && customers.length > 0 && (
+              <span className="customer-panel-count">
+                {customers.length}
+                <span className="sr-only">
+                  {customers.length === 1 ? " cliente" : " clientes"}
+                </span>
               </span>
-            </span>
-          )}
-          {canCreate && showAdd && (
-            <Link
-              aria-label="Novo cliente"
-              className="customer-panel-add"
-              href="/clientes/novo"
-            >
-              <Icon name="plus" />
-            </Link>
-          )}
+            )}
+            {canCreate && showAdd && customers.length > 0 && (
+              <Link
+                aria-label="Novo cliente"
+                className="customer-panel-add"
+                href="/clientes/novo"
+              >
+                <Icon name="plus" />
+              </Link>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {error ? (
-        <StatePanel
-          actionLabel="Tentar novamente"
-          description={error}
-          icon="alert"
-          onAction={data.retry}
-          title="Não foi possível carregar clientes"
-          tone="error"
-        />
+        <CustomerErrorState onRetry={data.retry} reference={error.reference} />
       ) : loading ? (
         <CustomerListSkeleton />
       ) : customers.length === 0 ? (
-        <StatePanel
-          actionHref={canCreate ? "/clientes/novo" : undefined}
-          actionLabel={canCreate ? "Cadastrar cliente" : undefined}
-          description="Depois do primeiro cadastro ou agendamento, os clientes aparecerão aqui."
-          icon="users"
-          title="Seus clientes aparecerão aqui"
-        />
+        <CustomerEmptyState canCreate={canCreate} />
       ) : (
         <>
-          <Field
-            className="customer-panel-search"
-            icon="search"
-            label="Buscar cliente"
-            onChange={(event) => data.setQuery(event.target.value)}
-            placeholder="Buscar por nome ou telefone"
-            type="search"
-            value={data.query}
-          />
-          {filtered.length === 0 ? (
-            <p className="customer-no-results" role="status">
-              Nenhum cliente corresponde à busca.
-            </p>
+          <div
+            className={clsx(
+              "customer-panel-searchbar",
+              searching && "is-searching",
+            )}
+          >
+            <Field
+              className="customer-panel-search"
+              icon="search"
+              label="Buscar cliente"
+              onChange={(event) => data.setQuery(event.target.value)}
+              placeholder="Buscar por nome ou telefone"
+              type="search"
+              value={data.query}
+            />
+            {searching && (
+              <button
+                className="customer-search-cancel"
+                onClick={() => data.setQuery("")}
+                type="button"
+              >
+                Cancelar
+              </button>
+            )}
+          </div>
+          {searching ? (
+            <CustomerSearchResults
+              canCreate={canCreate}
+              customers={filtered}
+              open={openId}
+              query={searchText}
+              today={today}
+            />
           ) : (
             <div
               aria-label="Clientes"
@@ -237,12 +253,92 @@ function CustomerListPanelView({
   );
 }
 
+function CustomerSearchResults({
+  canCreate,
+  customers,
+  open,
+  query,
+  today,
+}: {
+  canCreate: boolean;
+  customers: Customer[];
+  open?: string;
+  query: string;
+  today: Date;
+}) {
+  const create = canCreate ? <CustomerCreateRow query={query} /> : null;
+  return (
+    <div className="customer-search-results">
+      {customers.length === 0 ? (
+        <>
+          <p className="customer-no-results" role="status">
+            Nenhum cliente corresponde à busca.
+          </p>
+          {create && <div className="customer-panel-row">{create}</div>}
+        </>
+      ) : (
+        <div aria-label="Clientes" role="list">
+          {customers.map((customer) => (
+            <CustomerRow
+              customer={customer}
+              highlight={query}
+              key={customer.id}
+              open={customer.id === open}
+              today={today}
+            />
+          ))}
+          {create && (
+            <div className="customer-panel-row" role="listitem">
+              {create}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CustomerCreateRow({ query }: { query: string }) {
+  const hasLetter = /\p{L}/u.test(query);
+  const href = hasLetter
+    ? `/clientes/novo?nome=${encodeURIComponent(query)}`
+    : `/clientes/novo?telefone=${query.replace(/\D/g, "")}`;
+  const label = `${query.charAt(0).toLocaleUpperCase("pt-BR")}${query.slice(1)}`;
+  return (
+    <Link className="customer-panel-item customer-create-row" href={href}>
+      <span className="customer-create-icon" aria-hidden="true">
+        <Icon name="plus" />
+      </span>
+      <span className="customer-create-label">
+        Adicionar novo cliente “{label}…”
+      </span>
+    </Link>
+  );
+}
+
+function highlightName(name: string, query: string): ReactNode {
+  const index = name
+    .toLocaleLowerCase("pt-BR")
+    .indexOf(query.toLocaleLowerCase("pt-BR"));
+  if (index < 0) return name;
+  const end = index + query.length;
+  return (
+    <>
+      {name.slice(0, index)}
+      <mark className="customer-search-mark">{name.slice(index, end)}</mark>
+      {name.slice(end)}
+    </>
+  );
+}
+
 function CustomerRow({
   customer,
+  highlight,
   open,
   today,
 }: {
   customer: Customer;
+  highlight?: string;
   open: boolean;
   today: Date;
 }) {
@@ -269,14 +365,16 @@ function CustomerRow({
             </span>
             <span className="customer-panel-main">
               <span className="customer-panel-name list-item-title">
-                {customer.name}
+                {highlight
+                  ? highlightName(customer.name ?? "", highlight)
+                  : customer.name}
               </span>
               <span className="customer-panel-phone">
                 {phone ?? "Telefone não informado"}
               </span>
             </span>
             <span className="customer-panel-meta">
-              {meta.eyebrow && (
+              {meta.eyebrow && !highlight && (
                 <>
                   <span className="customer-panel-eyebrow">
                     {meta.eyebrow}
@@ -354,13 +452,10 @@ async function businessTimezone(
   }
 }
 
-function requestError(error: unknown, fallback: string): string {
-  if (!(error instanceof BffHttpError)) return fallback;
-  const messages: Record<string, string> = {
-    NETWORK_ERROR: "Não foi possível acessar a Avenly. Confira sua conexão.",
+function requestError(error: unknown): CustomerListError {
+  return {
+    reference: error instanceof BffHttpError ? error.requestId : null,
   };
-  const message = messages[error.code] ?? fallback;
-  return `${message} Referência: ${error.requestId}`;
 }
 
 function initials(name: string | null): string {

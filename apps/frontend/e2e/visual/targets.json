@@ -1,5 +1,5 @@
 {
-  "$comment": "Mapa de quadros do protótipo (docs/design-reference/claude-design/prototype/project) para rotas do app, usado por scripts/visual-compare.mjs. file + label identificam o quadro (data-screen-label); nas versões tablet/desktop o rótulo é '<Módulo> / <label> / Portrait|Landscape|Desktop'. steps são ações simples para levar a tela ao estado do quadro (click, clickRole, fill, press, waitFor, wait). clock fixa a hora do navegador no dia semeado. responses (Goal106) é uma lista de { method, path, json } que leva a tela a um estado que a conta de teste não alcança: só method GET, path exato do BFF sob /v1/ sem query (a query não conta), json é o corpo inteiro da resposta (envelope { data, requestId }); nas strings do json, {today} e {today-N} viram o dia semeado (menos N dias), para que o horário do clock e o \"ontem\" saiam iguais em qualquer dia; servida por route.fulfill só para o alvo que a declara e só no navegador da captura, nada é gravado; outro método, caminho fora de /v1/ ou campo desconhecido recusa este arquivo (scripts/lib/visual-responses.mjs). notes registra diferenças que são estado da conta de teste, não layout.",
+  "$comment": "Mapa de quadros do protótipo (docs/design-reference/claude-design/prototype/project) para rotas do app, usado por scripts/visual-compare.mjs. file + label identificam o quadro (data-screen-label); nas versões tablet/desktop o rótulo é '<Módulo> / <label> / Portrait|Landscape|Desktop'. steps são ações simples para levar a tela ao estado do quadro (click, clickRole, fill, press, waitFor, wait). clock fixa a hora do navegador no dia semeado. responses (Goal106) é uma lista de { method, path, json } que leva a tela a um estado que a conta de teste não alcança: só method GET, path exato do BFF sob /v1/ sem query (a query não conta), json é o corpo inteiro da resposta (envelope { data, requestId }); status opcional (inteiro de 400 a 599, só com GET) serve a recusa do BFF no lugar do 200 padrão; nas strings do json, {today} e {today-N} viram o dia semeado (menos N dias), para que o horário do clock e o \"ontem\" saiam iguais em qualquer dia; servida por route.fulfill só para o alvo que a declara e só no navegador da captura, nada é gravado; outro método, caminho fora de /v1/ ou campo desconhecido recusa este arquivo (scripts/lib/visual-responses.mjs). notes registra diferenças que são estado da conta de teste, não layout.",
   "targets": [
     {
       "code": "L1",
@@ -1719,6 +1719,193 @@
       "label": "Clientes · lista",
       "route": "/clientes",
       "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "CL2",
+      "file": "Clientes.dc.html",
+      "label": "Clientes · vazio",
+      "route": "/clientes",
+      "notes": "GET /v1/status conectado fixo tira o aviso de WhatsApp desconectado da casca (estado da conta de teste), só no navegador da captura. A conta de teste tem clientes; GET /v1/customers fixo devolve a lista vazia de uma agenda do próprio Avenly (managedExternally false), então “Adicionar cliente” aparece. No desktop e no tablet deitado (1024 px) o quadro mostra o vazio na largura toda, sem a coluna “Selecione um cliente para ver o perfil”, e o app faz o mesmo enquanto a lista não tem ninguém.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/customers",
+          "json": {
+            "data": {
+              "items": [],
+              "source": "AVENLY",
+              "managedExternally": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "CL3",
+      "file": "Clientes.dc.html",
+      "label": "Clientes · busca",
+      "route": "/clientes",
+      "steps": [
+        {
+          "fill": {
+            "label": "Buscar cliente",
+            "value": "mar"
+          }
+        }
+      ],
+      "notes": "GET /v1/status conectado fixo tira o aviso de WhatsApp desconectado da casca (estado da conta de teste), só no navegador da captura. GET /v1/customers fixo traz Marina Costa, Marcos Vieira e Maria Souza (último atendimento hoje, há 14 e há 5 dias) e Beatriz Lima, que não casa com “mar”; o fill de “mar” leva a lista ao modo de busca do quadro. Divergência declarada do Goal121: o quadro mostra “agenda para Pedro Souza” sob Maria Souza, e a lista não traz de quem o cliente é responsável (só o detalhe traz primaryGuardian), então o app mostra o telefone, como nas outras linhas.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/customers",
+          "json": {
+            "data": {
+              "items": [
+                {
+                  "id": "visual-compare-cl3-marina",
+                  "name": "Marina Costa",
+                  "phone": "5511990012200",
+                  "nextAppointment": null,
+                  "lastAppointment": {
+                    "date": "{today}",
+                    "startTime": "09:00",
+                    "status": "COMPLETED"
+                  }
+                },
+                {
+                  "id": "visual-compare-cl3-marcos",
+                  "name": "Marcos Vieira",
+                  "phone": "5511988887766",
+                  "nextAppointment": null,
+                  "lastAppointment": {
+                    "date": "{today-14}",
+                    "startTime": "15:00",
+                    "status": "COMPLETED"
+                  }
+                },
+                {
+                  "id": "visual-compare-cl3-maria",
+                  "name": "Maria Souza",
+                  "phone": "5511977665544",
+                  "nextAppointment": null,
+                  "lastAppointment": {
+                    "date": "{today-5}",
+                    "startTime": "11:00",
+                    "status": "COMPLETED"
+                  }
+                },
+                {
+                  "id": "visual-compare-cl3-beatriz",
+                  "name": "Beatriz Lima",
+                  "phone": "5511955554444",
+                  "nextAppointment": null,
+                  "lastAppointment": null
+                }
+              ],
+              "source": "AVENLY",
+              "managedExternally": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "CL10",
+      "file": "Clientes.dc.html",
+      "label": "Clientes · erro",
+      "route": "/clientes",
+      "notes": "GET /v1/status conectado fixo tira o aviso de WhatsApp desconectado da casca (estado da conta de teste), só no navegador da captura. GET /v1/customers fixo responde 503 com o corpo de erro do BFF. Divergência declarada do Goal121: o app mostra, abaixo do texto do quadro, a linha “Referência: visual-compare-fixed-response” em letra menor; o resto do app a mostra e ela liga o erro ao log. A resposta fixa não pode ser repetida de forma diferente: “Tentar novamente” relê a lista e volta ao mesmo erro.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/customers",
+          "status": 503,
+          "json": {
+            "error": {
+              "code": "SERVICE_UNAVAILABLE",
+              "message": "Serviço indisponível"
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
     },
     {
       "code": "CL4",

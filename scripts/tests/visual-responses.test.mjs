@@ -52,12 +52,43 @@ test("responses recusa caminho fora de /v1/ ou com query", () => {
 
 test("responses recusa campo desconhecido e item sem json", () => {
   assert.throws(
-    () => validateResponses([{ ...OK, status: 500 }], TARGET),
-    (error) => /campo desconhecido "status"/.test(error.message) && /alvo W1/.test(error.message),
+    () => validateResponses([{ ...OK, retry: 2 }], TARGET),
+    (error) => /campo desconhecido "retry"/.test(error.message) && /alvo W1/.test(error.message),
   );
   assert.throws(() => validateResponses([{ method: "GET", path: "/v1/whatsapp" }], TARGET), /não tem "json"/);
   assert.throws(() => validateResponses({}, TARGET), /precisa ser uma lista/);
   assert.throws(() => validateResponses(["GET /v1/whatsapp"], TARGET), /precisa ser um objeto/);
+});
+
+test("responses aceita status de 400 a 599 e, ausente, não inventa um", () => {
+  for (const status of [400, 503, 599]) {
+    const [entry] = validateResponses([{ ...OK, status }], TARGET);
+    assert.equal(entry.status, status);
+  }
+  const [plain] = validateResponses([OK], TARGET);
+  assert.equal("status" in plain, false);
+});
+
+test("responses recusa status fora de 400 a 599 ou não inteiro, com erro que nomeia o alvo e o item", () => {
+  for (const status of [200, 399, 600, "503", 503.5, null, NaN, undefined]) {
+    assert.throws(
+      () => validateResponses([OK, { ...OK, status }], TARGET),
+      (error) => /alvo W1/.test(error.message) && /responses\[1\]\.status/.test(error.message),
+      `status ${String(status)} deveria ser recusado`,
+    );
+  }
+});
+
+test("responses recusa status com método que não é GET", () => {
+  assert.throws(
+    () => validateResponses([{ ...OK, method: "POST", status: 503 }], TARGET),
+    (error) => /alvo W1/.test(error.message) && /responses\[0\]\.method/.test(error.message),
+  );
+});
+
+test("pickFixedResponse devolve o item com o status declarado", () => {
+  const target = { ...TARGET, responses: validateResponses([{ ...OK, status: 503 }], TARGET) };
+  assert.equal(pickFixedResponse(target, "GET", "/v1/whatsapp").status, 503);
 });
 
 test("validateTargetResponses recusa o arquivo inteiro por um item ruim e deixa passar alvo sem responses", () => {
@@ -112,9 +143,9 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, I1, A2, A12, C1 a C4, K1 a K6 e H1 a H5 e H7 declaram responses", () => {
+test("targets.json: só W1, I1, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6 e H1 a H5 e H7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["A12", "A2", "C1", "C2", "C3", "C4", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "W1"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["A12", "A2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "W1"]);
   for (const target of declaring) {
     const owner = ["W1", "I1"].includes(target.code)
       ? "Mais-WhatsApp-Importacao-Conta.dc.html"
@@ -122,7 +153,9 @@ test("targets.json: só W1, I1, A2, A12, C1 a C4, K1 a K6 e H1 a H5 e H7 declara
         ? "Home.dc.html"
         : target.code.startsWith("A")
           ? "Agenda.dc.html"
-          : "Conversas-e-Chat.dc.html";
+          : target.code.startsWith("CL")
+            ? "Clientes.dc.html"
+            : "Conversas-e-Chat.dc.html";
     assert.equal(target.file, owner, `${target.code} declara responses no arquivo errado`);
     for (const entry of target.responses) {
       assert.equal(entry.method, "GET");

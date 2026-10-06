@@ -30,7 +30,10 @@ export function CustomerForm() {
   const [message, setMessage] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Customer[] | null>(null);
   const [pending, setPending] = useState<PendingInput | null>(null);
-  const [phoneInput, setPhoneInput] = useState("");
+  const [prefill] = useState<PendingInput>(() => prefillFromLocation());
+  const [phoneInput, setPhoneInput] = useState(() =>
+    maskPhoneInput(prefill.phone),
+  );
   const [guardianHint, setGuardianHint] = useState(false);
   const phoneId = useId();
   const phoneHelpId = useId();
@@ -197,7 +200,7 @@ export function CustomerForm() {
           <div className="customer-form-grid">
             <Field
               autoComplete="name"
-              defaultValue={pending?.name}
+              defaultValue={pending?.name ?? prefill.name}
               label="Nome"
               maxLength={200}
               name="name"
@@ -279,6 +282,16 @@ export function CustomerForm() {
       split={wide}
     />
   );
+}
+
+/** `?nome=` e `?telefone=` da linha "Adicionar novo cliente" da busca: só preenchem os campos, nada é gravado. */
+function prefillFromLocation(): PendingInput {
+  if (typeof window === "undefined") return { name: "", phone: "" };
+  const params = new URLSearchParams(window.location.search);
+  return {
+    name: (params.get("nome") ?? "").trim().slice(0, 200),
+    phone: phoneInputDigits(params.get("telefone") ?? ""),
+  };
 }
 
 function requestError(error: unknown, fallback: string): string {

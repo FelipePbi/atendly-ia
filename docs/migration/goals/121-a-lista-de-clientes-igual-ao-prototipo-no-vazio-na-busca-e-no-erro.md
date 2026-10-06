@@ -1,6 +1,6 @@
 # Goal 121 — A lista de Clientes igual ao protótipo no vazio, na busca e no erro
 
-**Status: READY.** Preparado em 2026-10-05 pelo Tech Lead Agent após [Goal120 ACCEPTED](../reviews/120-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED.** Preparado em 2026-10-05 pelo Tech Lead Agent após [Goal120 ACCEPTED](../reviews/120-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: SONNET_HIGH
 

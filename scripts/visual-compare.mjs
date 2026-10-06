@@ -554,7 +554,7 @@ async function captureApp(browser, appUrl, session, target, device, file) {
       const request = route.request();
       const fixed = pickFixedResponse(target, request.method(), bffPathname(request.url()));
       if (!fixed) return route.fallback();
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(resolveRelativeDays(fixed.json, session.today)) });
+      return route.fulfill({ status: fixed.status ?? 200, contentType: "application/json", body: JSON.stringify(resolveRelativeDays(fixed.json, session.today)) });
     });
   }
   const page = await context.newPage();

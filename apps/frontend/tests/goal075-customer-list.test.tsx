@@ -161,7 +161,7 @@ describe("§6.7 separadores por letra em ordem pt-BR", () => {
     ]);
   });
 
-  test("a busca esconde o separador de letra sem resultado", async () => {
+  test("a busca troca os separadores de letra por uma lista plana (CL3)", async () => {
     const user = userEvent.setup();
     customersList.mockResolvedValue({
       items: [
@@ -178,8 +178,15 @@ describe("§6.7 separadores por letra em ordem pt-BR", () => {
 
     await user.type(screen.getByLabelText("Buscar cliente"), "Bruno");
 
-    expect(within(list).queryByText("A")).not.toBeInTheDocument();
-    expect(within(list).getByText("B")).toBeVisible();
+    const results = screen.getByRole("list", { name: "Clientes" });
+    expect(within(results).queryByText("A")).not.toBeInTheDocument();
+    expect(within(results).queryByText("B")).not.toBeInTheDocument();
+    expect(
+      within(results).getByRole("link", { name: /Bruno Lima/ }),
+    ).toBeVisible();
+    expect(
+      within(results).queryByRole("link", { name: /Ana Souza/ }),
+    ).not.toBeInTheDocument();
   });
 });
 

@@ -1,12 +1,12 @@
 // Respostas fixas de GET por alvo do `visual:compare` (Goal106).
 //
 // Um alvo de `targets.json` pode declarar `responses`: uma lista de
-// `{ "method": "GET", "path": "/v1/...", "json": ... }`. Serve para levar a
+// `{ "method": "GET", "path": "/v1/...", "json": ..., "status"?: 400-599 }`. Serve para levar a
 // tela a um estado que a conta de teste não alcança (ex.: WhatsApp conectado).
 // Só leitura, e só caminho exato do BFF: nada é gravado, a resposta existe só
 // no navegador da captura.
 
-const ALLOWED_FIELDS = Object.freeze(["method", "path", "json"]);
+const ALLOWED_FIELDS = Object.freeze(["method", "path", "json", "status"]);
 const BFF_PREFIX = "/api/bff";
 
 function describe(target) {
@@ -16,7 +16,7 @@ function describe(target) {
 /**
  * Valida a lista `responses` de um alvo e a devolve. Recusa, com erro que nomeia
  * o alvo e o item: outro método que não GET, caminho fora de `/v1/`, campo
- * desconhecido ou ausente.
+ * desconhecido ou ausente, `status` que não seja inteiro de 400 a 599.
  */
 export function validateResponses(responses, target) {
   const where = describe(target);
@@ -40,7 +40,12 @@ export function validateResponses(responses, target) {
     if (!("json" in entry) || entry.json === undefined) {
       throw new Error(`targets.json: ${label} não tem "json"`);
     }
-    return { method: entry.method, path: entry.path, json: entry.json };
+    if ("status" in entry && (!Number.isInteger(entry.status) || entry.status < 400 || entry.status > 599)) {
+      throw new Error(`targets.json: ${label}.status ${JSON.stringify(entry.status)} não é aceito; use um inteiro de 400 a 599 (ausente vale 200)`);
+    }
+    const validated = { method: entry.method, path: entry.path, json: entry.json };
+    if ("status" in entry) validated.status = entry.status;
+    return validated;
   });
 }
 

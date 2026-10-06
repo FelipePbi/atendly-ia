@@ -7034,3 +7034,86 @@ Os arquivos alterados estão dentro do critério do Goal: `apps/frontend/src/` (
 ### Não executado
 
 Conferência visual e em aparelho real: o Goal não muda tela.
+
+## A lista de Clientes igual ao protótipo no vazio, na busca e no erro, do Goal121
+
+Texto do Goal121 (decisão [D-135](DECISIONS.md), `PROPOSED`), escrito na rodada 1 (WU-04) e refeito na rodada 2 (FIX-001), depois da última edição de código da rodada 2: a barra de abas escondida na busca (`showBottomNav: !searching` em `CustomerList.tsx`) e o CSS de `avenly-customers.css` que acompanha. Os números abaixo são os da execução final da rodada 2.
+
+### Ambiente
+
+Pilha descartável própria, fora do repositório: cluster PostgreSQL 18 criado com `initdb` no scratchpad da sessão, na porta 56441, com os bancos `g121_*`; BFF na 3062, Scheduling na 50298 e IA na 50300; o `next dev` e o servidor do protótipo subidos pelo próprio `visual:compare` (a conta visual é criada e semeada a cada execução). Nada da pilha ficou no repositório, e a pilha foi encerrada ao fim da Work Unit. Na rodada 2 a pilha foi refeita do mesmo jeito (o cluster da rodada 1 reaberto na porta 56441, BFF na 3062), com `VISUAL_BFF_URL=http://127.0.0.1:3062` e `VISUAL_BFF_ORIGIN=http://localhost:3001`.
+
+### Controles negativos (§3.2)
+
+Refeitos na rodada 2, depois da última edição de código (a rodada 1 tinha rodado antes de `CustomerList.tsx` mudar), por mutação (cópia de segurança em `scratchpad/orig`, fora do repositório). Os testes do frontend com `npx vitest run tests/goal121` em `apps/frontend`; sem mutação, os dois arquivos têm 21 de 21 testes passando. O teste do `visual-responses` com `node --test scripts/tests/visual-responses.test.mjs`; sem mutação, 38 de 38. Depois de cada controle, o arquivo voltou da cópia (`cp`) e `cmp` contra a cópia saiu sem diferença nos controles (a), (b), (c) e (e). O controle (d) é de `scripts/lib/visual-responses.mjs`, que a rodada 2 não tocou; vale o resultado da rodada 1.
+
+| Controle | Mutação | Reprovou |
+| --- | --- | --- |
+| (a) linha de criação sem a guarda de `canCreate` | em `CustomerList.tsx`, `CustomerSearchResults`: `const create = canCreate ? <CustomerCreateRow query={query} /> : null;` virou `const create = <CustomerCreateRow query={query} />;` | 1 de 21: `sem permissão para criar, a linha de criação não existe` (`expected document not to contain element, found <a`) |
+| (b) nome sem a marca do trecho | em `CustomerList.tsx`, `highlightName`: `if (index < 0) return name;` virou `if (index < 0 \|\| index >= 0) return name;` | 2 de 21: `marca o trecho digitado no nome, mesmo com maiúsculas na busca` (`expected  to have a length of 2 but got +0`) e `marca só a primeira ocorrência dentro do nome` (`expected  to have a length of 1 but got +0`) |
+| (c) `CustomerForm` sem ler `nome` da URL | em `CustomerForm.tsx`, `prefillFromLocation`: `name: (params.get("nome") ?? "").trim().slice(0, 200),` virou `name: "",` | 2 de 21: `?nome= e ?telefone= preenchem os campos e nada é gravado antes de salvar` e `'Salvar cliente' grava o que está nos campos, só então` (as duas com `expect(element).toHaveValue(Mar)`, e o campo vazio) |
+| (e) barra de abas sempre visível | em `CustomerList.tsx`, `useShellConfig`: `showBottomNav: !searching,` virou `showBottomNav: true,` | 1 de 21: `a barra de abas some com a busca preenchida e volta depois de 'Cancelar'` (`expect(element).toHaveTextContent()`, a sonda ficou em "visível") |
+| (d) `validateResponses` aceitando `status` 200 | em `scripts/lib/visual-responses.mjs`: `entry.status < 400` virou `entry.status < 200` | 1 de 38: `responses recusa status fora de 400 a 599 ou não inteiro, com erro que nomeia o alvo e o item` (`Missing expected exception: status 200 deveria ser recusado`) |
+
+### `visual:compare`
+
+Comandos: `npm run visual:compare -- --target CL2,CL3,CL10` (12 pares) e `npm run visual:compare -- --target CL1,CL4,CL5,CL6,CL7` (20 pares, regressão), sem erro de captura. As capturas foram olhadas lado a lado (`side-by-side.png`), protótipo × app, nos quatro devices. O percentual é o `diff` do relatório, contra o quadro, e inclui a casca, que não é igual ao protótipo (D-127 a D-132).
+
+| Quadro | mobile | tablet em retrato | tablet em paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| CL2 (vazio) | 1,3% | 0,3% | 0,2% | 0,4% |
+| CL3 (busca) | 2,2% | 0,4% | 0,3% | 0,3% |
+| CL10 (erro) | 6,5% | 3,5% | 2,6% | 2,1% |
+
+**O que restou de diferença, por quadro** (diferenças de até 1 px de posição ou tamanho não entram):
+
+- **CL2, nos quatro devices:** o texto, a ilustração de contatos e o botão "Adicionar cliente" iguais ao quadro; restam só a casca (barra de status e indicador de início do iPhone no mobile, respiro de topo, nome e iniciais do negócio da conta visual). No desktop e no tablet em paisagem, o vazio ocupa a largura toda, como o quadro.
+- **CL3, nos quatro devices:** o campo de busca focado com "Cancelar", o trecho marcado no nome e a linha "Adicionar novo cliente “Mar…”" iguais ao quadro. A barra de abas inferior não aparece em nenhum dos quatro (o quadro de busca não a tem; no mobile ele mostra o teclado no lugar). No tablet em paisagem, a coluna da lista e o divisor vão até o pé, e "Selecione um cliente para ver o perfil" fica em y 379–391, o mesmo intervalo do quadro (medido nos `png`: protótipo 379–390, app 379–391); no desktop é o mesmo intervalo, e no tablet em retrato as linhas ficam a 1 px do quadro. Restam: "agenda para Pedro Souza" sob Maria Souza (divergência declarada: a lista não traz o responsável); no mobile, o teclado do iOS que o quadro mostra aberto; e a casca.
+- **CL10, nos quatro devices:** o ícone, o título, o texto e "Tentar novamente" iguais ao quadro. Restam: a linha "Referência: visual-compare-fixed-response" abaixo do texto (divergência declarada) e a casca.
+
+**Regressão (CL1, CL4, CL5, CL6 e CL7), contra uma captura de antes das mudanças do Goal121 (mesma pilha, árvore sem as mudanças deste Goal), por comparação de pixels do `app.png`:**
+
+- **14 dos 20 pares byte-idênticos** (CL1 no mobile e no tablet em retrato; CL4 no mobile e no tablet em retrato; CL5 e CL7 no mobile, no tablet em retrato e no tablet em paisagem; CL6 nos quatro).
+- **4 pares só com ruído de execução:** CL4 no desktop com 8 pixels (x 20 a 23, y 190 a 227), CL4 no tablet em paisagem com 26 (x 319 a 358, y 129 a 209), CL5 e CL7 no desktop com 26 cada (x 551 a 590, y 129 a 209). É o ruído do cabeçalho da captura (apareceu de 8 a 34 pixels em execuções repetidas, sem mudança de código entre elas; de uma execução para outra ele muda de par), e não tem relação com este Goal.
+- **2 pares com diferença real: CL1 no tablet em paisagem e no desktop**, 2190 e 2224 pixels, na região do texto "Selecione um cliente para ver o perfil" da coluna de detalhe vazia (tablet em paisagem: x 577 a 826, y 318 a 485; desktop: x 20 a 1113, y 129 a 485, onde entram os 8 a 34 pixels de ruído do cabeçalho). Na rodada 2 a regra de 1024 a 1099 px que desconta os 81 px da barra passou a valer só quando a barra existe (`.directory-shell:has(> nav)`); o CL1 tem a barra, então o texto dele continua onde a rodada 1 o pôs. O texto passou a ficar centralizado na altura da coluna, com 14 px (antes 15 px, a 60vh), pela regra `.list-detail:has(.customer-panel) .list-detail-empty` que o CL3 pede. Não foi corrigida: é efeito da regra de CSS que o CL3 pede, e fica **declarada** em D-135. O percentual contra o protótipo (`diff` do relatório) é o mesmo antes e depois em todos os 20 pares (CL1: 8,8%, 3,6%, 3,0% e 2,7%).
+
+### Execução
+
+Contagens obtidas nesta Work Unit, sobre a árvore final (as mutações todas revertidas):
+
+| Comando | Resultado |
+| --- | --- |
+| `npx vitest run tests/goal121` em `apps/frontend` | **2** arquivos, **21** testes passando (`goal121-clientes-estados.test.tsx` e `goal121-clientes-busca.test.tsx`) |
+| `node --test scripts/tests/visual-responses.test.mjs` | **38** testes, **38** passando, 0 falhas |
+| `visual:compare` de CL2, CL3 e CL10 | 12 pares, sem erro |
+| `visual:compare` de CL1, CL4, CL5, CL6 e CL7 | 20 pares, sem erro |
+| `npx tsc --noEmit` em `apps/frontend` | saída 0, sem erro |
+| `npx eslint src tests --max-warnings=0` em `apps/frontend` | saída 0, 0 avisos |
+| `npx vitest run` em `apps/frontend` (suíte completa) | **166** arquivos, **2143** testes passando |
+| `npm run test:gate` | **271** testes, **271** passando, 0 falhas |
+| `npm run validate:core` | PASSED: 17 passos, 15 passaram, 0 falharam, 2 pulados (`test:bff` e `test:health-worker`, que o próprio gate declara) |
+| `npm run validate:ui` | saída 0: **169** passaram, 21 pulados (os de alvo de toque, que o gate pula nos projetos sem toque), 0 retentativas |
+| `npm run validate:integration` | PASSED: **36** passos, 36 passaram, 0 falharam, 0 pulados, contra um PostgreSQL descartável em `127.0.0.1:56441/g121_bff_test` (inclui `rehearse:goal033-authenticated-ui`, que mede `/clientes` nas cinco larguras) |
+| `git diff --check` | saída 0 |
+
+### Testes existentes ajustados
+
+Sem afrouxar asserção; só pelo texto ou pela estrutura trocados nesta tela.
+
+- `apps/frontend/tests/goal015-shell-invariant.test.tsx`: na busca por "Bruno", a lista passou a ter 2 links (o cliente que casa e a linha "Adicionar novo cliente"), antes 1.
+- `apps/frontend/tests/goal075-customer-list.test.tsx`: "a busca esconde o separador de letra sem resultado" virou "a busca troca os separadores de letra por uma lista plana (CL3)"; a asserção passou a exigir que nenhum separador ("A", "B") apareça, que "Bruno Lima" esteja visível e que "Ana Souza" não esteja.
+- `scripts/tests/visual-responses.test.mjs`: o teste da lista de alvos com `responses` passou a incluir CL2, CL3 e CL10, e o dono do arquivo desses alvos é `Clientes.dc.html`. Mais os testes novos do campo `status` (aceita 400, 503 e 599; ausente não inventa; recusa 200, 399, 600, `"503"`, 503,5, `null`, `NaN`, `undefined` e outro método).
+
+### Escopo
+
+Os arquivos alterados estão dentro do critério do Goal: `apps/frontend/src/features/customers/` (`CustomerList.tsx`, `CustomerForm.tsx` e `CustomerStates.tsx`, novo), `apps/frontend/src/shared/styles/avenly-customers.css`, `apps/frontend/tests/`, `apps/frontend/e2e/visual/targets.json`, `scripts/lib/visual-responses.mjs`, `scripts/visual-compare.mjs`, `scripts/tests/visual-responses.test.mjs` e os três registros.
+
+### Não executado
+
+Conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho. O CL9 (carregando) e o CL8 estão fora do Goal. Os gates globais da seção "Validação e ordem" 7 foram todos rodados na rodada 2 e as contagens estão em "Execução"; `format:check` do `prettier` não é gate e não foi rodado.
+
+### Gates do IA Loop, rodada 2 (acrescentado no fechamento)
+
+Os gates do IA Loop rodaram de novo na árvore final, todos com saída 0: `typecheck` (WU-05), `lint` (WU-06), `goal121` com 2 arquivos e 21 testes (WU-07), a suíte do frontend com 166 arquivos e 2143 testes (WU-09), `test:gate` com 271 de 271 (WU-10), `validate:core` com 15 passos e 2 pulados (WU-11), `validate:ui` com 169 passed, 21 skipped e 0 retentativas (WU-12), `validate:integration` com 36 de 36 passos (WU-13) e `git diff --check` (WU-14). A WU-08 (`test:ia-loop`) foi pulada: o repositório não declara o script.
+
+Na WU-13, o gate autenticado (`rehearse:goal033-authenticated-ui`) passou com **273** de primeira e **2 retentativas**: `onboarding-demonstracao-da-ia` em `tablet-768` e `configuracoes` em `desktop-1440`, nenhuma rota de Clientes. A baseline do Goal120 tinha 275 de primeira e 0 retentativas. A execução do Developer não registrou a contagem do gate autenticado. Detalhe no [review121](reviews/121-review.md).

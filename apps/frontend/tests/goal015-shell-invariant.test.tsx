@@ -135,7 +135,8 @@ describe("ShellConfigProvider + tela real de Clientes não excede a profundidade
 
     expect((await screen.findByText("clientes")).closest(".customer-panel-count")).toHaveTextContent("2 clientes");
     await user.type(screen.getByLabelText("Buscar cliente"), "Bruno");
-    await waitFor(() => expect(within(screen.getByRole("list", { name: "Clientes" })).getAllByRole("link")).toHaveLength(1));
+    // Um cliente que casa e a linha "Adicionar novo cliente" (CL3).
+    await waitFor(() => expect(within(screen.getByRole("list", { name: "Clientes" })).getAllByRole("link")).toHaveLength(2));
   });
 
   test("formulário de novo cliente responde a digitação contínua", async () => {

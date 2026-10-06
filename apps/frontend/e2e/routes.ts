@@ -241,6 +241,20 @@ export const ONBOARDING_ROUTES = [
     name: "onboarding-whatsapp",
     contentMarker: "Agora vamos colocar sua IA para atender de verdade.",
   },
+  // Goal128: as duas etapas do teste real que vêm antes do resultado, pelo mesmo
+  // caminho. Na conta parada, sem execução, a 4.7 mostra o `ErrorNote` "Nenhum
+  // teste em andamento" e não sai da tela, e a 4.8 mostra o cartão genérico,
+  // sem linha do tempo: é esse estado que o gate mede.
+  {
+    path: "/onboarding/teste-real-progresso",
+    name: "onboarding-teste-real-progresso",
+    contentMarker: "Teste em andamento",
+  },
+  {
+    path: "/onboarding/teste-real-falha",
+    name: "onboarding-teste-real-falha",
+    contentMarker: "O teste não foi concluído",
+  },
   // Goal127: as duas conclusões. `OnboardingScreen` não guarda a etapa contra o
   // estado gravado, então a conta parada no meio as renderiza por URL direta.
   // Na conta real a 4.9 mede o estado honesto da IA desligada: sem anéis e sem

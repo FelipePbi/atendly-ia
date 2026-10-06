@@ -202,9 +202,9 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, W2, R2, I1, AG2, NT2, 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1, W2, R2, I1, AG2, NT2, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
   for (const target of declaring) {
     const owner = ["W1", "W2", "R2", "I1"].includes(target.code)
       ? "Mais-WhatsApp-Importacao-Conta.dc.html"
@@ -212,7 +212,7 @@ test("targets.json: só W1, W2, R2, I1, AG2, NT2, 4.9, A2, A12, C1 a C4, CL2, CL
         ? "Mais-Negocio-Agenda-IA.dc.html"
         : target.code === "NT2"
           ? "Notificacoes.dc.html"
-          : target.code === "4.9"
+          : ["4.7", "4.8", "4.9"].includes(target.code)
             ? "Onboarding-3-IA-e-WhatsApp.dc.html"
             : ["L2", "L7"].includes(target.code)
               ? "Login.dc.html"
@@ -405,10 +405,10 @@ test("targets.json: NT1 continua sem responses, com a lista da conta visual", ()
   assert.equal(nt1.responses, undefined);
 });
 
-test("targets.json: 4.9 é o único dono de responses em Onboarding-3-IA-e-WhatsApp.dc.html, só com os dois GET, a execução SUCCEEDED, o status ativo e sem passos; o 4.10 não declara responses", () => {
+test("targets.json: 4.7, 4.8 e 4.9 são os donos de responses em Onboarding-3-IA-e-WhatsApp.dc.html; 4.9 só com os dois GET, a execução SUCCEEDED, o status ativo e sem passos; o 4.10 não declara responses", () => {
   const owners = declaringTargets().filter((target) => target.file === "Onboarding-3-IA-e-WhatsApp.dc.html");
-  assert.deepEqual(owners.map((target) => target.code), ["4.9"]);
-  const [t49] = owners;
+  assert.deepEqual(owners.map((target) => target.code).sort(), ["4.7", "4.8", "4.9"]);
+  const t49 = owners.find((target) => target.code === "4.9");
   assert.equal(t49.label, "IA ativa");
   assert.equal(t49.route, "/onboarding/teste-real-sucesso");
   assert.equal(t49.account, "onboarding");
@@ -451,6 +451,60 @@ test("targets.json: 4.9 é o único dono de responses em Onboarding-3-IA-e-Whats
   assert.equal(t410.route, "/onboarding/whatsapp-concluido");
   assert.equal(t410.responses, undefined);
   assert.equal(t410.steps, undefined);
+});
+
+test("targets.json: 4.7 e 4.8 declaram só o GET de /v1/activation-test, sem passos, no estado de cada quadro (RUNNING e FAILED); o 4.9 mantém os dois GET e o 4.10 segue sem responses", () => {
+  const owners = declaringTargets().filter((target) => target.file === "Onboarding-3-IA-e-WhatsApp.dc.html");
+  const byCode = new Map(owners.map((target) => [target.code, target]));
+  const expectedRoutes = new Map([
+    ["4.7", "/onboarding/teste-real-progresso"],
+    ["4.8", "/onboarding/teste-real-falha"],
+  ]);
+  const runs = new Map();
+  for (const [code, route] of expectedRoutes) {
+    const target = byCode.get(code);
+    assert.ok(target, `${code} precisa declarar responses`);
+    assert.equal(target.route, route);
+    assert.equal(target.account, "onboarding");
+    assert.equal(target.steps, undefined, `${code}: nenhum passo, nada toca em botão que grava`);
+    assert.deepEqual(
+      target.responses.map((entry) => `${entry.method} ${entry.path}`),
+      ["GET /v1/activation-test"],
+      `${code}: só o GET da execução`,
+    );
+    runs.set(code, resolveRelativeDays(target.responses[0].json, "2026-10-06").data);
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      for (const other of ["/v1/activation-test", "/v1/activation-test/restart"]) {
+        assert.equal(pickFixedResponse(target, method, other), null, `${code}: ${method} ${other} não deveria casar`);
+      }
+    }
+    for (const other of ["/v1/status", "/v1/settings", "/v1/whatsapp", "/v1/onboarding"]) {
+      assert.equal(pickFixedResponse(target, "GET", other), null, `${code}: ${other} vem da conta de onboarding`);
+    }
+  }
+  const running = runs.get("4.7");
+  assert.equal(running.state, "RUNNING");
+  assert.equal(running.terminal, false);
+  assert.equal(running.cleanupState, "PENDING");
+  assert.equal(running.failureCode, null);
+  const failed = runs.get("4.8");
+  assert.equal(failed.state, "FAILED");
+  assert.equal(failed.terminal, true);
+  assert.equal(failed.failureCode, "ACTIVATION_TEST_AI_DID_NOT_ACT");
+  assert.equal(failed.cleanupState, "CLEAN");
+  for (const run of [running, failed]) {
+    assert.deepEqual(
+      run.milestones.map((milestone) => [milestone.milestone, milestone.reached]),
+      [["MESSAGE_SENT", true], ["SERVICE_IDENTIFIED", true], ["PRICE_INFORMED", true], ["AVAILABILITY_CHECKED", false], ["SLOT_SELECTED", false], ["APPOINTMENT_CONFIRMED", false]],
+    );
+    assert.ok(!Number.isNaN(Date.parse(run.startedAt)));
+  }
+  assert.deepEqual(
+    byCode.get("4.9").responses.map((entry) => `${entry.method} ${entry.path}`).sort(),
+    ["GET /v1/activation-test", "GET /v1/status"],
+  );
+  assert.equal(byCode.has("4.10"), false);
+  assert.equal(byCode.has("4.6"), false);
 });
 
 const CONFIRMING_NAMES =["desconectar", "excluir minha conta", "reduzir os dois prazos"];

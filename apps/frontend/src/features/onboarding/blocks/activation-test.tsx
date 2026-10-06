@@ -1,3 +1,5 @@
+import { useRouter } from "next/navigation";
+
 import type { ActivationTestRun } from "@/data";
 import {
   type ActivationTestPanel,
@@ -40,14 +42,27 @@ export function activationTestScenarioFor(
   return scenarioByPanel[activationTestPanelFor(run)];
 }
 
-export function activationTestStepBody(scenario: OnboardingScenario) {
+/**
+ * Corpo de cada tela do teste. O progresso (4.7) se atualiza sozinho: quando a
+ * leitura mostra que a execução terminou ou pausou, a etapa vai, com
+ * `replace`, para a tela do estado — a de progresso não fica no histórico.
+ */
+function ActivationTestStepBody({ scenario }: { scenario: OnboardingScenario }) {
+  const router = useRouter();
   return (
     <ActivationTestPanelBody
       onboarding
+      onSettled={(run) =>
+        router.replace(`/onboarding/${activationTestScenarioFor(run)}`)
+      }
       panel={panelForScenario(scenario)}
       title={onboardingScenarios[scenario][1]}
     />
   );
+}
+
+export function activationTestStepBody(scenario: OnboardingScenario) {
+  return <ActivationTestStepBody scenario={scenario} />;
 }
 
 /**

@@ -221,6 +221,170 @@
       "account": "onboarding"
     },
     {
+      "code": "4.7",
+      "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
+      "label": "Teste em andamento",
+      "route": "/onboarding/teste-real-progresso",
+      "account": "onboarding",
+      "notes": "GET /v1/activation-test (execução RUNNING, não terminal, com MESSAGE_SENT, SERVICE_IDENTIFIED e PRICE_INFORMED alcançados, os outros três não e a limpeza PENDING) vem de resposta fixa, só no navegador da captura: a conta de onboarding não iniciou o teste real, e sem a execução a tela diria \"Nenhum teste em andamento\", sem a linha do tempo. Nenhum passo: a tela abre pronta e nenhum toque chega a \"Continuar depois\", que concluiria o onboarding da conta visual. Divergências declaradas do Goal128: nas linhas concluídas, sem a segunda linha (hora, serviço e preço) e, na atual, sem \"próximo horário livre para …\" (o contrato não traz esses dados por marco); o rótulo do vault em todas as linhas (\"Agenda consultada\" onde o quadro diz \"Consultando agenda\"); \"Continuar depois\" discreto abaixo da nota; o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/activation-test",
+          "json": {
+            "data": {
+              "id": "visual-compare-activation-test",
+              "state": "RUNNING",
+              "terminal": false,
+              "startedAt": "{today}T10:30:00-03:00",
+              "finishedAt": null,
+              "pausedAt": null,
+              "currentStep": "AI_CHECKS_AVAILABILITY",
+              "completedStep": "AI_ANSWERS_PRICE",
+              "attempts": 1,
+              "maxAttempts": 2,
+              "failedStep": null,
+              "failedStepLabel": null,
+              "failureCode": null,
+              "appointmentId": null,
+              "channelId": "visual-compare-channel",
+              "supersededByChannelChange": false,
+              "cleanupState": "PENDING",
+              "cleanupAt": null,
+              "cleanupResidue": [],
+              "milestones": [
+                {
+                  "milestone": "MESSAGE_SENT",
+                  "reached": true,
+                  "reachedAt": "{today}T10:30:05-03:00",
+                  "sourceKind": "MESSAGE",
+                  "sourceId": "visual-compare-message-1"
+                },
+                {
+                  "milestone": "SERVICE_IDENTIFIED",
+                  "reached": true,
+                  "reachedAt": "{today}T10:30:15-03:00",
+                  "sourceKind": "SERVICE",
+                  "sourceId": "visual-compare-service"
+                },
+                {
+                  "milestone": "PRICE_INFORMED",
+                  "reached": true,
+                  "reachedAt": "{today}T10:30:25-03:00",
+                  "sourceKind": "MESSAGE",
+                  "sourceId": "visual-compare-message-2"
+                },
+                {
+                  "milestone": "AVAILABILITY_CHECKED",
+                  "reached": false,
+                  "reachedAt": null,
+                  "sourceKind": null,
+                  "sourceId": null
+                },
+                {
+                  "milestone": "SLOT_SELECTED",
+                  "reached": false,
+                  "reachedAt": null,
+                  "sourceKind": null,
+                  "sourceId": null
+                },
+                {
+                  "milestone": "APPOINTMENT_CONFIRMED",
+                  "reached": false,
+                  "reachedAt": null,
+                  "sourceKind": null,
+                  "sourceId": null
+                }
+              ]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "4.8",
+      "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
+      "label": "Teste falhou",
+      "route": "/onboarding/teste-real-falha",
+      "account": "onboarding",
+      "notes": "GET /v1/activation-test (execução FAILED, terminal, com MESSAGE_SENT, SERVICE_IDENTIFIED e PRICE_INFORMED alcançados, falha em AI_CHECKS_AVAILABILITY com ACTIVATION_TEST_AI_DID_NOT_ACT, 1 de 2 tentativas e a limpeza CLEAN) vem de resposta fixa, só no navegador da captura: a conta de onboarding não fez o teste real, e sem a execução a tela diria só o cartão genérico, sem a linha do tempo. Nenhum passo: a tela abre pronta e nenhum toque chega a \"Tentar novamente\" (que criaria uma execução) nem a \"Fazer isso depois\" (que concluiria o onboarding da conta visual). Divergências declaradas do Goal128: cada marco pendente numa linha própria (\"Horário selecionado\" e \"Agendamento confirmado\", onde o quadro junta \"Horário selecionado e confirmação\"); a segunda linha e o cartão pelo failureCode, e não o texto de horário livre do quadro, que descreve uma recusa antes do teste (ACTIVATION_TEST_NO_AVAILABILITY) e não uma falha da execução; \"Fazer isso depois\" no lugar de \"Revisar horários\"; o rótulo do vault (\"Agenda consultada\" onde o quadro diz \"Consultando agenda\"); a nota de limpeza abaixo do cartão, que o quadro não tem (Goal019 §6: a tela diz o que ficou); o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/activation-test",
+          "json": {
+            "data": {
+              "id": "visual-compare-activation-test",
+              "state": "FAILED",
+              "terminal": true,
+              "startedAt": "{today}T10:30:00-03:00",
+              "finishedAt": "{today}T10:31:00-03:00",
+              "pausedAt": null,
+              "currentStep": null,
+              "completedStep": "AI_ANSWERS_PRICE",
+              "attempts": 1,
+              "maxAttempts": 2,
+              "failedStep": "AI_CHECKS_AVAILABILITY",
+              "failedStepLabel": "Consulta à agenda",
+              "failureCode": "ACTIVATION_TEST_AI_DID_NOT_ACT",
+              "appointmentId": null,
+              "channelId": "visual-compare-channel",
+              "supersededByChannelChange": false,
+              "cleanupState": "CLEAN",
+              "cleanupAt": "{today}T10:31:30-03:00",
+              "cleanupResidue": [],
+              "milestones": [
+                {
+                  "milestone": "MESSAGE_SENT",
+                  "reached": true,
+                  "reachedAt": "{today}T10:30:05-03:00",
+                  "sourceKind": "MESSAGE",
+                  "sourceId": "visual-compare-message-1"
+                },
+                {
+                  "milestone": "SERVICE_IDENTIFIED",
+                  "reached": true,
+                  "reachedAt": "{today}T10:30:15-03:00",
+                  "sourceKind": "SERVICE",
+                  "sourceId": "visual-compare-service"
+                },
+                {
+                  "milestone": "PRICE_INFORMED",
+                  "reached": true,
+                  "reachedAt": "{today}T10:30:25-03:00",
+                  "sourceKind": "MESSAGE",
+                  "sourceId": "visual-compare-message-2"
+                },
+                {
+                  "milestone": "AVAILABILITY_CHECKED",
+                  "reached": false,
+                  "reachedAt": null,
+                  "sourceKind": null,
+                  "sourceId": null
+                },
+                {
+                  "milestone": "SLOT_SELECTED",
+                  "reached": false,
+                  "reachedAt": null,
+                  "sourceKind": null,
+                  "sourceId": null
+                },
+                {
+                  "milestone": "APPOINTMENT_CONFIRMED",
+                  "reached": false,
+                  "reachedAt": null,
+                  "sourceKind": null,
+                  "sourceId": null
+                }
+              ]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "4.9",
       "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
       "label": "IA ativa",

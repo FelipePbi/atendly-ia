@@ -247,6 +247,13 @@ describe("antes do teste: explicação e CTA do vault", () => {
   });
 });
 
+/** A linha da linha do tempo de um marco, pelo rótulo que a usuária lê. */
+function milestoneRow(label: string): HTMLElement {
+  const row = screen.getByText(label).closest("li");
+  if (!row) throw new Error(`sem linha para "${label}"`);
+  return row;
+}
+
 describe("progresso: os seis marcos, derivados de fato", () => {
   test("os seis marcos do vault são legíveis um a um", async () => {
     getActivationTest.mockResolvedValue(runFixture({ reachedCount: 0 }));
@@ -275,10 +282,13 @@ describe("progresso: os seis marcos, derivados de fato", () => {
     expect(
       screen.getByText("Serviço identificado", { exact: true }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Preço informado — aguardando")).toBeInTheDocument();
-    expect(
-      screen.getByText("Agendamento confirmado — aguardando"),
-    ).toBeInTheDocument();
+    // O primeiro sem fato é o que está em andamento; os outros ainda não
+    // começaram. Nenhum deles aparece concluído.
+    expect(milestoneRow("Preço informado")).toHaveTextContent("em andamento");
+    expect(milestoneRow("Agendamento confirmado")).toHaveTextContent(
+      "ainda não começou",
+    );
+    expect(milestoneRow("Serviço identificado")).toHaveTextContent("concluído");
   });
 
   test("tempo decorrido não conclui marco nenhum", async () => {
@@ -292,9 +302,9 @@ describe("progresso: os seis marcos, derivados de fato", () => {
       await screen.findByText("Mensagem enviada", { exact: true }),
     ).toBeInTheDocument();
     await new Promise((resolve) => setTimeout(resolve, 60));
-    expect(
-      screen.getByText("Serviço identificado — aguardando"),
-    ).toBeInTheDocument();
+    expect(milestoneRow("Serviço identificado")).not.toHaveTextContent(
+      "concluído",
+    );
   });
 
   test("a leitura para em estado terminal: não consulta para sempre", async () => {
@@ -324,31 +334,28 @@ describe("progresso: os seis marcos, derivados de fato", () => {
     expect(getActivationTest).toHaveBeenCalled();
   });
 
-  test("continuar le o estado real e leva a tela do estado", async () => {
-    const user = userEvent.setup();
+  test("a leitura que mostra o fim leva sozinha à tela do estado", async () => {
     getActivationTest.mockResolvedValue(
       runFixture({ state: "SUCCEEDED", reachedCount: 6 }),
     );
     renderScreen("teste-real-progresso");
 
-    await user.click(await screen.findByRole("button", { name: "Continuar" }));
-
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("/onboarding/teste-real-sucesso"),
+      expect(replace).toHaveBeenCalledWith("/onboarding/teste-real-sucesso"),
     );
+    expect(push).not.toHaveBeenCalled();
   });
 
   test("execução ainda em andamento não avança para sucesso", async () => {
-    const user = userEvent.setup();
     getActivationTest.mockResolvedValue(runFixture({ reachedCount: 3 }));
     renderScreen("teste-real-progresso");
 
-    await user.click(await screen.findByRole("button", { name: "Continuar" }));
-
+    await screen.findByText("Preço informado");
     expect(
-      await screen.findByText(/ainda está em andamento/),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Continuar" }),
+    ).not.toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
   });
 });
 
@@ -401,11 +408,17 @@ describe("falha", () => {
     );
     renderScreen("teste-real-falha");
 
+    // A linha que falhou é o primeiro marco sem fato (quadro 4.8), e o texto
+    // vem do código de falha, não do rótulo do servidor.
+    const failedRow = (await screen.findByText("Agenda consultada")).closest(
+      "li",
+    );
+    expect(failedRow).toHaveTextContent("não concluído");
+    expect(failedRow).toHaveTextContent("O teste parou nesta etapa.");
     expect(
-      await screen.findByText(/O teste parou em: consultar a agenda\./),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Sua IA continua desligada/),
+      screen.getByText(
+        "Sua IA ainda não está ativa. Nada foi enviado aos seus clientes.",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Tudo pronto/)).not.toBeInTheDocument();
     expect(
@@ -414,13 +427,15 @@ describe("falha", () => {
   });
 
   test("sem passo nomeado pelo servidor, a tela não inventa etapa", async () => {
+    // Com os seis marcos alcançados nenhuma linha fica vermelha, e o cartão
+    // diz que não sabe onde parou.
     getActivationTest.mockResolvedValue(
-      runFixture({ state: "FAILED", failedStepLabel: null }),
+      runFixture({ state: "FAILED", failedStepLabel: null, reachedCount: 6 }),
     );
     renderScreen("teste-real-falha");
 
     expect(
-      await screen.findByText("O teste parou antes de terminar."),
+      await screen.findByText(/^O teste parou antes de terminar\./),
     ).toBeInTheDocument();
   });
 });

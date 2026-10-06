@@ -116,9 +116,9 @@ export const onboardingScenarios = {
     "activation-test",
   ],
   "teste-real-progresso": [
+    "WhatsApp",
     "Teste em andamento",
-    "Sua IA está atendendo o cliente de teste",
-    "Acompanhe cada etapa. O teste continua mesmo se você trocar de aplicativo ou fechar esta tela.",
+    "Acompanhe pelo WhatsApp se quiser. Não responda à conversa de teste.",
     "activation-test-progress",
   ],
   "teste-real-interferencia": [
@@ -128,9 +128,9 @@ export const onboardingScenarios = {
     "activation-test-paused",
   ],
   "teste-real-falha": [
-    "Teste não concluído",
-    "O teste não chegou ao fim",
-    "Sua IA não foi ativada. Veja abaixo em qual etapa o teste parou e tente novamente.",
+    "WhatsApp",
+    "O teste não foi concluído",
+    "Sua IA ainda não está ativa. Nada foi enviado aos seus clientes.",
     "activation-test-failed",
   ],
   "teste-real-sucesso": [

@@ -164,7 +164,7 @@ describe("telas do teste real passam no axe", () => {
     await expectNoA11yViolations(
       await renderAndAwait(
         "teste-real-progresso",
-        "Sua IA está atendendo o cliente de teste",
+        "Teste em andamento",
       ),
     );
   });
@@ -194,7 +194,7 @@ describe("telas do teste real passam no axe", () => {
       }),
     );
     await expectNoA11yViolations(
-      await renderAndAwait("teste-real-falha", "O teste não chegou ao fim"),
+      await renderAndAwait("teste-real-falha", "O teste não foi concluído"),
     );
   });
 

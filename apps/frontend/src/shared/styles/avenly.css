@@ -4135,6 +4135,188 @@ p {
   font-size: 12px;
   font-weight: 400;
 }
+/* Teste real em andamento e não concluído (quadros 4.7 e 4.8): o mesmo topo e
+   o mesmo cabeçalho. No rodapé, a 4.7 traz "Abrir WhatsApp", a nota e
+   "Continuar depois"; a 4.8, "Tentar novamente" e "Fazer isso depois". */
+/* Sem "voltar", o espaço do chevron continua vazio: a barra fica a 32 px da
+   borda, como no quadro. */
+[data-step="teste-real-progresso"] .onboarding-top-row::before,
+[data-step="teste-real-falha"] .onboarding-top-row::before {
+  content: "";
+  width: 40px;
+  height: 40px;
+  margin-left: -8px;
+  flex: none;
+}
+[data-step="teste-real-progresso"] .onboarding-heading,
+[data-step="teste-real-falha"] .onboarding-heading {
+  gap: 8px;
+}
+[data-step="teste-real-progresso"] .onboarding-heading > p,
+[data-step="teste-real-falha"] .onboarding-heading > p {
+  font-size: 15px;
+  line-height: 1.45;
+}
+[data-step="teste-real-progresso"] .onboarding-actions,
+[data-step="teste-real-falha"] .onboarding-actions {
+  gap: 10px;
+}
+[data-step="teste-real-progresso"] .onboarding-actions .btn-secondary,
+[data-step="teste-real-falha"] .onboarding-actions .btn-secondary {
+  gap: 8px;
+  background: transparent;
+  border-color: var(--border-strong);
+}
+[data-step="teste-real-progresso"] .onboarding-actions .btn-secondary:hover,
+[data-step="teste-real-falha"] .onboarding-actions .btn-secondary:hover {
+  background: var(--at-color-surface-active);
+  border-color: #c9c0b3;
+}
+[data-step="teste-real-progresso"] .onboarding-actions .btn-secondary:active,
+[data-step="teste-real-falha"] .onboarding-actions .btn-secondary:active {
+  background: var(--border);
+}
+/* "Continuar depois" ocupa o respiro de baixo da nota, sem empurrar o botão
+   para cima do lugar que ele tem no quadro. */
+[data-step="teste-real-progresso"]
+  .onboarding-actions.is-stacked
+  .btn.onboarding-actions-skip {
+  margin: -10px 0 -44px;
+}
+/* Linha do tempo do teste (quadros 4.7 e 4.8): marcador de 24 px, conector de
+   1,5 px e o rótulo. Cada marco é uma linha; só a atual respira. */
+.activation-timeline {
+  margin: 0;
+  padding: 4px 0 0 4px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.activation-timeline-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.activation-timeline.is-animated .activation-timeline-row.is-done,
+.activation-timeline.is-animated .activation-timeline-row.is-current {
+  animation: at-reveal 0.3s ease-out var(--timeline-delay, 0s) both;
+}
+.activation-timeline-rail {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.activation-timeline-marker {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.activation-timeline-row.is-done .activation-timeline-marker {
+  background: var(--at-color-success);
+  color: var(--surface);
+}
+.activation-timeline-row.is-pending .activation-timeline-marker {
+  border: 1.5px solid var(--border-strong);
+}
+.activation-timeline-row.is-current .activation-timeline-marker::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--accent);
+  border-radius: 50%;
+  animation: at-breathe 2.4s ease-out infinite;
+}
+.activation-timeline-pulse {
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.activation-timeline-link {
+  width: 1.5px;
+  height: 26px;
+  background: var(--border);
+}
+.activation-timeline-row.is-done .activation-timeline-link {
+  background: var(--at-color-success);
+}
+.activation-timeline-text {
+  flex: 1;
+  min-width: 0;
+  padding-top: 2px;
+  display: flex;
+  flex-direction: column;
+  line-height: normal;
+}
+.activation-timeline-label {
+  font-size: 15px;
+  font-weight: 600;
+}
+.activation-timeline-row.is-pending .activation-timeline-label {
+  color: var(--muted);
+  font-weight: 500;
+}
+.activation-timeline-detail {
+  font-size: 13px;
+  color: var(--fg-soft);
+}
+/* 4.8: a linha que falhou fica vermelha, o conector é de 22 px e nada se move. */
+.activation-timeline-row.is-failed .activation-timeline-marker {
+  background: var(--at-color-danger-border);
+  color: var(--surface);
+}
+.activation-timeline-row.is-failed .activation-timeline-label,
+.activation-timeline-row.is-failed .activation-timeline-detail {
+  color: var(--at-color-danger-ink);
+}
+[data-step="teste-real-falha"] .activation-timeline-link {
+  height: 22px;
+}
+/* O secundário do quadro tem 52 px de miolo mais a borda de 1 px. */
+[data-step="teste-real-progresso"] .onboarding-actions .btn-secondary,
+[data-step="teste-real-falha"] .onboarding-actions .btn-secondary {
+  height: 54px;
+}
+/* O cartão "O que você pode fazer" e, abaixo dele, a nota de limpeza. */
+.activation-failed {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.activation-failed-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.activation-failed-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: normal;
+  color: var(--fg-soft);
+}
+.activation-failed-card-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+/* Com movimento reduzido nada se move: as linhas já estão no lugar final e o
+   anel da linha atual fica parado e visível. */
+@media (prefers-reduced-motion: reduce) {
+  .activation-timeline.is-animated .activation-timeline-row,
+  .activation-timeline-row.is-current .activation-timeline-marker::before {
+    animation: none;
+  }
+}
 /* Conclusão do onboarding (quadros 4.9 e 4.10): arte, título, texto e pílula
    centrados na altura que sobra, entre a barra de progresso e o rodapé. O
    respiro do rodapé é o das outras etapas; só a entrada é nova. */
@@ -4174,7 +4356,7 @@ p {
 .onboarding-content.is-completion {
   padding: 0 20px;
   align-items: center;
-  justify-content: center;
+  justify-content: safe center;
   gap: 32px;
 }
 .onboarding-content.is-completion > .onboarding-completion {

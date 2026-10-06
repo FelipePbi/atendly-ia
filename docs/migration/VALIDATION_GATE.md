@@ -7634,3 +7634,83 @@ Arquivos do Goal: `apps/frontend/src/features/onboarding/{OnboardingScreen,Onboa
 ### Não executado
 
 A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.
+
+## O teste real em andamento e o teste que falhou iguais ao protótipo, do Goal128
+
+Rodadas 1 e 2, 2026-10-06, na worktree `goal-128`. Baseline `02ba0bf`. A captura, a fidelidade, os controles negativos e os registros são da WU-03; as contagens dos gates abaixo são as da execução final de gates da rodada 2 (IA Loop, WU-04 a WU-12, sobre a árvore completa depois da correção FIX-001), todas com saída 0. A rodada 2 só mexeu em duas regras de `avenly.css` (a altura do secundário da 4.7 e o `line-height` do título do cartão da 4.8). Decisão: [D-142](DECISIONS.md), PROPOSED.
+
+### Contagens
+
+| Gate | Comando | Resultado |
+| --- | --- | --- |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0 |
+| Lint do frontend | `rtk proxy npx eslint src tests --max-warnings=0` (em `apps/frontend`) | saída 0 |
+| Testes do frontend | `npx vitest run` | **180** arquivos e **2384** testes passando (baseline 177 e 2318: +3 arquivos e +66 testes, os de `goal128`) |
+| Testes `goal128` | `goal128-teste-em-andamento.test.tsx`, `goal128-teste-falhou.test.tsx`, `goal128-alvos-captura.test.ts` | 3 arquivos e 66 testes (24, 31 e 11) |
+| Testes da captura | `node --test scripts/tests/visual-responses.test.mjs` | **56** testes passando (baseline 55: +1) |
+| `test:gate` | `npm run test:gate` | **289** testes, 289 passando, 0 falhas, 0 pulados (baseline 288: +1, o da captura) |
+| `validate:core` | `env -u AI_TEST_DATABASE_URL npm run validate:core` | PASSED, 17 passos: 15 passando, 0 falhas, 2 pulados (`test:bff` e `test:health-worker`) |
+| `validate:ui` | `npm run validate:ui` | **169** `passed` e **21** pulados, retries 0 ("every test passed on its first attempt") |
+| `validate:integration` | `env -u AI_TEST_DATABASE_URL npm run validate:integration` | PASSED, **36** de 36 passos, 0 falhas, 0 pulados; gate autenticado (`rehearse:goal033-authenticated-ui`) com **299** `passed` e **1** `flaky`, com 1 retentativa: `mobile-390 › configuracoes-conta › measured, logged in` (a primeira tentativa reprovou em `page.goto: net::ERR_NO_BUFFER_SPACE` ao abrir `/configuracoes/conta`, rota fora deste Goal; a nova tentativa passou) (baseline 290: +10 testes esperados, as rotas `/onboarding/teste-real-progresso` e `/onboarding/teste-real-falha` nas cinco larguras 360, 390, 768, 1024 e 1440) |
+| `git diff --check` | `git diff --check` | saída 0 |
+
+Duas execuções que não contam como falha do Goal. (1) Uma primeira execução de `validate:core` com `AI_TEST_DATABASE_URL` apontando para o banco descartável não migrado falhou em `test:ai-orchestrator` (tabelas que não existem), sem relação com este Goal (observação 1 do review124); sem a variável, como o Goal manda, o gate passou. (2) Uma primeira execução de `validate:integration`, rodada como tarefa em segundo plano com limite de 10 minutos, foi encerrada pelo limite no meio do gate autenticado (o navegador caiu com `Target crashed` e o worker saiu com `code=3221225794`, saída por interrupção, em `clientes`, `conversas` e `onboarding-boas-vindas`, nenhuma das duas rotas novas); foi refeita inteira, sem limite curto, e passou com 36 de 36, 299 `passed` e 1 `flaky`. Essa execução e a execução de gates da rodada 1 (IA Loop, WU-11, saída 0) registraram outra retentativa, `mobile-360 › onboarding-teste-real-sucesso › measured, logged in` (a primeira tentativa reprovou por contraste em "Ir para o início", `#fbf8f4` sobre `#91b2b1`, 2,15:1; a nova tentativa passou). São execuções anteriores, não a final: na execução final (rodada 2, WU-11, saída 0) a única retentativa é a de `configuracoes-conta` da tabela.
+
+### `visual:compare`
+
+Comando: `npm run visual:compare -- --target 4.7,4.8` (conta `onboarding`, parada no meio, com a execução fixa de cada alvo). Percentual de pixels diferentes por device:
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| 4.7 | 1,5% | 0,5% | 1,0% | 0,8% |
+| 4.8 | 3,9% | 1,7% | 1,9% | 1,5% |
+
+Percentuais da rodada 2, depois da correção do secundário da 4.7 e do `line-height` do título do cartão da 4.8. Medido em `prototype.png` contra `app.png` nos quatro devices: o secundário "Abrir WhatsApp" da 4.7 tem a borda de cima em y=686 (mobile), 912 (tablet retrato) e 656 (paisagem e desktop) e a de baixo em 739, 965 e 709, iguais ao quadro; o cartão "O que você pode fazer" da 4.8 tem 94 px no tablet em paisagem, no desktop e no tablet em retrato, e 114 px no mobile, iguais ao quadro (medido no review da rodada 2). O que resta de diferença, declarado em D-142:
+
+- Na 4.7, as linhas concluídas sem a segunda linha (13:41, "Corte feminino", "R$ 90") e a atual sem "próximo horário livre para Corte feminino…": o contrato não traz esses dados por marco.
+- O rótulo do vault em todas as linhas ("Agenda consultada" onde o quadro diz "Consultando agenda").
+- Na 4.8, "Horário selecionado" e "Agendamento confirmado" em duas linhas, onde o quadro junta "Horário selecionado e confirmação"; a segunda linha ("A IA não concluiu esta etapa.") e o cartão ("Tente de novo — …") pelo `failureCode`, no lugar do texto de horário livre do quadro; "Fazer isso depois" no lugar de "Revisar horários"; a nota de limpeza abaixo do cartão.
+- Na 4.7, "Continuar depois" discreto abaixo da nota.
+- O "Sair" do topo (mobile e tablet em retrato) e do rodapé da sidebar (a partir de 1024 px), nas duas telas.
+- A barra de status e o indicador de início do iPhone nos quadros mobile.
+- Ruído de antialiasing nos títulos.
+
+Regressão: `npm run visual:compare -- --target 4.6,4.9,4.10,IA1` (16 pares, nenhum com erro):
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| 4.6 | 5,4% | 2,3% | 2,7% | 1,9% |
+| 4.9 | 0,7% | 0,6% | 0,7% | 0,5% |
+| 4.10 | 1,3% | 0,6% | 0,7% | 0,7% |
+| IA1 | 12,7% | 6,0% | 7,8% | 6,6% |
+
+Contra o `app.png` de antes (guardado em `/tmp`, de uma captura de 13:47 a 13:48 que já existia na pilha, anterior à linha do tempo, às telas 4.7 e 4.8 e ao CSS, e só com a edição inicial do rodapé da 4.7 em `blocks/activation-test.tsx`; as rotas de 4.6, 4.9, 4.10 e IA1 não usam esse código), 13 dos 16 pares são iguais byte a byte (`cmp`). Os três que diferem foram medidos pixel a pixel: IA1 desktop, 47 pixels diferentes com delta de cor de no máximo 5 em 255; 4.9 desktop, 26 pixels com delta 1; 4.9 tablet em paisagem, 47 pixels com delta 1, todos na região da pílula e dos anéis que respiram, ou seja, a fase da animação no instante da captura, sem mudança de estrutura. Os percentuais contra o protótipo são os mesmos de antes (4.6 e 4.9 e 4.10, os mesmos do Goal127). Não foi possível guardar a captura de antes revertendo o trabalho das WU-01 e WU-02 na árvore (a reversão foi negada pelo ambiente), por isso a base é a captura do harness descrita acima.
+
+### Controles negativos
+
+Rodados depois da última edição de código de produto, cada um com o arquivo devolvido e conferido com `cmp` contra a cópia guardada antes da mudança (saída 0). (a) a (d) com `npx vitest run <arquivo>` (em `apps/frontend`); (e) em `targets.json`, com `npx vitest run tests/goal128-alvos-captura.test.ts` e `node --test scripts/tests/visual-responses.test.mjs`.
+
+| # | Mudança | Teste que reprovou | Mensagem |
+| --- | --- | --- | --- |
+| a | a linha atual da 4.7 passa a ser o primeiro marco alcançado (`activationTestTimelineStates` em `ActivationTestPanels.tsx`) | 3 de 24 em `goal128-teste-em-andamento.test.tsx`: "três marcos alcançados e RUNNING: três concluídas, a quarta atual, …", "com os seis alcançados e RUNNING, nenhuma linha é a atual" e "a linha atual é o primeiro marco não alcançado, não o último alcançado nem o que o tempo indica" | `AssertionError: expected [ 'current', 'done', 'current', …(3) ] to deeply equal [ 'done', 'done', 'current', …(3) ]` |
+| b | a 4.7 navega com a execução `RUNNING` (`const leaves = !!run`) | 2 de 24: "RUNNING não navega" e "a leitura continua a cada 3 s enquanto RUNNING, e a nova leitura que termina leva à tela do estado" | `AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times` |
+| c | o cartão da 4.8 com o texto de `REPLY_NOT_DELIVERED` para `ACTIVATION_TEST_ABANDONED` (`FAILURE_ADVICE`) | 1 de 31 em `goal128-teste-falhou.test.tsx`: "ACTIVATION_TEST_ABANDONED: segunda linha e cartão fixos" | `AssertionError: expected 'Confira se o seu WhatsApp continua co…' to be 'Tente de novo — pode ter sido uma fal…'` |
+| d | "Fazer isso depois" antes de "Tentar novamente" em `OnboardingScreen.tsx` | 1 de 31: "'Tentar novamente' vem antes de 'Fazer isso depois', no DOM" | `AssertionError: expected [ 'Fazer isso depois', …(1) ] to deeply equal [ 'Tentar novamente', …(1) ]` |
+| e | o 4.7 de `targets.json` com a execução `"state": "SUCCEEDED"` | 1 de 11 em `goal128-alvos-captura.test.ts` ("4.7 é RUNNING, não terminal, …") e 1 de 56 em `visual-responses.test.mjs` (o teste novo dos alvos 4.7 e 4.8) | `AssertionError: expected 'SUCCEEDED' to be 'RUNNING'` e `AssertionError [ERR_ASSERTION]: Expected values to be strictly equal` |
+
+### Testes ajustados
+
+Dois arquivos existentes do frontend, só no texto, na ordem ou na ação que o Goal muda, sem afrouxar asserção sobre ativação da IA, teste real, conclusão do onboarding ou Configurações › IA:
+
+- `goal019-a11y.test.tsx`: o título da 4.7 ("Sua IA está atendendo o cliente de teste" para "Teste em andamento") e o da 4.8 ("O teste não chegou ao fim" para "O teste não foi concluído").
+- `goal019-activation-test-screens.test.tsx`: o progresso do onboarding passa a afirmar as linhas da linha do tempo ("em andamento", "ainda não começou", "concluído") no lugar de "— aguardando"; o "Continuar" saiu e a leitura que mostra o fim leva sozinha, com `replace`, à tela do estado (e `RUNNING` não navega); a falha afirma a linha vermelha com "O teste parou nesta etapa." e o texto "Sua IA ainda não está ativa. …", e a execução com os seis marcos alcançados passa a levar a frase "O teste parou antes de terminar." no começo do cartão.
+
+`scripts/tests/visual-responses.test.mjs`: 4.7, 4.8 e 4.9 entre os donos de `responses` e o teste novo dos alvos 4.7 e 4.8 (de 55 para 56). `goal127-alvos-captura.test.ts` não mudou: não afirma o dono único de `responses`, quem o afirma é `visual-responses.test.mjs`.
+
+### Escopo
+
+Arquivos do Goal: `apps/frontend/src/features/activation-test/ActivationTestPanels.tsx`, `apps/frontend/src/features/onboarding/{OnboardingScreen.tsx,scenarios.ts}`, `blocks/activation-test.tsx`, `apps/frontend/src/shared/styles/avenly.css`, `apps/frontend/e2e/routes.ts`, `apps/frontend/e2e/visual/targets.json`, `scripts/tests/visual-responses.test.mjs`, os três testes `goal128-*`, os dois `goal019-*` ajustados e os três registros de `docs/migration/`. `scripts/visual-compare.mjs` e `scripts/lib/visual-responses.mjs` não mudaram; `goals/`, `reviews/` e `MIGRATION_STATUS.md` não foram tocados.
+
+### Não executado
+
+A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.

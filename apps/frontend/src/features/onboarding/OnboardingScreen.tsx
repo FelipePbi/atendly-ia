@@ -340,19 +340,42 @@ export function OnboardingScreen({
       {busy ? "Abrindo..." : "Ir para o início"}
     </button>
   ) : isActivationTestProgress ? (
-    // Em andamento não há nada a submeter: a execução é do servidor, e sair
-    // desta tela não a cancela. "Continuar" existe para quando ela termina.
+    // Quadro 4.7: em andamento não há nada a submeter. A execução é do
+    // servidor, sair desta tela não a cancela, e a tela vai sozinha para a do
+    // estado quando ela termina — por isso não há "Continuar". "Continuar
+    // depois" fica discreto abaixo da nota, como o "Fazer isso depois" da 4.6.
     <>
-      <button
+      <a
         className="btn btn-secondary"
+        href="whatsapp://send"
+        rel="noopener noreferrer"
+        target="_blank"
+      >
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.75"
+          viewBox="0 0 24 24"
+          width="18"
+        >
+          <path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.2 3.2c-.4.3-.8 0-.8-.5z" />
+        </svg>
+        Abrir WhatsApp
+      </a>
+      <p className="onboarding-actions-note">
+        Pode sair do app — o teste continua e a tela se atualiza sozinha.
+      </p>
+      <button
+        className="btn onboarding-actions-skip"
         disabled={busy}
         type="button"
         onClick={() => void skipActivationTest()}
       >
         {busy ? "Salvando..." : "Continuar depois"}
-      </button>
-      <button className="btn btn-primary" disabled={busy} type="submit">
-        {busy ? "Lendo..." : "Continuar"}
       </button>
     </>
   ) : isActivationTestPaused ? (
@@ -362,7 +385,14 @@ export function OnboardingScreen({
         : activationTestStartAction.paused.label}
     </button>
   ) : isActivationTestFailed ? (
+    // Quadro 4.8: principal primeiro, no DOM e na tela. "Fazer isso depois"
+    // fica no lugar do "Revisar horários" do quadro.
     <>
+      <button className="btn btn-primary" disabled={busy} type="submit">
+        {busy
+          ? activationTestStartAction.failed.busy
+          : activationTestStartAction.failed.label}
+      </button>
       <button
         className="btn btn-secondary"
         disabled={busy}
@@ -370,11 +400,6 @@ export function OnboardingScreen({
         onClick={() => void skipActivationTest()}
       >
         {busy ? "Salvando..." : "Fazer isso depois"}
-      </button>
-      <button className="btn btn-primary" disabled={busy} type="submit">
-        {busy
-          ? activationTestStartAction.failed.busy
-          : activationTestStartAction.failed.label}
       </button>
     </>
   ) : isActivationTestIntro ? (
@@ -476,7 +501,11 @@ export function OnboardingScreen({
     <OnboardingShell
       actions={actions}
       actionsStacked={
-        isWhatsappIntro || isActivationTestIntro || isWhatsappConclusion
+        isWhatsappIntro ||
+        isActivationTestIntro ||
+        isActivationTestProgress ||
+        isActivationTestFailed ||
+        isWhatsappConclusion
       }
       back={back}
       body={

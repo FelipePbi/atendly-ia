@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import {
   type ActivationTestMilestoneName,
@@ -73,6 +73,43 @@ export const MILESTONE_LABELS: Record<ActivationTestMilestoneName, string> = {
   SLOT_SELECTED: "Horário selecionado",
   APPOINTMENT_CONFIRMED: "Agendamento confirmado",
 };
+
+/**
+ * O que falhou, em uma frase, para cada `failureCode` (`PUBLIC_API_V1.md`,
+ * "Códigos de falha da execução"). Conjunto fechado: código desconhecido ou
+ * `null` cai em `FAILURE_STEP_FALLBACK`. Nenhuma frase culpa a pessoa.
+ */
+const FAILURE_STEP_DETAIL: Record<string, string> = {
+  ACTIVATION_TEST_AI_DID_NOT_ACT: "A IA não concluiu esta etapa.",
+  ACTIVATION_TEST_AI_DID_NOT_REPLY: "A IA não respondeu ao cliente de teste.",
+  ACTIVATION_TEST_AI_REPLY_NOT_DELIVERED:
+    "A resposta da IA não saiu pelo seu WhatsApp.",
+  ACTIVATION_TEST_AI_DID_NOT_CONFIRM_APPOINTMENT:
+    "A IA não confirmou o agendamento.",
+  ACTIVATION_TEST_ABANDONED: "O teste parou de responder.",
+  ACTIVATION_TEST_STEP_FAILED: "O teste parou nesta etapa.",
+};
+const FAILURE_STEP_FALLBACK = "O teste parou nesta etapa.";
+
+/**
+ * O que a pessoa pode fazer, para cada `failureCode`. Só a resposta que não
+ * saiu pelo WhatsApp tem um passo da pessoa; nos outros, tentar de novo é o
+ * que resta, e a frase não promete correção que ela não pode fazer.
+ */
+const FAILURE_ADVICE: Record<string, string> = {
+  ACTIVATION_TEST_AI_REPLY_NOT_DELIVERED:
+    "Confira se o seu WhatsApp continua conectado e tente de novo.",
+};
+const FAILURE_ADVICE_FALLBACK =
+  "Tente de novo — pode ter sido uma falha momentânea. Seus serviços e horários foram conferidos antes de o teste começar.";
+
+function failureText(
+  texts: Record<string, string>,
+  fallback: string,
+  code: string | null | undefined,
+): string {
+  return code && Object.hasOwn(texts, code) ? texts[code] : fallback;
+}
 
 /**
  * Intervalo da leitura de progresso, própria desta tela.
@@ -489,6 +526,146 @@ export function ActivationTestOnboardingIntro() {
   );
 }
 
+/** O que cada linha da linha do tempo diz sobre o seu marco. */
+export type ActivationTestTimelineState =
+  | "done"
+  | "current"
+  | "failed"
+  | "pending";
+
+/**
+ * O estado de cada marco, lido só de `run.milestones` e `run.state`.
+ *
+ * Concluída é só `reached: true`. O primeiro marco não alcançado é a linha
+ * atual com `RUNNING` e a que falhou com `FAILED`; os outros não alcançados
+ * são pendentes. Nada vem de tempo decorrido, e nada é guardado entre leituras.
+ */
+export function activationTestTimelineStates(
+  run: ActivationTestRun,
+): ActivationTestTimelineState[] {
+  let firstOpen = true;
+  return run.milestones.map((milestone) => {
+    if (milestone.reached) return "done";
+    const isFirstOpen = firstOpen;
+    firstOpen = false;
+    if (isFirstOpen && run.state === "RUNNING") return "current";
+    if (isFirstOpen && run.state === "FAILED") return "failed";
+    return "pending";
+  });
+}
+
+const TIMELINE_STATE_TEXT: Record<ActivationTestTimelineState, string> = {
+  current: "em andamento",
+  done: "concluído",
+  failed: "não concluído",
+  pending: "ainda não começou",
+};
+
+/**
+ * Linha do tempo do onboarding (quadros 4.7 e 4.8): um marco por linha, na
+ * ordem que veio da leitura. `cleanup` acrescenta "Limpando dados de teste",
+ * que a 4.7 mostra sempre pendente — a limpeza só roda depois do resultado.
+ * O contrato não traz o que a IA fez dentro de cada marco, então a linha só
+ * tem o rótulo, e `detail` só entra na linha que falhou.
+ */
+export function ActivationTestTimeline({
+  animated = false,
+  cleanup = false,
+  detail,
+  run,
+}: {
+  /** As linhas entram uma a uma (4.7); a 4.8 não anima. */
+  animated?: boolean;
+  cleanup?: boolean;
+  detail?: string;
+  run: ActivationTestRun;
+}) {
+  const states = activationTestTimelineStates(run);
+  const rows: Array<{
+    key: string;
+    label: string;
+    state: ActivationTestTimelineState;
+  }> = run.milestones.map((milestone, index) => ({
+    key: milestone.milestone,
+    label: MILESTONE_LABELS[milestone.milestone],
+    state: states[index],
+  }));
+  if (cleanup) {
+    rows.push({
+      key: "CLEANUP",
+      label: "Limpando dados de teste",
+      state: "pending",
+    });
+  }
+
+  return (
+    <ol className={`activation-timeline${animated ? " is-animated" : ""}`}>
+      {rows.map((row, index) => (
+        <li
+          aria-current={row.state === "current" ? "step" : undefined}
+          className={`activation-timeline-row is-${row.state}`}
+          key={row.key}
+          style={
+            animated
+              ? ({
+                  "--timeline-delay": `${(0.2 + 0.3 * index).toFixed(1)}s`,
+                } as CSSProperties)
+              : undefined
+          }
+        >
+          <span aria-hidden="true" className="activation-timeline-rail">
+            <span className="activation-timeline-marker">
+              {row.state === "done" && (
+                <svg
+                  fill="none"
+                  height="13"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="3"
+                  viewBox="0 0 24 24"
+                  width="13"
+                >
+                  <path d="M5 12.5l4.5 4.5L19 7.5" />
+                </svg>
+              )}
+              {row.state === "failed" && (
+                <svg
+                  fill="none"
+                  height="13"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="3"
+                  viewBox="0 0 24 24"
+                  width="13"
+                >
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              )}
+              {row.state === "current" && (
+                <span className="activation-timeline-pulse" />
+              )}
+            </span>
+            {index < rows.length - 1 && (
+              <span className="activation-timeline-link" />
+            )}
+          </span>
+          <span className="activation-timeline-text">
+            <span className="activation-timeline-label">
+              {row.label}
+              <span className="sr-only"> — {TIMELINE_STATE_TEXT[row.state]}</span>
+            </span>
+            {row.state === "failed" && detail && (
+              <span className="activation-timeline-detail">{detail}</span>
+            )}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /**
  * Progresso: os seis marcos, um a um, lidos do servidor.
  */
@@ -510,6 +687,45 @@ export function ActivationTestProgress() {
         O teste continua no servidor: você pode fechar esta tela ou trocar de
         aplicativo sem interromper nada.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Progresso do onboarding (quadro 4.7): a linha do tempo lida da execução.
+ *
+ * A tela se atualiza sozinha: quando a leitura devolve uma execução cuja tela
+ * não é a de progresso (terminou bem, falhou ou pausou por interferência),
+ * `onSettled` leva a etapa para ela. Com a leitura em erro ou sem execução, a
+ * tela fica onde está. A nota e as ações ficam no rodapé da etapa.
+ */
+export function ActivationTestOnboardingProgress({
+  onSettled,
+}: {
+  onSettled?: (run: ActivationTestRun) => void;
+}) {
+  const { error, run } = useActivationTestRun(true);
+  const settled = useRef(onSettled);
+  useEffect(() => {
+    settled.current = onSettled;
+  });
+
+  const leaves = !!run && activationTestPanelFor(run) !== "progress";
+  useEffect(() => {
+    if (run && leaves) settled.current?.(run);
+  }, [leaves, run]);
+
+  if (error) return <ErrorNote message={error} />;
+  if (run === undefined) return <LoadingNote />;
+  if (run === null) {
+    return (
+      <ErrorNote message="Nenhum teste em andamento. Volte e inicie o teste." />
+    );
+  }
+
+  return (
+    <div aria-live="polite">
+      <ActivationTestTimeline animated cleanup run={run} />
     </div>
   );
 }
@@ -572,6 +788,58 @@ export function ActivationTestFailed() {
           parar.
         </p>
       )}
+      <ActivationTestCleanupNote run={run} />
+    </div>
+  );
+}
+
+/**
+ * Falha do onboarding (quadro 4.8): a linha do tempo até onde deu certo, a
+ * linha que falhou com o que aconteceu e o cartão "O que você pode fazer".
+ *
+ * A linha vermelha é o primeiro marco não alcançado de uma execução `FAILED`;
+ * com os seis alcançados nenhuma fica vermelha, e o cartão começa por onde o
+ * servidor diz que o teste parou. Os dois textos vêm só do `failureCode`.
+ * A nota de limpeza fica abaixo do cartão (Goal019 §6).
+ */
+export function ActivationTestOnboardingFailed() {
+  const { error, run } = useActivationTestRun(false);
+
+  if (error) return <ErrorNote message={error} />;
+  if (run === undefined) return <LoadingNote />;
+
+  const code = run?.failureCode;
+  const hasFailedRow = run
+    ? activationTestTimelineStates(run).includes("failed")
+    : false;
+  const advice = failureText(FAILURE_ADVICE, FAILURE_ADVICE_FALLBACK, code);
+  const lead =
+    run && !hasFailedRow
+      ? run.failedStepLabel
+        ? `O teste parou em: ${run.failedStepLabel}.`
+        : "O teste parou antes de terminar."
+      : null;
+
+  return (
+    <div className="activation-failed">
+      {run && (
+        <ActivationTestTimeline
+          detail={failureText(FAILURE_STEP_DETAIL, FAILURE_STEP_FALLBACK, code)}
+          run={run}
+        />
+      )}
+      <div className="activation-failed-card">
+        <span className="activation-failed-card-title">
+          O que você pode fazer
+        </span>
+        <p className="activation-failed-card-text">
+          {lead && `${lead} `}
+          {advice}
+          {run && run.attempts > 1
+            ? ` A Avenly tentou ${run.attempts} de ${run.maxAttempts} vezes antes de parar.`
+            : null}
+        </p>
+      </div>
       <ActivationTestCleanupNote run={run} />
     </div>
   );
@@ -682,15 +950,30 @@ export function ActivationTestOnboardingSucceeded({
 export function ActivationTestPanelBody({
   panel,
   onboarding = false,
+  onSettled,
   title,
 }: {
   panel: ActivationTestPanel;
   onboarding?: boolean;
+  /** Só o progresso do onboarding a usa: a execução já não está em andamento. */
+  onSettled?: (run: ActivationTestRun) => void;
   title?: string;
 }) {
-  if (panel === "progress") return <ActivationTestProgress />;
+  if (panel === "progress") {
+    return onboarding ? (
+      <ActivationTestOnboardingProgress onSettled={onSettled} />
+    ) : (
+      <ActivationTestProgress />
+    );
+  }
   if (panel === "paused") return <ActivationTestPaused />;
-  if (panel === "failed") return <ActivationTestFailed />;
+  if (panel === "failed") {
+    return onboarding ? (
+      <ActivationTestOnboardingFailed />
+    ) : (
+      <ActivationTestFailed />
+    );
+  }
   if (panel === "succeeded") {
     return onboarding && title ? (
       <ActivationTestOnboardingSucceeded title={title} />

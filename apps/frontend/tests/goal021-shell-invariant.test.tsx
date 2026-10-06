@@ -28,6 +28,7 @@ const updateReminders = vi.fn();
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     migration: { getImportState },
+    serviceCatalog: { list: vi.fn().mockResolvedValue({ items: [] }) },
     settings: {
       get: getSettings,
       getAgendaViewPreference: vi.fn().mockResolvedValue({

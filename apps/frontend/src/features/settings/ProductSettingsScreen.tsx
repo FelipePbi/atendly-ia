@@ -200,9 +200,8 @@ function SettingsSection({
         backHref="/configuracoes/agenda"
         backLabel="Voltar para Agenda"
         title="Lembretes"
-        description="Configure os lembretes enviados antes de cada agendamento."
       >
-        <ReminderSettingsSection />
+        <ReminderSettingsSection settings={settings} />
       </SettingsPage>
     );
   if (scenario === "availability")

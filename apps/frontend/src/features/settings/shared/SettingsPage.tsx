@@ -21,7 +21,7 @@ export function SettingsPage({
   backHref?: string;
   backLabel?: string;
   children: ReactNode;
-  description: string;
+  description?: string;
   root?: boolean;
   title: string;
 }) {

@@ -20,14 +20,16 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { ReminderSettings } from "@/data";
+import type { ReminderSettings, SettingsState } from "@/data";
 import { ReminderSettingsSection } from "@/features/reminders/ReminderSettingsSection";
 
 const getReminders = vi.fn();
 const updateReminders = vi.fn();
+const listServices = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
+    serviceCatalog: { list: listServices },
     settings: { getReminders, updateReminders },
   }),
 }));
@@ -44,13 +46,34 @@ function remindersFixture(
   };
 }
 
+function settingsFixture(): SettingsState {
+  return {
+    ai: { enabled: false, tone: null },
+    availability: null,
+    business: null,
+    calendar: {
+      capabilities: {
+        createAppointments: false,
+        manageAvailability: false,
+        manageCustomers: false,
+        manageServices: false,
+        migrate: false,
+      },
+      integration: null,
+      source: "AVENLY",
+      timezone: "America/Sao_Paulo",
+    },
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  listServices.mockResolvedValue({ items: [] });
 });
 
 test("reflete o lembrete configurado, com o preset de 24h marcado", async () => {
   getReminders.mockResolvedValue(remindersFixture());
-  render(<ReminderSettingsSection />);
+  render(<ReminderSettingsSection settings={settingsFixture()} />);
 
   expect(
     await screen.findByText("Lembrete 1 · quanto tempo antes"),
@@ -70,7 +93,7 @@ test("reflete o lembrete configurado, com o preset de 24h marcado", async () => 
 test("sem lembrete configurado (rules vazio): mostra 'Ativar lembretes' e nasce no default do produto", async () => {
   getReminders.mockResolvedValue(remindersFixture({ rules: [] }));
   const user = userEvent.setup();
-  render(<ReminderSettingsSection />);
+  render(<ReminderSettingsSection settings={settingsFixture()} />);
 
   await user.click(
     await screen.findByRole("button", { name: "Ativar lembretes" }),
@@ -85,7 +108,7 @@ test("sem lembrete configurado (rules vazio): mostra 'Ativar lembretes' e nasce 
 test("adiciona e remove o segundo lembrete sem afetar o primeiro", async () => {
   getReminders.mockResolvedValue(remindersFixture());
   const user = userEvent.setup();
-  render(<ReminderSettingsSection />);
+  render(<ReminderSettingsSection settings={settingsFixture()} />);
 
   await user.click(
     await screen.findByRole("button", { name: "Adicionar segundo lembrete" }),
@@ -112,7 +135,7 @@ test("'Desativar lembretes' zera os dois lembretes, sem deixar o segundo órfão
     }),
   );
   const user = userEvent.setup();
-  render(<ReminderSettingsSection />);
+  render(<ReminderSettingsSection settings={settingsFixture()} />);
 
   await screen.findByText("Lembrete 2 · quanto tempo antes");
   await user.click(screen.getByRole("button", { name: "Desativar lembretes" }));
@@ -134,12 +157,12 @@ test("salvar envia o payload exato a updateReminders, incluindo confirmação e 
   );
   getReminders.mockResolvedValue(remindersFixture());
   const user = userEvent.setup();
-  render(<ReminderSettingsSection />);
+  render(<ReminderSettingsSection settings={settingsFixture()} />);
 
   await screen.findByText("Lembrete 1 · quanto tempo antes");
   await user.click(screen.getByRole("checkbox"));
   await user.click(screen.getByRole("button", { name: "Só quando for fixo" }));
-  await user.click(screen.getByRole("button", { name: "Salvar lembretes" }));
+  await user.click(screen.getByRole("button", { name: "Salvar" }));
 
   await waitFor(() =>
     expect(updateReminders).toHaveBeenCalledWith({
@@ -155,11 +178,11 @@ test("salvar com lembretes desativados envia rules vazio explicitamente", async 
   updateReminders.mockResolvedValue(remindersFixture({ rules: [] }));
   getReminders.mockResolvedValue(remindersFixture());
   const user = userEvent.setup();
-  render(<ReminderSettingsSection />);
+  render(<ReminderSettingsSection settings={settingsFixture()} />);
 
   await screen.findByText("Lembrete 1 · quanto tempo antes");
   await user.click(screen.getByRole("button", { name: "Desativar lembretes" }));
-  await user.click(screen.getByRole("button", { name: "Salvar lembretes" }));
+  await user.click(screen.getByRole("button", { name: "Salvar" }));
 
   await waitFor(() =>
     expect(updateReminders).toHaveBeenCalledWith({
@@ -173,7 +196,7 @@ test("salvar com lembretes desativados envia rules vazio explicitamente", async 
 describe("nunca inventa estado próprio", () => {
   test("erro ao carregar: some silenciosamente em vez de fabricar um estado", async () => {
     getReminders.mockRejectedValue(new Error("falhou"));
-    const { container } = render(<ReminderSettingsSection />);
+    const { container } = render(<ReminderSettingsSection settings={settingsFixture()} />);
 
     await waitFor(() => expect(container).toBeEmptyDOMElement());
   });

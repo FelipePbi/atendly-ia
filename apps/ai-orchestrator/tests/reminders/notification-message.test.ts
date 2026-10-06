@@ -62,10 +62,167 @@ describe("notification message templates", () => {
     }
   });
 
-  it("uses the date and the time exactly as the intent carries them", () => {
+  it("writes the date and time in Portuguese, with the weekday, in the three styles", () => {
     for (const style of AI_CONVERSATION_STYLES) {
       const text = composeNotificationText({ style, facts: facts() });
-      expect(text).toContain("no dia 2026-09-16 às 14:30");
+      expect(text).toContain("na quarta-feira, 16/09, às 14h30");
+      expect(text).not.toContain("2026-09-16");
+      expect(text).not.toContain("14:30");
+    }
+  });
+
+  it("uses the right article and weekday for the seven days", () => {
+    // 2026-09-14 e segunda-feira.
+    const expected = [
+      ["2026-09-14", "na segunda-feira, 14/09"],
+      ["2026-09-15", "na terça-feira, 15/09"],
+      ["2026-09-16", "na quarta-feira, 16/09"],
+      ["2026-09-17", "na quinta-feira, 17/09"],
+      ["2026-09-18", "na sexta-feira, 18/09"],
+      ["2026-09-19", "no sábado, 19/09"],
+      ["2026-09-20", "no domingo, 20/09"],
+    ] as const;
+    for (const [date, phrase] of expected) {
+      const text = notificationFactualLines(facts({ date })).join(" ");
+      expect(text).toContain(`${phrase}, às 14h30`);
+    }
+  });
+
+  it("gets the weekday right across a year turn and on 29 February", () => {
+    const cases = [
+      ["2025-12-31", "na quarta-feira, 31/12"],
+      ["2026-01-01", "na quinta-feira, 01/01"],
+      ["2024-02-29", "na quinta-feira, 29/02"],
+      ["2024-03-01", "na sexta-feira, 01/03"],
+      ["2000-02-29", "na terça-feira, 29/02"],
+      ["2028-02-29", "na terça-feira, 29/02"],
+    ] as const;
+    for (const [date, phrase] of cases) {
+      const text = notificationFactualLines(facts({ date })).join(" ");
+      expect(text).toContain(phrase);
+    }
+  });
+
+  it("formats the hour without a leading zero and omits a zero minute", () => {
+    const hour = (time: string) =>
+      notificationFactualLines(facts({ time })).join(" ");
+    expect(hour("09:00")).toContain("às 9h.");
+    expect(hour("09:05")).toContain("às 9h05.");
+    expect(hour("14:00")).toContain("às 14h.");
+    expect(hour("14:30")).toContain("às 14h30.");
+    expect(hour("00:00")).toContain("às 0h.");
+  });
+
+  it("keeps the literal text when the date or the time is invalid", () => {
+    const invalid: Array<Partial<NotificationFacts>> = [
+      { date: "16/09/2026" },
+      { date: "2026-13-01" },
+      { date: "2026-00-10" },
+      { date: "2026-02-29" },
+      { date: "2100-02-29" },
+      { date: "2026-04-31" },
+      { date: "2026-09-00" },
+      { date: "" },
+      { time: "25:00" },
+      { time: "14:60" },
+      { time: "2pm" },
+      { time: "" },
+    ];
+    for (const override of invalid) {
+      const sample = facts(override);
+      const text = notificationFactualLines(sample).join(" ");
+      expect(text).toContain(`no dia ${sample.date} às ${sample.time}`);
+    }
+  });
+
+  it("does not say 'de seu atendimento' when there is no service and no title", () => {
+    for (const kind of ["REMINDER", "CHANGE_NOTICE"] as const) {
+      for (const appointmentStatus of ["CONFIRMED", "CANCELLED"] as const) {
+        const text = notificationFactualLines(
+          facts({ kind, appointmentStatus, services: [], title: null }),
+        ).join(" ");
+        expect(text.toLowerCase()).toContain("seu atendimento");
+        expect(text).not.toContain("de seu atendimento");
+        expect(text).not.toContain("de Seu atendimento");
+        expect(text).not.toContain("atendimento de ");
+      }
+    }
+  });
+
+  it("builds the exact sentences with and without a subject", () => {
+    expect(
+      notificationFactualLines(facts({ services: [], title: null })),
+    ).toEqual([
+      "Passando para lembrar do seu atendimento na quarta-feira, 16/09, às 14h30.",
+    ]);
+    expect(notificationFactualLines(facts())).toEqual([
+      "Passando para lembrar do seu atendimento de Corte na quarta-feira, 16/09, às 14h30.",
+    ]);
+    expect(
+      notificationFactualLines(
+        facts({
+          kind: "CHANGE_NOTICE",
+          appointmentStatus: "CANCELLED",
+          services: [],
+        }),
+      ),
+    ).toEqual(["Seu atendimento na quarta-feira, 16/09, às 14h30 foi cancelado."]);
+    expect(
+      notificationFactualLines(
+        facts({ kind: "CHANGE_NOTICE", services: [], title: null }),
+      ),
+    ).toEqual([
+      "Seu atendimento foi alterado e agora está marcado na quarta-feira, 16/09, às 14h30.",
+    ]);
+  });
+
+  // Os mesmos textos, escritos literalmente, estao em
+  // apps/frontend/tests/goal125-previa-do-lembrete.test.ts (PAIRS). Mude os
+  // dois lados juntos.
+  it("keeps the full reminder text identical to the frontend preview", () => {
+    const pairs: Array<{
+      style: "PROFESSIONAL" | "BALANCED" | "CASUAL";
+      overrides: Partial<NotificationFacts>;
+      text: string;
+    }> = [
+      {
+        style: "PROFESSIONAL",
+        overrides: {},
+        text: "Olá, Ana.\n\nPassando para lembrar do seu atendimento de Corte na quarta-feira, 16/09, às 15h30.\n\nFico à disposição.",
+      },
+      {
+        style: "BALANCED",
+        overrides: { price: 120, confirmationRequested: true },
+        text: "Oi, Ana! Tudo bem?\n\nPassando para lembrar do seu atendimento de Corte na quarta-feira, 16/09, às 15h30.\n\nValor: R$ 120,00.\n\nVocê confirma sua presença? É só responder sim ou não.",
+      },
+      {
+        style: "BALANCED",
+        overrides: { services: [] },
+        text: "Oi, Ana! Tudo bem?\n\nPassando para lembrar do seu atendimento na quarta-feira, 16/09, às 15h30.\n\nQualquer coisa, é só me chamar!",
+      },
+      {
+        style: "CASUAL",
+        overrides: { services: [], confirmationRequested: true },
+        text: "Oii, Ana! Tudo bem? 😊\n\nPassando para lembrar do seu atendimento na quarta-feira, 16/09, às 15h30.\n\nConfirma pra mim? Pode responder sim ou não 💛",
+      },
+      {
+        style: "CASUAL",
+        overrides: { price: 89.9 },
+        text: "Oii, Ana! Tudo bem? 😊\n\nPassando para lembrar do seu atendimento de Corte na quarta-feira, 16/09, às 15h30.\n\nValor: R$ 89,90.\n\nQualquer coisa me chama por aqui 💛",
+      },
+      {
+        style: "PROFESSIONAL",
+        overrides: { price: 120, confirmationRequested: true },
+        text: "Olá, Ana.\n\nPassando para lembrar do seu atendimento de Corte na quarta-feira, 16/09, às 15h30.\n\nValor: R$ 120,00.\n\nPode confirmar sua presença respondendo sim ou não?",
+      },
+    ];
+    for (const pair of pairs) {
+      expect(
+        composeNotificationText({
+          style: pair.style,
+          facts: facts({ time: "15:30", ...pair.overrides }),
+        }),
+      ).toBe(pair.text);
     }
   });
 
@@ -113,6 +270,11 @@ describe("notification message templates", () => {
     expect(
       notificationFactualLines(facts({ services: [], title: null })).join(" "),
     ).toContain("seu atendimento");
+  });
+
+  it("keeps the generic subject out of the sentence when a service exists", () => {
+    const text = notificationFactualLines(facts()).join(" ");
+    expect(text).toContain("seu atendimento de Corte");
   });
 
   it("omits the price when the owner did not send one", () => {

@@ -352,8 +352,8 @@ describe("notification delivery", () => {
 
     expect(bodies.size).toBe(3);
     for (const body of bodies.values()) {
-      // Data e hora saem prontas da intencao, iguais nos tres.
-      expect(body).toContain("no dia 2026-09-16 às 14:30");
+      // Data e hora saem da intencao em portugues, iguais nos tres.
+      expect(body).toContain("na quarta-feira, 16/09, às 14h30");
       expect(body).toContain("Corte");
     }
     expect(new Set(bodies.values()).size).toBe(3);

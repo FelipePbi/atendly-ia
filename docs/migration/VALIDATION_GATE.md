@@ -7368,3 +7368,121 @@ Os arquivos alterados estão dentro do critério do Goal: `apps/frontend/src/fea
 ### Não executado
 
 Conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.
+
+## Lembretes igual ao protótipo, com a prévia da mensagem e a data em português, do Goal125
+
+Execução da WU-04 (captura, fidelidade, controles negativos e registros), rodada 1, 2026-10-06, na worktree `goal-125`, com a pilha descartável do harness (`VISUAL_BFF_URL` em `127.0.0.1:65339`; banco em `127.0.0.1:55500`). Baseline `562f43b`. Decisão: [D-139](DECISIONS.md), PROPOSED.
+
+### Contagens
+
+| Gate | Comando | Resultado |
+| --- | --- | --- |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0 |
+| Lint do frontend | `rtk proxy npx eslint src tests --max-warnings=0` | saída 0 |
+| Testes do frontend | `npx vitest run` | **173** arquivos e **2258** testes passando (baseline 171 e 2210: +2 arquivos e +48 testes, os de `goal125`) |
+| Testes `goal125` | `goal125-lembretes.test.tsx` e `goal125-previa-do-lembrete.test.ts` | 30 e 18 testes, 48 no total |
+| Testes do orquestrador | `env -u AI_TEST_DATABASE_URL npx vitest run` (em `apps/ai-orchestrator`) | 97 arquivos passando e 14 pulados; **1238** testes passando e 101 pulados (os de integração pulam sem `AI_TEST_DATABASE_URL`; com a variável apontando para banco não migrado eles falham, observação 1 do review124) |
+| Typecheck do orquestrador | `npx tsc --noEmit` (em `apps/ai-orchestrator`) | saída 0 |
+| Testes da captura | `node --test scripts/tests/visual-responses.test.mjs` | **52** testes passando (baseline 49: +3) |
+| `test:gate` | `npm run test:gate` | **285** testes, 285 passando, 0 falhas (baseline 282: +3, os da captura) |
+| `git diff --check` | `git diff --check` | saída 0 |
+
+Gates do harness (saída do harness na execução da rodada 1; a correção da rodada 2 só mexe em CSS escopado, nas `notes` do AG2 e neste documento):
+
+| Gate | Comando | Resultado |
+| --- | --- | --- |
+| `validate:core` | `npm run validate:core` | PASSED, com 2 passos pulados e reportados pelo harness |
+| `validate:ui` | `npm run validate:ui` | 169 passando e 21 pulados, retries 0 |
+| `validate:integration` | `npm run validate:integration` | saída 0; o gate autenticado fecha com 280 passando, retries 0, e inclui `/configuracoes/agenda/lembretes` nas cinco larguras |
+| `test:gate` | `npm run test:gate` | 285 testes, 285 passando, 0 falhas |
+
+### Pares de texto (a prévia e o orquestrador afirmam a mesma string)
+
+Escritos literalmente em `apps/frontend/tests/goal125-previa-do-lembrete.test.ts` (`PAIRS`, teste "texto idêntico ao do orquestrador") e em `apps/ai-orchestrator/tests/reminders/notification-message.test.ts` ("keeps the full reminder text identical to the frontend preview"), com a cliente "Ana" e "na quarta-feira, 16/09, às 15h30":
+
+| # | Estilo | Serviço | Preço | Confirmação |
+| --- | --- | --- | --- | --- |
+| 1 | `PROFESSIONAL` | Corte | sem | sem |
+| 2 | `BALANCED` | Corte | R$ 120,00 | com |
+| 3 | `BALANCED` | sem serviço | sem | sem |
+| 4 | `CASUAL` | sem serviço | sem | com |
+| 5 | `CASUAL` | Corte | R$ 89,90 | sem |
+| 6 | `PROFESSIONAL` | Corte | R$ 120,00 | com |
+
+Cobrem os três estilos, com e sem confirmação, com e sem preço e com e sem serviço. Exemplo (par 4): "Oii, Ana! Tudo bem? 😊\n\nPassando para lembrar do seu atendimento na quarta-feira, 16/09, às 15h30.\n\nConfirma pra mim? Pode responder sim ou não 💛".
+
+### `visual:compare`
+
+Comando do AG2: `npm run visual:compare -- --target AG2` (conta `visual-prototipo-v2@example.invalid` criada e semeada na hora). Percentual de pixels diferentes por device:
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| AG2 | 14,0% | 4,3% | 6,3% | 5,5% |
+
+Rodada 2: o rodapé do "Salvar" da tela de Lembretes passou a ter o padding de baixo do quadro (28 px de 768 a 1023 px e 24 px a partir de 1024 px, só em `.reminders-screen .rules-save`); o AG3 repetiu 15,2%, 6,4%, 7,5% e 6,7%, sem mudança. Os quatro `side-by-side.png` foram abertos. O que resta, todo declarado em D-139: o balão com a mensagem real da IA (em vez do texto do quadro) e a nota do cartão; "Desativar lembretes" abaixo das fichas (o quadro não mostra como desligar); o aviso "Atendimento automático parado" da conta de teste, que empurra o conteúdo para baixo (no celular e no tablet o cartão da prévia fica atrás do "Salvar" fixo até a rolagem, no quadro cabe inteiro) e as linhas do hub e o item "Notificações" ao lado; a barra de status do iPhone. Cabeçalho "‹" e "Lembretes", fichas (48 h, 24 h marcada com o check, 12 h, 2 h, "Outro" tracejada), "Adicionar segundo lembrete", bloco de confirmação, controle de preço, cartão da prévia e "Salvar" estão na mesma ordem, com as mesmas cores e fontes do quadro, nos quatro devices. Não restou diferença visível além dessas.
+
+Regressão: `npm run visual:compare -- --target AG1,AG3,M1,N1,IA1` (20 pares, nenhum com erro):
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| AG1 | 8,3% | 3,7% | 6,1% | 5,1% |
+| AG3 | 15,2% | 6,4% | 7,5% | 6,7% |
+| M1 | 8,5% | 3,8% | 5,9% | 5,1% |
+| N1 | 8,2% | 3,8% | 5,9% | 5,2% |
+| IA1 | 12,7% | 6,0% | 7,8% | 6,6% |
+
+Os percentuais são os mesmos da captura de antes (AG1 e IA1 iguais aos de goals anteriores). Contra a captura de antes, feita na mesma pilha com os quatro arquivos de `src/` do frontend trocados temporariamente pelas versões de `HEAD` (`git show HEAD:…`; devolvidos depois, com o `sha256` conferido): o `app.png` de 13 dos 20 pares é igual byte a byte, e os outros 7 (AG1 e AG3 em paisagem e desktop, IA1 em paisagem, N1 em paisagem e desktop) diferem em 8 a 61 pixels, soltos nas bordas da coluna do hub. Duas rodadas seguidas do mesmo código final, sem trocar nada, também diferem entre si nos mesmos pares e na mesma ordem de grandeza (8 a 98 pixels, mesmas caixas), ou seja, é ruído de renderização da captura e não do código; nenhum desses pares toca a tela de Lembretes.
+
+### Controles negativos
+
+Rodados na rodada 1, depois da última edição de código, cada um com o arquivo devolvido e conferido com `cmp` (saída 0, sem diferença) e `git status` igual ao de antes.
+
+| # | Mudança | Comando | Teste que reprovou | Mensagem |
+| --- | --- | --- | --- | --- |
+| a | `notification-message.ts` devolve sempre `no dia {date} às {time}` | `npx vitest run tests/reminders/notification-message.test.ts` (em `apps/ai-orchestrator`) | 6 de 18, entre eles "writes the date and time in Portuguese, with the weekday, in the three styles" | `expected 'Olá, Ana.\n\nPassando para lembrar do…' to contain 'na quarta-feira, 16/09, às 14h30'` |
+| b | `"no sábado"` vira `"na sábado"` | o mesmo | 1 de 18: "uses the right article and weekday for the seven days" | `expected 'Passando para lembrar do seu atendime…' to contain 'no sábado, 19/09, às 14h30'` |
+| c | a frase de fecho do `CASUAL` trocada só em `reminderPreview.ts` ("me chama aqui") | `npx vitest run tests/goal125-previa-do-lembrete.test.ts tests/goal125-lembretes.test.tsx` (em `apps/frontend`) | 1 de 48: "texto idêntico ao do orquestrador: 'CASUAL com serviço, preço, sem confir…'" | `AssertionError: expected 'Oii, Ana! Tudo bem? 😊\n\nPassando pa…' to be 'Oii, Ana! Tudo bem? 😊\n\nPassando pa…' // Object.is equality` |
+| d | a prévia com `confirmationRequested: false` | o mesmo | 3 de 48: "a confirmação troca o fecho da mensagem antes de salvar", "tone null usa BALANCED" e "pede confirmação só quando a caixa está marcada" | `expected 'Oi, Ana! Tudo bem?\n\nPassando para l…' to be …` |
+| e | o `PATCH` sem `confirmationEnabled` | o mesmo | 4 de 48, entre eles "salvar > não grava nada antes de 'Salvar' e grava uma vez, com uma regra", "com dois lembretes" e "desligado envia rules vazio" | `expected "vi.fn()" to be called with arguments: [ { confirmationEnabled: true, …(2) } ]` |
+| f | `steps: [{ clickRole: { role: "button", name: "Salvar" } }]` no AG2 de `targets.json` | `node --test scripts/tests/visual-responses.test.mjs` | 2 de 52: "AG2 é o único dono de responses em Mais-Negocio-Agenda-IA.dc.html…" e "nenhum passo toca "Salvar" em alvo com responses…" | `alvo AG2 (Mais-Negocio-Agenda-IA.dc.html): steps[0] {"clickRole":{"role":"button","name":"Salvar"}} toca "Salvar" em alvo com responses; responses só cobre GET e o toque gravaria na conta visual` |
+
+### Testes ajustados
+
+Nenhum ajuste afrouxa asserção de comportamento (corpo do `PATCH`, validação, até dois lembretes, preço só com acordo fixo, confirmação só no lembrete, estilo sem mudar fato):
+
+- `goal021-reminder-settings-section.test.tsx`: a seção recebe `settings` (fixture de `SettingsState`), o catálogo de serviços é simulado (`serviceCatalog.list`) e o botão "Salvar lembretes" passa a "Salvar".
+- `goal021-a11y.test.tsx` e `goal021-shell-invariant.test.tsx`: só o `serviceCatalog.list` simulado, porque a prévia lê o catálogo.
+- `goal067-configuracoes-ia-conta.test.tsx`: a seção recebe `settings` e o catálogo é simulado.
+- `notification-delivery.test.ts` (orquestrador): a data esperada passa de "no dia 2026-09-16 às 14:30" a "na quarta-feira, 16/09, às 14h30"; `notification-message.test.ts` ganha os testes novos (sete dias, virada de ano, 29 de fevereiro, "9h", "9h05", "14h", fato inválido, frases sem serviço, estilos).
+- `visual-responses.test.mjs`: AG2 entre os donos de `responses`, a regra do "Salvar" (com a exceção do R2) e o teste do AG2 (de 49 para 52).
+
+### Escopo
+
+Arquivos alterados desta unidade: `apps/frontend/e2e/visual/targets.json` (o AG2, entregue pela WU-03 e conferido aqui), `scripts/tests/visual-responses.test.mjs`, `docs/migration/DECISIONS.md`, `docs/migration/CURRENT_STATE.md` e `docs/migration/VALIDATION_GATE.md`. `apps/frontend/e2e/routes.ts` não mudou: o `contentMarker` "Lembretes" continua achando a tela.
+
+### Não executado
+
+Conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.
+
+### Execução final (rodada 2, IA Loop)
+
+Acrescentado no fechamento pelo Tech Lead ([review125](reviews/125-review.md)), a partir dos resultados do IA Loop da rodada 2, sobre a árvore aceita (19 arquivos, hash `d0e8a494adff0d975d66bf6e722359cdd2096fa948244c9746b5831a93c4064a`). As tabelas acima atribuem os gates do harness à rodada 1; os números da rodada 2 são os mesmos.
+
+| Gate | Unidade | Resultado |
+| --- | --- | --- |
+| Typecheck do frontend | WU-05 | saída 0 |
+| Typecheck do orquestrador | WU-06 | saída 0 |
+| Lint do frontend | WU-07 | saída 0 |
+| Testes alvo `goal125` | WU-08 | 2 arquivos e 48 testes passando |
+| Testes alvo `reminders/notification-` do orquestrador | WU-09 | 3 arquivos e 38 testes passando |
+| `test:ia-loop` | WU-10 | pulado: o repositório não declara o script; os testes da captura rodam no `test:gate` |
+| Testes do frontend | WU-11 | 173 arquivos e 2258 testes passando |
+| `test:gate` | WU-12 | 285 testes, 285 passando, 0 falhas |
+| `validate:core` | WU-13 | PASSED, 17 passos: 15 passando, 0 falhas, 2 pulados (`test:bff` e `test:health-worker`) |
+| `validate:ui` | WU-14 | 169 passed, 21 skipped, retries 0 |
+| `validate:integration` | WU-15 | PASSED, 36 de 36 passos, 0 pulados; gate autenticado com 280 passed, retries 0 |
+| `git diff --check` | WU-16 | saída 0 |
+
+O Tech Lead rodou `node --test scripts/tests/visual-responses.test.mjs` na rodada 2 (52 pass, 0 fail) e refez o `visual:compare` do AG2 (14,0/4,3/6,3/5,5%, os mesmos da tabela acima) e do AG3 (15,2/6,4/7,5/6,7%, sem mudança).
+
+Os controles negativos rodaram na rodada 1, depois da última edição de código daquela rodada. A rodada 2 só mudou o padding de baixo de `.reminders-screen .rules-save` em `avenly-settings.css`, as `notes` do AG2 em `targets.json` e esta seção; nenhuma linha mutada nem teste reprovado pelos controles (a) a (f) mudou, por isso eles não foram refeitos.

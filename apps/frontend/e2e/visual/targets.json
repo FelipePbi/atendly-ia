@@ -4431,6 +4431,29 @@
       "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
     },
     {
+      "code": "AG2",
+      "file": "Mais-Negocio-Agenda-IA.dc.html",
+      "label": "Agenda · lembretes",
+      "route": "/configuracoes/agenda/lembretes",
+      "clock": "13:45",
+      "notes": "GET /v1/settings/reminders vem de resposta fixa (só no navegador da captura): lembrete 1 em 24 h, confirmação de presença ligada e preço \"Nunca\", como o quadro. Nenhum passo toca \"Salvar\": gravaria na conta visual. Divergências declaradas do Goal125: o balão mostra a mensagem real da IA (estilo da conta, \"Passando para lembrar…\", data sem \"amanhã\"), não o texto do quadro; \"Desativar lembretes\" aparece abaixo das fichas (o quadro não mostra como desligar); a nota do cartão da prévia é a da política de preço; \"Ativar lembretes\" (o quadro já nasce com os lembretes ligados), \"Remover segundo lembrete\" e o campo \"Minutos antes\" de \"Outro\" não aparecem no quadro; a barra de status e o indicador de início do iPhone não existem no app. Estado da casca da conta visual, que o quadro não tem e é diferença esperada: as linhas do hub, o item \"Notificações\" e, no mobile, o cartão da prévia atrás do \"Salvar\" fixo até a rolagem. O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/settings/reminders",
+          "json": {
+            "data": {
+              "configured": true,
+              "confirmationEnabled": true,
+              "pricePolicy": "NEVER",
+              "rules": [{ "slot": "FIRST", "leadMinutes": 1440 }]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "IA1",
       "file": "Mais-Negocio-Agenda-IA.dc.html",
       "label": "Configurações · IA",

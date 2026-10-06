@@ -202,23 +202,25 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, W2, R2, I1, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1, W2, R2, I1, AG2, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["A12", "A2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "R2", "S2", "S7", "W1", "W2"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "R2", "S2", "S7", "W1", "W2"]);
   for (const target of declaring) {
     const owner = ["W1", "W2", "R2", "I1"].includes(target.code)
       ? "Mais-WhatsApp-Importacao-Conta.dc.html"
-      : ["L2", "L7"].includes(target.code)
-        ? "Login.dc.html"
-        : target.code.startsWith("H")
-          ? "Home.dc.html"
-          : target.code.startsWith("A")
-            ? "Agenda.dc.html"
-            : target.code.startsWith("CL")
-              ? "Clientes.dc.html"
-              : target.code.startsWith("S")
-                ? "Servicos.dc.html"
-                : "Conversas-e-Chat.dc.html";
+      : target.code === "AG2"
+        ? "Mais-Negocio-Agenda-IA.dc.html"
+        : ["L2", "L7"].includes(target.code)
+          ? "Login.dc.html"
+          : target.code.startsWith("H")
+            ? "Home.dc.html"
+            : target.code.startsWith("A")
+              ? "Agenda.dc.html"
+              : target.code.startsWith("CL")
+                ? "Clientes.dc.html"
+                : target.code.startsWith("S")
+                  ? "Servicos.dc.html"
+                  : "Conversas-e-Chat.dc.html";
     assert.equal(target.file, owner, `${target.code} declara responses no arquivo errado`);
     const postOwners = ["L2", "L7"];
     for (const entry of target.responses) {
@@ -327,7 +329,27 @@ test("targets.json: W2 e R2 declaram só o GET do próprio caminho e abrem a fol
   assert.deepEqual(r2.steps.map((step) => step.clickRole?.name ?? step.click), ["30 dias", "Salvar", "Guardar conversas comerciais por 30 dias?"]);
 });
 
-const CONFIRMING_NAMES = ["desconectar", "excluir minha conta", "reduzir os dois prazos"];
+test("targets.json: AG2 é o único dono de responses em Mais-Negocio-Agenda-IA.dc.html, com o GET dos lembretes e sem passos", () => {
+  const owners = declaringTargets().filter((target) => target.file === "Mais-Negocio-Agenda-IA.dc.html");
+  assert.deepEqual(owners.map((target) => target.code), ["AG2"]);
+  const [ag2] = owners;
+  assert.equal(ag2.route, "/configuracoes/agenda/lembretes");
+  assert.equal(ag2.clock, "13:45");
+  assert.equal(ag2.steps, undefined, "AG2: sem passos, nenhum toque pode gravar");
+  assert.match(ag2.notes, /Nenhum passo toca "Salvar"/);
+  assert.deepEqual(ag2.responses.map((entry) => `${entry.method} ${entry.path}`), ["GET /v1/settings/reminders"]);
+  assert.deepEqual(ag2.responses[0].json.data, {
+    configured: true,
+    confirmationEnabled: true,
+    pricePolicy: "NEVER",
+    rules: [{ slot: "FIRST", leadMinutes: 1440 }],
+  });
+  assert.equal(pickFixedResponse(ag2, "GET", "/v1/settings/reminders"), ag2.responses[0]);
+  for (const method of ["PATCH", "PUT", "POST"]) assert.equal(pickFixedResponse(ag2, method, "/v1/settings/reminders"), null);
+  assert.equal(pickFixedResponse(ag2, "GET", "/v1/settings"), null, "o estilo e o fuso da prévia vêm da conta de teste");
+});
+
+const CONFIRMING_NAMES =["desconectar", "excluir minha conta", "reduzir os dois prazos"];
 
 function confirmsRecordedAction(step) {
   const labels = [step.clickRole?.name, step.click].filter((label) => typeof label === "string");
@@ -356,6 +378,46 @@ test("targets.json: nenhum passo de captura confirma ação gravada (Desconectar
       }
     }
   }
+});
+
+const SAVE_ONLY_OPENS_SHEET = ["R2"];
+
+function clicksSave(step) {
+  return step.clickRole?.name?.trim().toLowerCase() === "salvar";
+}
+
+function savesRecordedSettings(target, step, index) {
+  if (target.responses === undefined || !clicksSave(step)) return false;
+  if (!SAVE_ONLY_OPENS_SHEET.includes(target.code)) return true;
+  const next = target.steps[index + 1];
+  return next === undefined || typeof next.click !== "string" || confirmsRecordedAction(next);
+}
+
+test("targets.json: nenhum passo toca \"Salvar\" em alvo com responses (o PATCH gravaria na conta visual)", () => {
+  const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "frontend", "e2e", "visual", "targets.json");
+  const targets = validateTargetResponses(JSON.parse(readFileSync(file, "utf8")).targets);
+  for (const target of targets) {
+    for (const [index, step] of (target.steps ?? []).entries()) {
+      assert.equal(
+        savesRecordedSettings(target, step, index),
+        false,
+        `alvo ${target.code} (${target.file}): steps[${index}] ${JSON.stringify(step)} toca "Salvar" em alvo com responses; responses só cobre GET e o toque gravaria na conta visual`,
+      );
+    }
+  }
+});
+
+test("a regra de \"Salvar\" recusa o toque em alvo com responses e só deixa passar o que abre a folha de confirmação (R2)", () => {
+  const save = { clickRole: { role: "button", name: "Salvar" } };
+  const responses = [OK];
+  assert.equal(savesRecordedSettings({ code: "AG2", responses, steps: [save] }, save, 0), true);
+  assert.equal(savesRecordedSettings({ code: "AG2", responses, steps: [{ clickRole: { role: "button", name: " salvar " } }] }, { clickRole: { role: "button", name: " salvar " } }, 0), true);
+  assert.equal(savesRecordedSettings({ code: "AG3", steps: [save] }, save, 0), false, "sem responses o alvo não tem resposta fixa a proteger");
+  assert.equal(savesRecordedSettings({ code: "AG2", responses, steps: [{ click: "Lembretes" }] }, { click: "Lembretes" }, 0), false);
+  const sheet = { click: "Guardar conversas comerciais por 30 dias?" };
+  assert.equal(savesRecordedSettings({ code: "R2", responses, steps: [save, sheet] }, save, 0), false);
+  assert.equal(savesRecordedSettings({ code: "R2", responses, steps: [save] }, save, 0), true, "R2 sem o passo da folha depois de Salvar");
+  assert.equal(savesRecordedSettings({ code: "R2", responses, steps: [save, { click: "Reduzir os dois prazos" }] }, save, 0), true);
 });
 
 test("a regra dos passos reconhece os botões que confirmam e deixa passar os que só abrem a folha", () => {

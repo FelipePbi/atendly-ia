@@ -25,6 +25,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+import type { SettingsState } from "@/data";
 import { OtherInfoSection } from "@/features/knowledge/OtherInfoSection";
 import { NotificationPreferenceSection } from "@/features/notifications/NotificationPreferenceSection";
 import { ReminderSettingsSection } from "@/features/reminders/ReminderSettingsSection";
@@ -44,6 +45,24 @@ const notificationsGetPreferences = vi.fn();
 const notificationsUpdatePreferences = vi.fn();
 const remindersGet = vi.fn();
 const remindersUpdate = vi.fn();
+
+const settingsForReminders: SettingsState = {
+  ai: { enabled: false, tone: null },
+  availability: null,
+  business: null,
+  calendar: {
+    capabilities: {
+      createAppointments: false,
+      manageAvailability: false,
+      manageCustomers: false,
+      manageServices: false,
+      migrate: false,
+    },
+    integration: null,
+    source: "AVENLY",
+    timezone: "America/Sao_Paulo",
+  },
+};
 
 let sessionUser: { email: string; name?: string | null } = {
   email: "dona@studiomarina.com.br",
@@ -67,6 +86,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       summary: notificationsSummary,
       updatePreferences: notificationsUpdatePreferences,
     },
+    serviceCatalog: { list: vi.fn().mockResolvedValue({ items: [] }) },
     settings: { getReminders: remindersGet, updateReminders: remindersUpdate },
     status: { get: statusGet },
   }),
@@ -315,7 +335,7 @@ describe("liga/desliga com título e descrição separados no nome acessível (G
       pricePolicy: "NEVER",
       rules: [{ slot: "FIRST", leadMinutes: 1_440 }],
     });
-    render(<ReminderSettingsSection />);
+    render(<ReminderSettingsSection settings={settingsForReminders} />);
 
     const checkbox = await screen.findByRole("checkbox", {
       name: "Pedir confirmação de presença",

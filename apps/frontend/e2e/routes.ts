@@ -120,6 +120,14 @@ export const AUTHENTICATED_ROUTES = [
     sessionMarker: "configuracoes",
     contentMarker: "Conta",
   },
+  // Goal124 (C2): excluir a conta em rota própria. A conta semeada não tem
+  // exclusão pedida, então a tela mostra o formulário; o h1 é o do quadro.
+  {
+    path: "/configuracoes/conta/excluir",
+    name: "configuracoes-conta-excluir",
+    sessionMarker: "configuracoes",
+    contentMarker: "Excluir sua conta na Avenly?",
+  },
   { path: "/servicos", name: "servicos", sessionMarker: "servicos", contentMarker: "Serviços" },
   {
     path: "/notificacoes",

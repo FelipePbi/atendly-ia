@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, type ReactNode, useState } from "react";
 
-import { BffHttpError, PASSWORD_POLICY_RULES } from "@/data";
+import { PASSWORD_POLICY_RULES } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices, useProductRuntime } from "@/shared/runtime/ProductRuntime";
 import {
@@ -61,12 +61,6 @@ export function AccountSettings() {
   const [confirmingLogoutAll, setConfirmingLogoutAll] = useState(false);
   const [loggingOutAll, setLoggingOutAll] = useState(false);
   const [logoutAllError, setLogoutAllError] = useState<string | null>(null);
-
-  const [requestingDeletion, setRequestingDeletion] = useState(false);
-  const [requestingDeletionBusy, setRequestingDeletionBusy] = useState(false);
-  const [requestingDeletionError, setRequestingDeletionError] = useState<
-    string | null
-  >(null);
 
   const [cancellingDeletion, setCancellingDeletion] = useState(false);
   const [cancellingDeletionBusy, setCancellingDeletionBusy] = useState(false);
@@ -156,29 +150,6 @@ export function AccountSettings() {
     router.replace("/login");
   }
 
-  async function requestAccountDeletion(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const password = formString(new FormData(event.currentTarget), "password");
-    setRequestingDeletionBusy(true);
-    setRequestingDeletionError(null);
-    try {
-      await getProductServices().account.requestDeletion(password);
-    } catch (error: unknown) {
-      setRequestingDeletionBusy(false);
-      setRequestingDeletionError(
-        error instanceof BffHttpError && error.status === 401
-          ? "Senha atual incorreta."
-          : "Não foi possível pedir a exclusão agora. Tente novamente.",
-      );
-      return;
-    }
-    setRequestingDeletionBusy(false);
-    setRequestingDeletion(false);
-    // O pedido já foi aceito pelo servidor; reler `GET /v1/status` é o único
-    // jeito de a tela mostrar o vencimento real sem inventar um estado local.
-    refreshStatus();
-  }
-
   async function cancelAccountDeletionRequest() {
     setCancellingDeletionBusy(true);
     setCancellingDeletionError(null);
@@ -266,7 +237,6 @@ export function AccountSettings() {
           <AccountDeletionSection
             accountDeletion={accountDeletion}
             onCancelOpen={() => setCancellingDeletion(true)}
-            onRequestOpen={() => setRequestingDeletion(true)}
             statusPhase={statusPhase}
           />
         </div>
@@ -357,53 +327,6 @@ export function AccountSettings() {
         </div>
       </Dialog>
       <Dialog
-        eyebrow="Excluir conta"
-        onClose={() => {
-          setRequestingDeletion(false);
-          setRequestingDeletionError(null);
-        }}
-        open={requestingDeletion}
-        title="Excluir sua conta?"
-      >
-        <ul className="settings-modal-list">
-          <li>As automações são desligadas agora.</li>
-          <li>O WhatsApp é desconectado agora.</li>
-          <li>Você tem sete dias para cancelar a exclusão.</li>
-          <li>
-            Depois desse prazo, os dados são apagados e não é possível
-            recuperar.
-          </li>
-        </ul>
-        <form onSubmit={(event) => void requestAccountDeletion(event)}>
-          <Password name="password" label="Senha atual" />
-          {requestingDeletionError && (
-            <p className="field-help" role="alert">
-              {requestingDeletionError}
-            </p>
-          )}
-          <div className="modal-actions">
-            <button
-              className="btn btn-secondary"
-              disabled={requestingDeletionBusy}
-              type="button"
-              onClick={() => {
-                setRequestingDeletion(false);
-                setRequestingDeletionError(null);
-              }}
-            >
-              Cancelar
-            </button>
-            <button
-              className="btn btn-danger"
-              disabled={requestingDeletionBusy}
-              type="submit"
-            >
-              {requestingDeletionBusy ? "Pedindo exclusão..." : "Pedir exclusão"}
-            </button>
-          </div>
-        </form>
-      </Dialog>
-      <Dialog
         eyebrow="Cancelar exclusão"
         onClose={() => {
           setCancellingDeletion(false);
@@ -473,12 +396,10 @@ type AccountDeletionSummary = { status: string; dueAt: string | null } | null;
 function AccountDeletionSection({
   accountDeletion,
   onCancelOpen,
-  onRequestOpen,
   statusPhase,
 }: {
   accountDeletion: AccountDeletionSummary;
   onCancelOpen: () => void;
-  onRequestOpen: () => void;
   statusPhase: "error" | "loading" | "loaded";
 }) {
   if (!accountDeletion && statusPhase === "loading") {
@@ -537,11 +458,7 @@ function AccountDeletionSection({
   }
 
   return (
-    <button
-      className="account-danger-card is-action"
-      type="button"
-      onClick={onRequestOpen}
-    >
+    <Link className="account-danger-card is-action" href="/configuracoes/conta/excluir">
       <span className="account-danger-copy">
         <span className="account-danger-title">Excluir conta</span>
         <span className="account-danger-detail">
@@ -549,6 +466,6 @@ function AccountDeletionSection({
         </span>
       </span>
       <Icon name="chevron-right" />
-    </button>
+    </Link>
   );
 }

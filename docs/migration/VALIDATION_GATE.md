@@ -7270,3 +7270,101 @@ Critério 7: `PUBLIC_ROUTES` (apps/frontend/e2e/routes.ts) não inclui `/nova-se
 ### Não executado
 
 Conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.
+
+## A folha de desconectar, a folha de redução da retenção e a exclusão de conta iguais ao protótipo, do Goal124
+
+Registro da execução do Goal124 sobre a baseline `62ee50c`, por acréscimo ([D-138](DECISIONS.md), PROPOSED). Só o frontend e a captura mudaram; nenhuma mudança no BFF, no Scheduling, na IA, no contrato ou no banco.
+
+### `visual:compare`
+
+Comandos, rodados na raiz da worktree: `npm run visual:compare -- --target W2,R2,Mais-WhatsApp:C2` (a execução final, depois da última edição de código e dos controles negativos, saída 0, 12 capturas) e `-- --target W1,R1,Mais-WhatsApp:C1,M1,K5,K6` para regressão. Percentuais em mobile / tablet em retrato / tablet em paisagem / desktop:
+
+| Quadro | Diff | Leitura |
+| --- | --- | --- |
+| W2 | 2,3 / 6,1 / 7,7 / 6,3 | folha "Desconectar o WhatsApp?" com título, texto com o número, três linhas, "Desconectar" `#B3392E` e "Manter conectado" na mesma estrutura, cor e tipografia do quadro. Restam a terceira linha sem "de 3 minutos" e o estado da casca (abaixo) |
+| R2 | 6,3 / 7,7 / 12,7 / 10,7 | folha "Guardar conversas comerciais por 30 dias?" com texto, nota, "Reduzir para 30 dias" em tinta e "Manter 90 dias". Restam a frase sem "hoje isso alcança 86 conversas", a frase das Não classificadas e o estado da casca |
+| C2 | 8,9 / 4,1 / 6,4 / 5,5 | `h1`, linha do tempo, campo "Confirme com sua senha", "Excluir minha conta" desabilitado e "Voltar". Restam a data da linha do tempo e o estado da casca |
+| W1 | 8,1 / 3,4 / 6,0 / 5,0 | igual ao aceito |
+| R1 | 17,2 / 9,4 / 10,2 / 9,1 | igual ao último aceito |
+| Mais-WhatsApp:C1 | 5,1 / 2,4 / 4,9 / 4,2 | igual ao aceito |
+| M1 | 8,5 / 3,8 / 5,9 / 5,1 | igual ao aceito |
+| K5 | 32,2 / 17,7 / 12,5 / 9,6 | aceito: 32,3 / 17,7 / 12,5 / 9,6; os 0,1 do celular são variação da execução |
+| K6 | 0,5 / 0,6 / 0,8 / 1,3 | igual ao aceito |
+
+Leitura dos `side-by-side.png` de W2, R2 e C2 (celular, tablet em retrato, tablet em paisagem e desktop; os de regressão, no celular de C1 e K5). **Divergências que restam**, todas declaradas em D-138:
+
+- W2: a terceira linha termina em "refazer o teste." e o quadro diz "refazer o teste de 3 minutos.".
+- R2: sem "hoje isso alcança 86 conversas" (o BFF não expõe a contagem antes de salvar) e com "As Não classificadas seguem o mesmo prazo." quando a Comercial reduz.
+- C2: a data da linha do tempo é a de hoje mais 7 dias ("Em 13 de outubro"), e o quadro mostra "Em 25 de setembro".
+- C2: o campo "Confirme com sua senha" é um input de senha próprio, sem "Mostrar senha", como no quadro; o `Password` de `settings/shared/fields.tsx` não tem essa alternância, e por isso o critério 7 não tem esse alvo de toque.
+- W2 e R2: o foco inicial vai para "Manter conectado" e "Manter {prazo atual}" / "Manter os prazos atuais" (prop opcional `initialFocusSelector` de `ChatSheetShell`), para que Enter repetido não confirme a ação gravada; não aparece na captura.
+- O estado da casca da conta visual, que o protótipo não tem: o aviso "Atendimento automático parado", a barra de status, as linhas do hub, o item "Notificações" e o nome e o telefone do negócio ao fundo; no C2 do celular o aviso empurra o campo de senha para a dobra.
+- A barra de status e o indicador de início do iPhone do protótipo.
+
+Regressão: W1, R1, Mais-WhatsApp:C1, M1, K5 e K6 têm os mesmos percentuais da captura aceita (K5 com 0,1 de variação no celular).
+
+### Controles negativos
+
+Rodados na rodada 1, depois da última edição de código daquela rodada; cada mutação foi revertida e conferida com `cmp` contra a cópia guardada antes (saída 0 nas cinco). A rodada 2 só acrescentou a prop `initialFocusSelector` de `ChatSheetShell` (em `ConversationActionsSheet.tsx`, `WhatsAppConnectionPanel.tsx` e `RetentionSection.tsx`) e completou as `notes` de W2 e R2. Nenhuma linha mutada pelos controles e nenhum teste que eles reprovaram mudou; por isso os controles não foram refeitos.
+
+| Controle | Mutação | Comando | Reprovou | `cmp` |
+| --- | --- | --- | --- | --- |
+| (a) "Excluir minha conta" habilitado sem senha | `disabled={!password \|\| busy}` passa a `disabled={busy}` em `AccountDeletionScreen.tsx` | `npx vitest run tests/goal124-excluir-conta.test.tsx tests/goal025-account-deletion-screen.test.tsx` | 2 testes: "'Excluir minha conta' fica desabilitado com a senha vazia e habilita ao digitar" (goal124) e "pedir enuncia os efeitos antes de executar e exige senha atual" (goal025), com `expect(element).toBeDisabled()` (25 passaram) | ok |
+| (b) formulário durante o carregamento | `canRequest` também verdadeiro com `!accountDeletion && phase === "loading"` | o mesmo | 1 teste: "sem leitura de status mostra o carregando e nunca o formulário" (`Unable to find an element with the text: Carregando o estado da exclusão...`; 26 passaram) | ok |
+| (c) `PATCH` sem `confirmReduction` | `...(confirmReduction ? { confirmReduction: true } : {})` passa a `...({})` em `RetentionSection.tsx` | `npx vitest run tests/goal124-folhas-de-configuracoes.test.tsx tests/goal023-retention-settings.test.tsx tests/goal104-ia-conversas-e-conta.test.tsx tests/goal024-settings-shell-invariant.test.tsx` | 3 testes: goal023 "confirmar a redução só então envia o PATCH com confirmReduction", goal104 "confirmar a redução envia um único pedido com confirmReduction true" e goal124 "'Reduzir para…' envia o PATCH com confirmReduction true, uma vez, só depois de confirmar" (`expected "vi.fn()" to be called with arguments`; 103 passaram) | ok |
+| (d) sem a frase das Não classificadas | o sufixo " As Não classificadas seguem o mesmo prazo." passa a `${""}` | o mesmo do (c) | 2 testes: goal023 "o diálogo de redução da Comercial menciona Não classificadas; o da Pessoal não" e goal124 "só Comercial: título, texto sem contagem, frase das Não classificadas, nota e botões" (`toHaveTextContent`; 104 passaram) | ok |
+| (e) passo de captura que confirma | o alvo C2 de `targets.json` ganha `steps: [{ clickRole: { role: "button", name: "Excluir minha conta" } }]` | `node --test scripts/tests/visual-responses.test.mjs` | 1 teste: "targets.json: nenhum passo de captura confirma ação gravada (Desconectar, Excluir minha conta, Reduzir…)" (48 de 49 passaram), com `alvo C2 (...): steps[0] {"clickRole":{"role":"button","name":"Excluir minha conta"}} toca o botão que confirma uma ação gravada; responses só cobre GET e o toque gravaria na conta visual` | ok |
+
+### Execução
+
+Contagens sobre a árvore final (as mutações todas revertidas):
+
+| Comando | Resultado |
+| --- | --- |
+| `npx vitest run tests/goal124-folhas-de-configuracoes.test.tsx tests/goal124-excluir-conta.test.tsx` em `apps/frontend` | **36** testes passando nos dois arquivos (rodada 2, depois dos dois testes de foco inicial) |
+| `node --test scripts/tests/visual-responses.test.mjs` | **49** testes, **49** passando, 0 falhas (eram 46) |
+| `npx tsc --noEmit` em `apps/frontend` | saída 0, sem erro |
+| lint em `apps/frontend` (`rtk proxy npx eslint src tests --max-warnings=0`) | saída 0, 0 avisos |
+| `npx vitest run` em `apps/frontend` (suíte completa) | **171** arquivos, **2210** testes passando (eram 169 e 2173; rodada 2) |
+| `npm run test:gate` | **282** testes, **282** passando, 0 falhas (eram 279) |
+| `git diff --check` | saída 0 (só o aviso de fim de linha do Git em `avenly-settings.css`) |
+| `npm run validate:core` | saída 0; 17 passos, **15** passando, 0 falhas, 2 pulados (`test:bff` e `test:health-worker`); ver a nota abaixo |
+| `npm run validate:ui` | saída 0; **169** passed, **21** skipped, 0 retentativas |
+| `node scripts/goal033-authenticated-ui-rehearsal.mjs` | saída 0; **280** passed (eram 275; +5 da rota nova do C2 nos cinco widths), 0 retentativas |
+| `npm run validate:integration` | saída 0; 36 passos, **36** passando, 0 falhas, 0 pulados; o gate autenticado com **280** passed e 0 retentativas |
+
+Nota sobre `validate:core` e `validate:integration`: a primeira execução de `validate:core` falhou em `test:ai-orchestrator` (13 suítes, "The table `public.ActivationTestRun` does not exist"), porque o banco apontado por `AI_TEST_DATABASE_URL` neste ambiente não estava migrado, e migrar banco não faz parte desta unidade. As duas execuções que contam (`validate:core` e `validate:integration`) rodaram com `AI_TEST_DATABASE_URL`, `SCHEDULING_TEST_DATABASE_URL` e `EVOLUTION_TEST_DATABASE_URL` removidas do ambiente do comando (os passos que dependem delas ficam pulados ou usam o banco padrão do gate); nenhum servidor nem banco foi iniciado ou parado por esta unidade.
+
+### Testes existentes ajustados
+
+- `apps/frontend/tests/goal023-retention-settings.test.tsx`: os textos do diálogo de redução passam a "Manter 90 dias", "Reduzir para 30 dias", "As Não classificadas seguem o mesmo prazo." e "Mensagens com mais de 30 dias serão removidas".
+- `apps/frontend/tests/goal024-settings-shell-invariant.test.tsx`: "Manter prazo atual" passa a "Manter 90 dias".
+- `apps/frontend/tests/goal025-account-deletion-screen.test.tsx`: renderiza `AccountDeletionScreen`; o diálogo é substituído pela tela, com "Excluir minha conta" desabilitado com a senha vazia, "Confirme com sua senha", `replace("/configuracoes/conta")` no sucesso e o pedido chamado uma vez.
+- `apps/frontend/tests/goal104-ia-conversas-e-conta.test.tsx`: os títulos do R1/R2; "Excluir conta" passa de `button` a `link` para `/configuracoes/conta/excluir`; teste novo da exclusão na própria rota.
+- `apps/frontend/tests/goal106-whatsapp.test.tsx`: "Desconectar o WhatsApp?" e o botão "Desconectar".
+- `scripts/tests/visual-responses.test.mjs`: a lista de donos de `responses` inclui W2 e R2 (`Mais-WhatsApp-Importacao-Conta.dc.html`), e ganha o teste de W2 e R2, o da regra dos passos que confirmam e o do reconhecimento dos nomes (de 46 para 49).
+
+Nenhuma asserção foi afrouxada.
+
+### `validate:ui`, gate autenticado, contraste e alvo de toque
+
+`validate:ui` e o gate autenticado não chegam às folhas W2 e R2: são estados abertos por toque, e `routes.ts` só lista rotas. O gate autenticado alcança o C2 (rota nova, `/configuracoes/conta/excluir`, nos cinco widths). Por isso o contraste e o alvo de toque das folhas foram conferidos por cálculo (WCAG 2.x), sobre as cores do CSS:
+
+| Par | Razão |
+| --- | --- |
+| "Desconectar" e "Excluir minha conta" habilitado, `#FFFDFA` sobre `#B3392E` | 5,84:1 |
+| texto da folha, `#5F574E` sobre `#FFFDFA` | 6,99:1 |
+| nota da folha, `#716859` sobre `#FFFDFA` | 5,41:1 |
+| "Reduzir para…", `#F7F4EF` sobre `#221E1A` | 15,09:1 |
+| ícone do visto, `#2E7D4F` sobre `#DFEFE4` (gráfico, mínimo 3:1) | 4,23:1 |
+| "Excluir minha conta" desabilitado, `#F7F4EF` sobre `#B9B1A6` (controle inativo, isento) | 1,93:1 |
+
+Os botões das folhas têm 52 px de altura (`.settings-sheet-confirm` e `.settings-sheet-cancel`, `height: 52px`); no C2 o "Voltar" do `.deletion-footer` tem 54 px. O critério 8 do Goal não autoriza mudar `routes.ts` além da rota do C2.
+
+### Escopo
+
+Os arquivos alterados estão dentro do critério do Goal: `apps/frontend/src/features/whatsapp/WhatsAppConnectionPanel.tsx`, `apps/frontend/src/features/conversations/ConversationActionsSheet.tsx` (só a prop opcional `initialFocusSelector` de `ChatSheetShell`; K5 e K6 sem a prop, com a mesma captura), `apps/frontend/src/features/settings/` (`AccountDeletionScreen.tsx`, `AccountSettings.tsx`, `ProductSettingsScreen.tsx`, `RetentionSection.tsx`, `types.ts`), a rota `apps/frontend/src/app/(platform)/configuracoes/conta/excluir/`, `apps/frontend/src/shared/styles/avenly-settings.css`, os testes `goal124-*`, `goal023`, `goal024`, `goal025`, `goal104` e `goal106`, `apps/frontend/e2e/routes.ts`, `apps/frontend/e2e/visual/targets.json`, `scripts/tests/visual-responses.test.mjs` e os três registros de `docs/migration/`. `scripts/visual-compare.mjs` e `scripts/lib/visual-responses.mjs` não mudaram; `goals/`, `reviews/`, `MIGRATION_STATUS.md` e `MASTER_PLAN.md` não foram tocados.
+
+### Não executado
+
+Conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.

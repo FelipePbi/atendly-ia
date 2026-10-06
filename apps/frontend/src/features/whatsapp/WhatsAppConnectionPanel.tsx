@@ -6,6 +6,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
 } from "react";
@@ -15,10 +16,10 @@ import {
   type WhatsAppConnectInput,
   type WhatsAppConnection,
 } from "@/data";
+import { ChatSheetShell } from "@/features/conversations/ConversationActionsSheet";
 import { Icon } from "@/shared/icons/Icon";
 import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
-import { Dialog } from "@/shared/ui/Dialog";
 import { Skeleton } from "@/shared/ui/States";
 
 // Intervalo de releitura do QR (Goal071/WU-02): menor que o giro observado da
@@ -510,37 +511,15 @@ export function WhatsAppConnectionPanel({
     );
   }
 
-  const disconnectDialog = (
-    <Dialog
-      eyebrow="Interrupção do serviço"
-      onClose={() => setDisconnectConfirmationOpen(false)}
-      open={disconnectConfirmationOpen}
-      title="Desconectar WhatsApp?"
-    >
-      <p className="settings-modal-copy">
-        A Avenly deixará de responder automaticamente assim que a desconexão
-        for concluída.
-      </p>
-      <div className="modal-actions">
-        <button
-          className="btn btn-secondary"
-          disabled={busy}
-          type="button"
-          onClick={() => setDisconnectConfirmationOpen(false)}
-        >
-          Manter conectado
-        </button>
-        <button
-          className="btn btn-danger"
-          disabled={busy}
-          type="button"
-          onClick={() => void disconnect()}
-        >
-          {busy ? "Desconectando..." : "Desconectar WhatsApp"}
-        </button>
-      </div>
-    </Dialog>
-  );
+  const disconnectDialog = disconnectConfirmationOpen ? (
+    <DisconnectSheet
+      busy={busy}
+      error={renderConnected ? null : error}
+      onCancel={() => setDisconnectConfirmationOpen(false)}
+      onConfirm={() => void disconnect()}
+      phone={displayPhone}
+    />
+  ) : null;
 
   if (
     renderConnected &&
@@ -887,6 +866,103 @@ export function WhatsAppConnectionPanel({
 
       {disconnectDialog}
     </div>
+  );
+}
+
+function DisconnectSheet({
+  busy,
+  error,
+  onCancel,
+  onConfirm,
+  phone,
+}: {
+  busy: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+  phone: string | null;
+}) {
+  const titleId = useId();
+  return (
+    <ChatSheetShell
+      className="is-settings-confirm"
+      initialFocusSelector=".settings-sheet-cancel"
+      onClose={onCancel}
+      title="Desconectar o WhatsApp?"
+      titleId={titleId}
+    >
+      <div className="settings-sheet-copy">
+        <h2 className="settings-sheet-title" id={titleId}>
+          Desconectar o WhatsApp?
+        </h2>
+        <p className="settings-sheet-text">
+          {phone ? `O número ${phone}` : "Seu número"} deixa de estar ligado à
+          Avenly.
+        </p>
+      </div>
+      <div className="settings-sheet-points">
+        <div className="settings-sheet-point">
+          <span aria-hidden="true" className="settings-sheet-ring" />
+          <span>
+            <strong>Sua IA para de atender</strong> na hora. Ninguém recebe
+            resposta automática.
+          </span>
+        </div>
+        <div className="settings-sheet-point">
+          <SheetCheck />
+          <span>
+            <strong>Clientes, agenda e histórico</strong> de conversas continuam
+            na Avenly.
+          </span>
+        </div>
+        <div className="settings-sheet-point">
+          <SheetCheck />
+          <span>Para voltar, basta conectar de novo e refazer o teste.</span>
+        </div>
+      </div>
+      {error && (
+        <p className="chat-sheet-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="settings-sheet-actions">
+        <button
+          className="settings-sheet-confirm is-danger"
+          disabled={busy}
+          type="button"
+          onClick={onConfirm}
+        >
+          {busy ? "Desconectando..." : "Desconectar"}
+        </button>
+        <button
+          className="settings-sheet-cancel"
+          disabled={busy}
+          type="button"
+          onClick={onCancel}
+        >
+          Manter conectado
+        </button>
+      </div>
+    </ChatSheetShell>
+  );
+}
+
+function SheetCheck() {
+  return (
+    <span aria-hidden="true" className="settings-sheet-check">
+      <svg
+        fill="none"
+        height="12"
+        stroke="#2E7D4F"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="3"
+        viewBox="0 0 24 24"
+        width="12"
+      >
+        <path d="M5 12.5l4.5 4.5L19 7.5" />
+      </svg>
+    </span>
   );
 }
 

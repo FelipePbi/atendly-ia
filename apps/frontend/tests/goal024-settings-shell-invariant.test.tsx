@@ -476,7 +476,7 @@ describe("ShellConfigProvider + Conversas não excede a profundidade de atualiza
       await user.click(within(commercial).getByRole("radio", { name: "30 dias" }));
       await user.click(screen.getByRole("button", { name: "Salvar" }));
       await screen.findByRole("dialog");
-      await user.click(screen.getByRole("button", { name: "Manter prazo atual" }));
+      await user.click(screen.getByRole("button", { name: "Manter 90 dias" }));
     }
 
     expect(updateRetention).not.toHaveBeenCalled();

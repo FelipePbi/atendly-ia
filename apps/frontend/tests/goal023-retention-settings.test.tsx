@@ -143,8 +143,7 @@ test("reduzir e salvar abre confirmação que avisa remoção de mensagens antig
 
   expect(update).not.toHaveBeenCalled();
   const dialog = await screen.findByRole("dialog");
-  expect(dialog).toHaveTextContent(/mensagens.*antigas.*removidas/i);
-  expect(dialog).toHaveTextContent(/não há como recuperá-las/i);
+  expect(dialog).toHaveTextContent(/mensagens com mais de 30 dias serão removidas/i);
   await expectNoA11yViolations(container);
 });
 
@@ -158,7 +157,7 @@ test("cancelar a redução não faz PATCH nenhum", async () => {
   await user.click(screen.getByRole("button", { name: "Salvar" }));
   await screen.findByRole("dialog");
 
-  await user.click(screen.getByRole("button", { name: "Manter prazo atual" }));
+  await user.click(screen.getByRole("button", { name: "Manter 90 dias" }));
 
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(update).not.toHaveBeenCalled();
@@ -176,7 +175,7 @@ test("confirmar a redução só então envia o PATCH com confirmReduction", asyn
   await screen.findByRole("dialog");
   expect(update).not.toHaveBeenCalled();
 
-  await user.click(screen.getByRole("button", { name: "Reduzir prazo" }));
+  await user.click(screen.getByRole("button", { name: "Reduzir para 30 dias" }));
 
   await waitFor(() =>
     expect(update).toHaveBeenCalledWith({
@@ -226,10 +225,9 @@ test("o diálogo de redução da Comercial menciona Não classificadas; o da Pes
   await user.click(screen.getByRole("button", { name: "Salvar" }));
   const commercialDialog = await screen.findByRole("dialog");
   expect(commercialDialog).toHaveTextContent(
-    /Mensagens Comerciais e Não classificadas mais antigas que o novo prazo/,
+    "As Não classificadas seguem o mesmo prazo.",
   );
-  expect(commercialDialog).toHaveTextContent(/não há como recuperá-las/i);
-  await user.click(screen.getByRole("button", { name: "Manter prazo atual" }));
+  await user.click(screen.getByRole("button", { name: "Manter 90 dias" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
   // Cancelar mantém a escolha na tela; volta a Comercial ao valor salvo para
@@ -238,8 +236,7 @@ test("o diálogo de redução da Comercial menciona Não classificadas; o da Pes
   await user.click(radio(PERSONAL, "30 dias"));
   await user.click(screen.getByRole("button", { name: "Salvar" }));
   const personalDialog = await screen.findByRole("dialog");
-  expect(personalDialog).toHaveTextContent(/mensagens.*antigas.*removidas/i);
-  expect(personalDialog).toHaveTextContent(/não há como recuperá-las/i);
+  expect(personalDialog).toHaveTextContent(/mensagens com mais de 30 dias serão removidas/i);
   expect(personalDialog).not.toHaveTextContent(/Não classificadas/);
   expect(update).not.toHaveBeenCalled();
 });

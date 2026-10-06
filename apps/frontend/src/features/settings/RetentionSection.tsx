@@ -3,17 +3,20 @@
 import { useEffect, useId, useState } from "react";
 
 import type { RetentionDays, RetentionSettings } from "@/data";
+import { ChatSheetShell } from "@/features/conversations/ConversationActionsSheet";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
-import { Dialog } from "@/shared/ui/Dialog";
 import { Skeleton } from "@/shared/ui/States";
 
 type RetentionCategory = "commercialRetentionDays" | "personalRetentionDays";
 
-const CATEGORY_LABELS: Record<RetentionCategory, string> = {
-  commercialRetentionDays: "Comercial",
-  personalRetentionDays: "Pessoal",
+const REDUCTION_NOUNS: Record<RetentionCategory, string> = {
+  commercialRetentionDays: "comerciais",
+  personalRetentionDays: "pessoais",
 };
+
+const EXPIRED_NOTE =
+  "Elas continuam na lista, com a indicação de que as mensagens antigas expiraram.";
 
 function retentionLabel(days: RetentionDays): string {
   return days === 365 ? "1 ano" : `${days} dias`;
@@ -50,6 +53,7 @@ export function RetentionSection() {
     Partial<Record<RetentionCategory, RetentionDays>>
   >({});
   const [confirming, setConfirming] = useState(false);
+  const sheetTitleId = useId();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -132,10 +136,28 @@ export function RetentionSection() {
   const reducesCommercial = reductions.some(
     ([category]) => category === "commercialRetentionDays",
   );
-  const reductionTitle =
-    reductions.length === 1
-      ? `Reduzir retenção ${CATEGORY_LABELS[reductions[0][0]]}?`
-      : "Reduzir os prazos de retenção?";
+  const reducedBoth = reductions.length > 1;
+  const reduction = reductions[0];
+  const reductionTitle = reducedBoth
+    ? "Reduzir os dois prazos?"
+    : reduction
+      ? `Guardar conversas ${REDUCTION_NOUNS[reduction[0]]} por ${retentionLabel(reduction[1])}?`
+      : "";
+  const reductionText = reducedBoth
+    ? `Mensagens comerciais com mais de ${retentionLabel(commercial)} e pessoais com mais de ${retentionLabel(personal)} serão removidas. ${EXPIRED_NOTE} As Não classificadas seguem o prazo das comerciais.`
+    : reduction
+      ? `Mensagens com mais de ${retentionLabel(reduction[1])} serão removidas. ${EXPIRED_NOTE}${reducesCommercial ? " As Não classificadas seguem o mesmo prazo." : ""}`
+      : "";
+  const confirmLabel = reducedBoth
+    ? "Reduzir os dois prazos"
+    : reduction
+      ? `Reduzir para ${retentionLabel(reduction[1])}`
+      : "";
+  const keepLabel = reducedBoth
+    ? "Manter os prazos atuais"
+    : reduction
+      ? `Manter ${retentionLabel(saved[reduction[0]])}`
+      : "";
 
   return (
     <div className="rules-screen retention-screen">
@@ -203,40 +225,43 @@ export function RetentionSection() {
           {busy && !confirming ? "Salvando..." : "Salvar"}
         </button>
       </div>
-      <Dialog
-        eyebrow="Redução de prazo"
-        onClose={() => setConfirming(false)}
-        open={confirming}
-        title={reductionTitle}
-      >
-        <p className="settings-modal-copy">
-          {reducesCommercial
-            ? "Mensagens Comerciais e Não classificadas mais antigas que o novo prazo poderão ser removidas na próxima varredura. "
-            : "Mensagens mais antigas que o novo prazo poderão ser removidas na próxima varredura. "}
-          {reducesCommercial && reductions.length > 1
-            ? "O mesmo vale para as Pessoais. "
-            : ""}
-          Não há como recuperá-las depois.
-        </p>
-        <div className="modal-actions">
-          <button
-            className="btn btn-secondary"
-            disabled={busy}
-            type="button"
-            onClick={() => setConfirming(false)}
-          >
-            Manter prazo atual
-          </button>
-          <button
-            className="btn btn-danger"
-            disabled={busy}
-            type="button"
-            onClick={() => void persist(true)}
-          >
-            {busy ? "Salvando..." : "Reduzir prazo"}
-          </button>
-        </div>
-      </Dialog>
+      {confirming && reduction && (
+        <ChatSheetShell
+          className="is-settings-confirm"
+          initialFocusSelector=".settings-sheet-cancel"
+          onClose={() => setConfirming(false)}
+          title={reductionTitle}
+          titleId={sheetTitleId}
+        >
+          <div className="settings-sheet-copy">
+            <h2 className="settings-sheet-title" id={sheetTitleId}>
+              {reductionTitle}
+            </h2>
+            <p className="settings-sheet-text">{reductionText}</p>
+            <p className="settings-sheet-note">
+              Clientes, agendamentos e histórico de atendimentos não mudam.
+            </p>
+          </div>
+          <div className="settings-sheet-actions">
+            <button
+              className="settings-sheet-confirm is-ink"
+              disabled={busy}
+              type="button"
+              onClick={() => void persist(true)}
+            >
+              {busy ? "Salvando..." : confirmLabel}
+            </button>
+            <button
+              className="settings-sheet-cancel"
+              disabled={busy}
+              type="button"
+              onClick={() => setConfirming(false)}
+            >
+              {keepLabel}
+            </button>
+          </div>
+        </ChatSheetShell>
+      )}
     </div>
   );
 }

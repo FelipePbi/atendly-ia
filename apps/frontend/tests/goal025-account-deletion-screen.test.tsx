@@ -24,13 +24,19 @@
  *   nem afirma sucesso;
  * - enquanto `GET /v1/status` ainda não respondeu, a zona de risco não afirma
  *   nenhum dos dois estados (nem "sem pedido", nem "agendado").
+ *
+ * Goal124 (Mais-WhatsApp:C2): pedir a exclusão saiu do diálogo e foi para a
+ * rota /configuracoes/conta/excluir (`AccountDeletionScreen`). A linha "Excluir
+ * conta" é um link; o botão "Pedir exclusão" sempre habilitado virou "Excluir
+ * minha conta", desabilitado sem senha. O que é afirmado do pedido é o mesmo.
  */
 
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 
-import { BffHttpError } from "@/data";
+import { BffHttpError, type SettingsState } from "@/data";
+import { AccountDeletionScreen } from "@/features/settings/AccountDeletionScreen";
 import { AccountSettings } from "@/features/settings/AccountSettings";
 // Import de tipo, apagado na compilacao: existe so para dar a assinatura do
 // modulo original a `importOriginal` sem uma anotacao `import()` inline, que o
@@ -77,6 +83,9 @@ vi.mock("@/shared/runtime/systemStatus", async (importOriginal) => ({
   useSystemStatus: (): SystemStatusMock => useSystemStatus(),
 }));
 
+// A tela só lê o fuso do negócio; o resto do estado não entra no pedido.
+const settings = { business: { timezone: "America/Sao_Paulo" } } as SettingsState;
+
 beforeEach(() => {
   vi.clearAllMocks();
   useSystemStatus.mockReturnValue({
@@ -97,55 +106,53 @@ test("o bloco desabilitado do Goal024 não existe mais", () => {
   expect(
     screen.queryByRole("button", { name: "Exclusão indisponível" }),
   ).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /^Excluir conta/ })).toBeEnabled();
+  // Goal124: a linha "Excluir conta" leva à rota própria; não abre mais diálogo.
+  expect(screen.getByRole("link", { name: /^Excluir conta/ })).toHaveAttribute(
+    "href",
+    "/configuracoes/conta/excluir",
+  );
 });
 
 test("pedir enuncia os efeitos antes de executar e exige senha atual", async () => {
   const user = userEvent.setup();
-  render(<AccountSettings />);
+  render(<AccountDeletionScreen settings={settings} />);
 
-  await user.click(screen.getByRole("button", { name: /^Excluir conta/ }));
-  const dialog = await screen.findByRole("dialog", {
-    name: "Excluir sua conta?",
-  });
-
-  expect(dialog).toHaveTextContent("As automações são desligadas agora.");
-  expect(dialog).toHaveTextContent("O WhatsApp é desconectado agora.");
-  expect(dialog).toHaveTextContent(
-    "Você tem sete dias para cancelar a exclusão.",
+  const timeline = screen.getByRole("list");
+  expect(timeline).toHaveTextContent(
+    "Sua IA para de atender e o WhatsApp é desconectado.",
   );
-  expect(dialog).toHaveTextContent(/apagados.*não é possível recuperar/);
+  expect(timeline).toHaveTextContent("Próximos 7 dias");
+  expect(timeline).toHaveTextContent(
+    "Clientes, agenda, serviços e conversas são apagados de forma definitiva.",
+  );
   expect(requestDeletion).not.toHaveBeenCalled();
 
-  // Campo nativo obrigatório: sem senha, o submit não dispara a chamada.
-  await user.click(
-    within(dialog).getByRole("button", { name: "Pedir exclusão" }),
-  );
+  // Sem senha o botão fica desabilitado e o envio não dispara a chamada.
+  const confirm = screen.getByRole("button", { name: "Excluir minha conta" });
+  expect(confirm).toBeDisabled();
+  await user.click(confirm);
   expect(requestDeletion).not.toHaveBeenCalled();
 
   requestDeletion.mockResolvedValue({
     status: "SCHEDULED",
     dueAt: "2026-09-23T12:00:00.000Z",
   });
-  await user.type(within(dialog).getByLabelText("Senha atual"), "correta-123");
-  await user.click(
-    within(dialog).getByRole("button", { name: "Pedir exclusão" }),
-  );
+  await user.type(screen.getByLabelText("Confirme com sua senha"), "correta-123");
+  await user.click(confirm);
 
   await waitFor(() =>
     expect(requestDeletion).toHaveBeenCalledWith("correta-123"),
   );
+  expect(requestDeletion).toHaveBeenCalledTimes(1);
   await waitFor(() => expect(refreshStatus).toHaveBeenCalledTimes(1));
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(replace).toHaveBeenCalledWith("/configuracoes/conta");
 });
 
-test("senha atual incorreta recusa com erro de campo, sem chamar refresh nem fechar o diálogo", async () => {
+test("senha atual incorreta recusa com erro de campo, sem chamar refresh nem sair da tela", async () => {
   const user = userEvent.setup();
-  render(<AccountSettings />);
+  render(<AccountDeletionScreen settings={settings} />);
 
-  await user.click(screen.getByRole("button", { name: /^Excluir conta/ }));
-  const dialog = await screen.findByRole("dialog");
-  await user.type(within(dialog).getByLabelText("Senha atual"), "errada-000");
+  await user.type(screen.getByLabelText("Confirme com sua senha"), "errada-000");
 
   requestDeletion.mockRejectedValue(
     new BffHttpError({
@@ -155,37 +162,35 @@ test("senha atual incorreta recusa com erro de campo, sem chamar refresh nem fec
       status: 401,
     }),
   );
-  await user.click(
-    within(dialog).getByRole("button", { name: "Pedir exclusão" }),
-  );
+  await user.click(screen.getByRole("button", { name: "Excluir minha conta" }));
 
-  expect(
-    await within(dialog).findByText("Senha atual incorreta."),
-  ).toBeVisible();
+  expect(await screen.findByText("Senha atual incorreta.")).toBeVisible();
   expect(refreshStatus).not.toHaveBeenCalled();
-  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(replace).not.toHaveBeenCalled();
+  expect(
+    screen.getByRole("button", { name: "Excluir minha conta" }),
+  ).toBeInTheDocument();
 });
 
 test("falha de rede ao pedir a exclusão nunca é apresentada como sucesso", async () => {
   const user = userEvent.setup();
-  render(<AccountSettings />);
+  render(<AccountDeletionScreen settings={settings} />);
 
-  await user.click(screen.getByRole("button", { name: /^Excluir conta/ }));
-  const dialog = await screen.findByRole("dialog");
-  await user.type(within(dialog).getByLabelText("Senha atual"), "correta-123");
-
-  requestDeletion.mockRejectedValue(new Error("network error"));
-  await user.click(
-    within(dialog).getByRole("button", { name: "Pedir exclusão" }),
+  await user.type(
+    screen.getByLabelText("Confirme com sua senha"),
+    "correta-123",
   );
 
+  requestDeletion.mockRejectedValue(new Error("network error"));
+  await user.click(screen.getByRole("button", { name: "Excluir minha conta" }));
+
   expect(
-    await within(dialog).findByText(
+    await screen.findByText(
       "Não foi possível pedir a exclusão agora. Tente novamente.",
     ),
   ).toBeVisible();
   expect(refreshStatus).not.toHaveBeenCalled();
-  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(replace).not.toHaveBeenCalled();
 });
 
 test("com exclusão agendada, os dias restantes vêm do vencimento devolvido pelo servidor", () => {
@@ -205,7 +210,7 @@ test("com exclusão agendada, os dias restantes vêm do vencimento devolvido pel
     ),
   ).toBeVisible();
   expect(
-    screen.queryByRole("button", { name: /^Excluir conta/ }),
+    screen.queryByRole("link", { name: /^Excluir conta/ }),
   ).not.toBeInTheDocument();
 
   vi.useRealTimers();
@@ -279,7 +284,7 @@ test("enquanto GET /v1/status carrega, a zona de risco não afirma nem 'sem pedi
   render(<AccountSettings />);
 
   expect(
-    screen.queryByRole("button", { name: /^Excluir conta/ }),
+    screen.queryByRole("link", { name: /^Excluir conta/ }),
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Cancelar exclusão" }),

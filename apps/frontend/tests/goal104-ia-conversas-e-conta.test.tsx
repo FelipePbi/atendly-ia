@@ -22,7 +22,8 @@
  * 4. Conta (`/configuracoes/conta`): grupos e linhas, folhas de nome e de senha
  *    com os pedidos e as mensagens de hoje, "Sair" de Segurança só depois da
  *    confirmação, links de "Sobre", os quatro estados da exclusão e nenhum
- *    "Sair da conta".
+ *    "Sair da conta". Desde o Goal124 a linha "Excluir conta" é um link para
+ *    `/configuracoes/conta/excluir`, que tem a suíte própria do C2.
  * 5. Casca: uma chamada de `useShellConfig` por árvore renderizada nas quatro
  *    rotas, nas duas faixas, e a rota nova marcando "Negócio" na lista.
  *
@@ -812,12 +813,12 @@ describe("Goal104 prova 3: R1 em /configuracoes/conversas", () => {
     await user.click(retentionRadio(COMMERCIAL, "30 dias"));
     await user.click(screen.getByRole("button", { name: "Salvar" }));
     const dialog = await screen.findByRole("dialog", {
-      name: "Reduzir retenção Comercial?",
+      name: "Guardar conversas comerciais por 30 dias?",
     });
-    expect(dialog).toHaveTextContent(/Não há como recuperá-las/);
+    expect(dialog).toHaveTextContent(/Mensagens com mais de 30 dias serão removidas/);
     expect(retentionUpdate).not.toHaveBeenCalled();
 
-    await user.click(within(dialog).getByRole("button", { name: "Manter prazo atual" }));
+    await user.click(within(dialog).getByRole("button", { name: "Manter 90 dias" }));
 
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(retentionUpdate).not.toHaveBeenCalled();
@@ -832,7 +833,7 @@ describe("Goal104 prova 3: R1 em /configuracoes/conversas", () => {
     await user.click(retentionRadio(COMMERCIAL, "30 dias"));
     await user.click(screen.getByRole("button", { name: "Salvar" }));
     const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: "Reduzir prazo" }));
+    await user.click(within(dialog).getByRole("button", { name: "Reduzir para 30 dias" }));
 
     await waitFor(() => expect(retentionUpdate).toHaveBeenCalledTimes(1));
     expect(retentionUpdate).toHaveBeenCalledWith({
@@ -854,7 +855,7 @@ describe("Goal104 prova 3: R1 em /configuracoes/conversas", () => {
     await user.click(screen.getByRole("button", { name: "Salvar" }));
 
     expect(
-      await screen.findByRole("dialog", { name: "Reduzir os prazos de retenção?" }),
+      await screen.findByRole("dialog", { name: "Reduzir os dois prazos?" }),
     ).toBeVisible();
     expect(retentionUpdate).not.toHaveBeenCalled();
   });
@@ -868,7 +869,7 @@ describe("Goal104 prova 3: R1 em /configuracoes/conversas", () => {
     await user.click(screen.getByRole("button", { name: "Salvar" }));
 
     expect(
-      await screen.findByRole("dialog", { name: "Reduzir retenção Pessoal?" }),
+      await screen.findByRole("dialog", { name: "Guardar conversas pessoais por 30 dias?" }),
     ).toBeVisible();
   });
 
@@ -1127,20 +1128,27 @@ describe("Goal104 prova 4: Conta em /configuracoes/conta", () => {
     expect(screen.queryByText("Sair da conta")).toBeNull();
   });
 
-  test("exclusão sem pedido: botão 'Excluir conta' com 'Você tem 7 dias para desistir'", async () => {
-    const user = userEvent.setup();
+  test("exclusão sem pedido: linha 'Excluir conta' com 'Você tem 7 dias para desistir' leva à rota própria", async () => {
     await renderRoute("account", NARROW, "Seus dados");
 
-    const button = await screen.findByRole("button", { name: /^Excluir conta/ });
-    expect(button).toHaveTextContent("Você tem 7 dias para desistir");
-    await user.click(button);
-    const dialog = await screen.findByRole("dialog", { name: "Excluir sua conta?" });
-    await user.type(within(dialog).getByLabelText("Senha atual"), "senhaAtual123");
+    const link = await screen.findByRole("link", { name: /^Excluir conta/ });
+    expect(link).toHaveTextContent("Você tem 7 dias para desistir");
+    expect(link).toHaveAttribute("href", "/configuracoes/conta/excluir");
+    expect(screen.queryByRole("dialog", { name: "Excluir sua conta?" })).toBeNull();
+    expect(requestDeletion).not.toHaveBeenCalled();
+  });
+
+  test("exclusão pedida na rota própria: a senha digitada vai uma vez e a tela volta à Conta", async () => {
+    const user = userEvent.setup();
+    await renderRoute("account-deletion", NARROW, "Excluir sua conta na Avenly?");
+
     requestDeletion.mockResolvedValue(undefined);
-    await user.click(within(dialog).getByRole("button", { name: "Pedir exclusão" }));
+    await user.type(screen.getByLabelText("Confirme com sua senha"), "senhaAtual123");
+    await user.click(screen.getByRole("button", { name: "Excluir minha conta" }));
 
     await waitFor(() => expect(requestDeletion).toHaveBeenCalledTimes(1));
     expect(requestDeletion).toHaveBeenCalledWith("senhaAtual123");
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/configuracoes/conta"));
   });
 
   test("exclusão agendada: mostra o prazo e 'Cancelar exclusão', que chama o cancelamento", async () => {
@@ -1151,7 +1159,7 @@ describe("Goal104 prova 4: Conta em /configuracoes/conta", () => {
     await renderRoute("account", NARROW, "Exclusão da conta agendada");
 
     expect(screen.getByText(/dias para os dados serem apagados definitivamente/)).toBeVisible();
-    expect(screen.queryByRole("button", { name: /^Excluir conta/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Excluir conta/ })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Cancelar exclusão" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Cancelar a exclusão da conta?",
@@ -1168,14 +1176,14 @@ describe("Goal104 prova 4: Conta em /configuracoes/conta", () => {
     expect(
       await screen.findByText(/Não foi possível carregar o estado da exclusão agora/),
     ).toBeVisible();
-    expect(screen.queryByRole("button", { name: /^Excluir conta/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Excluir conta/ })).toBeNull();
   });
 
   test("exclusão com a leitura pendente: não afirma 'sem pedido' nem 'agendado'", async () => {
     statusGet.mockReturnValue(new Promise(() => undefined));
     await renderRoute("account", NARROW, "Seus dados");
 
-    expect(screen.queryByRole("button", { name: /^Excluir conta/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Excluir conta/ })).toBeNull();
     expect(screen.queryByText("Exclusão da conta agendada")).toBeNull();
     expect(screen.queryByText("Você tem 7 dias para desistir")).toBeNull();
   });
@@ -1184,7 +1192,7 @@ describe("Goal104 prova 4: Conta em /configuracoes/conta", () => {
     statusGet.mockResolvedValue(statusFixture({ dueAt: null, status: "PURGED" }));
     await renderRoute("account", NARROW, "Conta excluída");
 
-    expect(screen.queryByRole("button", { name: /^Excluir conta/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Excluir conta/ })).toBeNull();
   });
 });
 

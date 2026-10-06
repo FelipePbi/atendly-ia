@@ -202,11 +202,11 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, I1, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1, W2, R2, I1, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["A12", "A2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "S2", "S7", "W1"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["A12", "A2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "R2", "S2", "S7", "W1", "W2"]);
   for (const target of declaring) {
-    const owner = ["W1", "I1"].includes(target.code)
+    const owner = ["W1", "W2", "R2", "I1"].includes(target.code)
       ? "Mais-WhatsApp-Importacao-Conta.dc.html"
       : ["L2", "L7"].includes(target.code)
         ? "Login.dc.html"
@@ -297,6 +297,77 @@ test("targets.json: W1 e I1 declaram só o seu GET", () => {
   assert.equal(imported.PAST_APPOINTMENT, 1400);
   assert.ok(imported.AVAILABILITY > 0);
   assert.equal(history.pendingAcceptance.pendingCount, 3);
+});
+
+function settingsSheetTarget(code) {
+  const target = declaringTargets().find((candidate) => candidate.code === code && candidate.file === "Mais-WhatsApp-Importacao-Conta.dc.html");
+  assert.ok(target, `alvo Mais-WhatsApp:${code} sem responses`);
+  return target;
+}
+
+test("targets.json: W2 e R2 declaram só o GET do próprio caminho e abrem a folha por passos obrigatórios", () => {
+  const w2 = settingsSheetTarget("W2");
+  const r2 = settingsSheetTarget("R2");
+  assert.equal(w2.route, "/configuracoes/whatsapp");
+  assert.deepEqual(w2.responses.map((entry) => `${entry.method} ${entry.path}`), ["GET /v1/whatsapp"]);
+  assert.deepEqual(w2.responses[0], settingsSheetTarget("W1").responses[0]);
+  assert.equal(r2.route, "/configuracoes/conversas");
+  assert.deepEqual(r2.responses.map((entry) => `${entry.method} ${entry.path}`), ["GET /v1/settings/retention"]);
+  const retention = r2.responses[0].json.data;
+  assert.equal(retention.commercialRetentionDays, 90);
+  assert.equal(retention.personalRetentionDays, 30);
+  assert.equal(retention.unclassifiedRetentionFollows, "COMMERCIAL");
+  assert.deepEqual(retention.retentionDaysOptions, [30, 90, 180, 365]);
+  for (const target of [w2, r2]) {
+    assert.ok(target.steps.length > 0, `${target.code}: sem passos a folha não abre`);
+    assert.ok(target.steps.every((step) => step.optional !== true), `${target.code}: sem a folha a captura tem de falhar`);
+    assert.match(target.notes, /[Dd]ivergência declarada/);
+  }
+  assert.equal(w2.steps[0].clickRole.name, "Desconectar WhatsApp");
+  assert.deepEqual(r2.steps.map((step) => step.clickRole?.name ?? step.click), ["30 dias", "Salvar", "Guardar conversas comerciais por 30 dias?"]);
+});
+
+const CONFIRMING_NAMES = ["desconectar", "excluir minha conta", "reduzir os dois prazos"];
+
+function confirmsRecordedAction(step) {
+  const labels = [step.clickRole?.name, step.click].filter((label) => typeof label === "string");
+  return labels.some((label) => {
+    const name = label.trim().toLowerCase();
+    return CONFIRMING_NAMES.includes(name) || name.startsWith("reduzir para");
+  });
+}
+
+test("targets.json: nenhum passo de captura confirma ação gravada (Desconectar, Excluir minha conta, Reduzir…)", () => {
+  const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "frontend", "e2e", "visual", "targets.json");
+  const targets = JSON.parse(readFileSync(file, "utf8")).targets;
+  for (const target of targets) {
+    for (const [index, step] of (target.steps ?? []).entries()) {
+      assert.equal(
+        confirmsRecordedAction(step),
+        false,
+        `alvo ${target.code} (${target.file}): steps[${index}] ${JSON.stringify(step)} toca o botão que confirma uma ação gravada; responses só cobre GET e o toque gravaria na conta visual`,
+      );
+      if (step.press !== undefined && index > 0) {
+        assert.equal(
+          confirmsRecordedAction(target.steps[index - 1]),
+          false,
+          `alvo ${target.code}: steps[${index}] press logo depois de um passo que dá foco a um botão que confirma ação gravada`,
+        );
+      }
+    }
+  }
+});
+
+test("a regra dos passos reconhece os botões que confirmam e deixa passar os que só abrem a folha", () => {
+  for (const name of ["Desconectar", "Excluir minha conta", "Reduzir os dois prazos", "Reduzir para 30 dias", "Reduzir para 1 ano"]) {
+    assert.equal(confirmsRecordedAction({ clickRole: { role: "button", name } }), true, name);
+  }
+  assert.equal(confirmsRecordedAction({ click: "Excluir minha conta" }), true);
+  for (const name of ["Desconectar WhatsApp", "Excluir conta", "Salvar", "Manter conectado", "Desconectar o WhatsApp?"]) {
+    assert.equal(confirmsRecordedAction({ clickRole: { role: "button", name } }), false, name);
+  }
+  assert.equal(confirmsRecordedAction({ click: "Desconectar o WhatsApp?" }), false);
+  assert.equal(confirmsRecordedAction({ press: "Enter" }), false);
 });
 
 function conversationFrame(code) {

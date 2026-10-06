@@ -504,10 +504,10 @@ describe("Goal106 prova 2: ações do W1", () => {
     await renderConnected();
 
     await user.click(disconnectRow());
-    const dialog = screen.getByRole("dialog", { name: "Desconectar WhatsApp?" });
+    const dialog = screen.getByRole("dialog", { name: "Desconectar o WhatsApp?" });
     expect(
       within(dialog).getByText(
-        "A Avenly deixará de responder automaticamente assim que a desconexão for concluída.",
+        "O número +55 11 98765-4321 deixa de estar ligado à Avenly.",
       ),
     ).toBeVisible();
 
@@ -523,8 +523,8 @@ describe("Goal106 prova 2: ações do W1", () => {
     await renderConnected();
 
     await user.click(disconnectRow());
-    const dialog = screen.getByRole("dialog", { name: "Desconectar WhatsApp?" });
-    await user.click(within(dialog).getByRole("button", { name: "Desconectar WhatsApp" }));
+    const dialog = screen.getByRole("dialog", { name: "Desconectar o WhatsApp?" });
+    await user.click(within(dialog).getByRole("button", { name: "Desconectar" }));
 
     expect(whatsappDisconnect).toHaveBeenCalledTimes(1);
     expect(await screen.findByRole("checkbox", { name: CONSENT_TEXT })).not.toBeChecked();
@@ -572,8 +572,8 @@ describe("Goal106 prova 2: ações do W1", () => {
     await renderConnected();
 
     await user.click(disconnectRow());
-    const dialog = screen.getByRole("dialog", { name: "Desconectar WhatsApp?" });
-    await user.click(within(dialog).getByRole("button", { name: "Desconectar WhatsApp" }));
+    const dialog = screen.getByRole("dialog", { name: "Desconectar o WhatsApp?" });
+    await user.click(within(dialog).getByRole("button", { name: "Desconectar" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(DISCONNECT_FAILURE);
     expect(whatsappDisconnect).toHaveBeenCalledTimes(1);

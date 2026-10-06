@@ -9,6 +9,7 @@ import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
+import { AccountDeletionScreen } from "./AccountDeletionScreen";
 import { AccountSettings } from "./AccountSettings";
 import { AiSettings } from "./AiSettings";
 import { AvailabilitySettings } from "./AvailabilitySettings";
@@ -97,7 +98,8 @@ function isHubScenario(scenario: SettingsScenario): boolean {
     scenario === "calendar-rules" ||
     scenario === "availability" ||
     scenario === "conversations" ||
-    scenario === "account"
+    scenario === "account" ||
+    scenario === "account-deletion"
   );
 }
 
@@ -114,7 +116,8 @@ function openHrefFor(scenario: SettingsScenario): string {
   )
     return "/configuracoes/agenda";
   if (scenario === "conversations") return "/configuracoes/conversas";
-  if (scenario === "account") return "/configuracoes/conta";
+  if (scenario === "account" || scenario === "account-deletion")
+    return "/configuracoes/conta";
   return "/configuracoes/negocio";
 }
 
@@ -206,5 +209,7 @@ function SettingsSection({
     return <AvailabilitySettings settings={settings} onSaved={setSettings} />;
   if (scenario === "conversations") return <ConversationsSettings />;
   if (scenario === "account") return <AccountSettings />;
+  if (scenario === "account-deletion")
+    return <AccountDeletionScreen settings={settings} />;
   return <BusinessSettings settings={settings} onSaved={setSettings} />;
 }

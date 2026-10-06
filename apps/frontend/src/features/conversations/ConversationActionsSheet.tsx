@@ -67,12 +67,15 @@ export function ConversationActionsSheet(props: ConversationActionsSheetProps) {
 export function ChatSheetShell({
   children,
   className,
+  initialFocusSelector,
   onClose,
   title,
   titleId: visibleTitleId,
 }: {
   children: ReactNode;
   className?: string;
+  /** Seletor do elemento que recebe o foco ao abrir; sem ele ou sem achado, o primeiro focável. */
+  initialFocusSelector?: string;
   onClose: () => void;
   title: string;
   /** Id de um título visível dentro de `children`; sem ele a casca traz um título só para leitor de tela. */
@@ -82,6 +85,7 @@ export function ChatSheetShell({
   const titleId = visibleTitleId ?? ownTitleId;
   const panelRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
+  const initialFocusSelectorRef = useRef(initialFocusSelector);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -93,7 +97,10 @@ export function ChatSheetShell({
         ? document.activeElement
         : null;
     const panel = panelRef.current;
-    panel?.querySelector<HTMLElement>(focusable)?.focus();
+    const initialTarget = initialFocusSelectorRef.current
+      ? panel?.querySelector<HTMLElement>(initialFocusSelectorRef.current)
+      : null;
+    (initialTarget ?? panel?.querySelector<HTMLElement>(focusable))?.focus();
     document.body.classList.add("has-overlay");
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {

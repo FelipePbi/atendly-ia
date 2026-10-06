@@ -4461,6 +4461,33 @@
       ]
     },
     {
+      "code": "W2",
+      "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
+      "label": "WhatsApp · desconectar",
+      "route": "/configuracoes/whatsapp",
+      "notes": "Mesmo estado conectado do W1 (resposta fixa de GET /v1/whatsapp, só no navegador da captura). Os passos abrem a folha pelo botão \"Desconectar WhatsApp\" e terminam num clique no título da folha, que tira o ponteiro dos botões (o :hover escureceria um deles, o que o quadro não tem): nenhum passo toca em \"Desconectar\", que desconectaria o número da conta visual. Divergência declarada do Goal124: a terceira linha traz \"refazer o teste\" sem \"de 3 minutos\" (nenhuma tela do app promete essa duração). Estado da casca da conta visual, que o quadro não tem e é diferença esperada (D-118): o banner \"Atendimento automático parado\", \"WhatsApp desconectado\" e as linhas do hub, mais o nome e o telefone do negócio ao fundo.",
+      "steps": [
+        { "clickRole": { "role": "button", "name": "Desconectar WhatsApp" } },
+        { "click": "Desconectar o WhatsApp?" }
+      ],
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/whatsapp",
+          "json": {
+            "data": {
+              "id": "visual-compare-whatsapp",
+              "phoneNumber": "5511987654321",
+              "status": "CONNECTED",
+              "connectedAt": "2026-09-18T15:00:00.000Z",
+              "updatedAt": "2026-10-01T15:00:00.000Z"
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "I1",
       "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
       "label": "Configurações · Importação",
@@ -4579,11 +4606,47 @@
       "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
     },
     {
+      "code": "R2",
+      "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
+      "label": "Conversas · reduzir retenção",
+      "route": "/configuracoes/conversas",
+      "notes": "Resposta fixa de GET /v1/settings/retention (comercial 90 dias, pessoal 30), só no navegador da captura. Os passos escolhem 30 dias em Conversas comerciais e clicam em Salvar, que só abre a folha, e terminam num clique no título da folha, que tira o ponteiro dos botões (o :hover escureceria um deles, o que o quadro não tem): nenhum passo toca em \"Reduzir para 30 dias\", que gravaria na conta visual. Divergência declarada do Goal124: o texto não traz \"hoje isso alcança 86 conversas\" (o contrato não informa quantas conversas o prazo alcança) e ganha \"As Não classificadas seguem o mesmo prazo.\" quando a Comercial reduz (é verdade, e a pessoa precisa saber). O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste: ignore-o na comparação.",
+      "steps": [
+        { "clickRole": { "role": "radio", "name": "30 dias" } },
+        { "clickRole": { "role": "button", "name": "Salvar" } },
+        { "click": "Guardar conversas comerciais por 30 dias?" }
+      ],
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/settings/retention",
+          "json": {
+            "data": {
+              "commercialRetentionDays": 90,
+              "personalRetentionDays": 30,
+              "retentionDaysOptions": [30, 90, 180, 365],
+              "unclassifiedRetentionFollows": "COMMERCIAL",
+              "lastSweepCompletedAt": null,
+              "appliesFrom": "NEXT_SWEEP"
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "C1",
       "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
       "label": "Configurações · Conta",
       "route": "/configuracoes/conta",
       "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "C2",
+      "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
+      "label": "Conta · excluir",
+      "route": "/configuracoes/conta/excluir",
+      "notes": "A rota abre sem passos: a conta visual não tem exclusão pedida, então o formulário aparece com a senha vazia e \"Excluir minha conta\" cinza, como no quadro. Nenhum passo digita a senha nem toca esse botão: ele gravaria a exclusão na conta visual. A data do terceiro passo é a da captura mais sete dias, não \"25 de setembro\" (divergência declarada). O aviso de WhatsApp desconectado / atendimento automático parado e o nome e o telefone do negócio no fundo são estado da conta de teste: ignore-os na comparação."
     }
   ]
 }

@@ -4402,6 +4402,88 @@
       ]
     },
     {
+      "code": "NT2",
+      "file": "Notificacoes.dc.html",
+      "label": "Notificações · vazio",
+      "route": "/inicio",
+      "clock": "10:30",
+      "notes": "GET /v1/notifications (lista vazia), GET /v1/notifications/summary (tudo zero) e GET /v1/status (WhatsApp conectado e IA ativa) vêm de resposta fixa (só no navegador da captura): a conta de teste tem duas notificações, o WhatsApp desconectado e a IA desligada, e sem o status ativo a pílula \"IA ativa · tudo em ordem\" não aparece e a casca mostraria o aviso de atendimento parado. Os passos só abrem o sino, nenhum toca botão que grava. Abre a Home e usa o sino: no mobile e no tablet em retrato ele é link para /notificacoes (tela empurrada); no tablet em paisagem e no desktop abre a gaveta sobre a Home. Divergências declaradas do Goal126: o terceiro exemplo do texto é \"um lembrete que não foi enviado\" (o quadro diz \"um serviço que impede a IA de marcar\", aviso que a central não manda); em /notificacoes a seção de preferência de notificação vem abaixo do bloco vazio e na gaveta há o link \"Preferências de notificação\" no rodapé (D-093, D-115); no tablet em paisagem e no desktop a Home atrás da gaveta é a da conta visual, com o WhatsApp e a IA ativos pela resposta fixa; a barra de status e o indicador de início do iPhone não existem no app.",
+      "steps": [
+        {
+          "clickRole": {
+            "name": "Notificações",
+            "role": "button"
+          },
+          "optional": true,
+          "timeout": 3000
+        },
+        {
+          "clickRole": {
+            "name": "Notificações",
+            "role": "link"
+          },
+          "optional": true,
+          "timeout": 1500
+        }
+      ],
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/notifications",
+          "json": {
+            "data": {
+              "total": 0,
+              "limit": 20,
+              "offset": 0,
+              "items": []
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/notifications/summary",
+          "json": {
+            "data": {
+              "byLevel": {
+                "INFO": 0,
+                "ATTENTION": 0,
+                "CRITICAL": 0
+              },
+              "unreadCount": 0,
+              "openConditionsCount": 0
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "reconciled": "NOOP",
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "M1",
       "file": "Mais-Negocio-Agenda-IA.dc.html",
       "label": "Mais",

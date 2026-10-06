@@ -8,6 +8,7 @@ import { PushedBar } from "@/shared/layout/PushedBar";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { useSystemStatus } from "@/shared/runtime/systemStatus";
 import { Skeleton, StatePanel } from "@/shared/ui/States";
 
 import { NotificationPreferenceSection } from "./NotificationPreferenceSection";
@@ -208,11 +209,7 @@ function NotificationHistory({
         </div>
       )}
       {items.length === 0 ? (
-        <StatePanel
-          description="Nada exige sua atenção agora."
-          icon="check"
-          title="Tudo em dia"
-        />
+        <NotificationsEmpty />
       ) : (
         <div className="notifications-days">
           {groupNotificationsByDay(items).map((group) => (
@@ -233,6 +230,52 @@ function NotificationHistory({
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * O vazio do quadro NT2, o mesmo na página e na gaveta. A pílula só confirma o
+ * que o status compartilhado já provou: IA e WhatsApp `active`. Qualquer outro
+ * estado, inclusive a leitura ainda em curso ou com erro, a deixa de fora.
+ */
+function NotificationsEmpty() {
+  const { aiView, whatsappView } = useSystemStatus();
+  const allClear = aiView === "active" && whatsappView === "active";
+
+  return (
+    <div className="notifications-empty">
+      <div aria-hidden="true" className="notifications-empty-halo">
+        <span className="notifications-empty-ring" />
+        <span className="notifications-empty-disc">
+          <svg
+            fill="none"
+            height="28"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.75"
+            viewBox="0 0 24 24"
+            width="28"
+          >
+            <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" />
+            <path d="M10 20a2 2 0 0 0 4 0" />
+          </svg>
+        </span>
+      </div>
+      <div className="notifications-empty-text">
+        <h3>Nada por aqui</h3>
+        <p>
+          Avisamos quando algo precisar de você: uma cliente aguardando, o
+          WhatsApp desconectado ou um lembrete que não foi enviado.
+        </p>
+      </div>
+      {allClear && (
+        <span className="notifications-empty-pill">
+          <span aria-hidden="true" className="notifications-empty-pill-dot" />
+          IA ativa · tudo em ordem
+        </span>
+      )}
+    </div>
   );
 }
 

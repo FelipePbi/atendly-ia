@@ -7486,3 +7486,77 @@ Acrescentado no fechamento pelo Tech Lead ([review125](reviews/125-review.md)), 
 O Tech Lead rodou `node --test scripts/tests/visual-responses.test.mjs` na rodada 2 (52 pass, 0 fail) e refez o `visual:compare` do AG2 (14,0/4,3/6,3/5,5%, os mesmos da tabela acima) e do AG3 (15,2/6,4/7,5/6,7%, sem mudança).
 
 Os controles negativos rodaram na rodada 1, depois da última edição de código daquela rodada. A rodada 2 só mudou o padding de baixo de `.reminders-screen .rules-save` em `avenly-settings.css`, as `notes` do AG2 em `targets.json` e esta seção; nenhuma linha mutada nem teste reprovado pelos controles (a) a (f) mudou, por isso eles não foram refeitos.
+
+## A central de notificações vazia igual ao protótipo, do Goal126
+
+Execução da WU-02 (captura, fidelidade, controles negativos e registros), rodada 1, 2026-10-06, na worktree `goal-126`, com a pilha descartável do harness (`VISUAL_BFF_URL` em `127.0.0.1:65057`; banco em `127.0.0.1:55500`). Baseline `c53be39`. Decisão: [D-140](DECISIONS.md), PROPOSED.
+
+### Contagens
+
+| Gate | Comando | Resultado |
+| --- | --- | --- |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0 |
+| Lint do frontend | `rtk proxy npx eslint src tests --max-warnings=0` | saída 0 |
+| Testes do frontend | `npx vitest run` | **174** arquivos e **2273** testes passando (baseline 173 e 2258: +1 arquivo e +15 testes, os de `goal126`) |
+| Testes `goal126` | `goal126-notificacoes-vazio.test.tsx` | 1 arquivo e 15 testes |
+| Testes da captura | `node --test scripts/tests/visual-responses.test.mjs` | **54** testes passando (baseline 52: +2) |
+| `test:gate` | `npm run test:gate` | **287** testes, 287 passando, 0 falhas (baseline 285: +2, os da captura) |
+| `validate:core` | `env -u AI_TEST_DATABASE_URL npm run validate:core` | PASSED, 17 passos: 15 passando, 0 falhas, 2 pulados (`test:bff` e `test:health-worker`) |
+| `validate:ui` | `env -u AI_TEST_DATABASE_URL npm run validate:ui` | 169 passando e 21 pulados, retries 0 |
+| `validate:integration` | `env -u AI_TEST_DATABASE_URL npm run validate:integration` | PASSED, 36 de 36 passos, 0 pulados; o gate autenticado fecha com 280 passando, retries 0, e mede `/notificacoes` nas cinco larguras (360, 390, 768, 1024 e 1440) |
+| `git diff --check` | `git diff --check` | saída 0 |
+
+`validate:core` e `validate:integration` rodaram com `AI_TEST_DATABASE_URL` fora do ambiente: apontando para o banco descartável não migrado, `test:ai-orchestrator` falha em tabelas que não existem (por exemplo `public.AiToolCall`), o que não tem relação com este Goal (observação 1 do review124). A execução sem a variável, como o Goal manda, passou.
+
+### `visual:compare`
+
+Comando do NT2: `npm run visual:compare -- --target NT2` (conta `visual-prototipo-v2@example.invalid` criada e semeada na hora). Percentual de pixels diferentes por device:
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| NT2 | 4,3% | 1,8% | 53,9% | 64,8% |
+
+Os quatro `side-by-side.png` foram abertos. No tablet em paisagem e no desktop o percentual é quase todo a Home atrás da gaveta (a conta de teste tem data, atendimentos e contagem de conversas que o quadro não tem, e o NT1 já dava 55,6% e 66,1% pelo mesmo motivo); a gaveta em si bate. O que resta, todo declarado em D-140:
+
+- O terceiro exemplo do texto ("um lembrete que não foi enviado", no lugar de "um serviço que impede a IA de marcar"), que quebra a linha em outro ponto.
+- Em `/notificacoes` (mobile e tablet em retrato), a seção "Preferências" abaixo do bloco: o bloco fica centrado na altura que sobra acima dela, mais alto que no quadro, que o centra na tela inteira. Na gaveta, o link "Preferências de notificação" no rodapé, que o quadro não tem, pelo mesmo motivo desloca o bloco 24 px para cima (tablet em paisagem e desktop); em `/notificacoes` o deslocamento é de cerca de 118 px no mobile e 117 px no tablet em retrato.
+- No mobile, o cabeçalho "‹" e "Notificações" fica cerca de 14 px abaixo do quadro (a barra de status do iPhone não existe no app; a `PushedBar` não mudou).
+- Na gaveta, o título "Notificações" fica alguns pixels à esquerda do centro do quadro, como no NT1.
+- A Home da conta visual atrás da gaveta (data, atendimentos, contagem de conversas).
+
+O anel de 88 px com o círculo de 64 px e o sino, "Nada por aqui" (17 px 600), o texto (14 px, `#5F574E`) e a pílula (30 px, `#DCECEB`, texto `#0B4A4E`, ponto de 6 px) estão na mesma ordem, com as mesmas medidas, cores e fontes do quadro, nos quatro devices. Não restou diferença visível além dessas.
+
+Regressão: `npm run visual:compare -- --target NT1,H1` (8 pares, nenhum com erro):
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| NT1 | 9,8% | 4,2% | 55,6% | 66,1% |
+| H1 | 12,2% | 6,4% | 7,8% | 6,7% |
+
+Contra a captura de antes, feita na mesma pilha com os dois arquivos de `src/` do Goal (`NotificationsScreen.tsx` e `avenly-notifications.css`) trocados temporariamente pelas versões de `HEAD` (`git show HEAD:…`; devolvidos depois, com `cmp` sem diferença): o `app.png` dos 8 pares (NT1 e H1 nos quatro devices) é igual byte a byte. O NT1 continua sem `responses`.
+
+### Controles negativos
+
+Rodados na rodada 1, depois da última edição de código, cada um com o arquivo devolvido e conferido com `cmp` (saída 0, sem diferença) e `git status` igual ao de antes. (a) a (c) em `NotificationsScreen.tsx`, com `npx vitest run tests/goal126-notificacoes-vazio.test.tsx tests/goal022-notifications-screen.test.tsx` (em `apps/frontend`); (d) em `targets.json`, com `node --test scripts/tests/visual-responses.test.mjs`.
+
+| # | Mudança | Teste que reprovou | Mensagem |
+| --- | --- | --- | --- |
+| a | a pílula sem a condição do WhatsApp (`allClear = aiView === "active"`) | 2 de 22: "a pílula diz a verdade > ausente com WhatsApp desconectado (off)" e "… ausente com WhatsApp não confirmado (unknown)" | `AssertionError: expected <span …(1)><span …(2)></span></span> to be null` |
+| b | a pílula também com a IA `pending` | 1 de 22: "a pílula diz a verdade > ausente com IA em ativação (pending)" | `AssertionError: expected <span …(1)><span …(2)></span></span> to be null` |
+| c | `NotificationsEmpty` trocado pelo `StatePanel` "Tudo em dia" | 14 de 22, entre eles "estado vazio explica que nada exige atenção > lista vazia mostra o texto explicando, não uma tela em branco" (`goal022`) e "o vazio na página > mostra 'Nada por aqui' e o texto do quadro, sem 'Tudo em dia' nem 'Marcar lidas', e mantém a preferência" | `TestingLibraryElementError: Unable to find role="heading" and name "Nada por aqui"` |
+| d | o NT2 de `targets.json` com uma notificação em `items` (e `total: 1`) | 1 de 54: "targets.json: NT2 é o único dono de responses em Notificacoes.dc.html, só com os três GET, a lista vazia, o status ativo e os passos do sino" | `AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal: actual: { total: 1, limit: 20, offset: 0, items: [ [Object] ] }, expected: { total: 0, limit: 20, offset: 0, items: [] }` |
+
+### Testes ajustados
+
+Nenhum ajuste afrouxa asserção de comportamento (linhas, "Marcar lidas", gaveta, preferência):
+
+- `goal022-notifications-screen.test.tsx`: o vazio passa a afirmar "Nada por aqui" no lugar de "Nada exige sua atenção agora.", e o teste simula `useSystemStatus` (a tela agora lê o status).
+- `visual-responses.test.mjs`: NT2 entre os donos de `responses`, com `Notificacoes.dc.html` como arquivo dono, o teste do NT2 e o do NT1 sem `responses` (de 52 para 54).
+
+### Escopo
+
+Arquivos alterados do Goal: `apps/frontend/src/features/notifications/NotificationsScreen.tsx`, `apps/frontend/src/shared/styles/avenly-notifications.css`, `apps/frontend/tests/goal126-notificacoes-vazio.test.tsx`, `apps/frontend/tests/goal022-notifications-screen.test.tsx`, `apps/frontend/e2e/visual/targets.json`, `scripts/tests/visual-responses.test.mjs` e os três registros de `docs/migration/`. `apps/frontend/e2e/routes.ts`, `scripts/visual-compare.mjs` e `scripts/lib/visual-responses.mjs` não mudaram; `goals/`, `reviews/`, `MIGRATION_STATUS.md` e `MASTER_PLAN.md` não foram tocados.
+
+### Não executado
+
+Conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.

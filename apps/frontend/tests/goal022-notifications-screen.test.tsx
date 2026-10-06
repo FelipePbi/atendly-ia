@@ -28,6 +28,10 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
   }),
 }));
 
+vi.mock("@/shared/runtime/systemStatus", () => ({
+  useSystemStatus: () => ({ aiView: "unknown", whatsappView: "unknown" }),
+}));
+
 function notificationFixture(overrides: Partial<Notification> = {}): Notification {
   return {
     id: "notif-1",
@@ -222,9 +226,7 @@ describe("estado vazio explica que nada exige atenção", () => {
     list.mockResolvedValue(listResult([]));
     renderScreen();
 
-    expect(
-      await screen.findByText("Nada exige sua atenção agora."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Nada por aqui")).toBeInTheDocument();
   });
 });
 

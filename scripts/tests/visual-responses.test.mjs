@@ -202,25 +202,27 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, W2, R2, I1, AG2, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1, W2, R2, I1, AG2, NT2, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "R2", "S2", "S7", "W1", "W2"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
   for (const target of declaring) {
     const owner = ["W1", "W2", "R2", "I1"].includes(target.code)
       ? "Mais-WhatsApp-Importacao-Conta.dc.html"
       : target.code === "AG2"
         ? "Mais-Negocio-Agenda-IA.dc.html"
-        : ["L2", "L7"].includes(target.code)
-          ? "Login.dc.html"
-          : target.code.startsWith("H")
-            ? "Home.dc.html"
-            : target.code.startsWith("A")
-              ? "Agenda.dc.html"
-              : target.code.startsWith("CL")
-                ? "Clientes.dc.html"
-                : target.code.startsWith("S")
-                  ? "Servicos.dc.html"
-                  : "Conversas-e-Chat.dc.html";
+        : target.code === "NT2"
+          ? "Notificacoes.dc.html"
+          : ["L2", "L7"].includes(target.code)
+            ? "Login.dc.html"
+            : target.code.startsWith("H")
+              ? "Home.dc.html"
+              : target.code.startsWith("A")
+                ? "Agenda.dc.html"
+                : target.code.startsWith("CL")
+                  ? "Clientes.dc.html"
+                  : target.code.startsWith("S")
+                    ? "Servicos.dc.html"
+                    : "Conversas-e-Chat.dc.html";
     assert.equal(target.file, owner, `${target.code} declara responses no arquivo errado`);
     const postOwners = ["L2", "L7"];
     for (const entry of target.responses) {
@@ -347,6 +349,58 @@ test("targets.json: AG2 é o único dono de responses em Mais-Negocio-Agenda-IA.
   assert.equal(pickFixedResponse(ag2, "GET", "/v1/settings/reminders"), ag2.responses[0]);
   for (const method of ["PATCH", "PUT", "POST"]) assert.equal(pickFixedResponse(ag2, method, "/v1/settings/reminders"), null);
   assert.equal(pickFixedResponse(ag2, "GET", "/v1/settings"), null, "o estilo e o fuso da prévia vêm da conta de teste");
+});
+
+test("targets.json: NT2 é o único dono de responses em Notificacoes.dc.html, só com os três GET, a lista vazia, o status ativo e os passos do sino", () => {
+  const owners = declaringTargets().filter((target) => target.file === "Notificacoes.dc.html");
+  assert.deepEqual(owners.map((target) => target.code), ["NT2"]);
+  const [nt2] = owners;
+  assert.equal(nt2.label, "Notificações · vazio");
+  assert.equal(nt2.route, "/inicio");
+  assert.equal(nt2.clock, "10:30");
+  assert.deepEqual(
+    nt2.responses.map((entry) => `${entry.method} ${entry.path}`).sort(),
+    ["GET /v1/notifications", "GET /v1/notifications/summary", "GET /v1/status"],
+  );
+  for (const entry of nt2.responses) {
+    assert.ok(!entry.path.includes("?"), `${entry.path} precisa ser caminho exato`);
+    assert.equal(typeof entry.json.requestId, "string");
+  }
+  const bodies = new Map(nt2.responses.map((entry) => [entry.path, resolveRelativeDays(entry.json, "2026-10-05").data]));
+  assert.deepEqual(bodies.get("/v1/notifications"), { total: 0, limit: 20, offset: 0, items: [] });
+  assert.deepEqual(bodies.get("/v1/notifications/summary"), {
+    byLevel: { INFO: 0, ATTENTION: 0, CRITICAL: 0 },
+    unreadCount: 0,
+    openConditionsCount: 0,
+  });
+  const status = bodies.get("/v1/status");
+  assert.equal(status.whatsapp.status, "CONNECTED");
+  assert.equal(typeof status.whatsapp.phoneNumber, "string");
+  assert.ok(!Number.isNaN(Date.parse(status.whatsapp.checkedAt)), "checkedAt precisa ser data válida");
+  assert.equal(status.ai.state, "ACTIVE");
+  assert.equal(status.ai.effectiveEnabled, true);
+  assert.equal(status.degraded, false);
+  assert.deepEqual(
+    nt2.steps.map((step) => [step.clickRole.role, step.clickRole.name, step.optional]),
+    [["button", "Notificações", true], ["link", "Notificações", true]],
+    "NT2: só os passos sobre o sino, como o NT1",
+  );
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    for (const route of ["/v1/notifications", "/v1/notifications/read", "/v1/notifications/preferences", "/v1/status"]) {
+      assert.equal(pickFixedResponse(nt2, method, route), null, `NT2: ${method} ${route} não deveria casar`);
+    }
+  }
+  for (const other of ["/v1/notifications/preferences", "/v1/settings", "/v1/dashboard", "/v1/whatsapp"]) {
+    assert.equal(pickFixedResponse(nt2, "GET", other), null, `NT2: ${other} vem da conta de teste`);
+  }
+});
+
+test("targets.json: NT1 continua sem responses, com a lista da conta visual", () => {
+  const nt1 = JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "frontend", "e2e", "visual", "targets.json"), "utf8")).targets.find(
+    (target) => target.code === "NT1" && target.file === "Notificacoes.dc.html",
+  );
+  assert.ok(nt1);
+  assert.equal(nt1.responses, undefined);
 });
 
 const CONFIRMING_NAMES =["desconectar", "excluir minha conta", "reduzir os dois prazos"];

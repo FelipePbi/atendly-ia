@@ -249,6 +249,94 @@
   cursor: default;
 }
 
+/* Vazio (NT2): o sino descansa dentro do anel que respira. */
+.notifications-page.is-pushed:has(.notifications-empty) {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.notifications-empty {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 0 44px 60px;
+  text-align: center;
+  color: #221e1a;
+}
+.notifications-empty-halo {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.notifications-empty-ring {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid #0f5f63;
+  border-radius: 50%;
+  opacity: 0.6;
+  animation: at-breathe 2.4s ease-out infinite;
+}
+.notifications-empty-disc {
+  width: 64px;
+  height: 64px;
+  border: 1px solid #e5ded4;
+  border-radius: 50%;
+  background: #fffdfa;
+  color: #0f5f63;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.notifications-empty-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.notifications-empty-text h3 {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.notifications-empty-text p {
+  margin: 0;
+  color: #5f574e;
+  font-size: 14px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+.notifications-empty-pill {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #dceceb;
+  color: #0b4a4e;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.notifications-empty-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #0f5f63;
+}
+@media (prefers-reduced-motion: reduce) {
+  .notifications-empty-ring {
+    animation: none;
+  }
+}
+
 /*
  * Gaveta (a partir de 1024 px): a mesma lista, sem a preferência. O cabeçalho
  * do `Dialog` vira a barra do quadro (fechar, título, "Marcar lidas") e só a

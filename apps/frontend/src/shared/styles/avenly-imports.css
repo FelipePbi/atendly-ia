@@ -663,6 +663,171 @@
 }
 
 /*
+ * Importação concluída no onboarding (2.I10, Goal134). Classes próprias:
+ * `.import-history*` segue servindo ao I1 de `/importacao` e ao bloco de
+ * Configurações › Agenda, e `.onboarding-actions` e `.onboarding-note`, às
+ * outras etapas; aqui eles só ganham regra escopada pelo rodapé novo. Os mesmos
+ * valores nos quatro devices; o único que muda é o respiro do rodapé (46 px no
+ * celular, 32 px de 768 px em diante), como no protótipo. O corpo fica
+ * centrado na altura que sobra entre a barra e o rodapé. O selo e o texto só
+ * se movem com movimento permitido; com `reduce`, tudo fica no estado final.
+ */
+.onboarding-content.is-frame:has(.imports-done) {
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+.imports-page:has(.imports-done):not(.is-pushed) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 46px;
+}
+.imports-done {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  line-height: normal;
+}
+.imports-done-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 26px;
+}
+.imports-done-seal {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.imports-done-ring {
+  position: absolute;
+  inset: 0;
+  border: 2px solid #2e7d4f;
+  border-radius: 50%;
+  opacity: 0.35;
+}
+.imports-done-disc {
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fffdfa;
+  background: #2e7d4f;
+}
+.imports-done-text {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: center;
+}
+.imports-done-text h1 {
+  margin: 0;
+  font-family: var(--font-display, Literata, Georgia, serif);
+  font-size: 32px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+}
+.imports-done-text p {
+  margin: 0;
+  color: #5f574e;
+  font-size: 15px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.imports-done-tally {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.imports-done-pills {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.imports-done-pill {
+  height: 32px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #efeae2;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.imports-done-pill.is-plain {
+  font-variant-numeric: normal;
+}
+.imports-done-note {
+  margin: 0;
+  color: #716859;
+  font-size: 13px;
+  text-align: center;
+}
+.imports-done-footer {
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.imports-done-footer .onboarding-note {
+  margin: 0;
+}
+.imports-done-footer .onboarding-actions {
+  margin: 0;
+}
+.imports-done-footer .onboarding-actions .btn {
+  border-radius: 14px;
+  font-weight: 600;
+}
+.imports-done-footer .onboarding-actions .btn-primary:not(:disabled) {
+  color: #f7f4ef;
+  background: #0f5f63;
+}
+.imports-done-footer .onboarding-actions .btn-primary:not(:disabled):is(:hover, :active) {
+  background: #0b484c;
+}
+.imports-done-path {
+  margin: 0;
+  color: #716859;
+  font-size: 12px;
+  text-align: center;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .imports-done-ring {
+    animation: at-pop 0.6s ease-out 0.1s both;
+  }
+  .imports-done-disc {
+    animation: at-pop 0.5s ease-out both;
+  }
+  .imports-done-text {
+    animation: at-reveal 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) 0.3s both;
+  }
+  .imports-done-tally {
+    animation: at-reveal 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) 0.5s both;
+  }
+}
+@media (min-width: 768px) {
+  .imports-page:has(.imports-done):not(.is-pushed) {
+    padding-bottom: 32px;
+  }
+}
+
+/*
  * Andamento (2.I7, Goal133). Classes próprias: `.imports-progress-*`, `.imports-panel`
  * e `.imports-rows` seguem servindo à tela parada, aos conflitos e à prévia. Os
  * mesmos valores nos quatro devices; o único que muda é o respiro do rodapé da

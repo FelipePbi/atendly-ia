@@ -1,6 +1,6 @@
 # Goal 134 — A importação concluída do onboarding igual ao protótipo
 
-**Status: READY.** Preparado em 2026-10-07 pelo Tech Lead Agent após [Goal133 ACCEPTED](../reviews/133-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED.** Preparado em 2026-10-07 pelo Tech Lead Agent após [Goal133 ACCEPTED](../reviews/133-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: SONNET_HIGH
 

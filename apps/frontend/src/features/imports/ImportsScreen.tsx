@@ -12,6 +12,7 @@ import { Dialog } from "@/shared/ui/Dialog";
 import { StatePanel } from "@/shared/ui/States";
 
 import { ConnectSourceScreen } from "./ConnectSourceScreen";
+import { ImportDoneScreen } from "./ImportDoneScreen";
 import { ImportEmptyScreen } from "./ImportEmptyScreen";
 import { ImportHistoryCard } from "./ImportHistoryCard";
 import { ImportPreviewScreen } from "./ImportPreviewScreen";
@@ -133,7 +134,9 @@ export function ImportsScreen() {
  * As telas da importação, escolhidas pelo estado lido (Goal020), sem
  * moldura própria: quem monta decide a moldura (`/importacao` no shell da
  * plataforma, ou a etapa `importacao` do onboarding, Goal066) e, com a
- * importação concluída, o que aparece junto do resultado.
+ * importação concluída, o que aparece junto do resultado. A conclusão é a
+ * única tela que a moldura escolhe (Goal134, D-148): no onboarding é o 2.I10,
+ * e na plataforma continua o histórico (I1).
  */
 export function ImportsFlow({
   historyActions,
@@ -145,6 +148,7 @@ export function ImportsFlow({
   timeZone?: string | null;
 }) {
   const { error, retry, setState, state } = reader;
+  const frame = useImportsFrame();
 
   if (!state && !error) return <ImportsLoading />;
 
@@ -166,6 +170,11 @@ export function ImportsFlow({
     );
   }
 
+  if (state.history && frame === "onboarding") {
+    return (
+      <ImportDoneScreen history={state.history}>{historyActions}</ImportDoneScreen>
+    );
+  }
   if (state.history) {
     return (
       <ImportHistoryScreen history={state.history} timeZone={timeZone}>

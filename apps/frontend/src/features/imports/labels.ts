@@ -143,6 +143,33 @@ export const HISTORY_CATEGORY_ORDER: ImportCategory[] = [
   ),
 ];
 
+/**
+ * Texto curto da pílula da importação concluída no onboarding (2.I10), no
+ * singular e no plural. Os horários não entram: a pílula deles não leva número.
+ */
+const HISTORY_PILL_LABELS: Record<
+  Exclude<ImportCategory, "AVAILABILITY">,
+  [singular: string, plural: string]
+> = {
+  SERVICE: ["serviço", "serviços"],
+  CUSTOMER: ["cliente", "clientes"],
+  FUTURE_APPOINTMENT: ["futuro", "futuros"],
+  PAST_APPOINTMENT: ["anterior", "anteriores"],
+  TIME_BLOCK: ["bloqueio", "bloqueios"],
+  CANCELLED_APPOINTMENT: ["cancelamento", "cancelamentos"],
+  NO_SHOW_APPOINTMENT: ["falta", "faltas"],
+};
+
+/** "12 serviços", "1 cliente" e, para os horários de atendimento, só "Horários". */
+export function historyPillLabel(
+  category: ImportCategory,
+  imported: number,
+): string {
+  if (category === "AVAILABILITY") return "Horários";
+  const [singular, plural] = HISTORY_PILL_LABELS[category];
+  return `${importCountFormatter.format(imported)} ${imported === 1 ? singular : plural}`;
+}
+
 /** "18 de setembro de 2026, 10:42", no fuso do negócio. */
 export function formatImportMoment(
   value: string | null,

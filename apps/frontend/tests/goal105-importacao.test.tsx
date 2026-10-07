@@ -803,14 +803,18 @@ describe("Goal105 prova 3: I1, o histórico só de leitura", () => {
     expect(screen.queryByText(/Não é possível importar novamente/)).toBeNull();
   });
 
-  test("no onboarding, o cartão usa o fuso do rascunho", async () => {
+  // Goal134 (2.I10): no onboarding a conclusão não é o cartão do histórico, e
+  // sim o selo, o título e as pílulas, sem data nem conta de origem. O cartão,
+  // com a data no fuso do negócio, continua em `/importacao` (testes acima).
+  test("no onboarding, a conclusão é o 2.I10: sem o cartão, sem a data e sem a conta de origem", async () => {
     getImportState.mockResolvedValue(doneState());
     renderOnboardingStep("importacao");
 
     expect(
-      await screen.findByText("Minha Agenda · 18 de setembro de 2026, 10:42"),
+      await screen.findByRole("heading", { level: 1, name: "Importação concluída" }),
     ).toBeVisible();
-    expect(screen.getByText(/depois de 18\/09 não chegam/)).toBeVisible();
+    expect(screen.queryByText(/Minha Agenda · /)).toBeNull();
+    expect(screen.queryByText(/depois de 18\/09 não chegam/)).toBeNull();
     expect(screen.queryByText(/camila@example\.com/)).toBeNull();
   });
 });

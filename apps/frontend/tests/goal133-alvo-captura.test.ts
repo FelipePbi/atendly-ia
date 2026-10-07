@@ -310,11 +310,11 @@ describe("pendências do review132", () => {
 });
 
 describe("os outros alvos do arquivo", () => {
-  test("2.I3, 2.I4, 2.I5 e 2.I7 são os únicos donos de responses; o 2.I7 não tem passo", () => {
+  test("2.I3, 2.I4, 2.I5, 2.I7 e 2.I10 são os únicos donos de responses; o 2.I7 não tem passo (o 2.I10 entrou no Goal134)", () => {
     const owners = targets
       .filter((item) => item.file === FILE && item.responses !== undefined)
       .map((item) => item.code);
-    expect(owners).toEqual(["2.I3", "2.I4", "2.I5", "2.I7"]);
+    expect(owners).toEqual(["2.I3", "2.I4", "2.I5", "2.I7", "2.I10"]);
     expect(target("2.I7").steps).toBeUndefined();
   });
 });

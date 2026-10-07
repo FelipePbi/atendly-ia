@@ -407,8 +407,9 @@ describe("importação concluída: 'Continuar' vai à primeira pendência (vault
     {
       expected: "/onboarding/demonstracao-da-ia",
       label: "sem pendência, vai a demonstracao-da-ia",
-      notice:
-        "Seus serviços e horários foram importados. Agora é só ver sua IA em ação.",
+      // Goal134 (2.I10): o selo e o título já dizem que deu certo; o aviso de
+      // sucesso não aparece, só os dois que mudam o destino.
+      notice: null,
       state: stateFixture({
         ...businessDone,
         ...calendarDone,
@@ -422,9 +423,20 @@ describe("importação concluída: 'Continuar' vai à primeira pendência (vault
     const { container } = renderStep("importacao", state);
 
     expect(
-      await screen.findByRole("heading", { level: 2, name: "Importação concluída" }),
+      await screen.findByRole("heading", { level: 1, name: "Importação concluída" }),
     ).toBeVisible();
-    expect(await screen.findByText(notice)).toBeVisible();
+    if (notice) {
+      expect(await screen.findByText(notice)).toBeVisible();
+    } else {
+      // A releitura do onboarding é a segunda leitura (a primeira é a do provider).
+      await waitFor(() => expect(getOnboarding).toHaveBeenCalledTimes(2));
+      expect(
+        screen.queryByText(
+          "Seus serviços e horários foram importados. Agora é só ver sua IA em ação.",
+        ),
+      ).toBeNull();
+      expect(screen.queryByRole("status")).toBeNull();
+    }
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.queryByRole("link", { name: /Configurações/ })).toBeNull();
     expectOnlyOnboardingLinks(container);

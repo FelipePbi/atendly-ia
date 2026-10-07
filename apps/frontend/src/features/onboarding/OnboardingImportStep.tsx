@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { ImportDonePathNote } from "@/features/imports/ImportDoneScreen";
 import { ImportsFrameProvider } from "@/features/imports/ImportsLayout";
 import { ImportsFlow, useImportState } from "@/features/imports/ImportsScreen";
 import { Icon } from "@/shared/icons/Icon";
@@ -43,9 +44,12 @@ export function OnboardingImportStep({
 }
 
 /**
- * Depois da importação concluída (vault §5B): relê o onboarding, que já
- * traz os serviços e horários importados, e mostra para onde "Continuar"
- * leva e por quê — a primeira pendência que a importação não resolveu.
+ * Rodapé da importação concluída (vault §5B, 2.I10): relê o onboarding, que
+ * já traz os serviços e horários importados, e mostra por que "Continuar"
+ * leva a uma pendência — a primeira que a importação não resolveu. Com os
+ * dois resolvidos, o selo e o título da tela já dizem que deu certo, e o
+ * aviso de sucesso não aparece. Abaixo do botão, a nota diz onde o histórico
+ * fica.
  */
 function ImportDoneActions({
   go,
@@ -91,7 +95,7 @@ function ImportDoneActions({
 
   return (
     <>
-      {next && (
+      {next && next.step !== "demonstracao-da-ia" && (
         <div className="onboarding-note" role="status">
           <Icon name="info" />
           <span>{next.notice}</span>
@@ -113,6 +117,7 @@ function ImportDoneActions({
           {busy ? "Abrindo..." : "Continuar"}
         </button>
       </div>
+      <ImportDonePathNote />
     </>
   );
 }

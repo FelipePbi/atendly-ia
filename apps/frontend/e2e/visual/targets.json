@@ -840,6 +840,107 @@
       ]
     },
     {
+      "code": "2.I10",
+      "file": "Onboarding-2-Importacao.dc.html",
+      "label": "Importação concluída",
+      "route": "/onboarding/importacao",
+      "account": "onboarding",
+      "notes": "O quadro mostra a importação concluída; a conta de onboarding não importou nada, então o estado concluído vem de resposta fixa de GET /v1/calendar/imports (responses), só no navegador da captura: right indisponível (available false) com o mesmo sessionId do histórico (visual-compare-import-done) e completedAt preenchido, session null e history COMPLETED com startedAt, finishedAt e completedAt preenchidos e pendingAcceptance null. As categorias são as do quadro, todas com sourceSupported true e pending, skipped, failed e needsReview 0: serviços 12, clientes 386, agendamentos futuros 42, atendimentos anteriores 1.400 e horários de atendimento 6 importados; counts é a soma das categorias (1.846 importados). A tela só lê esse GET e não chama nenhuma rota de escrita; nenhum passo: a tela abre concluída e nada nela é tocado. GET /v1/onboarding continua real: a conta de onboarding tem serviço e horários ativos gravados, então \"Continuar\" leva à demonstração da IA e o aviso de sucesso do stepAfterImport não aparece (o selo e o título já dizem isso, como no quadro). Divergências declaradas do Goal134: a conclusão do onboarding só vale em /onboarding/importacao; em /importacao segue o quadro I1 (histórico por categoria, com as pendências); a nota do rodapé traz o caminho que o app mostra em cada largura (Mais › Importação ou Configurações › Importação); \"Horários\" vem das seis regras da resposta, sem número, como no quadro; sem as animações de entrada, porque a captura usa reducedMotion reduce; o preenchimento dos segmentos da barra do topo, derivado por chapterFraction, e o \"Sair\" do topo e do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports",
+          "json": {
+            "data": {
+              "right": {
+                "available": false,
+                "sessionId": "visual-compare-import-done",
+                "completedAt": "2026-10-06T12:30:00.000Z"
+              },
+              "session": null,
+              "history": {
+                "sessionId": "visual-compare-import-done",
+                "provider": "MINHA_AGENDA",
+                "sourceAccountId": "visual-compare-source",
+                "sourceAccountLabel": null,
+                "status": "COMPLETED",
+                "completedAt": "2026-10-06T12:30:00.000Z",
+                "completedBy": "visual-compare",
+                "startedAt": "2026-10-06T12:01:00.000Z",
+                "finishedAt": "2026-10-06T12:30:00.000Z",
+                "counts": {
+                  "pending": 0,
+                  "imported": 1846,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0
+                },
+                "categories": [
+                  {
+                    "category": "SERVICE",
+                    "discovered": 12,
+                    "sourceSupported": true,
+                    "limitationCode": null,
+                    "pending": 0,
+                    "imported": 12,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0
+                  },
+                  {
+                    "category": "CUSTOMER",
+                    "discovered": 386,
+                    "sourceSupported": true,
+                    "limitationCode": null,
+                    "pending": 0,
+                    "imported": 386,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0
+                  },
+                  {
+                    "category": "FUTURE_APPOINTMENT",
+                    "discovered": 42,
+                    "sourceSupported": true,
+                    "limitationCode": null,
+                    "pending": 0,
+                    "imported": 42,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0
+                  },
+                  {
+                    "category": "PAST_APPOINTMENT",
+                    "discovered": 1400,
+                    "sourceSupported": true,
+                    "limitationCode": null,
+                    "pending": 0,
+                    "imported": 1400,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0
+                  },
+                  {
+                    "category": "AVAILABILITY",
+                    "discovered": 6,
+                    "sourceSupported": true,
+                    "limitationCode": null,
+                    "pending": 0,
+                    "imported": 6,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0
+                  }
+                ],
+                "pendingAcceptance": null
+              }
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "3.1",
       "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
       "label": "Demonstração da IA",

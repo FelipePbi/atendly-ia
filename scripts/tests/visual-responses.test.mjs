@@ -202,11 +202,11 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, W2, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 2.I7, 2.I10, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1, W2, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 2.I7, 2.I8, 2.I9, 2.I10, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I10", "2.I3", "2.I4", "2.I5", "2.I7", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I10", "2.I3", "2.I4", "2.I5", "2.I7", "2.I8", "2.I9", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
   for (const target of declaring) {
-    const owner = ["2.I3", "2.I4", "2.I5", "2.I7", "2.I10"].includes(target.code)
+    const owner = ["2.I3", "2.I4", "2.I5", "2.I7", "2.I8", "2.I9", "2.I10"].includes(target.code)
       ? "Onboarding-2-Importacao.dc.html"
       : ["W1", "W2", "R2", "I1"].includes(target.code)
       ? "Mais-WhatsApp-Importacao-Conta.dc.html"
@@ -263,9 +263,9 @@ test("targets.json: o 2.I7 só declara os dois GET, com o caminho exato do andam
   }
 });
 
-test("targets.json: 2.I3, 2.I4, 2.I5, 2.I7 e 2.I10 são os únicos donos de responses em Onboarding-2-Importacao.dc.html; o 2.I10 só declara o GET de /v1/calendar/imports, com a sessão própria, e não tem passo", () => {
+test("targets.json: 2.I3, 2.I4, 2.I5, 2.I7, 2.I8, 2.I9 e 2.I10 são os únicos donos de responses em Onboarding-2-Importacao.dc.html; o 2.I10 só declara o GET de /v1/calendar/imports, com a sessão própria, e não tem passo", () => {
   const owners = declaringTargets().filter((target) => target.file === "Onboarding-2-Importacao.dc.html");
-  assert.deepEqual(owners.map((target) => target.code), ["2.I3", "2.I4", "2.I5", "2.I7", "2.I10"]);
+  assert.deepEqual(owners.map((target) => target.code), ["2.I3", "2.I4", "2.I5", "2.I7", "2.I8", "2.I9", "2.I10"]);
   const t210 = owners.find((target) => target.code === "2.I10");
   assert.equal(t210.label, "Importação concluída");
   assert.equal(t210.route, "/onboarding/importacao");
@@ -285,6 +285,40 @@ test("targets.json: 2.I3, 2.I4, 2.I5, 2.I7 e 2.I10 são os únicos donos de resp
   const sessionId = "visual-compare-import-done";
   for (const owner of owners.filter((target) => target.code !== "2.I10")) {
     assert.ok(!JSON.stringify(owner.responses).includes(sessionId), `${owner.code} não usa a sessão do 2.I10`);
+  }
+});
+
+test("targets.json: 2.I8 e 2.I9 só declaram os quatro GET da sessão pendente; o 2.I8 não tem passo e o 2.I9 só clica em \"Concluir importação\"", () => {
+  const owners = declaringTargets().filter((target) => target.file === "Onboarding-2-Importacao.dc.html");
+  const [t28, t29] = ["2.I8", "2.I9"].map((code) => owners.find((target) => target.code === code));
+  const sessionId = "visual-compare-import-pending";
+  const expected = [
+    "GET /v1/calendar/imports",
+    `GET /v1/calendar/imports/${sessionId}/progress`,
+    `GET /v1/calendar/imports/${sessionId}/categories/SERVICE/items`,
+    `GET /v1/calendar/imports/${sessionId}/categories/CUSTOMER/items`,
+  ];
+  assert.equal(t28.label, "Pendências da importação");
+  assert.equal(t29.label, "Confirmar conclusão");
+  for (const target of [t28, t29]) {
+    assert.equal(target.route, "/onboarding/importacao");
+    assert.equal(target.account, "onboarding");
+    assert.deepEqual(target.responses.map((entry) => `${entry.method} ${entry.path}`), expected, `${target.code}: só os quatro GET`);
+    for (const entry of target.responses) assert.equal(typeof entry.json.requestId, "string");
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      for (const route of [`/v1/calendar/imports/${sessionId}/execute`, `/v1/calendar/imports/${sessionId}/complete`, "/v1/calendar/imports", `/v1/calendar/imports/${sessionId}/progress`]) {
+        assert.equal(pickFixedResponse(target, method, route), null, `${target.code}: ${method} ${route} não deveria casar`);
+      }
+    }
+    for (const other of [`/v1/calendar/imports/${sessionId}/preview`, `/v1/calendar/imports/${sessionId}/categories/AVAILABILITY/items`, "/v1/onboarding", "/v1/status"]) {
+      assert.equal(pickFixedResponse(target, "GET", other), null, `${target.code}: ${other} não é do alvo`);
+    }
+  }
+  assert.equal(t28.steps, undefined, "2.I8: nenhum passo, a tela abre parada e nada nela é tocado");
+  assert.deepEqual(t29.steps, [{ clickRole: { role: "button", name: "Concluir importação" } }], "2.I9: só o clique em Concluir importação do rodapé");
+  assert.deepEqual(t29.responses, t28.responses, "2.I8 e 2.I9 têm as mesmas respostas");
+  for (const owner of owners.filter((target) => !["2.I8", "2.I9"].includes(target.code))) {
+    assert.ok(!JSON.stringify(owner.responses).includes(sessionId), `${owner.code} não usa a sessão do 2.I8 e do 2.I9`);
   }
 });
 
@@ -1145,11 +1179,11 @@ test("targets.json: 2.6 é o único dono de responses em Onboarding-1-Negocio-e-
   }
 });
 
-test("targets.json: 2.I3, 2.I4, 2.I5, 2.I7 e 2.I10 são os únicos donos de responses em Onboarding-2-Importacao.dc.html; o 2.I3 só com o GET /v1/calendar/imports e sem passos; o 2.I4 só com os dois GET (estado e prévia do caminho exato) e sem passos; o 2.I5 com os mesmos dois GET e só o clickRole em \"Escolher o que importar\"; o 2.I7 é provado no teste seguinte; o 2.I2 não declara responses e só tem os três passos permitidos", () => {
+test("targets.json: 2.I3, 2.I4, 2.I5, 2.I7, 2.I8, 2.I9 e 2.I10 são os únicos donos de responses em Onboarding-2-Importacao.dc.html; o 2.I3 só com o GET /v1/calendar/imports e sem passos; o 2.I4 só com os dois GET (estado e prévia do caminho exato) e sem passos; o 2.I5 com os mesmos dois GET e só o clickRole em \"Escolher o que importar\"; o 2.I7 é provado no teste seguinte; o 2.I2 não declara responses e só tem os três passos permitidos", () => {
   const all = JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "frontend", "e2e", "visual", "targets.json"), "utf8")).targets;
   const inFile = all.filter((target) => target.file === "Onboarding-2-Importacao.dc.html");
   const owners = declaringTargets().filter((target) => target.file === "Onboarding-2-Importacao.dc.html");
-  assert.deepEqual(owners.map((target) => target.code), ["2.I3", "2.I4", "2.I5", "2.I7", "2.I10"]);
+  assert.deepEqual(owners.map((target) => target.code), ["2.I3", "2.I4", "2.I5", "2.I7", "2.I8", "2.I9", "2.I10"]);
   const [t2i3, t2i4, t2i5] = owners;
   const t2i2 = inFile.find((target) => target.code === "2.I2");
   assert.ok(t2i2, "2.I2 precisa estar em targets.json");

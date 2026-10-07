@@ -313,7 +313,7 @@ describe("ShellConfigProvider + execução não excede a profundidade de atualiz
     // Espera a leitura de progresso assentar: `ReplaceAccountZone` também
     // aparece na tela de carregamento, e um `findBy` ansioso pegaria o botão
     // da renderização transitória em vez do da tela final.
-    await screen.findByRole("heading", { name: "Importação parcial em andamento" });
+    await screen.findByRole("heading", { name: "Importação quase concluída" });
     const replaceTrigger = screen.getByRole("button", { name: "Conectar outra conta" });
     for (let i = 0; i < 4; i += 1) {
       await user.click(replaceTrigger);
@@ -342,7 +342,7 @@ describe("ShellConfigProvider + execução não excede a profundidade de atualiz
         name: "Esta é sua única importação.",
       });
       await user.click(
-        within(dialog).getByRole("button", { name: "Revisar antes de concluir" }),
+        within(dialog).getByRole("button", { name: "Voltar e revisar" }),
       );
     }
 
@@ -366,12 +366,12 @@ describe("ShellConfigProvider + execução não excede a profundidade de atualiz
     renderScreen();
 
     for (let i = 0; i < 4; i += 1) {
-      await user.click(await screen.findByRole("button", { name: "Revisar itens" }));
+      await user.click(await screen.findByRole("button", { name: "Revisar pendências" }));
       await user.click(await screen.findByRole("button", { name: "Voltar" }));
     }
 
     expect(
-      await screen.findByRole("heading", { name: "O que ainda não entrou (8)" }),
+      await screen.findByRole("heading", { name: "2 registros precisam de revisão" }),
     ).toBeInTheDocument();
   });
 });

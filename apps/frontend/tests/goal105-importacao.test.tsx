@@ -606,7 +606,7 @@ describe("Goal105 prova 2: a origem (2.I1) vem antes das credenciais", () => {
     getImportState.mockResolvedValue(liveState(sessionFixture()));
     renderImports();
 
-    await screen.findByRole("heading", { name: "Importação parcial em andamento" });
+    await screen.findByRole("heading", { name: "Importação quase concluída" });
     await user.click(screen.getByRole("button", { name: "Conectar outra conta" }));
     await user.click(
       screen.getByRole("button", { name: "Descartar e conectar outra conta" }),
@@ -622,7 +622,7 @@ describe("Goal105 prova 2: a origem (2.I1) vem antes das credenciais", () => {
     await user.click(screen.getByRole("button", { name: "Cancelar" }));
 
     expect(
-      await screen.findByRole("heading", { name: "Importação parcial em andamento" }),
+      await screen.findByRole("heading", { name: "Importação quase concluída" }),
     ).toBeVisible();
     expect(screen.queryByRole("heading", { name: ORIGIN_TITLE })).toBeNull();
     expect(getImportState).toHaveBeenCalledTimes(stateReads);
@@ -826,7 +826,7 @@ describe("Goal105 prova 4: a composição de /importacao", () => {
     [
       "sessão em execução",
       () => getImportState.mockResolvedValue(liveState(sessionFixture())),
-      "Importação parcial em andamento",
+      "Importação quase concluída",
     ],
   ];
 
@@ -998,7 +998,7 @@ describe("Goal105 prova 5: o que fica como era", () => {
       renderPlatform(width);
 
       expect(
-        await screen.findByRole("heading", { name: "Importação parcial em andamento" }),
+        await screen.findByRole("heading", { name: "Importação quase concluída" }),
       ).toBeVisible();
       expect(
         screen.getByRole("button", { name: "Conectar outra conta" }),

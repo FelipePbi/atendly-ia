@@ -46,15 +46,21 @@ export type ConflictCategorySummary = Pick<
  */
 export function ImportConflictsScreen({
   categories,
+  initialCategory,
   onBack,
   sessionId,
 }: {
   categories: ConflictCategorySummary[];
+  /**
+   * Abre direto numa categoria (a ação de um item do 2.I8). Voltar dessa
+   * categoria sai da tela, em vez de cair numa lista que quem chamou não viu.
+   */
+  initialCategory?: ImportCategory;
   onBack: () => void;
   sessionId: string;
 }) {
   const [activeCategory, setActiveCategory] = useState<ImportCategory | null>(
-    null,
+    initialCategory ?? null,
   );
 
   if (activeCategory) {
@@ -62,7 +68,9 @@ export function ImportConflictsScreen({
       <ConflictCategoryScreen
         category={activeCategory}
         key={activeCategory}
-        onBack={() => setActiveCategory(null)}
+        onBack={() =>
+          initialCategory === activeCategory ? onBack() : setActiveCategory(null)
+        }
         sessionId={sessionId}
       />
     );

@@ -298,7 +298,7 @@ describe("importar tudo é o caminho principal", () => {
     );
     expect(setImportCategorySelection).not.toHaveBeenCalled();
     expect(analyzeImport).not.toHaveBeenCalled();
-    await screen.findByRole("heading", { name: "Continuar importação" });
+    await screen.findByRole("heading", { name: "Importação quase concluída" });
   });
 });
 

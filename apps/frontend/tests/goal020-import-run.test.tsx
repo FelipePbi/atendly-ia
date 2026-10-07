@@ -178,6 +178,33 @@ function partialProgressFixture(): ImportProgress {
   });
 }
 
+/** Os dois clientes em revisão de `partialProgressFixture`, como a rota de itens os devolve. */
+function customerReviewPage() {
+  const item = (id: string) => ({
+    attemptCount: 0,
+    category: "CUSTOMER" as const,
+    disappearedAt: null,
+    entityType: null,
+    externalId: id,
+    id,
+    internalId: null,
+    label: "Cliente sem nome (origem #" + id + ")",
+    lastAttemptAt: null,
+    processedAt: null,
+    reasonCode: "CUSTOMER_NAME_MISSING",
+    reasonDetail: null,
+    status: "NEEDS_REVIEW" as const,
+  });
+  return {
+    category: "CUSTOMER" as const,
+    items: [item("1042"), item("1043")],
+    limit: 5,
+    offset: 0,
+    sessionId: "session-1",
+    total: 2,
+  };
+}
+
 /** Passada terminada sem deixar nada para trás. */
 function cleanProgressFixture(): ImportProgress {
   return progressFixture({
@@ -367,12 +394,10 @@ describe("progresso é fato do banco", () => {
     getImportProgress.mockResolvedValue(partialProgressFixture());
     renderScreen();
 
-    const bar = await screen.findByRole("progressbar");
-    expect(bar).toHaveAttribute("aria-valuenow", "45");
-    expect(bar).toHaveAttribute("aria-valuemax", "50");
-    expect(
-      screen.getByText(/45 de 50 registros processados · 42 importados/),
-    ).toBeInTheDocument();
+    // O cartão do sucesso (2.I8) diz o importado do progresso (42), nunca o
+    // da sessão lida antes (0).
+    expect(await screen.findByText("42 registros")).toBeInTheDocument();
+    expect(screen.queryByText("0 registros")).not.toBeInTheDocument();
     expect(getImportProgress).toHaveBeenCalledWith("session-1", expect.anything());
   });
 
@@ -417,6 +442,7 @@ describe("PARTIAL é estado legítimo", () => {
     const user = userEvent.setup();
     getImportState.mockResolvedValue(stateWithSession(runningSessionFixture()));
     getImportProgress.mockResolvedValue(partialProgressFixture());
+    listImportItems.mockResolvedValue(customerReviewPage());
     executeImport.mockResolvedValue({
       previewVersion: 7,
       sessionId: "session-1",
@@ -425,11 +451,11 @@ describe("PARTIAL é estado legítimo", () => {
     renderScreen();
 
     expect(
-      await screen.findByRole("heading", { name: "O que ainda não entrou (8)" }),
+      await screen.findByRole("heading", { name: "2 registros precisam de revisão" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("5 ainda não processados")).toBeInTheDocument();
-    expect(screen.getByText("2 esperando sua decisão")).toBeInTheDocument();
+    expect(screen.getByText("5 ainda não foram importados")).toBeInTheDocument();
     expect(screen.getByText("1 não importados")).toBeInTheDocument();
+    expect(await screen.findAllByText("cliente sem nome")).toHaveLength(2);
 
     await user.click(
       screen.getByRole("button", { name: "Importar os 5 que faltam" }),
@@ -461,7 +487,9 @@ describe("PARTIAL é estado legítimo", () => {
     });
     renderScreen();
 
-    await user.click(await screen.findByRole("button", { name: "Revisar itens" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Revisar pendências" }),
+    );
 
     expect(
       await screen.findByRole("heading", {
@@ -474,9 +502,11 @@ describe("PARTIAL é estado legítimo", () => {
   test("axe: execução com pendências sem violações", async () => {
     getImportState.mockResolvedValue(stateWithSession(runningSessionFixture()));
     getImportProgress.mockResolvedValue(partialProgressFixture());
+    listImportItems.mockResolvedValue(customerReviewPage());
     const { container } = renderScreen();
 
-    await screen.findByRole("heading", { name: "O que ainda não entrou (8)" });
+    await screen.findByRole("heading", { name: "2 registros precisam de revisão" });
+    await screen.findAllByText("cliente sem nome");
     await expectNoA11yViolations(container);
   });
 });
@@ -506,9 +536,13 @@ describe("concluir é definitivo", () => {
     expect(
       within(dialog).getByRole("heading", { name: "Esta é sua única importação." }),
     ).toBeInTheDocument();
+    // O texto do vault, com o número no lugar de "Alguns registros".
     expect(
       within(dialog).getByText(
-        "Depois de concluir, não será possível importar novamente do Minha Agenda. Alguns registros não serão importados. Deseja concluir mesmo assim?",
+        (_, element) =>
+          element?.tagName === "P" &&
+          element.textContent ===
+            "Depois de concluir, não será possível importar novamente do Minha Agenda. 8 registros não serão importados. Deseja concluir mesmo assim?",
       ),
     ).toBeInTheDocument();
     // Abrir a confirmação não conclui nada.
@@ -516,7 +550,7 @@ describe("concluir é definitivo", () => {
 
     getImportState.mockResolvedValue(completedState());
     await user.click(
-      within(dialog).getByRole("button", { name: "Concluir mesmo assim" }),
+      within(dialog).getByRole("button", { name: "Concluir importação" }),
     );
 
     await waitFor(() =>
@@ -537,13 +571,12 @@ describe("concluir é definitivo", () => {
     await user.click(
       await screen.findByRole("button", { name: "Concluir importação" }),
     );
-    await user.click(
-      screen.getByRole("button", { name: "Revisar antes de concluir" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Voltar e revisar" }));
 
     expect(completeImport).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "O que ainda não entrou (8)" }),
+      screen.getByRole("heading", { name: "2 registros precisam de revisão" }),
     ).toBeInTheDocument();
   });
 
@@ -602,7 +635,9 @@ describe("concluir é definitivo", () => {
     await user.click(
       await screen.findByRole("button", { name: "Concluir importação" }),
     );
-    const confirm = screen.getByRole("button", { name: "Concluir mesmo assim" });
+    const confirm = within(screen.getByRole("dialog")).getByRole("button", {
+      name: "Concluir importação",
+    });
     await user.click(confirm);
     await user.click(screen.getByRole("button", { name: "Concluindo..." }));
 
@@ -671,7 +706,7 @@ describe("concluir é definitivo", () => {
     );
     getImportState.mockResolvedValue(completedState());
     await user.click(
-      within(dialog).getByRole("button", { name: "Concluir mesmo assim" }),
+      within(dialog).getByRole("button", { name: "Concluir importação" }),
     );
 
     await waitFor(() => expect(completeImport).toHaveBeenCalledTimes(2));
@@ -693,7 +728,7 @@ describe("concluir é definitivo", () => {
     );
     const dialog = screen.getByRole("dialog");
     await user.click(
-      within(dialog).getByRole("button", { name: "Concluir mesmo assim" }),
+      within(dialog).getByRole("button", { name: "Concluir importação" }),
     );
     expect(
       await within(dialog).findByText(/Não foi possível concluir agora/),
@@ -702,7 +737,7 @@ describe("concluir é definitivo", () => {
     completeImport.mockResolvedValue(completionFixture());
     getImportState.mockResolvedValue(completedState());
     await user.click(
-      within(dialog).getByRole("button", { name: "Concluir mesmo assim" }),
+      within(dialog).getByRole("button", { name: "Concluir importação" }),
     );
 
     await waitFor(() => expect(completeImport).toHaveBeenCalledTimes(2));

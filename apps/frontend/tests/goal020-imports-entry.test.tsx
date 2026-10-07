@@ -369,7 +369,7 @@ describe("sessão viva: retomar é o padrão, substituir é decisão explícita"
 
     // A tela da execução lê `GET .../progress` ao montar (Goal020/WU-08):
     // esperar o estado assentar é o que a pessoa faz antes de clicar.
-    await screen.findByRole("heading", { name: "Importação parcial em andamento" });
+    await screen.findByRole("heading", { name: "Importação quase concluída" });
     await user.click(screen.getByRole("button", { name: "Conectar outra conta" }));
     expect(
       screen.getByRole("heading", { name: "Descartar esta importação?" }),
@@ -400,7 +400,7 @@ describe("sessão viva: retomar é o padrão, substituir é decisão explícita"
     });
     renderScreen();
 
-    await screen.findByRole("heading", { name: "Importação parcial em andamento" });
+    await screen.findByRole("heading", { name: "Importação quase concluída" });
     await user.click(screen.getByRole("button", { name: "Conectar outra conta" }));
     await user.click(
       screen.getByRole("button", { name: "Continuar esta importação" }),

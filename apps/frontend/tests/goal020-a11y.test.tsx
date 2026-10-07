@@ -367,9 +367,36 @@ describe("execução", () => {
   test("sem violação com pendências visíveis", async () => {
     getImportState.mockResolvedValue(stateWithSession(runningSessionFixture()));
     getImportProgress.mockResolvedValue(partialProgressFixture());
+    listImportItems.mockResolvedValue({
+      category: "CUSTOMER",
+      items: [
+        {
+          attemptCount: 0,
+          category: "CUSTOMER",
+          disappearedAt: null,
+          entityType: null,
+          externalId: "1042",
+          id: "item-1",
+          internalId: null,
+          label: "Cliente sem nome (origem #1042)",
+          lastAttemptAt: null,
+          processedAt: null,
+          reasonCode: "CUSTOMER_NAME_MISSING",
+          reasonDetail: null,
+          status: "NEEDS_REVIEW",
+        },
+      ],
+      limit: 5,
+      offset: 0,
+      sessionId: "session-1",
+      total: 1,
+    });
     const { container } = renderScreen();
 
-    await screen.findByRole("heading", { name: "O que ainda não entrou (8)" });
+    await screen.findByRole("heading", { name: "2 registros precisam de revisão" });
+    await screen.findByRole("button", {
+      name: "Nomear Cliente sem nome (origem #1042)",
+    });
     await expectNoA11yViolations(container);
   });
 
@@ -382,7 +409,7 @@ describe("execução", () => {
     // Espera a leitura de progresso assentar: `ReplaceAccountZone` também
     // aparece na tela de carregamento, e um `findBy` ansioso pegaria o botão
     // da renderização transitória em vez do da tela final.
-    await screen.findByRole("heading", { name: "Importação parcial em andamento" });
+    await screen.findByRole("heading", { name: "Importação quase concluída" });
     const trigger = screen.getByRole("button", { name: "Conectar outra conta" });
     await user.click(trigger);
     const dialog = await screen.findByRole("dialog", {
@@ -423,7 +450,7 @@ describe("execução", () => {
 
     await user.tab({ shift: true });
     expect(
-      within(dialog).getByRole("button", { name: "Concluir mesmo assim" }),
+      within(dialog).getByRole("button", { name: "Voltar e revisar" }),
     ).toHaveFocus();
     await user.tab();
     expect(within(dialog).getByRole("button", { name: "Fechar" })).toHaveFocus();

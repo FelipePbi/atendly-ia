@@ -8343,3 +8343,203 @@ Arquivos do Goal: `apps/frontend/src/features/imports/ImportDoneScreen.tsx` (nov
 ### Não executado
 
 A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.
+
+## As pendências e a confirmação da importação do onboarding iguais ao protótipo, do Goal135
+
+Rodada 1, 2026-10-07, na worktree `goal-135`. Baseline `0939249`. **Rodada 1:** a tela parada (2.I8), a confirmação (2.I9), a prop de `ImportConflictsScreen`, o CSS, os testes deles e as três capturas da baseline (WU-01); os alvos 2.I8 e 2.I9 e os testes da captura (WU-02); o `visual:compare`, as medidas, a regressão, uma correção de CSS (a opacidade do 2.I9 no mobile) e os dez controles negativos (WU-03); os gates do IA Loop sobre a árvore da rodada 1 (WU-04 a WU-11, todos com o mesmo `codeFingerprint`, `…48c0150a8d07`, sem mudança de código entre eles); e estes registros (WU-12). Os números das seções acima são da rodada 1, e a coluna diz quem os obteve; a **rodada 2** (FIX-001, dois blockers do review) está na seção "Rodada 2", depois dos controles negativos, e ela vale onde diverge da rodada 1: o cabeçalho do painel em `#7A4E0A`, a divergência do fundo do 2.I9, os números de `goal135`, de regressão e de controles, e os gates do IA Loop rodados de novo sobre a árvore final (coluna "rodada 2" em "Contagens"). Cada gate do IA Loop rodou **uma vez** por rodada (`attemptId` `a1`), sem retentativa do harness.
+
+### Contagens
+
+| Gate | Comando | Resultado (rodada 1) | Resultado (rodada 2, IA Loop) |
+| --- | --- | --- | --- |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0, 1,6 s, sem retentativa (IA Loop, WU-04; antes disso, sem erro nas WU-01 e WU-02) | saída 0, 1,6 s (WU-04) |
+| Lint do frontend | `npm run lint`, ou seja, `eslint src tests --max-warnings=0` (em `apps/frontend`) | saída 0, 17,4 s, 0 avisos, sem retentativa (IA Loop, WU-05) | saída 0, 16,9 s (WU-05) |
+| Testes `goal135` | `npx vitest run goal135` (IA Loop, WU-06) | 2 arquivos e **81** testes passando, sem retentativa: `goal135-pendencias.test.tsx` 54 (WU-01) e `goal135-alvos-captura.test.ts` 27 (WU-02) | 2 arquivos e **82** testes passando (54 + 28, com o teste novo das `notes`) (WU-06) |
+| Testes do frontend | `npm test` (IA Loop, WU-07) | **198** arquivos e **2818** testes passando, 0 falhas, sem retentativa (baseline 196 e 2737: +2 arquivos e +81 testes, os de `goal135`; a WU-01 viu 197 e 2791 antes dos 27 da WU-02) | **198** arquivos e **2819** testes passando (WU-07) |
+| Testes da captura | `node --test scripts/tests/visual-responses.test.mjs` (WU-02, WU-03 e, de novo, na WU-12, sobre a árvore final) | **62** testes, 62 passando, 0 falhas, 0 cancelados, 0 pulados (baseline 61: +1, o teste do 2.I8 e do 2.I9) | 62 de 62 (rodado pelo Developer na rodada 2; dentro do `test:gate` da WU-08) |
+| `test:gate` | `npm run test:gate` (IA Loop, WU-08) | **295** testes, 295 passando, 0 falhas, 0 pulados, sem retentativa (baseline 294: +1, o teste novo de `visual-responses.test.mjs`) | **295** testes, 295 passando, 0 falhas (WU-08) |
+| `validate:core` | `npm run validate:core` (IA Loop, WU-09, 119 s) | saída 0, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, que só tem a suíte de integração, rodada no `validate:integration`; `test:health-worker`, pacote sem suíte, só a checagem de sintaxe), sem retentativa. A auditoria estática dentro dele: 34 verificações, 33 passaram, 0 falharam, 1 pulada (`production_health`, que pede `PRODUCTION_HEALTH_TARGETS`) | saída 0, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, `test:health-worker`) (WU-09, 101 s) |
+| `validate:ui` | `npm run validate:ui` (IA Loop, WU-10, 46 s) | saída 0, **169 passed**, 21 skipped, retentativas **0** ("every test passed on its first attempt"); a baseline é 169 passed, 21 pulados | saída 0, **169 passed**, 21 skipped, retentativas **0** (WU-10, 45 s) |
+| `validate:integration` | `npm run validate:integration` (IA Loop, WU-11, 746 s) | saída 0, 36 passos, **36 passaram**, 0 falharam, 0 pulados, contra `127.0.0.1:55500/ia_bff_test`. O gate autenticado (`rehearse:goal033-authenticated-ui`) deu **305 passed** e retentativas **0** ("every test passed on its first attempt"); a baseline é 305 sem retentativa | saída 0, 36 de 36 passos; o gate autenticado deu **305 passed** e retentativas **0** (WU-11, 746 s) |
+| `git diff --check` | `git diff --check` | sem erro de espaço em branco na WU-03 (só os avisos de CRLF que já existiam); rodado de novo pela WU-13 do plano, depois destes registros | saída 0 (WU-13) |
+
+Na rodada 2, as WU-04 a WU-11 e a WU-13 têm o mesmo `codeFingerprint` (`code-v1:b1fec155ce0cf76a8107f39d0c57839fec9c8b00cd7273c115436c7acda01e9a`, a árvore final) e cada uma rodou **uma vez** (`attemptId` `a1`), sem retentativa do harness. O Developer não rodou `validate:core`, `validate:ui` nem `validate:integration` em nenhuma das duas rodadas: os números deles acima são os que o IA Loop rodou (WU-09, WU-10 e WU-11). Houve uma segunda rodada (FIX-001), e o IA Loop rodou de novo todos os gates sobre a árvore dela; os números da rodada 2 são os que valem para a árvore final. Todos os gates do plano têm resultado e número acima. O script `test:ia-loop` não consta do plano desta rodada, e o harness vive fora do repositório.
+
+### Gate autenticado
+
+A WU-01 buscou em `apps/frontend/e2e/authenticated-matrix.spec.ts` por **busca dirigida** (evidência 7 do Goal): "Concluir importação", "quase concluída", "Revisar pendências", "única importação", "Concluir mesmo assim", "Revisar antes de concluir" e "O que ainda não entrou". **Zero ocorrências em cada termo** (a WU-12 repetiu a contagem com `grep -c` na árvore final e deu 0 nos sete), então nenhum bloco toca a tela parada nem a confirmação e o arquivo **não foi ajustado** (escolha 10 do Goal). **Não foi a leitura integral do spec.** `ONBOARDING_ROUTES` não mudou: `/onboarding/importacao` segue medida na origem, com o marcador "De onde vamos trazer seus dados?". O gate autenticado deu 305 passed e 0 retentativas, e **não alcança** o 2.I8 nem o 2.I9 (a conta dele não tem sessão de importação): as cores deles são as do quadro (contraste de cada par em D-149), e o alvo de toque dos botões (52 e 54 px) está medido em px no `visual:compare`. O da ação de texto não foi medido à parte (ver "Desvios do texto do Goal").
+
+Leituras da tela (validação, item 1): a captura do 2.I8 e a do 2.I9 renderizaram a tela sem erro com os quatro `GET` fixos (`/v1/calendar/imports`, `.../progress`, `.../categories/SERVICE/items` e `.../categories/CUSTOMER/items`); **a WU-01 não enumerou os `GET` do navegador da captura**, e nenhum outro precisou de resposta fixa (a tela abre e fica estável só com esses). O `label` do cliente sem nome que o Scheduling grava é "Cliente sem nome (origem #<externalId>)" (`import-preview-service.ts`), e a resposta fixa usa a mesma forma ("Cliente sem nome (origem #1042)"): divergência declarada contra o telefone do quadro.
+
+### `visual:compare`
+
+Comando: `npm run visual:compare -- --target 2.I8,2.I9` (WU-03, saída 0, rodado de novo depois da correção de CSS). Percentual de pixels diferentes por device:
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| 2.I8 | 15,5% | 8,5% | 5,9% | 6,6% |
+| 2.I9 (antes da correção de opacidade, WU-01 com `targets.json` temporário) | 9,6% | 5,4% | 5,0% | 4,0% |
+| 2.I9 (depois da correção, WU-03, com o alvo real) | 7,8% | 5,4% | 5,0% | 4,0% |
+
+A WU-01 iterou com alvos **temporários** em `targets.json`, que ela reverteu (`git checkout`); os alvos reais são os da WU-02. Os **oito** `side-by-side.png` (protótipo × app) foram abertos pela WU-03 (cinco também pela WU-01), em `apps/frontend/e2e-results/visual/onboarding-2-importacao-2.I{8,9}-{mobile,tablet-portrait,tablet-landscape,desktop}/`. **A correção da WU-03:** o quadro 2.I9 no mobile põe `opacity: .5` no topo e no corpo atrás do véu, e o app só tinha o véu (o título saía `#221D1A` no app contra `#635F5B` no quadro). Um bloco `@media (max-width: 767px)` em `avenly-imports.css` aplica `opacity: 0.5` ao topo e ao corpo quando a confirmação está aberta; do tablet em diante o quadro não tem a opacidade, e as cores já eram iguais. Depois dela, o título mede `#635F5B` nos dois, e o diff do 2.I9 no mobile foi de 9,6% para 7,8%. É a única edição de código da WU-03.
+
+Divergências que restam, todas declaradas em D-149 ou nas `notes` dos alvos:
+
+- 1.843 no lugar de 1.840 registros, e o `label` do cliente sem nome com a forma do Scheduling;
+- a nota do 2.I8 e o fim do texto do 2.I9 com o texto do vault e o efeito real da conclusão (a folha do 2.I9 no mobile com 3 linhas de texto contra 4 do quadro: folha, alça e título 23 px mais abaixo no app);
+- **o fundo sob o véu do 2.I9** (divergência declarada na rodada 2): o quadro desenha atrás do véu só o título e o cartão do sucesso, com o círculo **sem o visto**; o app mostra a tela inteira do 2.I8 (o painel das pendências com as 3 linhas, a nota, "Concluir importação", "Revisar pendências" e a `ReplaceAccountZone`) e o círculo com o visto. As `notes` do 2.I9 diziam que o fundo era "como no quadro", o que era falso, e a rodada 1 não o registrava aqui;
+- `ReplaceAccountZone` abaixo do rodapé: com `.imports-danger-zone { display: none !important }` acrescentado **temporariamente** ao CSS, "Concluir importação" e "Revisar pendências" do 2.I8 caíram exatamente no quadro nos quatro devices (650 e 712, 876 e 938, 620 e 682, 620 e 682). A edição foi revertida (`cmp` igual);
+- o chevron (D-145), o preenchimento dos segmentos da barra do topo e o estado "Sua agenda" da sidebar (D-104), o "Sair" (D-104), a barra de status e o indicador de início do iPhone;
+- sem as animações de entrada (`reducedMotion: "reduce"`);
+- a sidebar do tablet paisagem e do desktop 1 px mais baixa no diff, igual aos outros quadros da importação (o Goal não a tocou).
+
+### Medidas por pixel, app × quadro
+
+Lidas de `prototype.png` e `app.png` a 1x por `measure.mjs` (cor exata, topo em y), em `C:\Users\felip\AppData\Local\Temp\wu03\`, fora do repositório (WU-03). Cada célula é o quadro → o app, em px.
+
+**2.I8**
+
+| Medida | mobile (402 × 812) | tablet retrato (768 × 1024) | tablet paisagem (1024 × 768) | desktop (1366 × 768) |
+| --- | --- | --- | --- | --- |
+| Topo do título | 91 → 91 | 101 → 101 | 130 → 130 | 130 → 130 |
+| Topo do cartão do sucesso | 171 → 171 | 178 → 178 | 177 → 178 | 177 → 178 |
+| Altura do cartão | 76 → 77 | 76 → 76 | 77 → 76 | 77 → 76 |
+| Círculo (altura; topo) | 40 → 40; 189 → 189 | 40 → 40; 196 → 196 | 40 → 40; 195 → 196 | 40 → 40; 195 → 196 |
+| Topo do painel | 267 → 268 | 274 → 274 | 274 → 274 | 274 → 274 |
+| Altura do cabeçalho do painel | 44 → 44 | 44 → 44 | 44 → 44 | 44 → 44 |
+| Altura de uma linha | 60 → 60 | 60 → 60 | 60 → 60 | 60 → 60 |
+| Topo da nota | 514 → 515 | 521 → 521 | 521 → 521 | 521 → 521 |
+| Topo de "Concluir importação" (`ReplaceAccountZone`) | 650 → 581 (−69) | 876 → 738 (−138) | 620 → 588 (−32) | 620 → 569 (−51) |
+| Topo de "Revisar pendências" (`ReplaceAccountZone`) | 712 → 643 (−69) | 938 → 800 (−138) | 682 → 650 (−32) | 682 → 631 (−51) |
+| Altura dos dois botões | 52 → 52 e 54 → 54 | 52 → 52 e 54 → 54 | 52 → 52 e 54 → 54 | 52 → 52 e 54 → 54 |
+| Espaço entre os botões | 10 → 10 | 10 → 10 | 10 → 10 | 10 → 10 |
+
+**2.I9**
+
+| Medida | mobile (402 × 812) | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| Topo da folha | 471 → 494 (+23) | 369 → 369 | 241 → 241 | 241 → 241 |
+| Altura da folha | 341 → 318 (−23) | 286 → 286 | 286 → 286 | 286 → 286 |
+| Topo da alça (largura; altura) | 481 → 504 (+23); 38 → 38; 4 → 4 | sem alça nos dois | sem alça nos dois | sem alça nos dois |
+| Raio da folha | 24 → 24 | 20 → 20 | 20 → 20 | 20 → 20 |
+| Topo do título | 472 → 495 (+23) | 370 → 370 | 242 → 242 | 242 → 242 |
+| Topo de "Concluir importação" | 650 → 650 | 515 → 515 | 387 → 387 | 387 → 387 |
+| Topo de "Voltar e revisar" | 712 → 712 | 577 → 577 | 449 → 449 | 449 → 449 |
+| Altura dos dois botões | 52 → 52 e 54 → 54 | 52 → 52 e 54 → 54 | 52 → 52 e 54 → 54 | 52 → 52 e 54 → 54 |
+| Espaço entre os botões | 10 → 10 | 10 → 10 | 10 → 10 | 10 → 10 |
+| Largura da folha | 370 → 402 (+32) | 460 → 460 | 460 → 460 | 460 → 460 |
+
+Nenhuma diferença acima de 1 px **fora das divergências declaradas**: a de 1 px do cartão e do painel no 2.I8 (subpixel, e tudo o que vem depois dele fica 1 px abaixo no mobile); os −69, −138, −32 e −51 px de "Concluir importação" e "Revisar pendências" são da `ReplaceAccountZone` (provado acima); os +23 e −23 px do 2.I9 no mobile são a linha de texto a menos da folha (a nota do vault, declarada); e os +32 px da largura são artefato do gradiente da borda da moldura do iPhone no `prototype.png` (a folha tem `left: 0; right: 0`, 402 px no app). Nos três devices maiores, o 2.I9 é igual ao quadro em tudo o que se mediu.
+
+### Ruído da baseline e regressão
+
+**Baseline `0939249`, três capturas** (WU-01, antes de qualquer edição, na árvore limpa): `npm run visual:compare -- --target 2.I1,2.I2,2.I3,2.I4,2.I5,2.I7,2.I10,I1,I2`, três vezes, saída 0 nas três, com os 36 `app.png` de cada uma em `C:\Users\felip\AppData\Local\Temp\visual-baseline-135\cap1`, `cap2` e `cap3`, fora do repositório. **Entre as capturas:** `cap1` × `cap2` tem **20 idênticos e 16 diferentes**; `cap1` × `cap3`, 24 e 12; `cap2` × `cap3`, 23 e 13. A maioria das imagens diferentes tem de 9 a 78 pixels com delta máximo de 1 a 4 por canal; a exceção é o 2.I1, que muda 15 a 19 pixels com delta de 35, 23 e 23 em desktop e tablets, e 13 pixels com delta de 2 no mobile. Os pares que variam entre capturas são I1 e I2 em desktop e paisagem, 2.I1, 2.I2 no mobile, 2.I4 nos quatro devices, 2.I5 em desktop e retrato, e 2.I7 em desktop, paisagem e mobile.
+
+**Depois das edições** (WU-03): o mesmo comando sobre a árvore final, saída 0, comparado com `cap1`, `cap2` e `cap3`. **Critério usado:** a imagem é "igual" se os pixels diferentes são 0 contra as três (`cmp`); é "dentro do ruído" se a contagem de pixels diferentes não passa do **máximo medido entre as três capturas para essa imagem** e o delta máximo por canal também não. **17 de 36 são iguais por `cmp`, 18 estão dentro do ruído e 1 (2.I7 em tablet retrato) saiu fora no passe dos 36 e foi refeita.** A tabela por imagem (pixels diferentes e, entre parênteses, o delta máximo em R/G/B):
+
+| Imagem (`app.png`) | `cap1` × `cap2` | `cap1` × `cap3` | `cap2` × `cap3` | final × `cap1` | final × `cap2` | final × `cap3` | Resultado |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| mais-whatsapp-importacao-conta-I1-desktop | 69 (1/3/3) | 0 (0/0/0) | 69 (1/3/3) | 48 (1/3/3) | 43 (1/1/1) | 48 (1/3/3) | dentro do ruído |
+| mais-whatsapp-importacao-conta-I1-mobile | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| mais-whatsapp-importacao-conta-I1-tablet-landscape | 39 (1/4/3) | 0 (0/0/0) | 39 (1/4/3) | 0 (0/0/0) | 39 (1/4/3) | 0 (0/0/0) | dentro do ruído |
+| mais-whatsapp-importacao-conta-I1-tablet-portrait | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| mais-whatsapp-importacao-conta-I2-desktop | 69 (1/3/3) | 12 (1/1/1) | 57 (1/3/3) | 69 (1/3/3) | 0 (0/0/0) | 57 (1/3/3) | dentro do ruído |
+| mais-whatsapp-importacao-conta-I2-mobile | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| mais-whatsapp-importacao-conta-I2-tablet-landscape | 66 (1/4/3) | 12 (1/1/1) | 78 (1/4/3) | 12 (1/1/1) | 78 (1/4/3) | 0 (0/0/0) | dentro do ruído |
+| mais-whatsapp-importacao-conta-I2-tablet-portrait | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| onboarding-2-importacao-2.I1-desktop | 0 (0/0/0) | 15 (35/23/23) | 15 (35/23/23) | 15 (35/23/23) | 15 (35/23/23) | 0 (0/0/0) | dentro do ruído |
+| onboarding-2-importacao-2.I1-mobile | 13 (2/1/2) | 13 (2/1/2) | 0 (0/0/0) | 13 (2/1/2) | 0 (0/0/0) | 0 (0/0/0) | dentro do ruído |
+| onboarding-2-importacao-2.I1-tablet-landscape | 15 (35/23/23) | 0 (0/0/0) | 15 (35/23/23) | 0 (0/0/0) | 15 (35/23/23) | 0 (0/0/0) | dentro do ruído |
+| onboarding-2-importacao-2.I1-tablet-portrait | 19 (14/9/9) | 19 (14/9/9) | 0 (0/0/0) | 0 (0/0/0) | 19 (14/9/9) | 19 (14/9/9) | dentro do ruído |
+| onboarding-2-importacao-2.I10-desktop | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| onboarding-2-importacao-2.I10-mobile | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| onboarding-2-importacao-2.I10-tablet-landscape | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| onboarding-2-importacao-2.I10-tablet-portrait | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| onboarding-2-importacao-2.I2-desktop | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| onboarding-2-importacao-2.I2-mobile | 31 (1/1/1) | 31 (1/1/1) | 0 (0/0/0) | 0 (0/0/0) | 31 (1/1/1) | 31 (1/1/1) | dentro do ruído |
+| onboarding-2-importacao-2.I2-tablet-landscape | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| onboarding-2-importacao-2.I2-tablet-portrait | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| onboarding-2-importacao-2.I3-desktop | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| onboarding-2-importacao-2.I3-mobile | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| onboarding-2-importacao-2.I3-tablet-landscape | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| onboarding-2-importacao-2.I3-tablet-portrait | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| onboarding-2-importacao-2.I4-desktop | 33 (1/1/1) | 22 (1/1/1) | 55 (1/1/1) | 33 (1/1/1) | 0 (0/0/0) | 55 (1/1/1) | dentro do ruído |
+| onboarding-2-importacao-2.I4-mobile | 64 (1/1/1) | 0 (0/0/0) | 64 (1/1/1) | 0 (0/0/0) | 64 (1/1/1) | 0 (0/0/0) | dentro do ruído |
+| onboarding-2-importacao-2.I4-tablet-landscape | 33 (1/1/1) | 0 (0/0/0) | 33 (1/1/1) | 33 (1/1/1) | 0 (0/0/0) | 33 (1/1/1) | dentro do ruído |
+| onboarding-2-importacao-2.I4-tablet-portrait | 54 (1/1/1) | 22 (1/1/1) | 32 (1/1/1) | 54 (1/1/1) | 0 (0/0/0) | 32 (1/1/1) | dentro do ruído |
+| onboarding-2-importacao-2.I5-desktop | 12 (1/1/1) | 12 (1/1/1) | 0 (0/0/0) | 12 (1/1/1) | 0 (0/0/0) | 0 (0/0/0) | dentro do ruído |
+| onboarding-2-importacao-2.I5-mobile | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| onboarding-2-importacao-2.I5-tablet-landscape | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | igual por `cmp` às três |
+| onboarding-2-importacao-2.I5-tablet-portrait | 40 (1/1/1) | 40 (1/1/1) | 0 (0/0/0) | 40 (1/1/1) | 0 (0/0/0) | 0 (0/0/0) | dentro do ruído |
+| onboarding-2-importacao-2.I7-desktop | 43 (1/1/1) | 0 (0/0/0) | 43 (1/1/1) | 43 (1/1/1) | 0 (0/0/0) | 43 (1/1/1) | dentro do ruído |
+| onboarding-2-importacao-2.I7-mobile | 0 (0/0/0) | 15 (1/1/1) | 15 (1/1/1) | 0 (0/0/0) | 0 (0/0/0) | 15 (1/1/1) | dentro do ruído |
+| onboarding-2-importacao-2.I7-tablet-landscape | 46 (1/1/1) | 9 (1/1/1) | 37 (1/1/1) | 0 (0/0/0) | 46 (1/1/1) | 9 (1/1/1) | dentro do ruído |
+| onboarding-2-importacao-2.I7-tablet-portrait | 0 (0/0/0) | 0 (0/0/0) | 0 (0/0/0) | 15 (1/1/1) | 15 (1/1/1) | 15 (1/1/1) | fora no passe dos 36; recapturado três vezes, igual (0 px) às três da baseline |
+
+Como ler a tabela:
+
+- Nenhuma imagem muda em layout, e o ruído da baseline mostra o mesmo perfil que a árvore final: bordas e cantos arredondados, delta 1 por canal, dezenas de pixels; o 2.I1 com 35, 23 e 23 e o I1 e o I2 com 1, 3 e 3 já aparecem **na própria baseline**.
+- **O 2.I7 em tablet retrato** (15 pixels, delta 1, o anel do marcador "em andamento", x 104–105, y 503–512) era idêntico entre as três capturas da baseline (ruído 0) e deu 15 px no passe dos 36. A WU-03 recapturou **só esse alvo três vezes**, depois de o limite de login do BFF (429) liberar: as três saíram **iguais por pixel (0 px) às três capturas da baseline e entre si**. A diferença do passe dos 36 foi ruído de execução, não do código: nenhum código novo alcança a tela do 2.I7 (`pendingView` só vale com `completable` e sem `interrupted`, e o 2.I7 é o estado `running`).
+- O código novo só é alcançável com a sessão `READY` ou `PARTIAL` e nada em execução (`ImportRunScreen`), e nenhum dos 9 alvos de regressão mostra essa tela (o 2.I10 e o I1 são a conclusão; o 2.I7 é o andamento).
+- Os 429 e 409 de login e de semeadura do BFF atrasaram só as recapturas (WU-01: duas execuções iniciais do `visual:compare` do 2.I8 e 2.I9; WU-03: as do 2.I7); a WU-03 esperou sem repetir tentativas e rodou de novo, sem mudar nada. Só contam as capturas que saíram com saída 0.
+
+### Controles negativos
+
+Rodados na rodada 1 (WU-03), por `ctl.sh`, **depois da última edição de código** (a correção de opacidade, acima; os gates da WU-04 à WU-11 têm o mesmo `codeFingerprint` e rodaram depois). Base verde antes dos controles: 81 de 81 (`npx vitest run tests/goal135-pendencias.test.tsx tests/goal135-alvos-captura.test.ts`, de `apps/frontend`) e 62 de 62 (`node --test scripts/tests/visual-responses.test.mjs`). Cada um teve o arquivo devolvido da cópia guardada, com `cmp` igual (**IGUAL nos dez**) e `sha1sum -c` OK, e a suíte voltou verde no fim. A saída bruta de cada um está em `C:\Users\felip\AppData\Local\Temp\wu03\ctl\` (fora do repositório; `a.fe.log` a `j.fe.log` e, para (h) e (i), também `h.mjs.log` e `i.mjs.log`). Teste `goal135` das telas = `npx vitest run tests/goal135-pendencias.test.tsx`; dos alvos = `npx vitest run tests/goal135-alvos-captura.test.ts` (de `apps/frontend`); `visual-responses` = `node --test scripts/tests/visual-responses.test.mjs` (da raiz).
+
+| # | Mudança | Teste que reprovou | Mensagem exata |
+| --- | --- | --- | --- |
+| a | `ImportRunScreen.tsx`: `{ limit: PENDING_ITEMS_LIMIT, status: "NEEDS_REVIEW" }` virou `{ limit: PENDING_ITEMS_LIMIT }` (a leitura sem o filtro) | `goal135-pendencias.test.tsx`, nas duas molduras (2 falhas): "uma leitura por categoria com needsReview, filtrada e com limite 5; nenhuma para as outras" | `AssertionError: expected "vi.fn()" to be called with arguments: [ 'session-1', 'SERVICE', …(2) ]` (o diff mostra o `"status": "NEEDS_REVIEW"` esperado e ausente) |
+| b | `ImportRunScreen.tsx`: `.slice(0, PENDING_ITEMS_LIMIT)` virou `.slice(0, PENDING_ITEMS_LIMIT + 1)` (6 itens) | `goal135-pendencias.test.tsx`, nas duas molduras (2 falhas): "seis itens lidos entre as categorias mostram só 5, na ordem das categorias" | `AssertionError: expected [ 'Corrigir S1', 'Corrigir S2', …(4) ] to deeply equal [ 'Corrigir S1', 'Corrigir S2', …(3) ]` (sobra `"Nomear C2"`) |
+| c | `ImportRunScreen.tsx`: com `outstanding > 0`, "Concluir importação" chama `runComplete(true)` em vez de abrir a folha (o pedido sem a folha) | `goal135-pendencias.test.tsx` (12 falhas, 6 por moldura), entre elas "abre sem pedido, com o título, sem o eyebrow, e o texto do vault com o número em negrito", "com 1 registro o negrito vai ao singular", "'Concluir importação' da folha envia {acceptPending:true} uma vez, com a chave por corpo" e "o erro da conclusão aparece com role=alert" | `TestingLibraryElementError: Unable to find role="dialog"` (12 vezes). É o único que reprova também o axe, porque a folha nunca abre |
+| d | `ImportRunScreen.tsx`: a folha chama `runComplete(false)` em vez de `runComplete(true)` (envia `{}`) | `goal135-pendencias.test.tsx`, nas duas molduras (2 falhas): "'Concluir importação' da folha envia {acceptPending:true} uma vez, com a chave por corpo" | `AssertionError: expected "vi.fn()" to be called with arguments: [ 'session-1', …(2) ]` (o diff mostra `{ "acceptPending": true }` esperado e `{}` recebido) |
+| e | `ImportRunScreen.tsx`: `{SINGLE_IMPORT_CONFIRMATION_TAIL}` trocado por "— você pode corrigi-los depois, em Serviços e Clientes." (o texto do quadro) | `goal135-pendencias.test.tsx`, nas duas molduras (2 falhas): "abre sem pedido, com o título, sem o eyebrow, e o texto do vault com o número em negrito" | `AssertionError: expected 'Depois de concluir, não será possível…' to be 'Depois de concluir, não será possível…' // Object.is equality` (recebido: "…3 registros não serão importados. — você pode corrigi-los depois, em Serviços e Clientes."; esperado: "…3 registros não serão importados. Deseja concluir mesmo assim?") |
+| f | `labels.ts`: `SERVICE_DURATION_MISSING` com a ação "Nomear" em vez de "Corrigir" | `goal135-pendencias.test.tsx`, nas duas molduras (10 falhas, 5 por moldura), entre elas "uma leitura por categoria com needsReview, filtrada e com limite 5; nenhuma para as outras", "seis itens lidos entre as categorias mostram só 5, na ordem das categorias", "no máximo 5 linhas, e 'Mais N em Revisar pendências.' com o resto", "motivo curto e ação por reasonCode, com o item no nome acessível" e "axe: a tela parada e a folha da confirmação" | `TestingLibraryElementError: Unable to find role="button" and name "Corrigir Escova"` (6 vezes; também com "Corrigir Serviço 1" 2 vezes e "Corrigir S1" 2 vezes) |
+| g | `ImportRunScreen.tsx`: `disabled={completing \|\| retrying \|\| Boolean(pendingRead?.failed)}` em "Concluir importação" (a falha da leitura bloqueando) | `goal135-pendencias.test.tsx`, nas duas molduras (2 falhas): "falha da leitura dos itens: nota com role=status, uma linha por categoria e ações livres" | `Error: expect(element).toBeEnabled()` — `Received element is not enabled: <button class="btn btn-primary" disabled="" type="button" />` |
+| h | `targets.json`: o 2.I8 com um passo `clickRole` em "Revisar pendências" | **os dois:** `goal135-alvos-captura.test.ts` (1 falha: "os dois alvos > o 2.I8 não tem passo") e `visual-responses.test.mjs` (1 falha, `visual-responses.test.mjs:291`: "targets.json: 2.I8 e 2.I9 só declaram os quatro GET da sessão pendente; o 2.I8 não tem passo e o 2.I9 só clica em "Concluir importação"") | `AssertionError: expected [ { clickRole: { …(2) } } ] to be undefined`; e `AssertionError [ERR_ASSERTION]: 2.I8: nenhum passo, a tela abre parada e nada nela é tocado` (a suíte: 62 testes, 61 passando, 1 falha) |
+| i | `targets.json`: o 2.I9 com um segundo passo `clickRole` em "Voltar e revisar" (um passo que toca a folha) | **os dois:** `goal135-alvos-captura.test.ts` (1 falha: "os dois alvos > o 2.I9 só tem o clickRole no botão Concluir importação, sem tocar a folha") e `visual-responses.test.mjs` (1 falha, mesmo teste da linha 291) | `AssertionError: expected [ { clickRole: { …(2) } }, …(1) ] to deeply equal [ { clickRole: { …(2) } } ]`; e `AssertionError [ERR_ASSERTION]: 2.I9: só o clique em Concluir importação do rodapé` (a suíte: 62 testes, 61 passando, 1 falha) |
+| j | `targets.json`: `counts.imported` do andamento do 2.I8 de 1843 para 1844 (diferente da soma das categorias) | `goal135-alvos-captura.test.ts` (3 falhas): "alvo 2.I8 do visual:compare > counts é a soma das categorias: 1.843 importados e 3 em revisão, sem pendente, ignorado nem falho", "alvo 2.I8 do visual:compare > a sessão e o andamento têm as mesmas contagens, no total e por categoria, na mesma ordem" e "os dois alvos > têm as mesmas respostas, caminho a caminho". O `visual-responses.test.mjs` não afirma `counts` | `AssertionError: expected { pending: +0, imported: 1844, …(3) } to deeply equal { pending: +0, imported: 1843, …(3) }` (a soma); `AssertionError: expected { pending: +0, imported: 1843, …(3) } to deeply equal { pending: +0, imported: 1844, …(3) }` (a sessão contra o andamento); e `AssertionError: expected [ { method: 'GET', …(2) }, …(3) ] to deeply equal [ { method: 'GET', …(2) }, …(3) ]` (os dois alvos) |
+
+Os dez controles reprovaram, o (h) e o (i) pelos **dois** testes, e foram revertidos. A WU-12 conferiu as mensagens de (a), (b), (d), (e), (g), (h), (i) e (j) contra os logs de `wu03\ctl\`, e as contagens de falhas e a mensagem de (c) e (f) contra `c.fe.log` e `f.fe.log`: batem com o relatório da WU-03.
+
+### Rodada 2 (FIX-001: os dois blockers do review)
+
+Rodada 2, 2026-10-07, mesma worktree. Só duas mudanças, e a regressão e os controles foram refeitos **depois da última edição de código** (a `avenly-imports.css`, o `targets.json` e um teste novo de `goal135-alvos-captura.test.ts`):
+
+- **Blocker 1, o cabeçalho do painel das pendências (2.I8, nos quatro devices, e o fundo do 2.I9).** O texto "3 registros precisam de revisão" saía `#221E1A` no app e `#7A4E0A` no quadro: `avenly.css` dá `color: var(--fg)` a todo `h2`, e a regra `.imports-pending-head h2` não declarava cor, então o `h2` não herdava o `#7a4e0a` de `.imports-pending-head`. A regra passou a declarar `color: inherit`. **Medida por pixel** nos `prototype.png` e `app.png` do `visual:compare` desta rodada (contagem de pixels `#7A4E0A` exatos na página inteira do 2.I8), quadro × app: **549 × 549** no mobile, **548 × 549** no tablet retrato, **548 × 549** no tablet paisagem e **548 × 549** no desktop (antes: 244 no app, com o `#221E1A` subindo na mesma medida). Os quatro 2.I9 não têm pixel `#7A4E0A` nenhum, nos dois lados (o véu escurece o painel). O motivo das linhas (13 px) já saía `#7A4E0A` e não mudou.
+- **Blocker 2, o fundo do 2.I9.** As `notes` do 2.I9 em `targets.json` diziam que o fundo sob o véu era a tela do 2.I8 "com o painel das pendências, como no quadro". O quadro desenha só o título e o cartão do sucesso (o círculo sem o visto). O trecho virou uma divergência declarada: "o fundo sob o véu é a própria tela do 2.I8, com o painel das pendências, a nota, o rodapé e a ReplaceAccountZone, que o quadro não desenha (ele mostra só o título e o cartão, com o círculo sem o visto)". A mesma divergência entrou na lista de D-149 e na lista de divergências acima. Um teste novo em `goal135-alvos-captura.test.ts` prova o texto novo e a ausência do antigo.
+
+**`visual:compare`** (`npm run visual:compare -- --target 2.I1,2.I2,2.I3,2.I4,2.I5,2.I7,2.I10,I1,I2,2.I8,2.I9`, saída 0, depois da última edição de código; os 44 `side-by-side.png`, entre eles os **oito** do 2.I8 e do 2.I9, saíram desse comando, e os oito foram abertos): diff do 2.I8 **15,4% / 8,5% / 5,8% / 6,6%** (mobile / tablet retrato / tablet paisagem / desktop) e do 2.I9 **7,8% / 5,4% / 5,0% / 4,0%**. As medidas de posição da rodada 1 não mudam (a regra só troca a cor do texto do `h2`); as divergências que restam são as da lista acima, mais a do fundo do 2.I9.
+
+**Regressão dos 36 `app.png`** (os 9 alvos de regressão, nos quatro devices, do mesmo comando, contra as três capturas da baseline `cap1`, `cap2` e `cap3`, com o mesmo critério da seção anterior): **18 iguais por `cmp` às três e 18 dentro do ruído, 0 fora do ruído**, nos 36. Nenhuma passou do máximo medido entre as três capturas da baseline (pixels e delta por canal), e o 2.I7 em tablet retrato saiu igual (0 px) às três. Contagens por imagem em `C:\Users\felip\AppData\Local\Temp\wu03\reg2-vs-cap1.txt` a `reg2-vs-cap3.txt` (fora do repositório).
+
+**Os dez controles negativos (a) a (j)**, refeitos depois da última edição de código, cada um com o arquivo devolvido de uma cópia guardada (`cmp` igual nos dez e `sha1sum -c` OK nos quatro arquivos que importam). Base verde antes: `goal135` 82 de 82 e `visual-responses.test.mjs` 62 de 62. As mudanças são as da tabela de controles acima, e cada uma reprovou como na rodada 1, com as mesmas contagens: (a) 2 falhas de 54; (b) 2 de 54; (c) 12 de 54; (d) 2 de 54; (e) 2 de 54; (f) 10 de 54; (g) 2 de 54 (`expect(element).toBeEnabled()`; o `disabled` do controle (g) leu `reviewRead?.failed`, o nome vigente do estado da leitura); (h) 1 de 27 em `goal135-alvos-captura.test.ts` e 1 de 62 em `visual-responses.test.mjs`; (i) 1 de 27 e 1 de 62; (j) 3 de 27 (o `visual-responses.test.mjs` não afirma `counts`). Saída bruta em `C:\Users\felip\AppData\Local\Temp\fix1\ctl\` (fora do repositório).
+
+**Testes e checagens desta rodada** (executados pelo Developer): `npx vitest run goal135` (de `apps/frontend`): 2 arquivos e **82** testes passando (54 + 28, o teste novo das `notes`); `npx vitest run goal135 goal133 goal134 goal132 goal020 goal105 goal120`: 20 arquivos e 437 testes passando (antes do teste novo); `node --test scripts/tests/visual-responses.test.mjs`: 62 de 62; `npx tsc --noEmit` e `eslint` do arquivo de teste novo: sem erro. `validate:core`, `validate:ui`, `validate:integration`, `test:gate` e o `npm test` inteiro **não foram rodados pelo Developer nesta rodada**: ficam com o IA Loop, e o IA Loop os rodou na rodada 2 (WU-04 a WU-11 e WU-13), com os números da tabela de Contagens (a árvore mudou só em uma propriedade de CSS, um trecho de `notes` e um teste novo).
+
+### Testes ajustados
+
+Cada ajuste troca só o texto ou a forma que este Goal muda (o título, o painel de status, "O que ainda não entrou", "Revisar itens", o eyebrow e os botões da confirmação). Nenhum afrouxa asserção sobre os pedidos, o corpo, a chave, o guarda, a retomada, os erros ou as outras telas.
+
+- `apps/frontend/tests/goal020-a11y.test.tsx`, `goal020-import-preview.test.tsx`, `goal020-import-run.test.tsx`, `goal020-imports-entry.test.tsx`, `goal020-reachability.test.tsx`, `goal020-shell-invariant.test.tsx`, `goal105-importacao.test.tsx`, `goal120-importacao-recusas.test.tsx` e `goal133-andamento.test.tsx` (WU-01): os títulos "Continuar importação" e "Importação parcial em andamento" passaram a "Importação quase concluída"; "O que ainda não entrou (8)" passou a "2 registros precisam de revisão" (o painel novo); "Revisar itens" passou a "Revisar pendências"; "Concluir mesmo assim" passou a "Concluir importação" dentro da folha; "Revisar antes de concluir" passou a "Voltar e revisar"; o texto do vault com o número no lugar de "Alguns registros"; e o `progressbar` do painel de status passou a "42 registros" no cartão do sucesso. Os pedidos, o corpo `{acceptPending: true}`, a chave por corpo, o guarda, a retomada e os erros seguem afirmados como antes.
+- `apps/frontend/tests/goal132-alvos-captura.test.ts`, `goal133-alvo-captura.test.ts` e `goal134-alvo-captura.test.ts` (WU-02, **fora dos arquivos que o plano listava para os testes ajustados da WU-01, mas necessários**): afirmavam a lista fechada de cinco donos de `responses` em `Onboarding-2-Importacao.dc.html` e reprovariam com o 2.I8 e o 2.I9; só a lista (e o nome do teste) passou para sete, o mesmo padrão que o Goal134 usou ao entrar o 2.I10. Com os alvos temporários da WU-01, esses três reprovaram como esperado (3 falhas) até a lista ser ajustada.
+- `scripts/tests/visual-responses.test.mjs` (WU-02): o título e a lista ordenada dos donos de `responses`, o mapa de dono por arquivo e as duas listas de donos de `Onboarding-2-Importacao.dc.html` ganharam o 2.I8 e o 2.I9; um teste novo (62 no total) prova que o 2.I8 e o 2.I9 só declaram os quatro `GET`, que nenhum método de escrita casa, que o 2.I8 não tem passo, que o 2.I9 só tem o `clickRole` em "Concluir importação", que os dois têm as mesmas respostas e que nenhum outro dono usa a sessão `visual-compare-import-pending`.
+- Evidência 8 do Goal: montam a tela parada ou a confirmação `goal020-a11y`, `goal020-import-run`, `goal020-shell-invariant`, `goal120-importacao-recusas` e `goal133-andamento` (os cinco do Goal), mais `goal020-import-preview`, `goal020-imports-entry`, `goal020-reachability` e `goal105-importacao` (achados pela busca), todos ajustados acima. `goal135-pendencias.test.tsx` cobre a tela nova nas duas molduras.
+
+### Escopo
+
+Arquivos do Goal: `apps/frontend/src/features/imports/ImportRunScreen.tsx`, `ImportConflictsScreen.tsx` (só a prop `initialCategory`) e `labels.ts` (por acréscimo), `apps/frontend/src/shared/styles/avenly-imports.css`, `apps/frontend/e2e/visual/targets.json` (o 2.I8 e o 2.I9), `scripts/tests/visual-responses.test.mjs`, `apps/frontend/tests/goal135-pendencias.test.tsx` e `goal135-alvos-captura.test.ts` (novos), os testes existentes ajustados acima e os três registros em `docs/migration/`. `shared/ui/Dialog.tsx`, `ImportsScreen.tsx`, `ImportDoneScreen.tsx`, `ImportHistoryCard.tsx`, `features/onboarding/`, `features/settings/`, `authenticated-matrix.spec.ts`, o contrato e o BFF não mudaram.
+
+### Desvios do texto do Goal, para o review
+
+- A regressão por `cmp` não deu 36 de 36 byte a byte, pela captura não determinística (acima): 17 iguais, 18 dentro do ruído medido entre as três capturas da baseline e 1 refeita (o 2.I7 em tablet retrato). O critério 4 fica atendido pela segunda via, com a tabela por imagem.
+- O `authenticated-matrix.spec.ts` foi lido por busca dirigida, não por inteiro (zero ocorrências nos sete termos).
+- A WU-01 não enumerou os `GET` do navegador da captura (passo da validação, item 1); só viu a tela renderizar sem erro com os quatro `GET` fixos.
+- **O alvo de toque das ações de texto "Corrigir" e "Nomear" não foi medido em px à parte, e nenhum teste do jsdom lê o CSS dele.** O Goal (critério 7) pede a prova em jsdom pelo CSS aplicado e pelas medidas do §3.5; o jsdom não faz layout, e o §3.5 lista a altura da linha (60 px, igual ao quadro) e a dos dois botões (52 e 54 px), não a caixa da ação. A regra é `padding: 13px 0; margin: -13px 0`, como no quadro, com a fonte de 13 px; a conta de CSS dá mais de 24 px (WCAG 2.5.8), mas fica sem medição própria. Os botões estão medidos.
+- A borda de "Revisar pendências" e de "Voltar e revisar" (`#D6CEC2`) mede 1,42:1 sobre `#F7F4EF` e 1,54:1 sobre `#FFFDFA`, abaixo dos 3:1 de componente de interface; é a cor do quadro, declarada em D-149, e o gate não a mede.
+- Três testes fora da lista do plano para a WU-01 foram ajustados pela WU-02 (`goal132-alvos-captura`, `goal133-alvo-captura` e `goal134-alvo-captura`), só na lista de donos de `responses`.
+- A tela parada com `failed` ou `pending`, a falha da leitura dos itens e a confirmação só são provadas em jsdom; a captura mostra só o estado do quadro (itens em revisão, sem falha nem pendente).
+
+### Não executado
+
+A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.

@@ -305,6 +305,102 @@ export const SINGLE_IMPORT_CONFIRMATION_TITLE = "Esta é sua única importação
 export const SINGLE_IMPORT_CONFIRMATION_BODY =
   "Depois de concluir, não será possível importar novamente do Minha Agenda. Alguns registros não serão importados. Deseja concluir mesmo assim?";
 
+/**
+ * Partes da folha da confirmação (2.I9). O vault fixa a frase inteira em
+ * `SINGLE_IMPORT_CONFIRMATION_BODY`; a folha do quadro põe o número em negrito
+ * no meio dela, então o texto é cortado em duas pontas e o meio, "Alguns
+ * registros não serão importados.", vira `notImportedSentence`. A constante de
+ * cima continua sendo a fonte do texto.
+ */
+export const SINGLE_IMPORT_CONFIRMATION_LEAD =
+  "Depois de concluir, não será possível importar novamente do Minha Agenda.";
+export const SINGLE_IMPORT_CONFIRMATION_TAIL = "Deseja concluir mesmo assim?";
+
+/** "3 registros não serão importados." e, no singular, "1 registro não será importado." */
+export function notImportedSentence(count: number): string {
+  return count === 1
+    ? "1 registro não será importado."
+    : `${importCountFormatter.format(count)} registros não serão importados.`;
+}
+
+/** Cada categoria no singular, em minúscula, para o motivo genérico do 2.I8. */
+export const CATEGORY_SINGULAR_LABELS: Record<ImportCategory, string> = {
+  SERVICE: "serviço",
+  CUSTOMER: "cliente",
+  AVAILABILITY: "horário de atendimento",
+  TIME_BLOCK: "bloqueio",
+  FUTURE_APPOINTMENT: "agendamento futuro",
+  PAST_APPOINTMENT: "atendimento anterior",
+  CANCELLED_APPOINTMENT: "cancelamento",
+  NO_SHOW_APPOINTMENT: "falta",
+};
+
+/** Título da tela parada (2.I8), com a importação ainda por concluir. */
+export const IMPORT_PENDING_TITLE = "Importação quase concluída";
+
+/** "1.843 registros" e, no singular, "1 registro", no cartão do sucesso do 2.I8. */
+export function importedCardCount(count: number): string {
+  return `${importCountFormatter.format(count)} ${count === 1 ? "registro" : "registros"}`;
+}
+
+export function importedCardHint(count: number): string {
+  return count === 1 ? "já está na Avenly" : "já estão na Avenly";
+}
+
+/**
+ * Cabeçalho do painel das pendências (2.I8): os itens em revisão quando há; sem
+ * eles, o que ainda não entrou (falhas e o que não foi processado).
+ */
+export function pendingPanelHeading(
+  needsReview: number,
+  outstanding: number,
+): string {
+  if (needsReview > 0) {
+    return needsReview === 1
+      ? "1 registro precisa de revisão"
+      : `${importCountFormatter.format(needsReview)} registros precisam de revisão`;
+  }
+  return outstanding === 1
+    ? "1 registro ainda não entrou"
+    : `${importCountFormatter.format(outstanding)} registros ainda não entraram`;
+}
+
+/** Linha final do painel quando há mais itens em revisão que os mostrados. */
+export function pendingMoreLabel(count: number): string {
+  return `Mais ${importCountFormatter.format(count)} em Revisar pendências.`;
+}
+
+export const PENDING_ITEMS_READ_FAILED = "Não foi possível listar os itens agora.";
+export const PENDING_PANEL_NOTE =
+  "Você pode revisar agora. O que continuar pendente não será importado quando você concluir.";
+
+export function pendingNotProcessedLabel(count: number): string {
+  return count === 1
+    ? "1 ainda não foi importado"
+    : `${importCountFormatter.format(count)} ainda não foram importados`;
+}
+
+/**
+ * Motivo curto e ação de um item em revisão no 2.I8, por `reasonCode`. O texto
+ * longo de cada motivo continua em `conflictReasonLabel`, na tela de decisão.
+ */
+export function importReviewCopy(
+  reasonCode: string | null,
+  category: ImportCategory,
+): { action: string; reason: string } {
+  switch (reasonCode) {
+    case "SERVICE_DURATION_MISSING":
+      return { action: "Corrigir", reason: "sem duração · precisa de revisão" };
+    case "CUSTOMER_NAME_MISSING":
+      return { action: "Nomear", reason: "cliente sem nome" };
+    default:
+      return {
+        action: "Corrigir",
+        reason: `${CATEGORY_SINGULAR_LABELS[category]} · precisa de revisão`,
+      };
+  }
+}
+
 const WEEKDAY_LABELS = [
   "Domingo",
   "Segunda",

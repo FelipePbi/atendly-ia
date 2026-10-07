@@ -16,15 +16,28 @@ import {
   CATEGORY_ORDER,
   failedReasonLabel,
   formatImportDateTime,
+  IMPORT_PENDING_TITLE,
   importCountFormatter,
-  SINGLE_IMPORT_CONFIRMATION_BODY,
+  importedCardCount,
+  importedCardHint,
+  importReviewCopy,
+  notImportedSentence,
+  PENDING_ITEMS_READ_FAILED,
+  PENDING_PANEL_NOTE,
+  pendingMoreLabel,
+  pendingNotProcessedLabel,
+  pendingPanelHeading,
+  SINGLE_IMPORT_CONFIRMATION_LEAD,
+  SINGLE_IMPORT_CONFIRMATION_TAIL,
   SINGLE_IMPORT_CONFIRMATION_TITLE,
   STATUS_LABELS,
   upstreamErrorCode,
   workErrorLabel,
 } from "./labels";
 import type {
+  ImportCategory,
   ImportCompletion,
+  ImportItem,
   ImportLiveSession,
   ImportProgress,
   ImportSessionStatus,
@@ -32,6 +45,9 @@ import type {
 } from "./types";
 
 const PROGRESS_POLL_MS = 3_000;
+
+/** Quantos itens em revisão o painel do 2.I8 mostra, no total das categorias. */
+const PENDING_ITEMS_LIMIT = 5;
 
 /** Terminais do domínio (Goal010): depois deles a sessão não muda mais. */
 const TERMINAL_STATUSES = new Set<ImportSessionStatus>([
@@ -317,6 +333,179 @@ function ImportRunningBody({
   );
 }
 
+/** Um item em revisão do painel do 2.I8, com a categoria em que foi lido. */
+interface ReviewItem {
+  category: ImportCategory;
+  item: ImportItem;
+}
+
+/**
+ * O resultado da leitura dos itens em revisão, preso ao andamento que a pediu:
+ * um andamento novo faz o painel voltar a "lendo" sem estado a zerar.
+ */
+interface ReviewRead {
+  failed: boolean;
+  items: ReviewItem[];
+  progress: ImportProgress;
+}
+
+/**
+ * Tela parada (2.I8): a importação executada que ainda pode ser concluída. O
+ * sucesso vem primeiro; o painel das pendências só existe com o que ainda não
+ * entrou (`outstanding`) e traz até `PENDING_ITEMS_LIMIT` itens em revisão,
+ * lidos da rota de itens. Falhas e o que não foi processado entram como linhas
+ * sem ação: o quadro só desenha itens em revisão.
+ */
+function ImportPendingBody({
+  categories,
+  counts,
+  onCorrect,
+  read,
+}: {
+  categories: ProgressCategory[];
+  counts: ImportProgress["counts"];
+  onCorrect: (category: ImportCategory) => void;
+  /** `null` enquanto a leitura dos itens em revisão não terminou. */
+  read: ReviewRead | null;
+}) {
+  const outstanding = outstandingOf(counts);
+  const reviewCategories = categories.filter((category) => category.needsReview > 0);
+  const failedCategories = categories.filter((category) => category.failed > 0);
+  const reading = counts.needsReview > 0 && read === null;
+  const shown = read && !read.failed ? read.items : [];
+  const hidden = read && !read.failed ? counts.needsReview - shown.length : 0;
+  return (
+    <div className="imports-pending">
+      <div className="imports-pending-success">
+        <span aria-hidden="true" className="imports-pending-seal">
+          <svg
+            fill="none"
+            height="20"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="3"
+            viewBox="0 0 24 24"
+            width="20"
+          >
+            <path d="M5 12.5l4.5 4.5L19 7.5" />
+          </svg>
+        </span>
+        <div className="imports-pending-figures">
+          <span className="imports-pending-count">
+            {importedCardCount(counts.imported)}
+          </span>
+          <span className="imports-pending-hint">
+            {importedCardHint(counts.imported)}
+          </span>
+        </div>
+      </div>
+      {outstanding > 0 && (
+        <>
+          <section
+            aria-busy={reading || undefined}
+            className="imports-pending-panel"
+          >
+            <div className="imports-pending-head">
+              <svg
+                aria-hidden="true"
+                fill="none"
+                height="18"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.75"
+                viewBox="0 0 24 24"
+                width="18"
+              >
+                <path d="M12 4 21 20H3z" />
+                <path d="M12 10v4M12 17v.5" />
+              </svg>
+              <h2>{pendingPanelHeading(counts.needsReview, outstanding)}</h2>
+            </div>
+            <ul className="imports-pending-rows">
+              {shown.map(({ category, item }) => {
+                const copy = importReviewCopy(item.reasonCode, category);
+                const name = item.label?.trim() || "Sem nome";
+                return (
+                  <li className="imports-pending-row" key={item.id}>
+                    <div className="imports-pending-who">
+                      <span className="imports-pending-name">{name}</span>
+                      <span className="imports-pending-why">{copy.reason}</span>
+                    </div>
+                    <button
+                      className="imports-pending-action"
+                      type="button"
+                      onClick={() => onCorrect(category)}
+                    >
+                      {copy.action}{" "}
+                      <span className="sr-only">{name}</span>
+                    </button>
+                  </li>
+                );
+              })}
+              {hidden > 0 && (
+                <li className="imports-pending-row">
+                  <span className="imports-pending-why">
+                    {pendingMoreLabel(hidden)}
+                  </span>
+                </li>
+              )}
+              {read?.failed &&
+                reviewCategories.map((category) => (
+                  <li className="imports-pending-row" key={category.category}>
+                    <span className="imports-pending-name">
+                      {`${importCountFormatter.format(category.needsReview)} ${CATEGORY_LABELS[category.category]}`}
+                    </span>
+                  </li>
+                ))}
+              {failedCategories.map((category) => (
+                <li
+                  className="imports-pending-row"
+                  key={`failed-${category.category}`}
+                >
+                  <div className="imports-pending-who">
+                    <span className="imports-pending-name">
+                      {capitalized(CATEGORY_LABELS[category.category])}
+                    </span>
+                    <span className="imports-pending-why">
+                      {`${importCountFormatter.format(category.failed)} não importados`}
+                    </span>
+                    {category.failedReasons.map((reason) => (
+                      <span
+                        className="imports-pending-why"
+                        key={reason.reasonCode}
+                      >
+                        {`${failedReasonLabel(reason.reasonCode)} (${importCountFormatter.format(reason.count)})`}
+                      </span>
+                    ))}
+                  </div>
+                </li>
+              ))}
+              {counts.pending > 0 && (
+                <li className="imports-pending-row">
+                  <span className="imports-pending-name">
+                    {pendingNotProcessedLabel(counts.pending)}
+                  </span>
+                </li>
+              )}
+            </ul>
+            {read?.failed && (
+              <p
+                className="imports-pending-why imports-pending-read-failed"
+                role="status"
+              >
+                {PENDING_ITEMS_READ_FAILED}
+              </p>
+            )}
+          </section>
+          <p className="imports-pending-note">{PENDING_PANEL_NOTE}</p>
+        </>
+      )}
+    </div>
+  );
+}
+
 /**
  * Execução, progresso e conclusão (Goal020/WU-08). Cobre `session.status`
  * fora de `DRAFT | ANALYZING | READY`-sem-execução, que é a tela de preview.
@@ -339,6 +528,9 @@ export function ImportRunScreen({
   const [progressError, setProgressError] = useState(false);
   const [readToken, setReadToken] = useState(0);
   const [reviewing, setReviewing] = useState(false);
+  // A categoria que a ação de um item do 2.I8 abre; `null` abre a lista.
+  const [reviewCategory, setReviewCategory] = useState<ImportCategory | null>(null);
+  const [reviewRead, setReviewRead] = useState<ReviewRead | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -390,6 +582,53 @@ export function ImportRunScreen({
       if (timer.current) clearTimeout(timer.current);
     };
   }, [session.sessionId, readToken]);
+
+  // Os itens em revisão do 2.I8: uma leitura por categoria com `needsReview`,
+  // uma vez por leitura do andamento, só enquanto a sessão pode ser concluída.
+  // Falha aqui nunca bloqueia nada: o painel diz que não listou e segue.
+  useEffect(() => {
+    if (
+      !progress ||
+      progress.interrupted ||
+      !COMPLETABLE_STATUSES.has(progress.status)
+    ) {
+      return;
+    }
+    const targets = orderedCategories(progress.categories).filter(
+      (category) => category.needsReview > 0,
+    );
+    if (targets.length === 0) return;
+    const controller = new AbortController();
+    async function readItems(current: ImportProgress) {
+      try {
+        const pages = await Promise.all(
+          targets.map((category) =>
+            getProductServices().migration.listImportItems(
+              session.sessionId,
+              category.category,
+              { limit: PENDING_ITEMS_LIMIT, status: "NEEDS_REVIEW" },
+              controller.signal,
+            ),
+          ),
+        );
+        if (controller.signal.aborted) return;
+        setReviewRead({
+          failed: false,
+          items: pages
+            .flatMap((page, index) =>
+              page.items.map((item) => ({ category: targets[index].category, item })),
+            )
+            .slice(0, PENDING_ITEMS_LIMIT),
+          progress: current,
+        });
+      } catch {
+        if (controller.signal.aborted) return;
+        setReviewRead({ failed: true, items: [], progress: current });
+      }
+    }
+    void readItems(progress);
+    return () => controller.abort();
+  }, [progress, session.sessionId]);
 
   async function settleCompleted(completion: ImportCompletion) {
     try {
@@ -527,8 +766,10 @@ export function ImportRunScreen({
     return (
       <ImportConflictsScreen
         categories={conflictCategories}
+        initialCategory={reviewCategory ?? undefined}
         onBack={() => {
           setReviewing(false);
+          setReviewCategory(null);
           setReadToken((value) => value + 1);
         }}
         sessionId={session.sessionId}
@@ -549,6 +790,10 @@ export function ImportRunScreen({
   const processed = total - progress.counts.pending;
   // A tela em andamento (2.I7) só existe com passada em curso de verdade.
   const running = executing && !interrupted;
+  // A tela parada (2.I8): pode ser concluída e nada está em curso nem parou no
+  // meio. Interrompida e terminal seguem a tela de sempre.
+  const pendingView = completable && !interrupted;
+  const pendingRead = reviewRead?.progress === progress ? reviewRead : null;
   // A lista segue a ordem da execução e não mostra o que o negócio deixou de
   // fora na escolha. O estado de cada linha vem só das contagens.
   const deselected = new Set(
@@ -564,23 +809,27 @@ export function ImportRunScreen({
     <>
       <ImportsPage
         description={
-          interrupted
-            ? "Nada do que já entrou foi perdido."
-            : executing
-              ? "Leva alguns minutos."
-              : terminal
-                ? "Esta importação não continua de onde parou."
-                : "Você já tem uma importação em andamento. Continue de onde parou."
+          pendingView
+            ? undefined
+            : interrupted
+              ? "Nada do que já entrou foi perdido."
+              : executing
+                ? "Leva alguns minutos."
+                : terminal
+                  ? "Esta importação não continua de onde parou."
+                  : "Você já tem uma importação em andamento. Continue de onde parou."
         }
         eyebrow={!running}
         title={
-          interrupted
-            ? "Isso parou no meio do caminho"
-            : executing
-              ? "Importando…"
-              : terminal
-                ? "Esta importação não pode continuar"
-                : "Continuar importação"
+          pendingView
+            ? IMPORT_PENDING_TITLE
+            : interrupted
+              ? "Isso parou no meio do caminho"
+              : executing
+                ? "Importando…"
+                : terminal
+                  ? "Esta importação não pode continuar"
+                  : "Continuar importação"
         }
       >
         {interrupted && (
@@ -602,7 +851,17 @@ export function ImportRunScreen({
           </div>
         )}
 
-        {running ? (
+        {pendingView ? (
+          <ImportPendingBody
+            categories={categories}
+            counts={progress.counts}
+            onCorrect={(category) => {
+              setReviewCategory(category);
+              setReviewing(true);
+            }}
+            read={pendingRead}
+          />
+        ) : running ? (
           <ImportRunningBody
             busy={executing}
             categories={runningCategories}
@@ -713,8 +972,21 @@ export function ImportRunScreen({
           </p>
         )}
 
+        {pendingView && progressError && (
+          <p className="imports-note" role="status">
+            A última leitura do andamento falhou. Os números acima são da
+            leitura anterior.
+          </p>
+        )}
+
         {completable && (
-          <div className="imports-actions is-stacked">
+          <div
+            className={
+              pendingView
+                ? "imports-pending-footer"
+                : "imports-actions is-stacked"
+            }
+          >
             {progress.counts.pending > 0 && (
               <button
                 className="btn btn-primary"
@@ -748,6 +1020,15 @@ export function ImportRunScreen({
                   qual deles é a decisão. */}
               {completing && !confirmOpen ? "Concluindo..." : "Concluir importação"}
             </button>
+            {pendingView && progress.counts.needsReview > 0 && (
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => setReviewing(true)}
+              >
+                Revisar pendências
+              </button>
+            )}
           </div>
         )}
 
@@ -755,41 +1036,43 @@ export function ImportRunScreen({
       </ImportsPage>
 
       <Dialog
-        eyebrow="Isto não pode ser desfeito"
         onClose={() => {
           if (completing) return;
           setConfirmOpen(false);
         }}
         open={confirmOpen}
         title={SINGLE_IMPORT_CONFIRMATION_TITLE}
+        variant="sheet"
       >
-        <p className="settings-modal-copy">{SINGLE_IMPORT_CONFIRMATION_BODY}</p>
-        <p className="imports-note">
-          {importCountFormatter.format(outstanding)} registro(s) não serão
-          importados.
-        </p>
-        {completeError && (
-          <p className="field-help" role="alert">
-            {completeError}
+        <div className="imports-confirm">
+          <p className="imports-confirm-copy">
+            {SINGLE_IMPORT_CONFIRMATION_LEAD}{" "}
+            <strong>{notImportedSentence(outstanding)}</strong>{" "}
+            {SINGLE_IMPORT_CONFIRMATION_TAIL}
           </p>
-        )}
-        <div className="modal-actions">
-          <button
-            className="btn btn-secondary"
-            disabled={completing}
-            type="button"
-            onClick={() => setConfirmOpen(false)}
-          >
-            Revisar antes de concluir
-          </button>
-          <button
-            className="btn btn-danger"
-            disabled={completing}
-            type="button"
-            onClick={() => void runComplete(true)}
-          >
-            {completing ? "Concluindo..." : "Concluir mesmo assim"}
-          </button>
+          {completeError && (
+            <p className="field-help" role="alert">
+              {completeError}
+            </p>
+          )}
+          <div className="imports-confirm-actions">
+            <button
+              className="btn btn-primary"
+              disabled={completing}
+              type="button"
+              onClick={() => void runComplete(true)}
+            >
+              {completing ? "Concluindo..." : "Concluir importação"}
+            </button>
+            <button
+              className="btn btn-secondary"
+              disabled={completing}
+              type="button"
+              onClick={() => setConfirmOpen(false)}
+            >
+              Voltar e revisar
+            </button>
+          </div>
         </div>
       </Dialog>
     </>

@@ -663,6 +663,328 @@
 }
 
 /*
+ * Pendências da importação (2.I8, Goal135) e confirmação da conclusão (2.I9).
+ * Classes próprias: `.imports-panel`, `.imports-rows` e `.imports-actions`
+ * seguem servindo às telas interrompida e terminal, aos conflitos e à prévia;
+ * a regra do `Dialog` fica escopada pela confirmação (`:has(.imports-confirm)`),
+ * sem mudar os outros usos. Os mesmos valores nos quatro devices; o que muda é o
+ * respiro do rodapé (46 px no celular, 32 px de 768 px em diante) e a folha
+ * da confirmação, que vira diálogo centrado de 768 px em diante, como no
+ * protótipo. Movimento só com movimento permitido.
+ */
+.imports-page:has(.imports-pending),
+.imports-pushed-body:has(.imports-pending) {
+  gap: 20px;
+}
+.onboarding-content.is-frame:has(.imports-pending) {
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+.imports-page:has(.imports-pending):not(.is-pushed) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 46px;
+}
+.imports-pending {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  line-height: normal;
+}
+.imports-pending-success {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-radius: 16px;
+  background: #dfefe4;
+}
+.imports-pending-seal {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fffdfa;
+  background: #2e7d4f;
+}
+.imports-pending-figures {
+  display: flex;
+  flex-direction: column;
+}
+.imports-pending-count {
+  color: #1f5c39;
+  font-family: var(--font-display, Literata, Georgia, serif);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  line-height: 1.1;
+}
+.imports-pending-hint {
+  color: #1f5c39;
+  font-size: 14px;
+}
+.imports-pending-panel {
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: #f8ecd5;
+  overflow: hidden;
+}
+.imports-pending-head {
+  padding: 14px 16px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #7a4e0a;
+}
+.imports-pending-head svg {
+  flex: none;
+}
+.imports-pending-head h2 {
+  margin: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: normal;
+}
+.imports-pending-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.imports-pending-row {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid #ebd7ae;
+}
+.imports-pending-who {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.imports-pending-name {
+  color: #221e1a;
+  font-size: 14px;
+  font-weight: 600;
+}
+.imports-pending-why {
+  color: #7a4e0a;
+  font-size: 13px;
+}
+.imports-pending-read-failed {
+  margin: 0;
+  padding: 12px 16px;
+  border-top: 1px solid #ebd7ae;
+}
+.imports-pending-action {
+  margin: -13px 0;
+  padding: 13px 0;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  border-radius: 6px;
+  color: #0f5f63;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: normal;
+}
+.imports-pending-action:hover {
+  color: #0b484c;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.imports-pending-action:active {
+  color: #0b484c;
+}
+.imports-pending-action:focus-visible {
+  outline: 2px solid #0f5f63;
+  outline-offset: 2px;
+}
+.imports-pending-note {
+  margin: 0;
+  color: #716859;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.imports-pending-footer {
+  padding: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* Os botões do rodapé do 2.I8 e da folha do 2.I9 são os mesmos do quadro. */
+:is(.imports-pending-footer, .imports-confirm-actions) .btn {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+:is(.imports-pending-footer, .imports-confirm-actions) .btn-primary:not(:disabled) {
+  color: #f7f4ef;
+  background: #0f5f63;
+}
+:is(.imports-pending-footer, .imports-confirm-actions)
+  .btn-primary:not(:disabled):is(:hover, :active) {
+  background: #0b484c;
+}
+/*
+ * O quadro dá `height: 52px` ao botão secundário sem `box-sizing`: com a borda
+ * de 1 px ele mede 54 px, e o primário, sem borda, 52 px.
+ */
+:is(.imports-pending-footer, .imports-confirm-actions) .btn-secondary {
+  min-height: 54px;
+}
+:is(.imports-pending-footer, .imports-confirm-actions) .btn-secondary:not(:disabled) {
+  border-color: #d6cec2;
+  color: #221e1a;
+  background: transparent;
+}
+:is(.imports-pending-footer, .imports-confirm-actions)
+  .btn-secondary:not(:disabled):hover {
+  border-color: #c9c0b3;
+  background: #efeae2;
+}
+:is(.imports-pending-footer, .imports-confirm-actions)
+  .btn-secondary:not(:disabled):active {
+  background: #e5ded4;
+}
+
+/* A folha da confirmação (2.I9): o `Dialog` `sheet`, escopado pela confirmação. */
+.overlay:has(.imports-confirm) {
+  background: rgba(34, 30, 26, 0.38);
+}
+.bottom-sheet:has(.imports-confirm) {
+  max-width: none;
+  padding: 10px 20px 46px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 24px 24px 0 0;
+  background: #fffdfa;
+  box-shadow: 0 -12px 40px rgba(34, 30, 26, 0.18);
+}
+.bottom-sheet:has(.imports-confirm) .sheet-handle {
+  margin: 0 auto 18px;
+  background: #d6cec2;
+}
+.bottom-sheet:has(.imports-confirm) .modal-header {
+  margin: 0 0 10px;
+}
+.bottom-sheet:has(.imports-confirm) .modal-header h2 {
+  margin: 0;
+  font-family: var(--font-display, Literata, Georgia, serif);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+/*
+ * O quadro não desenha o X da folha: o "Fechar" do `Dialog` fica fora da vista
+ * e só aparece quando o teclado chega nele (o foco entra por ele ao abrir).
+ */
+.bottom-sheet:has(.imports-confirm) .modal-header .icon-btn:not(:focus-visible) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.imports-confirm-copy {
+  margin: 0 0 18px;
+  color: #5f574e;
+  font-size: 15px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.imports-confirm-copy strong {
+  color: #221e1a;
+  font-weight: 700;
+}
+.imports-confirm .field-help {
+  margin: 0 0 18px;
+}
+.imports-confirm-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/*
+ * No celular o quadro 2.I9 põe `opacity: .5` no topo e no corpo da tela atrás
+ * do véu; do tablet em diante só o véu escurece. O `Dialog` é irmão do corpo,
+ * por isso a opacidade não o atinge.
+ */
+@media (max-width: 767px) {
+  .onboarding-column:has(.imports-confirm) .onboarding-top,
+  .imports-page:has(.imports-pending):has(~ .overlay .imports-confirm) {
+    opacity: 0.5;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .imports-pending-action {
+    transition: color 160ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  :is(.imports-pending-footer, .imports-confirm-actions) .btn {
+    transition:
+      background-color 160ms cubic-bezier(0.2, 0.7, 0.2, 1),
+      border-color 160ms cubic-bezier(0.2, 0.7, 0.2, 1),
+      color 160ms cubic-bezier(0.2, 0.7, 0.2, 1),
+      transform 120ms ease;
+  }
+  .overlay:has(.imports-confirm) {
+    animation: at-fade 0.2s ease-out both;
+  }
+  .bottom-sheet:has(.imports-confirm) {
+    animation: at-sheet 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+}
+@media (min-width: 768px) {
+  .imports-page:has(.imports-pending):not(.is-pushed) {
+    padding-bottom: 32px;
+  }
+  .overlay:has(.imports-confirm) {
+    align-items: center;
+    padding: 0;
+  }
+  .bottom-sheet:has(.imports-confirm) {
+    width: 460px;
+    max-width: calc(100% - 40px);
+    max-height: calc(100% - 80px);
+    padding: 22px 24px 24px;
+    border-radius: 20px;
+    box-shadow: 0 24px 64px rgba(34, 30, 26, 0.28);
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .bottom-sheet:has(.imports-confirm) .sheet-handle {
+    display: none;
+  }
+}
+@media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
+  .bottom-sheet:has(.imports-confirm) {
+    animation: at-dialog 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+}
+
+/*
  * Importação concluída no onboarding (2.I10, Goal134). Classes próprias:
  * `.import-history*` segue servindo ao I1 de `/importacao` e ao bloco de
  * Configurações › Agenda, e `.onboarding-actions` e `.onboarding-note`, às

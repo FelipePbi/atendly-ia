@@ -840,6 +840,494 @@
       ]
     },
     {
+      "code": "2.I8",
+      "file": "Onboarding-2-Importacao.dc.html",
+      "label": "Pendências da importação",
+      "route": "/onboarding/importacao",
+      "account": "onboarding",
+      "notes": "O quadro mostra a importação executada com itens em revisão; a conta de onboarding não tem sessão de importação, então a sessão PARTIAL executada (startedAt e finishedAt preenchidos, previewVersion 1, sem interrupção e sem erro, todas as categorias selected) e o andamento vêm de respostas fixas de GET /v1/calendar/imports e de GET /v1/calendar/imports/visual-compare-import-pending/progress, e os itens em revisão vêm de GET /v1/calendar/imports/visual-compare-import-pending/categories/SERVICE/items e de GET /v1/calendar/imports/visual-compare-import-pending/categories/CUSTOMER/items (sessionId igual no direito, na sessão, no andamento, nos caminhos e nas páginas), só no navegador da captura. Serviços: 10 importados e 2 em revisão (SERVICE_DURATION_MISSING: Escova e Design de sobrancelha); clientes: 385 importados e 1 em revisão (CUSTOMER_NAME_MISSING); agendamentos futuros 42, atendimentos anteriores 1.400 e horários de atendimento 6 importados; pending, skipped e failed 0 e failedReasons vazio; counts é a soma das categorias (1.843 importados e 3 em revisão). A tela só lê esses quatro GET e não chama nenhuma rota de escrita; nenhum passo: a tela abre parada e nada nela é tocado. Divergências declaradas do Goal135: \"1.843 registros\" no lugar de \"1.840\" do quadro, porque o importado conta as 6 regras de AVAILABILITY (como em D-147); o cliente sem nome aparece com o label que o Scheduling grava, \"Cliente sem nome (origem #1042)\", e não o telefone \"(11) 97654-3210\" do quadro; a nota do painel e o fim do texto da confirmação dizem o efeito real da conclusão (o que continuar pendente não será importado), conforme o vault, e não \"Você pode corrigir agora ou depois, em Serviços e Clientes\" nem \"você pode corrigi-los depois\"; a ReplaceAccountZone (\"Prefere conectar outra conta?\") abaixo do rodapé, que o quadro não mostra; o chevron do topo, que a moldura do onboarding não mostra nesta etapa (D-145); o preenchimento dos segmentos da barra do topo, derivado por chapterFraction, e o estado do item \"Sua agenda\" na sidebar (D-104); o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app; sem as animações de entrada, porque a captura usa reducedMotion reduce.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports",
+          "json": {
+            "data": {
+              "right": {
+                "available": true,
+                "sessionId": "visual-compare-import-pending",
+                "completedAt": null
+              },
+              "session": {
+                "sessionId": "visual-compare-import-pending",
+                "status": "PARTIAL",
+                "previewVersion": 1,
+                "provider": "MINHA_AGENDA",
+                "sourceAccountId": "visual-compare-source",
+                "sourceAccountLabel": null,
+                "createdAt": "2026-10-06T12:00:00.000Z",
+                "startedAt": "2026-10-06T12:01:00.000Z",
+                "finishedAt": "2026-10-06T12:30:00.000Z",
+                "previewGeneratedAt": "2026-10-06T12:00:30.000Z",
+                "interrupted": false,
+                "lastError": null,
+                "counts": {
+                  "pending": 0,
+                  "imported": 1843,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 3
+                },
+                "categories": [
+                  {
+                    "category": "SERVICE",
+                    "pending": 0,
+                    "imported": 10,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 2,
+                    "selected": true
+                  },
+                  {
+                    "category": "CUSTOMER",
+                    "pending": 0,
+                    "imported": 385,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 1,
+                    "selected": true
+                  },
+                  {
+                    "category": "FUTURE_APPOINTMENT",
+                    "pending": 0,
+                    "imported": 42,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "PAST_APPOINTMENT",
+                    "pending": 0,
+                    "imported": 1400,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "AVAILABILITY",
+                    "pending": 0,
+                    "imported": 6,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  }
+                ]
+              },
+              "history": null
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports/visual-compare-import-pending/progress",
+          "json": {
+            "data": {
+              "sessionId": "visual-compare-import-pending",
+              "status": "PARTIAL",
+              "previewVersion": 1,
+              "startedAt": "2026-10-06T12:01:00.000Z",
+              "finishedAt": "2026-10-06T12:30:00.000Z",
+              "interrupted": false,
+              "lastError": null,
+              "counts": {
+                "pending": 0,
+                "imported": 1843,
+                "skipped": 0,
+                "failed": 0,
+                "needsReview": 3
+              },
+              "categories": [
+                {
+                  "category": "SERVICE",
+                  "pending": 0,
+                  "imported": 10,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 2,
+                  "failedReasons": []
+                },
+                {
+                  "category": "CUSTOMER",
+                  "pending": 0,
+                  "imported": 385,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 1,
+                  "failedReasons": []
+                },
+                {
+                  "category": "FUTURE_APPOINTMENT",
+                  "pending": 0,
+                  "imported": 42,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0,
+                  "failedReasons": []
+                },
+                {
+                  "category": "PAST_APPOINTMENT",
+                  "pending": 0,
+                  "imported": 1400,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0,
+                  "failedReasons": []
+                },
+                {
+                  "category": "AVAILABILITY",
+                  "pending": 0,
+                  "imported": 6,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0,
+                  "failedReasons": []
+                }
+              ]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports/visual-compare-import-pending/categories/SERVICE/items",
+          "json": {
+            "data": {
+              "sessionId": "visual-compare-import-pending",
+              "category": "SERVICE",
+              "total": 2,
+              "limit": 5,
+              "offset": 0,
+              "items": [
+                {
+                  "id": "2201",
+                  "category": "SERVICE",
+                  "externalId": "2201",
+                  "label": "Escova",
+                  "status": "NEEDS_REVIEW",
+                  "reasonCode": "SERVICE_DURATION_MISSING",
+                  "reasonDetail": "Serviço sem duração na origem.",
+                  "entityType": null,
+                  "internalId": null,
+                  "attemptCount": 0,
+                  "lastAttemptAt": null,
+                  "processedAt": null,
+                  "disappearedAt": null
+                },
+                {
+                  "id": "2202",
+                  "category": "SERVICE",
+                  "externalId": "2202",
+                  "label": "Design de sobrancelha",
+                  "status": "NEEDS_REVIEW",
+                  "reasonCode": "SERVICE_DURATION_MISSING",
+                  "reasonDetail": "Serviço sem duração na origem.",
+                  "entityType": null,
+                  "internalId": null,
+                  "attemptCount": 0,
+                  "lastAttemptAt": null,
+                  "processedAt": null,
+                  "disappearedAt": null
+                }
+              ]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports/visual-compare-import-pending/categories/CUSTOMER/items",
+          "json": {
+            "data": {
+              "sessionId": "visual-compare-import-pending",
+              "category": "CUSTOMER",
+              "total": 1,
+              "limit": 5,
+              "offset": 0,
+              "items": [
+                {
+                  "id": "1042",
+                  "category": "CUSTOMER",
+                  "externalId": "1042",
+                  "label": "Cliente sem nome (origem #1042)",
+                  "status": "NEEDS_REVIEW",
+                  "reasonCode": "CUSTOMER_NAME_MISSING",
+                  "reasonDetail": "Cliente sem nome na origem: identificado temporariamente pelo id de origem.",
+                  "entityType": null,
+                  "internalId": null,
+                  "attemptCount": 0,
+                  "lastAttemptAt": null,
+                  "processedAt": null,
+                  "disappearedAt": null
+                }
+              ]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "2.I9",
+      "file": "Onboarding-2-Importacao.dc.html",
+      "label": "Confirmar conclusão",
+      "route": "/onboarding/importacao",
+      "account": "onboarding",
+      "notes": "O quadro mostra a confirmação da única importação aberta sobre a tela do 2.I8; a conta de onboarding não tem sessão de importação, então a sessão PARTIAL executada (startedAt e finishedAt preenchidos, previewVersion 1, sem interrupção e sem erro, todas as categorias selected) e o andamento vêm de respostas fixas de GET /v1/calendar/imports e de GET /v1/calendar/imports/visual-compare-import-pending/progress, e os itens em revisão vêm de GET /v1/calendar/imports/visual-compare-import-pending/categories/SERVICE/items e de GET /v1/calendar/imports/visual-compare-import-pending/categories/CUSTOMER/items (sessionId igual no direito, na sessão, no andamento, nos caminhos e nas páginas), só no navegador da captura. Serviços: 10 importados e 2 em revisão (SERVICE_DURATION_MISSING: Escova e Design de sobrancelha); clientes: 385 importados e 1 em revisão (CUSTOMER_NAME_MISSING); agendamentos futuros 42, atendimentos anteriores 1.400 e horários de atendimento 6 importados; pending, skipped e failed 0 e failedReasons vazio; counts é a soma das categorias (1.843 importados e 3 em revisão). A tela só lê esses quatro GET e não chama nenhuma rota de escrita. Um só passo: clickRole em \"Concluir importação\" (o do rodapé), que com 3 registros em revisão (outstanding > 0) só abre a folha de confirmação, sem pedido: nada é gravado, e nenhum passo toca \"Concluir importação\" da folha nem \"Voltar e revisar\". Divergências declaradas do Goal135: \"1.843 registros\" no lugar de \"1.840\" do quadro, porque o importado conta as 6 regras de AVAILABILITY (como em D-147); o cliente sem nome aparece com o label que o Scheduling grava, \"Cliente sem nome (origem #1042)\", e não o telefone \"(11) 97654-3210\" do quadro; a nota do painel e o fim do texto da confirmação dizem o efeito real da conclusão (o que continuar pendente não será importado), conforme o vault, e não \"Você pode corrigir agora ou depois, em Serviços e Clientes\" nem \"você pode corrigi-los depois\"; a ReplaceAccountZone (\"Prefere conectar outra conta?\") abaixo do rodapé, que o quadro não mostra; o chevron do topo, que a moldura do onboarding não mostra nesta etapa (D-145); o preenchimento dos segmentos da barra do topo, derivado por chapterFraction, e o estado do item \"Sua agenda\" na sidebar (D-104); o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app; sem as animações de entrada, porque a captura usa reducedMotion reduce; o fundo sob o véu é a própria tela do 2.I8, com o painel das pendências, a nota, o rodapé e a ReplaceAccountZone, que o quadro não desenha (ele mostra só o título e o cartão, com o círculo sem o visto).",
+      "steps": [
+        {
+          "clickRole": {
+            "role": "button",
+            "name": "Concluir importação"
+          }
+        }
+      ],
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports",
+          "json": {
+            "data": {
+              "right": {
+                "available": true,
+                "sessionId": "visual-compare-import-pending",
+                "completedAt": null
+              },
+              "session": {
+                "sessionId": "visual-compare-import-pending",
+                "status": "PARTIAL",
+                "previewVersion": 1,
+                "provider": "MINHA_AGENDA",
+                "sourceAccountId": "visual-compare-source",
+                "sourceAccountLabel": null,
+                "createdAt": "2026-10-06T12:00:00.000Z",
+                "startedAt": "2026-10-06T12:01:00.000Z",
+                "finishedAt": "2026-10-06T12:30:00.000Z",
+                "previewGeneratedAt": "2026-10-06T12:00:30.000Z",
+                "interrupted": false,
+                "lastError": null,
+                "counts": {
+                  "pending": 0,
+                  "imported": 1843,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 3
+                },
+                "categories": [
+                  {
+                    "category": "SERVICE",
+                    "pending": 0,
+                    "imported": 10,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 2,
+                    "selected": true
+                  },
+                  {
+                    "category": "CUSTOMER",
+                    "pending": 0,
+                    "imported": 385,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 1,
+                    "selected": true
+                  },
+                  {
+                    "category": "FUTURE_APPOINTMENT",
+                    "pending": 0,
+                    "imported": 42,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "PAST_APPOINTMENT",
+                    "pending": 0,
+                    "imported": 1400,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "AVAILABILITY",
+                    "pending": 0,
+                    "imported": 6,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  }
+                ]
+              },
+              "history": null
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports/visual-compare-import-pending/progress",
+          "json": {
+            "data": {
+              "sessionId": "visual-compare-import-pending",
+              "status": "PARTIAL",
+              "previewVersion": 1,
+              "startedAt": "2026-10-06T12:01:00.000Z",
+              "finishedAt": "2026-10-06T12:30:00.000Z",
+              "interrupted": false,
+              "lastError": null,
+              "counts": {
+                "pending": 0,
+                "imported": 1843,
+                "skipped": 0,
+                "failed": 0,
+                "needsReview": 3
+              },
+              "categories": [
+                {
+                  "category": "SERVICE",
+                  "pending": 0,
+                  "imported": 10,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 2,
+                  "failedReasons": []
+                },
+                {
+                  "category": "CUSTOMER",
+                  "pending": 0,
+                  "imported": 385,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 1,
+                  "failedReasons": []
+                },
+                {
+                  "category": "FUTURE_APPOINTMENT",
+                  "pending": 0,
+                  "imported": 42,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0,
+                  "failedReasons": []
+                },
+                {
+                  "category": "PAST_APPOINTMENT",
+                  "pending": 0,
+                  "imported": 1400,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0,
+                  "failedReasons": []
+                },
+                {
+                  "category": "AVAILABILITY",
+                  "pending": 0,
+                  "imported": 6,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0,
+                  "failedReasons": []
+                }
+              ]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports/visual-compare-import-pending/categories/SERVICE/items",
+          "json": {
+            "data": {
+              "sessionId": "visual-compare-import-pending",
+              "category": "SERVICE",
+              "total": 2,
+              "limit": 5,
+              "offset": 0,
+              "items": [
+                {
+                  "id": "2201",
+                  "category": "SERVICE",
+                  "externalId": "2201",
+                  "label": "Escova",
+                  "status": "NEEDS_REVIEW",
+                  "reasonCode": "SERVICE_DURATION_MISSING",
+                  "reasonDetail": "Serviço sem duração na origem.",
+                  "entityType": null,
+                  "internalId": null,
+                  "attemptCount": 0,
+                  "lastAttemptAt": null,
+                  "processedAt": null,
+                  "disappearedAt": null
+                },
+                {
+                  "id": "2202",
+                  "category": "SERVICE",
+                  "externalId": "2202",
+                  "label": "Design de sobrancelha",
+                  "status": "NEEDS_REVIEW",
+                  "reasonCode": "SERVICE_DURATION_MISSING",
+                  "reasonDetail": "Serviço sem duração na origem.",
+                  "entityType": null,
+                  "internalId": null,
+                  "attemptCount": 0,
+                  "lastAttemptAt": null,
+                  "processedAt": null,
+                  "disappearedAt": null
+                }
+              ]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports/visual-compare-import-pending/categories/CUSTOMER/items",
+          "json": {
+            "data": {
+              "sessionId": "visual-compare-import-pending",
+              "category": "CUSTOMER",
+              "total": 1,
+              "limit": 5,
+              "offset": 0,
+              "items": [
+                {
+                  "id": "1042",
+                  "category": "CUSTOMER",
+                  "externalId": "1042",
+                  "label": "Cliente sem nome (origem #1042)",
+                  "status": "NEEDS_REVIEW",
+                  "reasonCode": "CUSTOMER_NAME_MISSING",
+                  "reasonDetail": "Cliente sem nome na origem: identificado temporariamente pelo id de origem.",
+                  "entityType": null,
+                  "internalId": null,
+                  "attemptCount": 0,
+                  "lastAttemptAt": null,
+                  "processedAt": null,
+                  "disappearedAt": null
+                }
+              ]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "2.I10",
       "file": "Onboarding-2-Importacao.dc.html",
       "label": "Importação concluída",

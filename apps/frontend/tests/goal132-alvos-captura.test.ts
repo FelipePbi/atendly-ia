@@ -274,10 +274,10 @@ describe("os outros alvos", () => {
     expect(target("2.I3").steps).toBeUndefined();
   });
 
-  test("2.I3, 2.I4, 2.I5, 2.I7 e 2.I10 são os únicos donos de responses no arquivo (o 2.I7 entrou no Goal133 e o 2.I10 no Goal134)", () => {
+  test("2.I3, 2.I4, 2.I5, 2.I7, 2.I8, 2.I9 e 2.I10 são os únicos donos de responses no arquivo (o 2.I7 entrou no Goal133, o 2.I10 no Goal134 e o 2.I8 e o 2.I9 no Goal135)", () => {
     const owners = targets
       .filter((item) => item.file === FILE && item.responses !== undefined)
       .map((item) => item.code);
-    expect(owners).toEqual(["2.I3", "2.I4", "2.I5", "2.I7", "2.I10"]);
+    expect(owners).toEqual(["2.I3", "2.I4", "2.I5", "2.I7", "2.I8", "2.I9", "2.I10"]);
   });
 });

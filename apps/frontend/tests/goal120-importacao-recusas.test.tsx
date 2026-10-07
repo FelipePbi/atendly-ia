@@ -325,7 +325,7 @@ describe("conclusão: recusas no envelope real", () => {
       session: null,
     } satisfies ImportState);
     await user.click(
-      within(dialog).getByRole("button", { name: "Concluir mesmo assim" }),
+      within(dialog).getByRole("button", { name: "Concluir importação" }),
     );
     await waitFor(() => expect(completeImport).toHaveBeenCalledTimes(2));
     expect(completeImport.mock.calls[1][1]).toEqual({ acceptPending: true });

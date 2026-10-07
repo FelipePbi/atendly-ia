@@ -499,7 +499,7 @@ describe.each<ImportsFrame>(["onboarding", "platform"])(
       }
     });
 
-    test("PARTIAL: a tela parada de hoje, com 'Concluir importação' e a confirmação", async () => {
+    test("PARTIAL: a tela parada (2.I8), com 'Concluir importação' e a confirmação", async () => {
       const user = userEvent.setup();
       getImportProgress.mockResolvedValue(
         progressFixture(quadroCategories(), { status: "PARTIAL" }),
@@ -507,26 +507,27 @@ describe.each<ImportsFrame>(["onboarding", "platform"])(
       const { container } = renderRun(frame, sessionFixture({ status: "PARTIAL" }));
 
       expect(
-        await screen.findByRole("heading", { name: "Continuar importação" }),
+        await screen.findByRole("heading", { name: "Importação quase concluída" }),
       ).toBeInTheDocument();
       expect(container.querySelector(".imports-running")).toBeNull();
-      expect(screen.getByText("Importação parcial em andamento")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Importar os 636 que faltam" })).toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: "Concluir importação" }));
 
-      expect(await screen.findByRole("dialog")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Concluir mesmo assim" })).toBeInTheDocument();
+      const dialog = await screen.findByRole("dialog");
+      expect(
+        within(dialog).getByRole("button", { name: "Concluir importação" }),
+      ).toBeInTheDocument();
     });
 
-    test("READY depois de uma passada: a tela parada de hoje", async () => {
+    test("READY depois de uma passada: a tela parada (2.I8)", async () => {
       getImportProgress.mockResolvedValue(
         progressFixture([entry("SERVICE", { imported: 12 })], { status: "READY" }),
       );
       const { container } = renderRun(frame, sessionFixture({ status: "READY" }));
 
       expect(
-        await screen.findByRole("heading", { name: "Continuar importação" }),
+        await screen.findByRole("heading", { name: "Importação quase concluída" }),
       ).toBeInTheDocument();
       expect(container.querySelector(".imports-running")).toBeNull();
       expect(screen.getByRole("button", { name: "Concluir importação" })).toBeInTheDocument();
@@ -607,7 +608,7 @@ describe.each<ImportsFrame>(["onboarding", "platform"])(
       await act(async () => {
         await vi.advanceTimersByTimeAsync(3_000);
       });
-      expect(screen.getByRole("heading", { name: "Continuar importação" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Importação quase concluída" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Concluir importação" })).toBeInTheDocument();
     });
 

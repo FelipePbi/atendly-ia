@@ -349,13 +349,10 @@ describe("/importacao monta a jornada real pela própria rota", () => {
     });
     renderPage(<ImportacaoPage />);
 
-    expect(
-      await screen.findByRole("progressbar", {
-        name: "Andamento da importação",
-      }),
-    ).toBeVisible();
+    // O progresso real (10 importados) é o cartão do sucesso da tela parada.
+    expect(await screen.findByText("10 registros")).toBeVisible();
     await user.click(
-      await screen.findByRole("button", { name: "Revisar itens" }),
+      await screen.findByRole("button", { name: "Revisar pendências" }),
     );
 
     expect(

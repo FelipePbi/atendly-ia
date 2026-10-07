@@ -22,7 +22,7 @@ import { CustomerMemory } from "./CustomerMemory";
 import { CustomerNotes } from "./CustomerNotes";
 import { CustomerNextAppointment, CustomerSummary } from "./CustomerSummary";
 import { CustomerTags } from "./CustomerTags";
-import { GuardianCard } from "./GuardianCard";
+import { firstName, GuardianCard } from "./GuardianCard";
 import { initials } from "./initials";
 import { PrimaryGuardianPanel } from "./PrimaryGuardianPanel";
 
@@ -50,7 +50,12 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [tab, setTab] = useState<ProfileTab>(() => initialTabFromLocation());
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  // A conversa vem marcada com o dono para quem foi pedida: o resultado de
+  // outro dono nunca é lido como o do dono atual.
+  const [conversation, setConversation] = useState<{
+    ownerId: string;
+    id: string | null;
+  } | null>(null);
   const [savedNotice, setSavedNotice] = useState(false);
   const notesPanelRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -77,19 +82,52 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
     return () => controller.abort();
   }, [customerId, reload]);
 
-  // A conversa mais recente da pessoa (Goal075): sem conversa ou em erro, a
+  // O cartão do responsável (CL8) só existe com a relação confirmada: proposta
+  // ou ausente, o perfil fica como era. Sem telefone próprio, a linha sob o
+  // nome diz isso em vez de "Telefone não informado".
+  const confirmedGuardian =
+    customer?.primaryGuardian?.status === "CONFIRMED"
+      ? customer.primaryGuardian
+      : null;
+  const dependent = Boolean(confirmedGuardian && !customer?.phone?.trim());
+
+  // O dono da conversa do perfil (Goal147): o responsável confirmado quando o
+  // cliente não tem telefone próprio, senão o próprio cliente. Só existe depois
+  // de o perfil carregar, porque depende de `primaryGuardian`.
+  const conversationOwnerId = customer
+    ? dependent && confirmedGuardian
+      ? confirmedGuardian.guardian.id
+      : customer.id
+    : null;
+
+  // A conversa mais recente do dono (Goal075): sem conversa ou em erro, a
   // ação "Conversa" simplesmente não aparece — não é uma falha bloqueante.
+  // Trocar o dono aborta o pedido anterior e esconde a ação até o novo
+  // responder.
   useEffect(() => {
-    if (!customerId) return;
+    if (!conversationOwnerId) return;
+    const ownerId = conversationOwnerId;
     const controller = new AbortController();
     getProductServices()
-      .conversations.list({ customerId, limit: 1 }, controller.signal)
-      .then((result) => setConversationId(result[0]?.id ?? null))
+      .conversations.list({ customerId: ownerId, limit: 1 }, controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted)
+          setConversation({ ownerId, id: result[0]?.id ?? null });
+      })
       .catch(() => {
-        if (!controller.signal.aborted) setConversationId(null);
+        if (!controller.signal.aborted) setConversation({ ownerId, id: null });
       });
     return () => controller.abort();
-  }, [customerId]);
+  }, [conversationOwnerId]);
+
+  const conversationId =
+    conversation && conversation.ownerId === conversationOwnerId
+      ? conversation.id
+      : null;
+  const conversationLabel =
+    dependent && confirmedGuardian
+      ? `Conversa com ${firstName(confirmedGuardian.guardian.name) ?? "o responsável"}`
+      : "Conversa";
 
   async function saveIdentity(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -133,15 +171,6 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
   const applyTags = useCallback((tags: CustomerDetail["tags"]) => {
     setCustomer((current) => (current ? { ...current, tags } : current));
   }, []);
-
-  // O cartão do responsável (CL8) só existe com a relação confirmada: proposta
-  // ou ausente, o perfil fica como era. Sem telefone próprio, a linha sob o
-  // nome diz isso em vez de "Telefone não informado".
-  const confirmedGuardian =
-    customer?.primaryGuardian?.status === "CONFIRMED"
-      ? customer.primaryGuardian
-      : null;
-  const dependent = Boolean(confirmedGuardian && !customer?.phone?.trim());
 
   const editable = Boolean(calendar?.capabilities.manageCustomers);
   const canSchedule = Boolean(calendar?.capabilities.createAppointments);
@@ -279,8 +308,8 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
                   className="btn btn-secondary"
                   href={`/conversas/${encodeURIComponent(conversationId)}`}
                 >
-                  <Icon name="chat" />
-                  Conversa
+                  <Icon name="nav-chat" />
+                  {conversationLabel}
                 </Link>
               )}
               {canSchedule && (
@@ -288,7 +317,7 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
                   className="btn btn-secondary"
                   href={`/agenda/novo?customerId=${encodeURIComponent(customer.id)}`}
                 >
-                  <Icon name="calendar" />
+                  <Icon name="nav-calendar" />
                   Agendar
                 </Link>
               )}

@@ -3952,7 +3952,7 @@
       "file": "Clientes.dc.html",
       "label": "Cliente · resumo",
       "route": "/clientes/detalhes?id={customerId}",
-      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro. A ação “Conversa” do quadro não aparece no app por estado da conta, não por CSS: a conta visual não tem conversa do cliente (a semeadura não cria conversa, GET /v1/conversations vem vazio), e o perfil só oferece “Conversa” quando existe uma; “Agendar” ocupa a linha inteira, como com uma ação só. Os valores das ações (altura, raio, borda, fonte, gap, ícone, fundo e estados) são os mesmos do CL8, que mostra as duas lado a lado."
     },
     {
       "code": "CL6",
@@ -3989,7 +3989,7 @@
       "file": "Clientes.dc.html",
       "label": "Cliente · responsável",
       "route": "/clientes/detalhes?id=visual-compare-cl8-pedro",
-      "notes": "Respostas fixas (Goal144, GET só no navegador da captura, nada é gravado) porque a conta de teste não tem o estado do quadro: um cliente sem telefone próprio com responsável confirmado. Nenhum passo grava: o alvo não tem passo e só declara GET /v1/status, GET /v1/customers/visual-compare-cl8-pedro, GET /v1/customers/visual-compare-cl8-pedro/memory, GET /v1/conversations e GET /v1/customers (a lista ao lado do perfil de 1024 px em diante); o calendário vem da conta visual. Divergências declaradas: (1) o quadro mostra “mãe” na segunda linha do cartão e “Maria Souza agenda para Pedro”; o contrato não traz o tipo de relação (pergunta 141 do vault, sem caminho), então o app mostra “Maria Souza agenda para Pedro” sem “mãe”. (2) O quadro mostra “sáb 20/09” no Próximo; 20/09/2026 cai num domingo, então o app mostra o dia da semana da data real (“dom 20/09”). (3) O quadro mostra “30 min · R$ 50 · marcado pela IA com Maria” e “Corte masculino” no Próximo; o resumo do agendamento no contrato não traz serviço, duração, preço nem quem marcou (limitação do CL5, já aceita no Goal094). (4) O painel “Responsável principal” no fim do Resumo, que o quadro não tem, pertence ao app (escolha 6 do Goal144). (5) A lista de clientes ao lado do perfil (de 1024 px em diante) traz Pedro Souza e Maria Souza com o telefone na segunda linha, como nas outras linhas do app; o quadro mostra “agenda para Pedro Souza” sob Maria Souza e a lista não traz de quem o cliente é responsável (Goal121). (6) O resumo da IA e as preferências vêm da conta visual, onde o id fixo não existe, e não aparecem como no quadro por estado vazio; a barra do iPhone do quadro não existe no app. (7) A cor dos títulos h2 do app é var(--fg) (avenly.css), como nos outros alvos (review135, blocker 1). (8) O quadro mostra a ação “Conversa com Maria” ao lado de “Agendar”; o app mostra só “Agendar”, em largura total: o Goal144 não muda as ações (escolha 6), o perfil só oferece “Conversa” para a conversa do próprio cliente e o contrato não liga o dependente à conversa do responsável. (9) No celular, o app começa o perfil 14 px abaixo do quadro: o quadro reserva 60 px para a barra de status do iPhone (62 px recortados) e a barra de voltar do app tem 12 px de respiro, como em CL5, CL6 e CL7; do identificador ao fim das abas, o app fica nesses mesmos 14 px de deslocamento, sem diferença acima de 1 px entre blocos. (10) A caixa de toque de “Ver Maria” tem 24 px de altura (alvo mínimo de toque) contra 18 px do texto do quadro; o texto fica na mesma posição.",
+      "notes": "Respostas fixas (Goal144, GET só no navegador da captura, nada é gravado) porque a conta de teste não tem o estado do quadro: um cliente sem telefone próprio com responsável confirmado. Nenhum passo grava: o alvo não tem passo e só declara GET /v1/status, GET /v1/customers/visual-compare-cl8-pedro, GET /v1/customers/visual-compare-cl8-pedro/memory, GET /v1/conversations e GET /v1/customers (a lista ao lado do perfil de 1024 px em diante); o calendário vem da conta visual. Divergências declaradas: (1) o quadro mostra “mãe” na segunda linha do cartão e “Maria Souza agenda para Pedro”; o contrato não traz o tipo de relação (pergunta 141 do vault, sem caminho), então o app mostra “Maria Souza agenda para Pedro” sem “mãe”. (2) O quadro mostra “sáb 20/09” no Próximo; 20/09/2026 cai num domingo, então o app mostra o dia da semana da data real (“dom 20/09”). (3) O quadro mostra “30 min · R$ 50 · marcado pela IA com Maria” e “Corte masculino” no Próximo; o resumo do agendamento no contrato não traz serviço, duração, preço nem quem marcou (limitação do CL5, já aceita no Goal094). (4) O painel “Responsável principal” no fim do Resumo, que o quadro não tem, pertence ao app (escolha 6 do Goal144). (5) A lista de clientes ao lado do perfil (de 1024 px em diante) traz Pedro Souza e Maria Souza com o telefone na segunda linha, como nas outras linhas do app; o quadro mostra “agenda para Pedro Souza” sob Maria Souza e a lista não traz de quem o cliente é responsável (Goal121). (6) O resumo da IA e as preferências vêm da conta visual, onde o id fixo não existe, e não aparecem como no quadro por estado vazio; a barra do iPhone do quadro não existe no app. (7) A cor dos títulos h2 do app é var(--fg) (avenly.css), como nos outros alvos (review135, blocker 1). (8) A conversa de “Conversa com Maria” é da responsável, não do Pedro: o perfil de quem não tem telefone próprio pede a conversa pelo id da Maria (Goal147). A resposta fixa de GET /v1/conversations traz uma conversa da Maria (customerId visual-compare-cl8-maria, o mesmo id de primaryGuardian.guardian.id) e casa pelo caminho exato, sem a query, então serve ao pedido com o id do responsável; nenhum passo grava. O app mostra “Conversa com Maria” e “Agendar” lado a lado, como o quadro. (9) No celular, o app começa o perfil 14 px abaixo do quadro: o quadro reserva 60 px para a barra de status do iPhone (62 px recortados) e a barra de voltar do app tem 12 px de respiro, como em CL5, CL6 e CL7; do identificador ao fim das abas, o app fica nesses mesmos 14 px de deslocamento, sem diferença acima de 1 px entre blocos. (10) A caixa de toque de “Ver Maria” tem 24 px de altura (alvo mínimo de toque) contra 18 px do texto do quadro; o texto fica na mesma posição.",
       "responses": [
         {
           "method": "GET",
@@ -4072,7 +4072,23 @@
           "method": "GET",
           "path": "/v1/conversations",
           "json": {
-            "data": [],
+            "data": [
+              {
+                "id": "visual-compare-cl8-conversation-maria",
+                "externalContactId": "5511987651100",
+                "customerName": "Maria Souza",
+                "status": "ACTIVE",
+                "humanHandoff": false,
+                "handoffReason": null,
+                "lastMessage": null,
+                "unreadCount": 0,
+                "updatedAt": "2026-09-18T13:00:00.000Z",
+                "category": "COMMERCIAL",
+                "categorySource": "AUTOMATIC",
+                "handling": "AI",
+                "customerId": "visual-compare-cl8-maria"
+              }
+            ],
             "requestId": "visual-compare-fixed-response"
           }
         },

@@ -9918,3 +9918,182 @@ Goal146 aceito na rodada 2 ([review146](reviews/146-review.md)), sem blocker. Co
 | Escopo do diff | 22 arquivos (18 rastreados e 4 novos): o §1 da IA, o ensaio `goal074`, os testes de `apps/ai-orchestrator/tests/`, o teste do Goal144 no frontend e os quatro registros; nada no Scheduling, no BFF, no contrato público, em `PUBLIC_API_V1.md` ou no `src` do frontend |
 
 Os quatro controles negativos são os do Developer (WU-04, refeitos pela WU-12 numa cópia fora do repositório); o Tech Lead não os refez. A partida da unidade da IA é a da WU-12, medida depois da primeira edição numa cópia de `HEAD`, e não foi refeita. A integração `goal146` com banco só tem a execução da WU-01 e a do `validate:integration`. Uma conversa real no WhatsApp, a ação "Conversa" do perfil lida depois de uma confirmação, um banco com dados reais e a contagem de testes por passo de `validate:core` e de `validate:integration` continuam sem prova.
+
+## A conversa do responsável e as ações do perfil iguais ao protótipo, do Goal147
+
+Rodada 1, 2026-10-07, na worktree `goal-147`. Baseline `e0142aa` (o `HEAD` da worktree, `30dc629`, só difere dela em `docs/`). **Rodada 1:** a partida da suíte do frontend e as três capturas da baseline, o dono da conversa, o rótulo, o nome acessível e os testes `goal147` do perfil (WU-01); as ações do perfil no CSS (WU-02); o alvo CL8 e o teste de captura (WU-03); a fidelidade visual, as medidas e as correções (WU-04); os controles negativos (a) a (g) (WU-05); os gates do IA Loop (WU-06 a WU-14); e estes registros (WU-15). Os gates WU-09 e WU-11 a WU-14 da rodada 1 rodaram na mesma árvore (`codeFingerprint` `code-v1:41adab3f16527fd69cf80adf2d094a620baa58646bffb05ac31cb90783df15a1`). **Rodada 2** (correção dos ícones, FIX-001): a troca para `nav-chat` e `nav-calendar` em `CustomerProfile.tsx` mudou o código, e os gates WU-06 a WU-14 e WU-16 rodaram de novo na árvore final (`codeFingerprint` `code-v1:c4c51f65fed1f9afdf08702113e0e211dea3e70f1c0617651b09a5ee97b05895`). **A execução final é a da rodada 2.** Só o frontend e a captura: sem BFF, IA, Scheduling, contrato público, `PUBLIC_API_V1.md`, semente da captura e do gate e banco.
+
+### Contagens
+
+Contagens de partida (a baseline, **antes da primeira edição**, medidas pela WU-01) e da execução final:
+
+| Suíte | Partida (baseline) | Final | Diferença | Quem obteve |
+| --- | --- | --- | --- | --- |
+| Frontend (`npx vitest run` em `apps/frontend`) | **206** arquivos e **3017** testes passando, saída 0, 60,98 s | **208** arquivos e **3046** testes passando, saída 0 (rodada 2, 98,0 s; na rodada 1, 68,92 s do vitest) | +2 arquivos e +29 testes (`goal147-conversa-do-responsavel.test.tsx` 24 e `goal147-alvo-captura.test.ts` 5) | Developer, WU-01 (partida); IA Loop, WU-09 da rodada 2 (final, sobre a árvore final) |
+| `goal147` do frontend | arquivos novos: sem partida | **29** de 29 passando (2 arquivos) | +2 arquivos e +29 testes | IA Loop, WU-08 (rodadas 1 e 2) |
+| `scripts/tests/visual-responses.test.mjs` | **65** passando | **65** passando, 0 falhas | 0 (o arquivo não mudou) | Developer, WU-03 e WU-05; IA Loop, WU-11 (dentro do `test:gate`, rodadas 1 e 2) |
+
+**Como a partida foi medida.** `rtk proxy npx vitest run` em `apps/frontend`, de 2026-10-07 17:18:01 a 17:19:03, no `HEAD` `30dc629` sem nenhuma edição (a primeira captura da baseline começou às 17:19:24; a primeira edição de código veio depois das três). A partida bate com a última contagem aceita (Goal144: 206 arquivos e 3017 testes). Isso cumpre a lição 2 do Goal.
+
+Gates do IA Loop e do Developer:
+
+A coluna "Execução final" é a da **rodada 2**, na árvore final (`code-v1:c4c51f65…bb05895`); entre parênteses, o resultado da rodada 1 (`code-v1:41adab3f…83df15a1`), substituído porque o código mudou.
+
+| Gate | Comando | Execução final (rodada 2) | Quem obteve |
+| --- | --- | --- | --- |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0, 2,5 s, sem erro (rodada 1: saída 0, 5,3 s) | IA Loop, WU-06 |
+| Lint do frontend | `npm run lint` (`eslint src tests --max-warnings=0`) | saída 0, 28,6 s, 0 avisos (rodada 1: saída 0, 29,7 s) | IA Loop, WU-07 |
+| Testes `goal147` | `vitest run` nos dois arquivos `goal147` | saída 0, 2 arquivos passando com **29** testes, 3,9 s (rodada 1: o mesmo, 3,4 s) | IA Loop, WU-08 |
+| Testes do frontend | `npm test` | saída 0, **208** arquivos e **3046** testes passando, 98,0 s (rodada 1: o mesmo, 69,4 s) | IA Loop, WU-09 |
+| Testes do IA Loop (`test:ia-loop`) | — | **pulado**: o `package.json` da worktree não declara `test:ia-loop`; o harness vive fora do repositório (igual nas duas rodadas) | IA Loop, WU-10 (`SKIPPED`) |
+| `test:gate` | `npm run test:gate` | saída 0, **298** testes, 298 passando, 0 falhas, 0 cancelados, 0 pulados (igual ao Goal146), 2,9 s (rodada 1: o mesmo, 1,9 s) | IA Loop, WU-11 |
+| `validate:core` | `npm run validate:core` | saída 0, 191,2 s, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, que só tem a suíte de integração, rodada no `validate:integration`; `test:health-worker`, pacote sem suíte, só a checagem de sintaxe). Rodada 1: o mesmo, 174,1 s, com a auditoria estática em 34 checagens, 33 passando e 1 pulada (`production_health`, que pede `PRODUCTION_HEALTH_TARGETS`) | IA Loop, WU-12 |
+| `validate:ui` | `npm run validate:ui` | saída 0, 57,5 s (56,4 s de Playwright), **169 passed**, 21 pulados, retentativas **0** ("every test passed on its first attempt"); igual ao Goal144 (rodada 1: o mesmo, 56,1 s) | IA Loop, WU-13 |
+| `validate:integration` | `npm run validate:integration` | saída 0, 819,6 s, 36 passos, **36 passaram**, 0 falharam, 0 pulados, contra `127.0.0.1:55500/ia_bff_test`. O gate autenticado (`rehearse:goal033-authenticated-ui`) deu **310 passed** em 10,9 min de Playwright e **0** retentativas ("every test passed on its first attempt"), a mesma contagem do Goal146. Rodada 1: saída 0, 850,9 s, 36 de 36, e o gate autenticado com **309 passed e 1 flaky** e 1 retentativa (ver "Gate autenticado") | IA Loop, WU-14 |
+| `git diff --check` | `git diff --check` | saída 0, limpo, 138 ms (ver também "Verificação final do Developer") | Developer, WU-15; IA Loop, WU-16 (rodada 2) |
+
+Também rodados pelos Developers das WU anteriores: na WU-01, `npx vitest run tests/goal147 tests/goal144-perfil tests/goal075-customer-profile` (3 arquivos, 82 testes passando), a suíte completa (207 arquivos e 3041 testes, antes do alvo), `tsc --noEmit`, `eslint src tests --max-warnings=0` e `prettier --check` nos arquivos alterados (sem erro); na WU-02, `npx vitest run tests/goal147-conversa-do-responsavel.test.tsx tests/goal144-perfil-responsavel.test.tsx` (67 passando); na WU-03, `npx vitest run tests/goal147-alvo-captura.test.ts tests/goal144-alvos-captura.test.ts` (15 passando), `node --test scripts/tests/visual-responses.test.mjs` (65 passando), `tsc --noEmit` e `eslint` nos dois arquivos de teste (sem erro); na WU-04, o mesmo par de `alvos-captura` de novo depois de mexer em `targets.json` (15 passando). A WU-15 não rodou nenhum desses gates: os números acima são os dos resultados das WU-06 a WU-14.
+
+**O que não foi contado.** O relatório que o IA Loop guarda de `validate:core` e de `validate:integration` omite o meio da saída, então **não há contagem de testes por passo** (quantos testes tem `test:ai-orchestrator`, `test:scheduling-service` ou `test:frontend` dentro de `validate:core`); o que vale deles é a saída 0 e os passos passando. A contagem do frontend é a do `npm test` direto (WU-09), não a do gate. A IA e o Scheduling não mudaram, então as contagens deles (IA: 104 arquivos e 1338 testes, Goal146; Scheduling: 43 arquivos e 594 testes, Goal142) **não** foram refeitas por este Goal.
+
+### Gate autenticado
+
+**Execução final (rodada 2, WU-14, árvore `code-v1:c4c51f65…bb05895`):** o gate autenticado deu **310 passed** e **0** retentativas, 10,9 min de Playwright ("every test passed on its first attempt"), igual ao Goal146. **O flaky abaixo é só da rodada 1 e não se repetiu na rodada 2.**
+
+**Rodada 1 (histórico, árvore `code-v1:41adab3f…83df15a1`, substituída):** o gate autenticado deu **309 passed e 1 flaky** (310 testes no total; o Goal146 deu 310 `passed` sem retentativa) (WU-14, 11,1 min de Playwright). A retentativa foi de um teste: `mobile-390 › servicos > measured, logged in`, que passou na segunda tentativa; o `validate:integration` declarou "authenticated gate retries: 1 test(s) needed a retry". A rota `/servicos` não é tocada por este Goal (as regras novas de CSS estão escopadas em `.customer-profile`) e **a causa da retentativa não foi investigada**: não há evidência aqui de que seja ou não relacionada a esta mudança. É ponto para o review. O `validate:ui` deu **169 passed**, 21 pulados e 0 retentativas, igual ao Goal144. O Goal não tocou `e2e/routes.ts`, `authenticated-matrix.spec.ts` nem a semente do gate, e nenhuma rota é nova.
+
+### Fidelidade visual
+
+Comando: `npm run visual:compare -- --target CL8,CL5,CL6,CL7` e `--target CL1,CL3`, na worktree, depois da última mudança de código (a última edição de CSS foi da WU-04; os controles negativos da WU-05 mexeram em `CustomerProfile.tsx`, `GuardianCard.tsx` e `targets.json` e voltaram com `cmp` igual). A primeira tentativa de CL1 e CL3 deu 429 (limite de logins da conta visual); a WU-04 esperou 14 min e rodou de novo. Os `side-by-side.png` estão em `apps/frontend/e2e-results/visual/<página>-<quadro>-<device>/`. A **baseline** é o `HEAD` sem edição, capturada **três vezes** (`run1`, `run2` e `run3`, em `E:\Projetos\goal147-baseline`, fora do repositório; 17:19:24–17:21:08, 17:21:16–17:22:15 e 17:22:15–17:23:15), CL8, CL5, CL6, CL7, CL1 e CL3 nos quatro devices (24 `app.png` por rodada).
+
+**Diff do `visual:compare`** (tendência, não critério), depois das correções da WU-04: CL8 celular **9,2%**, tablet em retrato **3,4%**, tablet em paisagem **4,5%**, desktop **3,4%**; CL5 9,8 / 4,5 / 6,0 / 5,3; CL6 7,1 / 2,8 / 5,1 / 4,3; CL7 8,0 / 3,3 / 6,0 / 5,2; CL1 8,8 / 3,6 / 3,0 / 2,7; CL3 2,2 / 0,4 / 0,3 / 0,3. **Rodada 2 (correção dos ícones):** `visual:compare --target CL8,CL5,CL6,CL7` de novo, depois da troca; CL8 9,2 / 3,4 / 4,5 / 3,4; CL5 9,8 / 4,5 / 6,0 / 5,3; CL6 7,1 / 2,8 / 5,1 / 4,3; CL7 8,0 / 3,3 / 6,0 / 5,2 (os valores de CL8 e de CL5 ficam iguais ou 0,1 ponto abaixo dos da rodada 1, porque a área do ícone é pequena).
+
+**Ícones das ações, rodada 2.** O review da rodada 1 apontou que `<Icon name="chat" />` e `<Icon name="calendar" />` não eram os símbolos do quadro. O protótipo usa o balão simples (`i-nav-chat`) e o calendário sem grade de dias (`i-nav-calendar`) do sprite `public/icons/avenly-icons.svg`. `CustomerProfile.tsx` passou a usar `<Icon name="nav-chat" />` em "Conversa"/"Conversa com <responsável>" e `<Icon name="nav-calendar" />` em "Agendar", como `SettingsHub.tsx` já faz; nenhuma divergência de ícone resta nas ações, e a afirmação das `notes` do CL5 (valores das ações, ícone incluído, são os do CL8) continua verdadeira. Lidos o `side-by-side.png` de CL8 (celular) e de CL5 (desktop): balão e calendário iguais ao quadro. Rodados de novo: `goal147-conversa-do-responsavel`, `goal147-alvo-captura`, `goal144-perfil-responsavel` e `goal144-alvos-captura` (4 arquivos, 82 testes, todos passando), `tsc --noEmit` e `eslint src/features/customers` com saída 0.
+
+**Os `side-by-side.png` abertos.** O relatório da WU-04 diz que abriu as quatro imagens de cada um dos quatro quadros. O registro de leituras do harness lista 13 das 16 como lidas: CL8 nos quatro devices; CL5 nos quatro; CL6 em desktop, tablet em retrato e celular; CL7 em desktop e celular. **Não consta abertura** do CL6 em paisagem nem do CL7 em retrato e em paisagem; para esses três vale a medida do DOM (abas) e a diferença de pixels.
+
+**Medidas (DOM e pixel, no app e no quadro, depois das correções).** Uma cópia temporária de `visual-compare.mjs` mediu o protótipo e o app na mesma captura (`getBoundingClientRect` e `getComputedStyle`) e foi apagada no fim; os JSON e os scripts ficaram fora do repositório (`E:\tmp\wu04`, `E:\tmp\wu04-tools`). **CL8**, botões "Conversa com Maria" e "Agendar", em todos os devices e nos dois botões: altura 46 contra 46; raio 12 contra 12; borda `rgb(214,206,194)` contra `rgb(214,206,194)`; fundo em repouso computado `rgba(0,0,0,0)` contra `rgba(0,0,0,0)`; ícone 18 × 18 contra 18 × 18, a 14,0 px do topo do botão nos dois lados; fonte 15 px / 600; sem reticências ativas.
+
+| Device | Largura dos botões (app / quadro) | Topo dos botões (app / quadro) | Gap (app / quadro) | Topo das abas (app / quadro) | Topo da nota (app / quadro) | "Ver Maria" |
+| --- | --- | --- | --- | --- | --- | --- |
+| Celular | 176 / 176 | 343,92 / 329,92 (+14) | 10 / 10 | 405,92 / 391,92 (+14) | 249,39 / 235,39 (+14) | centro +14, x 0 |
+| Tablet em retrato | 350 / 350 | 313,69 / 313,69 (0) | 12 / 12 | 383,69 / 383,69 (0) | 232 / 232 (0) | centro 0, x 0 |
+| Tablet em paisagem | 288 / 287,5 (+0,5) | 309,69 / 309,69 (0) | 12 / 12 | 379,69 / 379,69 (0) | 228 / 228 (0) | centro 0, x 0 |
+| Desktop | 343 / 342,5 (+0,5) | 309,69 / 309,69 (0) | 12 / 12 | 379,69 / 379,69 (0) | 228 / 228 (0) | centro 0, x 0 |
+
+O +14 do celular é a divergência (9) já declarada (a barra de status do iPhone e o respiro da barra de voltar): todos os blocos ficam no mesmo +14. As diferenças de 0,5 px na largura são arredondamento de subpixel. Em "Ver Maria", a caixa de toque de 24 px contra 18 px é a divergência (10).
+
+**CL5**, só a linha de ações (a conta visual não tem conversa, então o app mostra só "Agendar" em largura total): altura 46 contra 46 em todos os devices; do topo do botão ao topo das abas, 62 / 62 (celular), 70 / 70 (tablet em retrato), 70 / 70 (paisagem) e 70 / 70 (desktop); a largura de "Agendar" sozinho é a soma das duas ações do quadro mais o gap: 362 / 362 e 712 / 712, e 588 / 587 e 698 / 697 (+1, arredondamento) em paisagem e desktop; raio 12, borda `rgb(214,206,194)`, fundo `rgba(0,0,0,0)` e ícone de 18 px nos dois. O topo absoluto difere pelo aviso de WhatsApp desconectado e pelas tags que a conta de teste não tem (estado da conta, já nas `notes`).
+
+**CL6 e CL7**, abas em relação ao avatar e ao `h1` (as ações ficam ocultas, como no quadro):
+
+| Device | Avatar até as abas (app / quadro) | `h1` até as abas (app / quadro) |
+| --- | --- | --- |
+| Celular | 60,00 / 60,00 | 59,59 / 59,59 |
+| Tablet em retrato | 68,00 / 68,00 | 67,59 / 67,59 |
+| Tablet em paisagem | 68,00 / 68,00 | 67,59 / 67,59 |
+| Desktop | 68,00 / 68,00 | 67,59 / 67,59 |
+
+Antes do ajuste do cabeçalho compacto: avatar até as abas 71,10 em 768 px ou mais, e `h1` até as abas 61,69 no celular e 74,19 em 768 px ou mais. **Hover e active** foram lidos do CSS contra `style-hover` e `style-active` do quadro, não capturados.
+
+**Tabela por imagem: a captura final contra as três baselines.** Cada célula é "pixels diferentes / delta máximo por canal", por `sharp` em pixels decodificados. "Ruído" é o par de baselines 1×2, 1×3 e 2×3. Três valores iguais aparecem uma vez.
+
+| Alvo | Device | Ruído (1×2, 1×3, 2×3) | Final × run1, run2, run3 | Leitura |
+| --- | --- | --- | --- | --- |
+| CL1 | celular, tablet em retrato, tablet em paisagem | 0/0, 0/0, 0/0 | 0/0 | idêntica |
+| CL1 | desktop | 8/5, 26/8, 34/8 | 0/0, 8/5, 26/8 | idêntica à run1; dentro do ruído nas outras |
+| CL3 | celular, tablet em retrato, tablet em paisagem | 0/0, 0/0, 0/0 | 0/0 | idêntica |
+| CL3 | desktop | 0/0, 15/32, 15/32 | 35/5, 35/5, 50/32 | **35 px, delta 5** contra run1 e run2 (ver abaixo) |
+| CL5 | celular | 0/0 | 35546/240 | mudou: o botão passou de 44 para 46 px e desloca o conteúdo abaixo |
+| CL5 | tablet em retrato | 0/0 | 59936/240 | idem |
+| CL5 | tablet em paisagem | 0/0 | 42134/240 | idem |
+| CL5 | desktop | 8/5, 34/8, 26/8 | 52588/240, 52596/240, 52570/240 | idem |
+| CL6 | celular | 0/0 | 7813/216 | mudou: o cabeçalho compacto (ajuste da WU-04) |
+| CL6 | tablet em retrato | 0/0 | 14038/216 | idem |
+| CL6 | tablet em paisagem | 0/0 | 13542/216 | idem |
+| CL6 | desktop | 0/0 | 13982/216 | idem |
+| CL7 | celular | 0/0 | 12706/240 | mudou: o cabeçalho compacto |
+| CL7 | tablet em retrato | 0/0 | 32019/240 | idem |
+| CL7 | tablet em paisagem | 0/0 | 29415/240 | idem |
+| CL7 | desktop | 8/5, 8/5, 0/0 | 31733/240, 31725/240, 31725/240 | idem |
+| CL8 | celular | 0/0 | 2108/215 | mudou: a linha de ações (o botão novo) |
+| CL8 | tablet em retrato | 0/0 | 2220/215 | idem |
+| CL8 | tablet em paisagem | 0/0 | 2220/215 | idem |
+| CL8 | desktop | 303/204, 269/204, 34/8 | 2538/215, 2235/215, 2269/215 | idem; a run1 tem o ruído maior (ver abaixo) |
+
+**Leitura.** (1) **CL1 e CL3** não mudaram fora do ruído, com **uma exceção a julgar: o CL3 em desktop**, com 35 px diferentes (delta máximo 5) contra run1 e run2 (na faixa x 28–40, y 660–751, a parte de baixo da barra lateral, segundo a WU-04) e 50 px (delta 32) contra run3. O delta de 5 é menor que o delta máximo de 32 medido como ruído do CL3 desktop, mas o ruído medido ali caiu em outra região e com 15 px, e 35 px é maior que os 34 px do maior ruído de CL1; **não foi medido como ruído nessa região**. A mudança deste Goal está escopada em `.customer-profile` e a barra lateral não é do perfil; mesmo assim a diferença é registrada como não provada, para o review. (2) **CL8** muda só na linha de ações segundo a WU-04: 2108 px (celular) e 2220 px (tablet) nas faixas y 344–389 e y 314–359 (46 px de altura, a linha de ações); em paisagem e desktop há 26 px extras com delta de até 8 na borda do painel da lista, visualmente idênticos no zoom. O CL8 desktop da run1 difere das outras duas em 269 a 303 px (delta 204), então a leitura do CL8 desktop usa run2 e run3. (3) **CL5, CL6 e CL7**: os pixels diferentes são muitos porque o conteúdo desloca (CL5: 2 px a partir da linha de ações) e porque o cabeçalho compacto mudou (CL6 e CL7). A WU-04 não localizou cada uma dessas diferenças em faixas como fez no CL8; a medida do DOM acima (altura das ações, distância até as abas, avatar e `h1` até as abas) é o que sustenta que não há diferença acima de 1 px em relação ao quadro.
+
+### Controles negativos
+
+Todos feitos pela WU-05 depois da última edição de código, cada um aplicando uma só mutação (por um script de troca de texto único, `/tmp/wu05-mut.cjs`), rodando o comando, reprovando e revertendo por `cp` do backup (`/tmp/wu05-bak`, fora do repositório, com `CustomerProfile.tsx`, `GuardianCard.tsx` e `targets.json`), com `cmp` igual ao backup nos sete. Comando de (a) a (f), a partir de `apps/frontend`: `npx vitest run tests/goal147-conversa-do-responsavel.test.tsx tests/goal147-alvo-captura.test.ts`. O (g) roda também, a partir da raiz, `node --test scripts/tests/visual-responses.test.mjs`. Antes dos controles: `goal147` com 29 passando e `visual-responses.test.mjs` com 65 passando.
+
+| Controle | Edição | Teste que reprovou | Mensagem de asserção |
+| --- | --- | --- | --- |
+| (a) o dependente pedindo pelo próprio id | `CustomerProfile.tsx`: `conversationOwnerId` sempre `customer.id`. **15 reprovados**, 14 passando | `goal147-conversa-do-responsavel.test.tsx` > "De quem é a conversa do perfil (escolha 2) > o dependente pede só pelo id do responsável, nunca pelo próprio"; também "o dependente não mostra uma conversa vinculada a ele mesmo" e "o pedido só sai depois de o perfil carregar" | `AssertionError: expected "vi.fn()" to be called with arguments: [ …(2) ]`, com o diff `-"customerId": "maria-1"` / `+"customerId": "pedro-1"`; `AssertionError: expected <a class="btn btn-secondary" …(1)>…(1)</a> to be null`; `AssertionError: expected [ 'pedro-1' ] to deeply equal [ 'maria-1' ]` |
+| (b) o rótulo "Conversa" para o dependente | `CustomerProfile.tsx`: o rótulo do dependente trocado por "Conversa". **11 reprovados**, 18 passando | "O rótulo e o destino (escolha 3) > dependente: 'Conversa com Maria' leva para a conversa da Maria"; também "responsável sem nome: 'Conversa com o responsável'" | `TestingLibraryElementError: Unable to find role="link" and name "Conversa com Maria"`; `Unable to find role="link" and name "Conversa com o responsável"` |
+| (c) telefone próprio e `CONFIRMED` pedindo pelo id do responsável | `CustomerProfile.tsx`: `dependent && confirmedGuardian` virou `confirmedGuardian`. **1 reprovado**, 28 passando | "De quem é a conversa do perfil (escolha 2) > cliente com telefone próprio e responsável CONFIRMED pede pelo próprio id" | `Error: expect(element).toHaveAttribute("href", "/conversas/conv-pedro")`, com `Expected the element to have attribute: href="/conversas/conv-pedro"` e `Received: href="/conversas/conv-maria"` |
+| (d) o resultado atrasado do dono anterior aparecendo | `CustomerProfile.tsx`: removidos o guarda `if (!controller.signal.aborted)` do `.then` e o guarda `conversation.ownerId === conversationOwnerId`. **3 reprovados**, 26 passando | "Trocar o dono da conversa (escolha 2) > o resultado atrasado do responsável não aparece depois de remover a relação"; também "a ação some até o pedido do novo dono responder" e "o resultado atrasado do próprio cliente não aparece depois de confirmar o responsável" | `AssertionError: expected <a class="btn btn-secondary" …(1)>…(1)</a> to be null`, com o recebido `<a class="btn btn-secondary" href="/conversas/conv-maria">` |
+| (e) o `aria-label` "Ver perfil de <nome>" de volta | `GuardianCard.tsx`: `aria-label` voltou a `Ver perfil de ${name}`. **2 reprovados**, 27 passando | "'Ver <responsável>' (escolha 5) > com nome: o nome acessível é 'Ver <nome completo>', que contém o texto visível" e "… > o nome 'Ver perfil de ...' não existe mais" | `TestingLibraryElementError: Unable to find an accessible element with the role "link" and name "Ver Maria Souza"`; `AssertionError: expected <a …(3)></a> to be null` |
+| (f) a conversa do CL8 com `customerId` do Pedro | `targets.json`, linha 4089: `visual-compare-cl8-maria` virou `visual-compare-cl8-pedro`. **2 reprovados**, 27 passando | `goal147-alvo-captura.test.ts` > "alvo CL8 do visual:compare (conversa da responsável) > há uma só conversa, a da Maria Souza, com o telefone do quadro" e "… > o customerId da conversa é o primaryGuardian.guardian.id do perfil do CL8" | `AssertionError: expected { …(13) } to match object { …(3) }`, com o diff `-"customerId": "visual-compare-cl8-maria"` / `+"customerId": "visual-compare-cl8-pedro"`; `AssertionError: expected 'visual-compare-cl8-pedro' to be 'visual-compare-cl8-maria' // Object.is equality` |
+| (g) o CL8 com um passo que toca "Confirmar" | `targets.json`: o CL8 ganhou `"steps": [{ "clickRole": { "name": "Confirmar", "role": "button" } }]` antes de `"responses"`. **os dois testes**: `goal147` 1 reprovado e `visual-responses.test.mjs` 64 passando e 1 reprovado | `goal147-alvo-captura.test.ts` > "alvo CL8 do visual:compare (conversa da responsável) > o CL8 continua só com GET e sem passo"; `scripts/tests/visual-responses.test.mjs:547`, "targets.json: CL8 é o único alvo com responses em Clientes.dc.html além de CL2, CL3 e CL10, só declara GET e não tem passo" | `AssertionError: expected [ { clickRole: { …(2) } } ] to be undefined`, com `Received: [ { "clickRole": { "name": "Confirmar", "role": "button" } } ]`; `AssertionError [ERR_ASSERTION]: CL8: nenhum passo, nada toca em Confirmar nem em Remover` (linha 553), com `actual` `[ { clickRole: { name: 'Confirmar', role: 'button' } } ]` e `expected` `undefined` |
+
+Os sete controles reprovaram os testes que o Goal nomeia: (a) o dependente pedindo pelo próprio id; (b) o rótulo com "com <responsável>"; (c) o cliente com telefone próprio pedindo pelo próprio id; (d) o resultado atrasado do dono anterior; (e) o nome acessível de "Ver <responsável>"; (f) o `customerId` da conversa do CL8; (g) o CL8 sem passo, pelos **dois** testes. Depois de todos, `cmp` igual ao backup nos três arquivos, `git status --short` idêntico ao de antes dos controles, `goal147` com 29 de 29 e `visual-responses.test.mjs` com 65 de 65.
+
+**Limite do registro dos controles.** A WU-15 não refez os controles nem leu a saída bruta do `vitest` e do `node --test`: as mensagens acima vêm do relatório da WU-05, que rodou os comandos. A mensagem do `testing-library` e a de `toHaveBeenCalledWith` aparecem cortadas antes do despejo do DOM e do diff completo, como o relatório as trouxe.
+
+### Testes ajustados
+
+Só o que o Goal muda. `goal075-customer-profile` (o §6.8, com o pedido `{ customerId: "c1", limit: 1 }`) **não mudou** e passa.
+
+| Arquivo | Antes | Depois | O que a asserção provava e onde a prova continua |
+| --- | --- | --- | --- |
+| `goal144-perfil-responsavel.test.tsx` (linhas 371 e 383) | `getByRole("link", { name: "Ver perfil de Maria Souza" })` | `name: "Ver Maria Souza"` | O nome acessível do link "Ver Maria" e o `href`. Continua nos mesmos dois testes, com o nome novo (escolha 5), e no grupo "'Ver <responsável>'" do `goal147` |
+| `goal144-perfil-responsavel.test.tsx` (linha 393) | `name: "Ver perfil do responsável"` | `name: "Ver responsável"` | O nome acessível do link sem nome do responsável. A escolha 5 tira o `aria-label` nesse caso, e o nome passa a ser o texto visível. **Fora da lista literal do Goal**, consequência direta da escolha 5; continua no mesmo teste e no `goal147` ("Ver responsável" sem `aria-label`) |
+| `goal144-perfil-responsavel.test.tsx` (linha 627) | "com conversa, 'Conversa' continua levando para ela": o mock devolvia `[{ id: "conv-9" }]` para qualquer pedido e a asserção era `findByRole("link", { name: /^Conversa/ })` com `href` `/conversas/conv-9` | "com conversa, 'Conversa com Maria' leva para a conversa da Maria, pedida pelo id dela": o mock devolve a conversa só para `maria-1`; `findByRole("link", { name: "Conversa com Maria" })` com o mesmo `href`; `toHaveBeenCalledWith({ customerId: "maria-1", limit: 1 }, expect.anything())` e `not.toHaveBeenCalledWith(objectContaining({ customerId: "pedro-1" }), …)` | Antes, o teste passava com o pedido pelo id do Pedro. Agora afirma o pedido pelo id da Maria, o rótulo e a ausência de pedido pelo dependente. A prova do dono da conversa em todos os casos continua no `goal147` |
+| `goal144-alvos-captura.test.ts` (linha 117) | `expect(bodyOf("/v1/conversations")).toEqual([])` | `expect(conversationSchema.array().safeParse(bodyOf("/v1/conversations")).success).toBe(true)`, com um comentário que aponta para o `goal147` | Provava que a lista era vazia (a divergência 8 antiga). Agora prova só que a lista é válida contra o schema; **é mais fraca nesse arquivo**. O conteúdo (uma conversa, da Maria, `customerId` igual ao `primaryGuardian.guardian.id`) é afirmado em `goal147-alvo-captura.test.ts` |
+
+Nenhuma asserção sobre os pedidos do `PrimaryGuardianPanel`, o cartão, a nota ou as outras telas foi tocada. `goal144-perfil-responsavel.test.tsx` tem 43 testes e `goal144-alvos-captura.test.ts` tem 10, como antes. `goal147-conversa-do-responsavel.test.tsx` (24) e `goal147-alvo-captura.test.ts` (5) são arquivos **novos** deste Goal.
+
+### Escopo
+
+Os arquivos mudados são os do §1, do §2 e da "Documentação" do Goal. Frontend (`apps/frontend/src/`): `features/customers/CustomerProfile.tsx`, `features/customers/GuardianCard.tsx` e `shared/styles/avenly-customers.css`. Captura: `apps/frontend/e2e/visual/targets.json` (o CL8 e as `notes` do CL5). Testes: os dois arquivos novos acima e os dois ajustados (`goal144-perfil-responsavel.test.tsx`, `goal144-alvos-captura.test.ts`). E `DECISIONS.md`, `CURRENT_STATE.md` e este arquivo, todos por acréscimo. `PrimaryGuardianPanel.tsx`, `CustomerSummary.tsx`, `CustomerMemory.tsx`, `data/services/`, `shared/ui/`, `avenly.css`, `scripts/tests/visual-responses.test.mjs`, `e2e/routes.ts`, `e2e/authenticated-matrix.spec.ts`, o contrato, o BFF, a IA, o Scheduling e o banco não mudaram. Nenhum arquivo de medida ficou no repositório (a WU-04 apagou a cópia do `visual-compare` e o script de medida; `git status` confirma).
+
+### Desvios do texto do Goal, para o review
+
+- **Altura de 46 px.** O Goal cita `height:44px` do quadro; o que se mede no quadro e no app é 46 px com a borda de 1 px (`content-box`). A WU-02 pôs 44 numa primeira execução, mediu o PNG do protótipo e corrigiu para 46.
+- **CL6 e CL7 mudaram além da linha de ações.** O Goal pede CL5 a CL8 mudando só na linha de ações. A medida mostrou o cabeçalho compacto do app com as abas 2,1 px (celular) e 6,6 px (768 px ou mais) abaixo do quadro; a WU-04 aplicou `line-height: 17px` no telefone e `gap: 0` na identidade compacta, pela regra do Goal de corrigir o que passa de 1 px. As duas regras valem para as abas Atendimentos e Notas de todos os perfis (D-161, item 7.2).
+- **`Ver perfil do responsável` virou `Ver responsável`** em `goal144-perfil-responsavel.test.tsx`, fora da lista literal do §3.2 (ver "Testes ajustados").
+- **A asserção da lista de conversas** em `goal144-alvos-captura.test.ts` ficou mais fraca nesse arquivo (schema em vez de `[]`); a prova do conteúdo está no `goal147` (ver "Testes ajustados").
+- **Rótulo longo.** O Goal pede reticências dentro do botão; para isso o botão passou de `inline-flex` para `display: block` com `line-height: 44px`, e o ícone ganhou `margin: 13px 8px 0 0` (D-161, item 4.2). A primeira versão, com `padding: 0 8px`, cortava "Conversa com Maria" no celular; foi corrigida.
+- **Borda das ações a 1,42:1** (repouso) e 1,50:1 (hover), abaixo de 3:1 de não texto; é a mesma `--border-strong` de antes (D-161, "Contrastes calculados"). Ponto para o review.
+- **CL3 em desktop**, 35 px diferentes (delta 5) da baseline, numa região em que o ruído não foi medido (ver "Fidelidade visual"). Ponto para o review.
+- **Retentativa do gate autenticado** em `mobile-390 › servicos > measured, logged in` (ver "Gate autenticado"). Só da rodada 1; não se repetiu na execução final (rodada 2: 310 passed, 0 retentativas).
+- **`test:ia-loop` pulado** (WU-10): o repositório não declara o script.
+- **Partida.** Medida no `HEAD` `30dc629` (código idêntico ao de `e0142aa`; só `docs/` difere), antes da primeira edição (lição 2 cumprida).
+
+### Não executado
+
+- A contagem de testes por passo de `validate:core` e de `validate:integration` (ver "O que não foi contado").
+- A unidade da IA e a do Scheduling, à parte do `validate:core` (não mudaram), e a suíte de integração da IA e do Scheduling com banco, à parte do `validate:integration`.
+- Uma conta real com um responsável confirmado e uma conversa real dele de ponta a ponta: o CL8 usa respostas fixas de `GET` na captura, e os testes do perfil usam o serviço de conversas falso.
+- **A medida do overflow horizontal com um rótulo longo ("Conversa com Maximiliana") em 360 px.** O CSS o garante por construção (`min-width: 0`, `overflow: hidden`, `text-overflow: ellipsis`); nenhum relatório desta rodada registra uma medida, e os relatórios do `validate:ui` e do gate autenticado não mostram um perfil de dependente com nome longo.
+- O hover e o active das ações por captura de estado (foram lidos do CSS contra o quadro).
+- A abertura dos `side-by-side.png` de CL6 em paisagem e de CL7 em retrato e em paisagem (ver "Fidelidade visual").
+- A refação dos controles negativos pela WU-15 e a leitura da saída bruta deles.
+- A investigação da causa da retentativa do gate autenticado e dos 35 px do CL3 em desktop. A retentativa (`mobile-390 › servicos > measured, logged in`) é só da rodada 1 e **não se repetiu na rodada 2**: na árvore final, o gate autenticado deu 310 passed e 0 retentativas (WU-14).
+- `prettier --check` nos arquivos editados fora dos que a WU-01 formatou: a WU-03 notou que o `goal144-alvos-captura.test.ts` original já reprovava o `prettier --check` (CRLF do checkout) e não reformatou trechos não relacionados.
+
+### Verificação final do Developer
+
+`git diff --check`, rodado pela WU-15 depois de escrever os três registros: saída 0, sem erro de espaço em branco. Os arquivos novos e não rastreados (`goal147-conversa-do-responsavel.test.tsx` e `goal147-alvo-captura.test.ts`) ainda não entram nesse `git diff`. A WU-16 do IA Loop o roda de novo, por último, na árvore final, e o resultado dela é anotado no review.
+
+### Aceite
+
+Goal147 aceito na rodada 2 ([review147](reviews/147-review.md)). A rodada 1 terminou em `CHANGES_REQUIRED` com 2 blockers (os ícones `chat` e `calendar` das ações, no lugar de `nav-chat` e `nav-calendar` do quadro), corrigidos na rodada 2 (ver "Ícones das ações, rodada 2"). O review da rodada 2 pediu só a correção destes registros (a execução final dada como a da rodada 1); a correção foi feita no fechamento, sem nova execução, com os números dos resultados da rodada 2 do IA Loop (tabela de gates e "Gate autenticado"). Conferência do Tech Lead na árvore aceita, sem edição de código no meio:
+
+- `visual:compare --target CL8,CL5,CL6,CL7` refeito no review da rodada 2, com os mesmos percentuais declarados; abertos os `side-by-side.png` de CL8 e CL5 nos quatro devices, de CL6 no celular e de CL7 no desktop. Balão e calendário iguais ao quadro.
+- `CustomerProfile.tsx:311` com `<Icon name="nav-chat" />` e `:320` com `<Icon name="nav-calendar" />`.
+- No fechamento, a partir de `apps/frontend`: `npx vitest run tests/goal147-conversa-do-responsavel.test.tsx tests/goal147-alvo-captura.test.ts tests/goal144-perfil-responsavel.test.tsx tests/goal144-alvos-captura.test.ts` deu 4 arquivos e **82** testes passando.
+- Os JSON de `results/work_unit` da rodada 2 (WU-06 a WU-14 e WU-16) têm todos o `codeFingerprint` `code-v1:c4c51f65fed1f9afdf08702113e0e211dea3e70f1c0617651b09a5ee97b05895` e saída 0 (WU-10 pulada), e batem com a tabela de gates.
+
+Os sete controles negativos são os da WU-05; o Tech Lead não os refez. Uma conversa de responsável de ponta a ponta numa conta real, o overflow com rótulo longo em 360 px, o hover e o active por captura, os 35 px do CL3 em desktop e a contagem de testes por passo de `validate:core` e de `validate:integration` continuam sem prova.

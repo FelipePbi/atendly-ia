@@ -66,9 +66,7 @@ export function GuardianCard({
           <span className="customer-guardian-detail">{details}</span>
         </div>
         <Link
-          aria-label={
-            name ? `Ver perfil de ${name}` : "Ver perfil do responsável"
-          }
+          aria-label={name ? `Ver ${name}` : undefined}
           className="customer-guardian-link"
           href={`/clientes/detalhes?id=${encodeURIComponent(person.id)}`}
         >
@@ -91,6 +89,6 @@ export function GuardianCard({
   );
 }
 
-function firstName(name: string | null | undefined): string | null {
+export function firstName(name: string | null | undefined): string | null {
   return name?.trim().split(/\s+/)[0] || null;
 }

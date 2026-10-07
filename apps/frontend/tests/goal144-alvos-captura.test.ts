@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
+  conversationSchema,
   customerDetailSchema,
   customerListSchema,
   customerMemorySchema,
@@ -114,7 +115,11 @@ describe("alvo CL8 do visual:compare (perfil com responsável)", () => {
     const memory = bodyOf(MEMORY_PATH);
     expect(Array.isArray(memory) && memory.length).toBe(0);
     expect(customerMemorySchema.array().safeParse(memory).success).toBe(true);
-    expect(bodyOf("/v1/conversations")).toEqual([]);
+    // Goal147: a lista deixou de ser vazia; a conversa é da Maria (responsável)
+    // e é validada por inteiro em goal147-alvo-captura.test.ts.
+    expect(
+      conversationSchema.array().safeParse(bodyOf("/v1/conversations")).success,
+    ).toBe(true);
   });
 
   test("o detalhe é Pedro Souza sem telefone próprio, sem nota nem tag, com os números do quadro", () => {

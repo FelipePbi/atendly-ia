@@ -677,16 +677,53 @@
 .customer-profile .directory-detail-actions[hidden] {
   display: none;
 }
+/* Ações do perfil (CL5–CL8): valores do quadro, iguais em todos os perfis
+   (height 44 + borda de 1px, content-box no quadro = 46px). Bloco com linha
+   única, para o rótulo longo cortar com reticências em vez de estourar a
+   largura. */
 .customer-profile .directory-detail-actions .btn {
-  min-height: 44px;
+  min-width: 0;
+  height: 46px;
+  min-height: 46px;
   flex: 1;
+  padding: 0;
+  display: block;
+  overflow: hidden;
+  border-color: var(--border-strong);
   border-radius: 12px;
+  background: transparent;
   font-size: 15px;
+  line-height: 44px;
   letter-spacing: 0;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    background-color 160ms var(--ease),
+    border-color 160ms var(--ease),
+    color 160ms var(--ease),
+    transform 120ms ease,
+    box-shadow 160ms var(--ease);
+}
+.customer-profile .directory-detail-actions .btn:hover {
+  border-color: #c9c0b3;
+  background: var(--surface-interactive);
+}
+.customer-profile .directory-detail-actions .btn:active {
+  background: #e5ded4;
+  transform: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .customer-profile .directory-detail-actions .btn:active {
+    transform: scale(0.98);
+  }
 }
 .customer-profile .directory-detail-actions .icon {
   width: 18px;
   height: 18px;
+  margin: 13px 8px 0 0;
+  display: inline-block;
+  vertical-align: top;
 }
 .customer-profile .directory-tabs {
   margin-top: 16px;
@@ -1114,6 +1151,9 @@
 .customer-profile .directory-detail-hero.is-compact .directory-detail-identity {
   align-items: center;
 }
+.customer-profile .directory-detail-hero.is-compact .directory-detail-identity > div {
+  gap: 0;
+}
 .customer-profile .directory-detail-hero.is-compact .avatar {
   width: 44px;
   height: 44px;
@@ -1127,6 +1167,7 @@
 .customer-profile .directory-detail-hero.is-compact .directory-detail-phone {
   margin-top: 2px;
   font-size: 13px;
+  line-height: 17px;
   white-space: nowrap;
 }
 .customer-profile .customer-appts-panel {
@@ -1170,13 +1211,6 @@
 .customer-profile .directory-detail-identity.is-dependent .directory-detail-phone {
   margin-top: 3px;
   line-height: normal;
-}
-.customer-profile .directory-detail-actions.is-dependent .btn {
-  min-height: 46px;
-  background: transparent;
-}
-.customer-profile .directory-detail-actions.is-dependent .btn:hover {
-  background: var(--surface-interactive);
 }
 @media (min-width: 768px) {
   .customer-profile .directory-detail-identity.is-dependent .directory-detail-phone {

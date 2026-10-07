@@ -368,7 +368,7 @@ describe("'Ver <primeiro nome>'", () => {
     await renderProfile();
 
     const link = within(card()).getByRole("link", {
-      name: "Ver perfil de Maria Souza",
+      name: "Ver Maria Souza",
     });
     expect(link).toHaveAttribute("href", "/clientes/detalhes?id=maria-1");
     expect(link).toHaveTextContent("Ver Maria");
@@ -380,7 +380,7 @@ describe("'Ver <primeiro nome>'", () => {
     );
 
     expect(
-      within(card()).getByRole("link", { name: "Ver perfil de Maria Souza" }),
+      within(card()).getByRole("link", { name: "Ver Maria Souza" }),
     ).toHaveAttribute("href", "/clientes/detalhes?id=a%20b%26c");
   });
 
@@ -390,7 +390,7 @@ describe("'Ver <primeiro nome>'", () => {
     );
 
     expect(
-      within(card()).getByRole("link", { name: "Ver perfil do responsável" }),
+      within(card()).getByRole("link", { name: "Ver responsável" }),
     ).toHaveTextContent("Ver responsável");
   });
 
@@ -624,13 +624,25 @@ describe("O que não muda (escolha 6)", () => {
     ]);
   });
 
-  test("com conversa, 'Conversa' continua levando para ela", async () => {
-    conversationsList.mockResolvedValue([{ id: "conv-9" }]);
+  test("com conversa, 'Conversa com Maria' leva para a conversa da Maria, pedida pelo id dela", async () => {
+    // A conversa só existe para a Maria: o pedido pelo id do Pedro devolve vazio.
+    conversationsList.mockImplementation(
+      async (query: { customerId?: string }) =>
+        query.customerId === "maria-1" ? [{ id: "conv-9" }] : [],
+    );
     await renderProfile();
 
     expect(
-      await screen.findByRole("link", { name: /^Conversa/ }),
+      await screen.findByRole("link", { name: "Conversa com Maria" }),
     ).toHaveAttribute("href", "/conversas/conv-9");
+    expect(conversationsList).toHaveBeenCalledWith(
+      { customerId: "maria-1", limit: 1 },
+      expect.anything(),
+    );
+    expect(conversationsList).not.toHaveBeenCalledWith(
+      expect.objectContaining({ customerId: "pedro-1" }),
+      expect.anything(),
+    );
   });
 
   test("cliente sem responsável fica como antes: sem cartão, painel com 'Nenhum responsável'", async () => {

@@ -1027,6 +1027,9 @@ export class AssistantToolRegistry {
         schedulingContext(context),
         context.idempotencyKey,
       );
+      // A pessoa da série é a última pessoa agendada por este número, como
+      // num atendimento avulso. Sem pessoa conhecida, nada é gravado.
+      await this.recordScheduledCustomer(context, seriesCustomerId);
       await this.clearPendingAction(context);
       return { appointments };
     } catch (error) {
@@ -1253,10 +1256,10 @@ export class AssistantToolRegistry {
   /**
    * Para quem é o atendimento.
    *
-   * `customerId` escolhido pela conversa vence. Sem escolha, o contato
-   * vinculado a um dependente confirmado do número propõe esse dependente
-   * (Goal142): foi a última pessoa atendida por ele, e a IA pergunta se é
-   * para ela de novo. Senão, os candidatos do **telefone** decidem o que
+   * `customerId` escolhido pela conversa vence. Sem escolha, a última pessoa
+   * agendada pelo contato (`lastScheduledCustomerId`), quando é um dependente
+   * confirmado do número, propõe esse dependente (Goal142, Goal146): a IA
+   * pergunta se é para ela de novo. Senão, os candidatos do **telefone** decidem o que
    * perguntar: vários exigem seleção explícita antes de seguir; um vira
    * proposta a confirmar; nenhum significa cadastro novo, que só nasce na
    * confirmação do agendamento. Os dependentes vão em `candidates` nos três
@@ -1293,12 +1296,13 @@ export class AssistantToolRegistry {
         candidates,
       };
     }
-    // Só lê o vínculo quando há dependente: número sem dependente segue
-    // exatamente o caminho de antes.
+    // Só lê a última pessoa agendada quando há dependente: número sem
+    // dependente segue exatamente o caminho de antes.
     if (dependents.length > 0) {
-      const linkedCustomerId = await this.linkedCustomerId(context);
+      const lastScheduledCustomerId =
+        await this.lastScheduledCustomerId(context);
       const lastBookedFor = dependents.find(
-        (dependent) => dependent.id === linkedCustomerId,
+        (dependent) => dependent.id === lastScheduledCustomerId,
       );
       if (lastBookedFor) {
         return {
@@ -1385,7 +1389,7 @@ export class AssistantToolRegistry {
       );
     }
 
-    await this.linkContactToCustomer(context, appointment.customerId);
+    await this.recordScheduledCustomer(context, appointment.customerId);
     await this.clearPendingAction(context);
     return { appointment: this.presentAppointment(appointment) };
   }
@@ -1422,29 +1426,70 @@ export class AssistantToolRegistry {
   }
 
   /**
-   * Contato do canal passa a referenciar a pessoa atendida.
+   * Contato do canal guarda a pessoa agendada e quem escreve por ele (Goal146).
    *
-   * A referência é por ID e tenant, sem FK entre bancos, e pode mudar ao longo
-   * do tempo — a mãe que agenda para o filho e depois para si mesma continua
-   * sendo **um** contato, apontando ora para uma pessoa, ora para outra.
-   * Nenhum contato e nenhum cliente é fundido por causa disso.
+   * A referência é por ID e tenant, sem FK entre bancos. Dois campos, num só
+   * `updateMany`:
+   *
+   * - `lastScheduledCustomerId`: a pessoa agendada, sempre, mesmo dependente
+   *   sem telefone. Serve à pessoa provável, à memória inferida e ao resumo.
+   * - `customerId`: quem escreve por este número, sempre um candidato do
+   *   telefone. A pessoa agendada que é candidata vira o vínculo; o dependente
+   *   leva o responsável; fora disso o vínculo não muda.
+   *
+   * O efeito (agendamento ou série) já existe quando isto roda: se a leitura
+   * dos candidatos falhar, grava só a última pessoa agendada e não muda o
+   * vínculo. Nenhum contato e nenhum cliente é fundido por causa disso.
    */
-  private async linkContactToCustomer(
+  private async recordScheduledCustomer(
     context: ToolExecutionContext,
-    customerId: string | null,
+    scheduledCustomerId: string | null | undefined,
   ): Promise<void> {
-    if (!customerId) return;
+    if (!scheduledCustomerId) return;
+    const linkedTo = await this.contactLinkFor(context, scheduledCustomerId);
+    const now = new Date();
     await this.prisma.contact.updateMany({
       where: {
         tenantId: context.tenantId,
         channelId: context.channelId,
         externalContactId: context.phone,
       },
-      data: { customerId, customerLinkedAt: new Date() },
+      data: {
+        lastScheduledCustomerId: scheduledCustomerId,
+        lastScheduledAt: now,
+        ...(linkedTo ? { customerId: linkedTo, customerLinkedAt: now } : {}),
+      },
     });
   }
 
-  private async linkedCustomerId(
+  /**
+   * Quem escreve pelo número, dada a pessoa agendada: ela mesma se é candidata
+   * do telefone, o responsável se é dependente do número, senão ninguém. Uma
+   * falha na leitura devolve `null` (vínculo inalterado): a confirmação já
+   * aconteceu e não pode falhar por causa dele.
+   */
+  private async contactLinkFor(
+    context: ToolExecutionContext,
+    scheduledCustomerId: string,
+  ): Promise<string | null> {
+    try {
+      const { phoneCandidates, dependents } =
+        await this.customerCandidates(context);
+      if (
+        phoneCandidates.some((candidate) => candidate.id === scheduledCustomerId)
+      ) {
+        return scheduledCustomerId;
+      }
+      const dependent = dependents.find(
+        (item) => item.id === scheduledCustomerId,
+      );
+      return dependent?.guardian.id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async lastScheduledCustomerId(
     context: ToolExecutionContext,
   ): Promise<string | null> {
     const contact = await this.prisma.contact.findUnique({
@@ -1455,17 +1500,17 @@ export class AssistantToolRegistry {
           externalContactId: context.phone,
         },
       },
-      select: { customerId: true },
+      select: { lastScheduledCustomerId: true },
     });
-    return contact?.customerId ?? null;
+    return contact?.lastScheduledCustomerId ?? null;
   }
 
   /**
    * Compromissos futuros das pessoas do numero (Goal145).
    *
    * A lista e sempre a do telefone com os dependentes confirmados deles
-   * (Goal142), com ou sem vinculo do contato: o vinculo muda a cada
-   * atendimento e so serve a pessoa provavel (`resolveScheduleCustomer`).
+   * (Goal142), com ou sem vinculo do contato: a ultima pessoa agendada muda a
+   * cada atendimento e so serve a pessoa provavel (`resolveScheduleCustomer`).
    * Cada horario diz para quem e, e e a mesma lista em que cancelar e
    * remarcar procuram o `appointmentId`. Nao le o vinculo nem os candidatos.
    */

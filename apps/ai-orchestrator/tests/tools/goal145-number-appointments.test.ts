@@ -228,7 +228,7 @@ function createAgenda(
   return { gateway: gateway as unknown as SchedulingGateway, calls };
 }
 
-/** `Contact.customerId` é o vínculo: a última pessoa atendida pelo número. */
+/** `Contact.lastScheduledCustomerId` é a última pessoa agendada pelo número. */
 function createPrisma(linkedCustomerId: string | null = null) {
   const store = {
     state: { availabilityLookups: [availabilityLookup()] } as Record<
@@ -241,7 +241,9 @@ function createPrisma(linkedCustomerId: string | null = null) {
     contact: {
       findUnique: async () => {
         store.contactReads += 1;
-        return linkedCustomerId ? { customerId: linkedCustomerId } : null;
+        return linkedCustomerId
+          ? { lastScheduledCustomerId: linkedCustomerId }
+          : null;
       },
       updateMany: async () => ({ count: 1 }),
     },

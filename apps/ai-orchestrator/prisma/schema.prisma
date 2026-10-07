@@ -284,13 +284,19 @@ model Contact {
   categoryOverrideAt DateTime?
   categoryOverrideBy String?
 
-  /// Pessoa do Scheduling resolvida a partir deste contato, preenchida quando
-  /// um agendamento e confirmado. Referencia por ID e tenant: nenhuma FK
-  /// atravessa bancos. Um contato pode apontar para pessoas diferentes ao
-  /// longo do tempo (mae que agenda para o filho) sem fundir contato nem
-  /// cliente.
+  /// Pessoa do Scheduling que escreve por este numero: sempre um candidato do
+  /// telefone, preenchida quando um agendamento e confirmado. Referencia por ID
+  /// e tenant: nenhuma FK atravessa bancos. Quando o responsavel agenda para um
+  /// dependente, o vinculo fica no responsavel; o dependente vai em
+  /// `lastScheduledCustomerId`.
   customerId       String?
   customerLinkedAt DateTime?
+
+  /// Ultima pessoa agendada por este numero, que pode ser um dependente (mae
+  /// que agenda para o filho). Mesma referencia por ID e tenant, sem FK. Serve
+  /// a pessoa provavel do proximo agendamento e ao resumo do dependente.
+  lastScheduledCustomerId String?
+  lastScheduledAt         DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt

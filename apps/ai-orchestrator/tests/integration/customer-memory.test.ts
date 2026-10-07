@@ -119,6 +119,8 @@ describe.skipIf(!databaseUrl)("customer memory against PostgreSQL", () => {
           externalContactId: PHONE,
           customerId: CUSTOMER,
           customerLinkedAt: NOW,
+          lastScheduledCustomerId: CUSTOMER,
+          lastScheduledAt: NOW,
         },
       });
       await prisma.conversation.update({
@@ -506,7 +508,12 @@ describe.skipIf(!databaseUrl)("customer memory against PostgreSQL", () => {
   it("contato sem pessoa vinculada não gera memória", async () => {
     await prisma.contact.update({
       where: { tenantId_id: { tenantId: TENANT_A, id: CONTACT_A } },
-      data: { customerId: null, customerLinkedAt: null },
+      data: {
+        customerId: null,
+        customerLinkedAt: null,
+        lastScheduledCustomerId: null,
+        lastScheduledAt: null,
+      },
     });
 
     expect(

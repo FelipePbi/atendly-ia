@@ -1040,6 +1040,8 @@ function createCustomerMemoryStub(input: {
         tenantId: input.tenantId,
         ignored: input.contact.ignored,
         customerId: input.contact.customerId,
+        lastScheduledCustomerId: input.contact.customerId,
+        lastScheduledAt: null,
         categoryOverride: input.contact.categoryOverride,
       },
     ],

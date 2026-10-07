@@ -85,6 +85,16 @@ const GOAL115_MIGRATION_SQL = path.join(
   "migration.sql",
 );
 
+const GOAL146_MIGRATION_SQL = path.join(
+  repositoryRoot,
+  "apps",
+  "ai-orchestrator",
+  "prisma",
+  "migrations",
+  "20261007120000_goal146_contact_last_scheduled_customer",
+  "migration.sql",
+);
+
 function refuse(message) {
   console.error(`goal074:human-takeover-migration-rehearsal REFUSED — ${message}`);
   process.exit(2);
@@ -433,6 +443,55 @@ async function alignAiDurabilityTargetWithGoal115(target) {
   }
 }
 
+/**
+ * Leva o banco de durabilidade da IA as colunas `lastScheduledCustomerId` e
+ * `lastScheduledAt` do contato (Goal146). A `SessionService` le e escreve o
+ * contato sem `select`, entao a coluna precisa existir em todo banco que a
+ * suite usa. O DDL usa `ADD COLUMN IF NOT EXISTS` e o backfill so toca linhas
+ * ainda nulas, entao reaplicar sobre banco ja alinhado nao muda nada.
+ */
+async function alignAiDurabilityTargetWithGoal146(target) {
+  const database = decodeURIComponent(
+    target.maintenance.pathname.replace(/^\//u, ""),
+  );
+  const durability = new URL(target.maintenance.href);
+  durability.pathname = `/${database}_goal004`;
+
+  const client = new Client({ connectionString: durability.href });
+  try {
+    await client.connect();
+  } catch {
+    console.log(
+      "durability target not provisioned yet — skipping the Goal146 columns",
+    );
+    return;
+  }
+  try {
+    const contactTable = await client.query(
+      `SELECT to_regclass('"Contact"') AS present`,
+    );
+    if (!contactTable.rows[0].present) {
+      console.log(
+        "durability target has no Contact table yet — skipping the Goal146 columns",
+      );
+      return;
+    }
+    const applied = await applyMigrationFile(client, GOAL146_MIGRATION_SQL);
+    if (applied !== true) {
+      console.error(
+        `goal074:human-takeover-migration-rehearsal FAILED — durability target columns failed applying ${GOAL146_MIGRATION_SQL}: ${applied}`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    console.log(
+      `durability target aligned with the Goal146 Contact.lastScheduledCustomerId columns: ${database}_goal004`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
 export async function main() {
   const target = rehearsalTarget(process.env);
 
@@ -440,6 +499,7 @@ export async function main() {
   await prepareAiDurabilityTarget(target);
   await alignAiDurabilityTargetWithGoal109(target);
   await alignAiDurabilityTargetWithGoal115(target);
+  await alignAiDurabilityTargetWithGoal146(target);
 
   if (process.exitCode) {
     console.error(

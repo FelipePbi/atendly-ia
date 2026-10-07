@@ -174,11 +174,23 @@ export class CustomerSummaryService {
     input: GenerateCustomerSummaryInput,
     promptVersion: string,
   ) {
-    const contact = await this.prisma.contact.findFirst({
-      where: { tenantId: input.tenantId, customerId: input.customerId },
-      orderBy: { customerLinkedAt: "desc" },
-      select: { id: true },
-    });
+    // Quem escreve (`customerId`) primeiro; so depois a ultima pessoa agendada
+    // por um numero (`lastScheduledCustomerId`), que e o caso do dependente: a
+    // auditoria do resumo dele fica na conversa do responsavel (Goal146).
+    const contact =
+      (await this.prisma.contact.findFirst({
+        where: { tenantId: input.tenantId, customerId: input.customerId },
+        orderBy: { customerLinkedAt: "desc" },
+        select: { id: true },
+      })) ??
+      (await this.prisma.contact.findFirst({
+        where: {
+          tenantId: input.tenantId,
+          lastScheduledCustomerId: input.customerId,
+        },
+        orderBy: { lastScheduledAt: "desc" },
+        select: { id: true },
+      }));
     if (!contact) {
       throw new AppError("Customer is not linked to a contact.", {
         statusCode: 404,

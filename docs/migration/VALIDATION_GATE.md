@@ -9761,3 +9761,160 @@ Goal145 aceito na rodada 1 ([review145](reviews/145-review.md)), sem blocker. Co
 | `git diff --check` (WU-11 do IA Loop, depois destes registros) | saída 0, 83 ms, na árvore `code-v1:f5e204b3…5f810d`, a mesma dos gates WU-03 a WU-09 |
 
 Os dois controles negativos são os do Developer (WU-02); o Tech Lead conferiu a saída bruta deles, mas não os refez. A partida da unidade da IA é a da WU-10, medida numa cópia de `HEAD` depois da primeira edição, e não foi refeita pelo Tech Lead. Uma conversa real no WhatsApp com o contato vinculado a um dependente e a contagem de testes por passo de `validate:core` e de `validate:integration` continuam sem prova.
+
+## A conversa continua de quem escreve quando o responsável agenda para o dependente, do Goal146
+
+Rodada 1, 2026-10-07, na worktree `goal-146`. Baseline `48d39d0`. **Rodada 1:** a migration, o schema, o ensaio `goal074` e a integração `goal146` (WU-01); a gravação na confirmação e a pessoa provável, com os testes `goal146` de `tests/tools/` e as asserções trocadas (WU-02); a memória e o resumo, com os testes `goal146` de `tests/memory/` (WU-03); os controles negativos (a) a (d) (WU-04); os gates do IA Loop (WU-05 a WU-11, com três diagnósticos, DIAG-001 a DIAG-003, em gates que reprovaram na primeira execução); e estes registros (WU-12). Só a IA, o banco da IA e o ensaio: sem Scheduling, BFF, contrato público, `PUBLIC_API_V1.md` nem tela, então sem `validate:ui`, sem `targets.json` e sem `visual:compare`. A rodada 1 parou antes do review (`PRE_REVIEW_INCOMPLETE`, 1 blocker: o DIAG-003 sem resultado gravado). O Goal foi aceito na rodada 2 ([review146](reviews/146-review.md)), sem blocker, e a [D-160](DECISIONS.md) está ACCEPTED; a rodada 2 e a conferência do Tech Lead estão em "Rodada 2" e "Aceite".
+
+### Contagens
+
+Contagens de partida (a baseline `48d39d0`) e da execução final da IA:
+
+| Suíte | Partida (baseline) | Final | Diferença | Quem obteve |
+| --- | --- | --- | --- | --- |
+| Unidade da IA (`npx vitest run` em `apps/ai-orchestrator`, sem banco) | 102 arquivos passando e 16 pulados (118); **1319** testes passando e 112 pulados (1431), 24,0 s (o vitest) | 104 arquivos passando e 17 pulados (121); **1338** testes passando e 115 pulados (1453), saída 0, 25,6 s (o vitest) | +2 arquivos e +19 testes passando (`goal146-contact-of-writer.test.ts` com 10 e `goal146-memory-of-scheduled.test.ts` com 9); +1 arquivo e +3 testes pulados (`goal146-contact-last-scheduled.test.ts`, de integração) | Developer, WU-12 (partida, numa cópia de `HEAD`); IA Loop, WU-08 (final, segunda execução) |
+| `goal146` da IA | arquivos novos: sem partida | **19** de 19 passando, mais 3 pulados sem banco (2 arquivos passando e 1 pulado); 1 arquivo de integração com **3** de 3 passando contra PostgreSQL real | +3 arquivos e +22 testes | IA Loop, WU-07 (sem banco); Developer, WU-01 (com banco); Developer, WU-12 (de novo, sobre a árvore final: 19 passando e 3 pulados, 0,9 s) |
+
+A conta fecha: 102 + 2 = 104 arquivos passando, 1319 + 19 = 1338 testes passando, 16 + 1 = 17 arquivos pulados e 112 + 3 = 115 testes pulados. A partida bate com a última contagem aceita (Goal145: 102 arquivos e 1319 testes passando, 16 e 112 pulados).
+
+**Como a partida foi medida.** Nenhuma Work Unit mediu a baseline **antes da primeira edição** (a lição 2 não foi cumprida: a WU-01 começou editando). A WU-12 a mediu depois, sem tocar na árvore, do mesmo modo que o Goal145: exportou `HEAD` (`8be067a`, o fechamento do Goal145 sobre a baseline `48d39d0`, sem código novo) com `git archive HEAD apps/ai-orchestrator apps/bff apps/scheduling-service packages package.json` para uma pasta de rascunho fora do repositório, copiou para ela os clients Prisma gerados de `apps/ai-orchestrator` e de `apps/bff` (o `generated` é ignorado pelo git e a baseline não os tem), ligou o `node_modules` de `apps/ai-orchestrator` por junção e rodou `npx vitest run`: **102** arquivos e **1319** testes passando, 16 arquivos e 112 pulados, 24,0 s. O client da IA copiado é o gerado do schema novo; o código da baseline não usa as colunas novas e ignora a diferença. A junção foi desfeita com `rmdir` antes de apagar a pasta, e o `node_modules` da worktree ficou intacto.
+
+Gates do IA Loop e do Developer:
+
+| Gate | Comando | Resultado | Quem obteve |
+| --- | --- | --- | --- |
+| Typecheck da IA | `npx tsc --noEmit` (em `apps/ai-orchestrator`) | saída 0, 4,1 s, sem erro; repetido pelo Developer na árvore final (depois de DIAG-001 a DIAG-003): saída 0 | IA Loop, WU-05; Developer, WU-12 |
+| Lint da IA | `npm run lint` (`eslint src --max-warnings=0`) | saída 0, 5,1 s, 0 avisos; repetido na árvore final: saída 0 | IA Loop, WU-06; Developer, WU-12 |
+| Testes `goal146` da IA | `npx vitest run goal146` | saída 0, 2 arquivos passando com **19** testes, 1 arquivo e 3 testes pulados (sem banco), 0,9 s | IA Loop, WU-07 |
+| Testes da IA, 1ª execução | `npm test` | saída **1**, 1 arquivo reprovado e 103 passando, 17 pulados (121); **2** testes reprovados, 1336 passando, 115 pulados (1453), 20,3 s. Os dois, em `tests/assistant/assistant.service.test.ts`: `Goal046 / WU-04 — a árvore real produz os números desta rodada…` e `Goal047 / WU-04 (§6) — …`, ambos com `AssertionError: expected [ …(186) ] to have a length of 210 but got 186` | IA Loop, WU-08 |
+| Testes da IA, 2ª execução | `npm test` | saída 0, **104** arquivos e **1338** testes passando, 17 arquivos e 115 testes pulados, 25,6 s | IA Loop, WU-08 (segunda execução) |
+| `test:gate` | `npm run test:gate` | saída 0, **298** testes, 298 passando, 0 falhas, 0 pulados (igual ao Goal145, que é 298), 1,2 s | IA Loop, WU-09 |
+| `validate:core`, 1ª execução | `npm run validate:core` | saída **1**, 17 passos: 8 passaram (os builds, `check:health-worker`, `test:ai-orchestrator`, `test:scheduling-service`), **1 falhou** (`test:frontend`: 205 arquivos passando e 1 reprovado, 3016 testes passando e 1 reprovado de 3017) e 8 não rodaram | IA Loop, WU-10 |
+| `validate:core`, 2ª execução | `npm run validate:core` | saída 0, 128,5 s, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, que só tem a suíte de integração, rodada no `validate:integration`; `test:health-worker`, pacote sem suíte, só a checagem de sintaxe). `audit:static`: 34 verificações, 33 passaram e 1 pulada (`production_health`) | IA Loop, WU-10 (segunda execução) |
+| `validate:integration`, 1ª execução | `npm run validate:integration` | saída **1**, 36 passos: 30 passaram, **1 falhou** (`test:ai-orchestrator-transport-durability`) e 5 não rodaram (`test:ai-orchestrator-content-purge`, `test:evolution-go-webhook-outbox`, `rehearse:goal030-mvp-journey`, `rehearse:goal032-auto-reply`, `rehearse:goal033-authenticated-ui`) | IA Loop, WU-11 |
+| `validate:integration`, 2ª execução | `npm run validate:integration` | saída 0, 794,3 s, 36 passos, **36 passaram**, 0 falharam, 0 pulados, contra `127.0.0.1:55500/ia_bff_test`. O gate autenticado (`rehearse:goal033-authenticated-ui`) deu **310 passed** e retentativas **0** ("every test passed on its first attempt"); igual ao Goal145 | IA Loop, WU-11 (segunda execução) |
+| `git diff --check` | `git diff --check` | ver "Verificação final do Developer" | Developer, WU-12 |
+
+**As três reprovações da primeira execução.** Nenhuma delas foi afrouxada, pulada ou isentada; o que mudou em cada uma está abaixo.
+
+1. **Unidade da IA (DIAG-001).** O teste de varredura de árvore (Goal046 e Goal047, WU-04) espera 210 arquivos `.ts` (121 em `apps/ai-orchestrator/src` e 89 em `apps/bff/src`) e recebeu 186: a worktree não tinha `apps/bff/src/generated/prisma` (ignorado pelo git, `.gitignore:35`), que o teste conta. É ambiente, não regressão: o diff de `src` do Goal não acrescenta nem remove arquivo `.ts`. O diagnóstico rodou `npx prisma generate` em `apps/bff` (nenhum arquivo rastreado mudou) e a segunda execução passou. Uma worktree limpa precisa do `prisma generate` do BFF antes da unidade da IA.
+2. **`validate:core` (DIAG-002).** `apps/frontend/tests/goal144-perfil-responsavel.test.tsx`, `A nota do que a IA faz (escolha 4) > cliente sem telefone e responsável com telefone: o texto exato, com a pergunta em itálico`, reprovou com `AssertionError: expected <span class="spinner-wrap" …(1)>…(2)</span> to be null`. O teste afirmava `queryByRole("status")` nulo logo depois de `renderProfile`, que só espera o título do cliente; a memória do cliente carrega em paralelo e mostra o spinner (`role="status"`) até a lista chegar, e sob a carga da suíte inteira ele ainda estava na tela. O Goal146 não toca o frontend. A correção acrescentou antes da asserção um `await waitFor(() => expect(screen.queryByText("Carregando memória do cliente")).toBeNull())`, com comentário; a asserção (a nota não tem `role` `status` nem `alert`) não foi removida nem afrouxada. O teste do Goal144 passou isolado (43 de 43) e a suíte do frontend inteira passou (206 arquivos e 3017 testes) antes e depois da edição, então a falha é intermitente; a evidência de que a corrida foi fechada é a leitura do código e as execuções verdes, não uma reprodução forçada. **Esta é a única edição fora de `apps/ai-orchestrator/`, de `scripts/` e dos registros, e o Goal (§10 do critério de aceite) não a autoriza; o review decide.**
+3. **`validate:integration` (DIAG-003).** A mudança de schema fez dois testes de integração da IA, que semeiam `Contact` fora do código novo, reprovarem: (i) `tests/integration/goal109-avenly-human-control-source.test.ts > goal109 migration renames HumanControlSource ATENDLY to AVENLY (prova 2)` com `PrismaClientKnownRequestError`, `Invalid this.prisma.contact.upsert() invocation in … SessionService.ts:162:47` e `The column Contact.lastScheduledCustomerId does not exist in the current database` (o teste monta o banco aplicando só as migrations até a do Goal115, e a `SessionService` real do semeio usa o client atual); (ii) cinco testes de `tests/integration/customer-memory.test.ts`, que semeiam o contato só com `customerId`: `guarda a memória inferida com origem, conversa e mensagens de origem` (`expected { applied: +0, …(1) } to deeply equal { applied: 1 }`, recebido `skipped: "customer_not_linked"`), `substitui a memória contraditória sem apagar a anterior` (`expected [] to have a length of 2 but got +0`), `reforço atualiza lastReinforcedAt sem criar linha nova` (`expected [] to have a length of 1 but got +0`), `a profissional permite, revoga e remove — inclusive memória inferida` (`TypeError: Cannot read properties of undefined (reading 'id')`) e `sessão pessoal e atendimento humano não viram memória da pessoa` (`skipped: "personal_session"` esperado, `"customer_not_linked"` recebido). O alinhamento só mudou dados de teste: o `goal109` passou a aplicar a migration do Goal146 depois da do Goal115, o semeio do contato em `customer-memory.test.ts` ganhou `lastScheduledCustomerId: CUSTOMER` e `lastScheduledAt: NOW`, e o teste `contato sem pessoa vinculada não gera memória` passou a anular também as duas colunas novas. Nenhuma linha `expect` mudou. O resultado do diagnóstico (DIAG-003) não foi gravado pelo harness (`UNKNOWN_FATAL`); a descrição acima vem do `git diff` desses dois arquivos e da segunda execução, que passou 36 de 36.
+
+### Gate autenticado
+
+O gate autenticado deu **310 passed** e 0 retentativas na árvore final (segunda execução de `validate:integration`, WU-11), igual ao Goal145. A primeira execução parou antes dele (`rehearse:goal033-authenticated-ui` não rodou). O Goal não tocou `authenticated-matrix.spec.ts`, `e2e/routes.ts` nem a semente do gate, e nenhuma tela mudou.
+
+### Controles negativos
+
+Feitos pela WU-04 depois da última edição de código de `src` (as três correções posteriores, DIAG-001 a DIAG-003, só tocaram testes e o ambiente; `src` não mudou depois), cada um editando só um arquivo de `src`, rodando o mesmo comando, reprovando e revertendo por cópia do backup (`/tmp/wu04/*.bak`, fora do repositório), com `cmp` igual ao backup em cada um (`A_REVERTED_OK` a `D_REVERTED_OK`). Comando dos quatro, em `apps/ai-orchestrator`: `npx vitest run tests/tools/goal146-contact-of-writer.test.ts tests/memory/goal146-memory-of-scheduled.test.ts`. Sem controle, o comando dá 2 arquivos e **19** de 19 passando. A WU-04 não guardou a saída bruta; a WU-12 **refez os quatro controles numa cópia do `apps/ai-orchestrator` atual** (fora do repositório, com o `node_modules` ligado por junção, mesma edição de cada controle, saída bruta guardada fora do repositório) e as mensagens abaixo são as dessa saída bruta, iguais às do relatório da WU-04 (mesmos testes, mesmas linhas e mesmas contagens: 4, 2, 3 e 1 reprovados). Depois dos controles da WU-12, os três arquivos de `src` da worktree continuam com `cmp` igual aos backups da WU-04, e a cópia foi apagada. Os testes de (a) têm o prefixo `Goal146 — gravação do contato na confirmação >`; os de (b), `Goal146 — pessoa provável pela última pessoa agendada >`; os de (c), `Goal146 — memória inferida vai para a última pessoa agendada >`; o de (d), `Goal146 — âncora do resumo >`.
+
+**(a) A gravação na confirmação volta a pôr `customerId` = a pessoa agendada.** Em `apps/ai-orchestrator/src/modules/tools/assistant-tools.ts`, `recordScheduledCustomer`: `...(linkedTo ? { customerId: linkedTo, customerLinkedAt: now } : {})` trocado por `customerId: scheduledCustomerId, customerLinkedAt: now,`. Saída 1: **4 reprovados, 15 passando**, todos em `tests/tools/goal146-contact-of-writer.test.ts`.
+
+| Teste que reprovou (linha) | Mensagem de asserção |
+| --- | --- |
+| `confirmar para Pedro: customerId = Maria e lastScheduledCustomerId = Pedro num só updateMany` (linha 330; **o teste que o Goal nomeia**) | `AssertionError: expected { …(4) } to match object { customerId: 'cust-maria', …(1) }` |
+| `vínculo antigo no Pedro volta para a Maria na próxima confirmação para o Pedro` (linha 398) | `AssertionError: expected { customerId: 'cust-pedro', …(1) } to deeply equal { customerId: 'cust-maria', …(1) }` |
+| `leitura dos candidatos falha depois de createAppointment: mesmo sucesso, só lastScheduled* gravado` (linha 421) | `AssertionError: expected { …(4) } to not have property "customerId"` |
+| `série confirmada para o Pedro grava lastScheduledCustomerId = Pedro e customerId = Maria` (linha 438) | `AssertionError: expected { …(4) } to match object { customerId: 'cust-maria', …(1) }` |
+
+**(b) `resolveScheduleCustomer` volta a ler o vínculo.** No mesmo arquivo, o método `lastScheduledCustomerId`: `select: { lastScheduledCustomerId: true }` e `return contact?.lastScheduledCustomerId ?? null` trocados por `customerId`. Saída 1: **2 reprovados, 17 passando**, ambos em `tests/tools/goal146-contact-of-writer.test.ts`.
+
+| Teste que reprovou (linha) | Mensagem de asserção |
+| --- | --- |
+| `customerId = Maria e lastScheduledCustomerId = Pedro: propõe o Pedro com LAST_BOOKED_FOR_DEPENDENT` (linha 470; **o teste que o Goal nomeia**) | `AssertionError: expected { requestId: 'request-1', …(6) } to match object { ok: true, data: { …(1) } }` (o diff mostra `proposedCustomerId: "cust-pedro"`, `reason: "LAST_BOOKED_FOR_DEPENDENT"` e `requiresConfirmation: true` esperados e ausentes; recebido `proposedCustomerId: "cust-maria"`) |
+| `dado antigo, customerId = Pedro e lastScheduledCustomerId = Maria: não propõe o Pedro` (linha 496) | `AssertionError: expected { requestId: 'request-1', …(6) } to match object { ok: true, data: { …(1) } }` (esperado `proposedCustomerId: "cust-maria"`, recebido `"cust-pedro"`) |
+
+**(c) `recordTurnInference` volta a usar `contact.customerId`.** Em `apps/ai-orchestrator/src/modules/memory/customer-memory-service.ts`, o `select` e `const scheduledCustomerId = contact.lastScheduledCustomerId` passam a usar `customerId`. Saída 1: **3 reprovados, 16 passando**, todos em `tests/memory/goal146-memory-of-scheduled.test.ts`.
+
+| Teste que reprovou (linha) | Mensagem de asserção |
+| --- | --- |
+| `depois da confirmação para o Pedro, a memória inferida é do Pedro` (linha 106; **o teste que o Goal nomeia**) | `AssertionError: expected false to be true // Object.is equality` |
+| `depois da série do Pedro, a memória inferida também é do Pedro` (linha 115) | `AssertionError: expected [ 'customer-maria', 'customer-maria' ] to not include 'customer-maria'` |
+| `sem lastScheduledCustomerId o motivo continua customer_not_linked, mesmo com vínculo` (linha 140) | `AssertionError: expected { applied: 1 } to deeply equal { applied: +0, …(1) }` |
+
+**(d) `startSummaryRun` sem a procura por `lastScheduledCustomerId`.** Em `apps/ai-orchestrator/src/modules/memory/customer-summary-service.ts`, o `?? (await this.prisma.contact.findFirst({ where: { …, lastScheduledCustomerId: input.customerId }, orderBy: { lastScheduledAt: "desc" }, … }))` foi removido. Saída 1: **1 reprovado, 18 passando**.
+
+| Teste que reprovou (linha) | Mensagem de asserção |
+| --- | --- |
+| `tests/memory/goal146-memory-of-scheduled.test.ts > Goal146 — âncora do resumo > o resumo do Pedro, sem contato com customerId = Pedro, ancora na conversa da Maria` (linha 277; **o teste que o Goal nomeia**) | `AppError: Customer is not linked to a contact.` (código `CUSTOMER_NOT_LINKED`, lançado por `startSummaryRun`) |
+
+Os quatro controles reprovaram os testes que o Goal nomeia. Depois deles, a árvore voltou à anterior (`cmp` igual, `goal146` 19 de 19 passando). Uma tentativa da WU-04 de editar (d) por um script Python em heredoc travou em segundo plano e foi encerrada sem tocar o arquivo; o `cmp` confirmou o arquivo intacto e a edição foi refeita pela ferramenta de edição.
+
+### Asserções trocadas
+
+Só as que fixavam o comportamento antigo, como a escolha 8 do Goal manda (WU-02 e WU-03; o `git diff` das suítes antigas toca só as linhas abaixo e a forma dos falsos). Nenhuma outra asserção dessas suítes mudou. Os quatro testes que reprovaram depois da mudança de código de `assistant-tools.ts` (WU-02, antes de qualquer ajuste de teste) são exatamente os de 1 a 4 abaixo; os itens 5 e 6 vêm da memória e do resumo (WU-03).
+
+1. `apps/ai-orchestrator/tests/tools/goal142-guardian-dependents.test.ts`, "contato vinculado a Maria: propõe Maria, Pedro vem em candidates com scheduledBy, e prepare com o customerId de Pedro agenda para Pedro e vincula o contato a ele" (linha 380; gravação do `Contact.customerId` com a pessoa agendada quando ela é dependente).
+   - Antes: `expect(store.contactLinks[0].data.customerId).toBe(pedro.id);`
+   - Depois: `expect(store.contactLinks[0].data.customerId).toBe(maria.id);` e `expect(store.contactLinks[0].data.lastScheduledCustomerId).toBe(pedro.id);`
+2. `apps/ai-orchestrator/tests/tools/goal143-customer-of-number.test.ts`, "dependente confirmado: agenda para ele, como no 142, com uma leitura dos candidatos por prepare" (linha 448; mesma escolha).
+   - Antes: `expect(store.contactLinks[0]?.data.customerId).toBe(pedro.id);`
+   - Depois: `expect(store.contactLinks[0]?.data.customerId).toBe(maria.id);` e `expect(store.contactLinks[0]?.data.lastScheduledCustomerId).toBe(pedro.id);`
+3. `apps/ai-orchestrator/tests/tools/goal142-guardian-dependents.test.ts`, "contato vinculado a Pedro: prepare sem customerId propõe Pedro com LAST_BOOKED_FOR_DEPENDENT e nada é confirmado sem a resposta" (linha 318; a pessoa provável lida do vínculo). A asserção **não mudou**: mudou o falso de `Contact` (`createPrisma`), que devolvia `{ customerId: linkedCustomerId }` e passa a devolver `{ lastScheduledCustomerId: linkedCustomerId }`, de modo que o Pedro chega por `lastScheduledCustomerId`.
+4. `apps/ai-orchestrator/tests/tools/goal145-number-appointments.test.ts`, "contato vinculado ao Pedro: prepare de create_appointment sem customerId continua propondo o Pedro com LAST_BOOKED_FOR_DEPENDENT" (linha 385; mesma escolha). Mesmo ajuste do falso `createPrisma` (`{ lastScheduledCustomerId: linkedCustomerId }`); nenhuma linha `expect` mudou.
+5. `apps/ai-orchestrator/tests/memory/customer-memory-inference.test.ts`, "não infere de contato sem pessoa vinculada" (a memória inferida gravada em `contact.customerId`). A asserção **não mudou** (`skipped: "customer_not_linked"`); mudou o dado: `contact({ customerId: null })` passou a `contact({ customerId: null, lastScheduledCustomerId: null })`, porque o contato do helper do arquivo agora traz `lastScheduledCustomerId: CUSTOMER` e, sem o campo nulo, inferiria.
+6. A âncora do resumo só pelo vínculo: `customer-summary-service.test.ts` **não precisou de mudança** (o falso devolve `null` nas duas buscas quando o contato não está vinculado, e `CUSTOMER_NOT_LINKED` continua válido).
+
+Os falsos de Prisma que montam `Contact` ganharam os campos novos só na forma: `tests/memory/fake-memory-prisma.ts` (`ContactRow` com `lastScheduledCustomerId` e `lastScheduledAt`), `tests/evals/harness.ts` (o falso da memória, com `lastScheduledCustomerId` igual a `customerId` e `lastScheduledAt: null`, sem o que as evals de inferência quebrariam com a leitura nova), o helper `contact()` de `customer-memory-inference.test.ts`, e o tipo de `contactLinks` e do `updateMany` falso dos três arquivos de `tests/tools/` (`data: { customerId?: string; lastScheduledCustomerId: string }`). `assistant-tools.test.ts` não mudou: o falso dele devolve `{ customerId }`, que a tool não lê mais, e nenhuma asserção dele depende da pessoa provável. Os arquivos novos são `goal146-contact-of-writer.test.ts`, `goal146-memory-of-scheduled.test.ts` e `goal146-contact-last-scheduled.test.ts`.
+
+**Pino de contagem.** O único pino que reprovou foi o de arquivos varridos (Goal046 e Goal047, WU-04), por falta do client gerado do BFF na worktree, não por mudança de código (ver "As três reprovações", item 1); não foi afrouxado. Nenhum pino de AST, de linha de egresso HTTP ou de texto mudou.
+
+### Escopo
+
+Os arquivos mudados são os do §1, do §2 e da "Documentação" do Goal, mais os testes de `apps/ai-orchestrator/tests/` e a exceção declarada abaixo. IA (`apps/ai-orchestrator/`): `prisma/schema.prisma`, a migration nova, `src/modules/tools/assistant-tools.ts` (`recordScheduledCustomer`, `contactLinkFor`, `lastScheduledCustomerId` e as chamadas na confirmação e na série), `src/modules/memory/customer-memory-service.ts` (`recordTurnInference`) e `src/modules/memory/customer-summary-service.ts` (`startSummaryRun`). Ensaio: `scripts/goal074-human-takeover-migration-rehearsal.mjs` (`alignAiDurabilityTargetWithGoal146`). Testes de `apps/ai-orchestrator/tests/`: os três arquivos novos, as suítes de `tests/tools/` e `tests/memory/` e o `harness.ts` de `tests/evals/` acima, e as duas suítes de `tests/integration/` alinhadas (DIAG-003). E `DECISIONS.md`, `DATA_MIGRATION.md`, `CURRENT_STATE.md` e este arquivo, todos por acréscimo. O Scheduling, o BFF, o contrato público, `PUBLIC_API_V1.md`, as telas do frontend, o prompt, `goals/`, `reviews/`, `MIGRATION_STATUS.md` e `MASTER_PLAN.md` não foram tocados.
+
+### Desvios do texto do Goal, para o review
+
+- **Partida medida depois da edição.** Nenhuma WU mediu a baseline antes da primeira edição; a WU-12 a mediu numa cópia de `HEAD` fora do repositório (ver "Contagens"). O número bate com a última contagem aceita e a conta do final fecha (+2 arquivos e +19 testes).
+- **Um arquivo de frontend mudou, fora do §10 do critério de aceite.** `apps/frontend/tests/goal144-perfil-responsavel.test.tsx` ganhou um `waitFor` para fechar uma corrida de teste do Goal144 que reprovou `validate:core` (ver "As três reprovações", item 2). É só teste, nenhuma asserção foi afrouxada, e o Goal146 não toca nenhum arquivo do frontend fora dele.
+- **`tests/evals/harness.ts` e duas suítes de `tests/integration/`.** Não estavam nas listas das Work Units, mas estão sob `apps/ai-orchestrator/tests/`, que o §10 autoriza, e mudaram só na forma dos dados e dos falsos.
+- **Prisma gerado.** A worktree não tinha o client gerado do BFF; DIAG-001 rodou `npx prisma generate` em `apps/bff` (o `generated` é ignorado pelo git, nada entrou no diff).
+- **Lint de `tests/`.** A WU-02 viu 3 erros de lint já existentes em `goal142-guardian-dependents.test.ts` (linhas 12, 867 e 868, código que não foi tocado); o `npm run lint` do Goal cobre só `src` e passa. Não foram corrigidos (fora do escopo, como no review145). A WU-03 viu `prettier --check` apontar `customer-memory-prompt.test.ts`, `customer-summary-service.test.ts` e `evals/harness.ts`; não os reformatou, e não confirmou se o aviso já existia.
+- **O resultado do DIAG-003 não foi gravado.** O harness registrou `UNKNOWN_FATAL` para essa unidade; as mudanças dela estão no `git diff` e foram exercidas pela segunda execução de `validate:integration`.
+
+### Não executado
+
+- A contagem de testes por passo de `validate:core` e de `validate:integration`: o relatório que o IA Loop guarda omite o meio da saída, então a contagem de testes da unidade da IA acima é a do `npm test` direto, não a do gate. O Scheduling e o frontend não mudaram em código de produto, e as contagens deles (Scheduling: unidade 43 arquivos e 594 testes, Goal142; frontend: 206 arquivos e 3017 testes, Goal144, reconfirmada pelo DIAG-002) não foram refeitas por este Goal no gate.
+- A suíte de integração da IA com banco inteira à parte do `validate:integration` (o `goal146` foi rodado à parte pela WU-01, 3 de 3).
+- Uma conversa real no WhatsApp com o responsável que agenda para o dependente, e a ação "Conversa" do perfil lida depois de uma confirmação.
+- O `validate:ui`, que não se aplica (nenhuma tela mudou).
+
+### Verificação final do Developer
+
+`git diff --check`, rodado pelo Developer (WU-12) na worktree **depois** de escrever os quatro registros: saída 0, sem erro de espaço em branco (só quatro avisos de fim de linha do git, em arquivos de `src` e de `tests/memory/` de outras Work Units, que não são erro; os quatro registros são acréscimo puro: 181 linhas a mais e nenhuma a menos em `docs/migration/`). Os quatro registros são só acréscimo. Os arquivos novos, não rastreados (`goal146-*.test.ts` e a migration), não entram nesse `git diff`. A WU-13 do IA Loop o roda de novo, na árvore final, e o resultado dela é anotado no review.
+
+### Rodada 2
+
+A rodada 1 terminou com o resultado do Developer `BLOCKED` e o pré-review do IA Loop em `PRE_REVIEW_INCOMPLETE` (`WORK_UNIT_NOT_COMPLETED`, 1 blocker): o DIAG-003 foi marcado `FAILED`/`UNKNOWN_FATAL`, código `ACCEPTANCE_NOT_MET` (declarou `COMPLETED` com um critério não cumprido), e o resultado dele não foi gravado. A rodada 2 foi de correção (`CODE_OR_EVIDENCE`), com uma unidade de modelo e os gates de novo:
+
+- **FIX-001** (`COMPLETED`, nenhum arquivo alterado): conferiu que o que o DIAG-003 devia entregar já estava na árvore (o `goal109` aplica a migration do Goal146 depois da do Goal115; o semeio de `customer-memory.test.ts` traz `lastScheduledCustomerId` e `lastScheduledAt`; o ensaio `goal074` tem `alignAiDurabilityTargetWithGoal146`) e que a WU-11-g2 da rodada 1, publicada depois do DIAG-003, deu `validate:integration` com saída 0 e 36 de 36. Rodou `npx tsc --noEmit -p .` (sem erro) e as suítes `customer-memory`, `goal109` e `goal146` sem banco (2 arquivos e 19 testes passando, 3 arquivos e 17 testes pulados).
+- **Árvore.** O hash do diff rastreado é `752e1247d6946a72e0517f57e942401fdd8b310dba57157bbf09fa36f6efaf77` antes da rodada 2 e no review; o código não mudou entre as rodadas.
+
+| Gate | Resultado na rodada 2 | Quem obteve |
+| --- | --- | --- |
+| Typecheck da IA (`npx tsc --noEmit`) | saída 0, 3,6 s | IA Loop, WU-05 |
+| Lint da IA (`npm run lint`) | saída 0, 4,7 s | IA Loop, WU-06 |
+| `npx vitest run goal146` | saída 0, 2 arquivos e **19** testes passando, 1 arquivo e 3 testes pulados (sem banco) | IA Loop, WU-07 |
+| Unidade da IA (`npm test`) | saída 0, **104** arquivos e **1338** testes passando, 17 arquivos e 115 testes pulados, 23,5 s | IA Loop, WU-08 |
+| `test:gate` | saída 0, **298** testes, 298 passando, 0 falhas | IA Loop, WU-09 |
+| `validate:core` | saída 0, 117,4 s, 17 passos: **15** passaram, 0 falharam, 2 pulados (`test:bff` e `test:health-worker`) | IA Loop, WU-10 |
+| `validate:integration` | reaproveitado da WU-11-g2 da rodada 1 (nenhum arquivo fora de `docs/**/*.md` mudou desde aquela execução): saída 0, 794,3 s, **36** de 36 passos, gate autenticado com **310** passed e 0 retentativas | IA Loop, WU-11 (reaproveitado) |
+| `git diff --check` | saída 0, 97 ms | IA Loop, WU-13 |
+
+Todos os gates da rodada 2 e a WU-11-g2 reaproveitada têm o mesmo `codeFingerprint`, `code-v1:3880e753d6f17c25d773c029643676f15a03198b6e031bbb2282c138e91bec53`, e `attemptId` `a1`.
+
+### Aceite
+
+Goal146 aceito na rodada 2 ([review146](reviews/146-review.md)), sem blocker. Conferência do Tech Lead na árvore aceita, sem edição de código no meio:
+
+| Verificação | Resultado |
+| --- | --- |
+| Cobertura dos critérios, só pelo diff | §1, §2, §3 e critérios 1 a 8 e 11 `COVERED`; 9 (gates) `UNCLEAR` pelo diff e resolvido pelos resultados das WU acima; 10 (escopo) `NOT_COVERED` pela edição do teste do Goal144, aceita como desvio |
+| Código (§1) | migration aditiva e idempotente, backfill igual à escolha 2; `recordScheduledCustomer` com um só `updateMany` e o vínculo de `contactLinkFor` depois do efeito, com falha da leitura sem derrubar a confirmação; chamado depois de `createAppointment` e de `confirmAppointmentSeries`; `resolveScheduleCustomer`, `recordTurnInference` e `startSummaryRun` lendo `lastScheduledCustomerId`; `loadForPrompt` em `customerId`; a inferência roda depois das tools do `AiRun` (`assistant.service.ts:1523`) |
+| Suítes antigas | só as asserções da escolha 8 (`goal142`:380 e `goal143`:448); o resto é forma de falsos e de semeio, sem outro `expect` mudado |
+| Desvio do critério 10 | `apps/frontend/tests/goal144-perfil-responsavel.test.tsx`: só um `waitFor` até o spinner "Carregando memória do cliente" (`CustomerMemory.tsx:225`) sumir; as asserções de `role` `status` e `alert` continuam. Aceito, como no review130 |
+| `npx vitest run goal146 goal142 goal143 goal145 customer-memory-inference` em `apps/ai-orchestrator`, no fechamento | 6 arquivos e **89** testes passando, 1 arquivo e 3 testes pulados (a integração `goal146`, sem banco) |
+| Escopo do diff | 22 arquivos (18 rastreados e 4 novos): o §1 da IA, o ensaio `goal074`, os testes de `apps/ai-orchestrator/tests/`, o teste do Goal144 no frontend e os quatro registros; nada no Scheduling, no BFF, no contrato público, em `PUBLIC_API_V1.md` ou no `src` do frontend |
+
+Os quatro controles negativos são os do Developer (WU-04, refeitos pela WU-12 numa cópia fora do repositório); o Tech Lead não os refez. A partida da unidade da IA é a da WU-12, medida depois da primeira edição numa cópia de `HEAD`, e não foi refeita. A integração `goal146` com banco só tem a execução da WU-01 e a do `validate:integration`. Uma conversa real no WhatsApp, a ação "Conversa" do perfil lida depois de uma confirmação, um banco com dados reais e a contagem de testes por passo de `validate:core` e de `validate:integration` continuam sem prova.

@@ -414,6 +414,12 @@ describe("A nota do que a IA faz (escolha 4)", () => {
       within(note).getByText("“Seria para Pedro novamente?”").tagName,
     ).toBe("EM");
     expect(note).not.toHaveAttribute("role");
+    // A memória do cliente carrega em paralelo e mostra um spinner
+    // role="status"; sob carga ele ainda estava na tela quando a asserção
+    // rodava. Espere a carga terminar: a nota é que não pode ter status.
+    await waitFor(() =>
+      expect(screen.queryByText("Carregando memória do cliente")).toBeNull(),
+    );
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
   });

@@ -243,20 +243,24 @@ function createAgenda(
   return { gateway: gateway as unknown as SchedulingGateway, calls };
 }
 
-/** `Contact.customerId` é o vínculo: a última pessoa atendida pelo número. */
+/** `Contact.lastScheduledCustomerId` é a última pessoa agendada pelo número. */
 function createPrisma(linkedCustomerId: string | null = null) {
   const store = {
     state: { availabilityLookups: [availabilityLookup()] } as Record<
       string,
       unknown
     >,
-    contactLinks: [] as Array<{ data: { customerId: string } }>,
+    contactLinks: [] as Array<{
+      data: { customerId?: string; lastScheduledCustomerId: string };
+    }>,
   };
   const prisma = {
     contact: {
       findUnique: async () =>
-        linkedCustomerId ? { customerId: linkedCustomerId } : null,
-      updateMany: async (args: { data: { customerId: string } }) => {
+        linkedCustomerId ? { lastScheduledCustomerId: linkedCustomerId } : null,
+      updateMany: async (args: {
+        data: { customerId?: string; lastScheduledCustomerId: string };
+      }) => {
         store.contactLinks.push(args);
         return { count: 1 };
       },
@@ -467,7 +471,8 @@ describe("Goal143 — create_appointment prepare só com pessoa do número", () 
       context(nextTurn),
     );
     expect(calls.createAppointment[0].customerId).toBe(pedro.id);
-    expect(store.contactLinks[0]?.data.customerId).toBe(pedro.id);
+    expect(store.contactLinks[0]?.data.customerId).toBe(maria.id);
+    expect(store.contactLinks[0]?.data.lastScheduledCustomerId).toBe(pedro.id);
   });
 
   it("sem customerId: igual a hoje, uma leitura dos candidatos por prepare", async () => {

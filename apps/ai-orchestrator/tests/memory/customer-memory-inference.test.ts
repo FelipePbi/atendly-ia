@@ -61,6 +61,8 @@ function contact(overrides: Partial<ContactRow> = {}): ContactRow {
     tenantId: TENANT,
     ignored: false,
     customerId: CUSTOMER,
+    lastScheduledCustomerId: CUSTOMER,
+    lastScheduledAt: null,
     categoryOverride: null,
     ...overrides,
   };
@@ -283,7 +285,9 @@ describe("inferência de memória a partir do atendimento confirmado no turno", 
   });
 
   it("não infere de contato sem pessoa vinculada", async () => {
-    const subject = service({ contacts: [contact({ customerId: null })] });
+    const subject = service({
+      contacts: [contact({ customerId: null, lastScheduledCustomerId: null })],
+    });
 
     expect(await infer(subject)).toEqual({
       applied: 0,

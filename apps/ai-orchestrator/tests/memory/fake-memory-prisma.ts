@@ -35,6 +35,9 @@ export interface ContactRow {
   tenantId: string;
   ignored: boolean;
   customerId: string | null;
+  /** Goal146: ultima pessoa agendada por este numero; pode ser um dependente. */
+  lastScheduledCustomerId: string | null;
+  lastScheduledAt: Date | null;
   categoryOverride: "COMMERCIAL" | "UNCLASSIFIED" | "PERSONAL" | null;
 }
 

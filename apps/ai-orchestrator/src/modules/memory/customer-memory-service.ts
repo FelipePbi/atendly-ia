@@ -271,7 +271,8 @@ export class CustomerMemoryService
   }
 
   /**
-   * Memoria permitida da pessoa vinculada ao contato, com origem e idade.
+   * Memoria permitida da pessoa vinculada ao contato (`customerId`, quem
+   * escreve por este numero), com origem e idade.
    *
    * Devolve vazio — nunca lanca — quando nao ha contato, o contato esta
    * ignorado ou nao existe pessoa vinculada: o prompt simplesmente nao ganha a
@@ -334,8 +335,8 @@ export class CustomerMemoryService
   /**
    * Inferencia a partir do que um turno da IA **confirmou**.
    *
-   * A porta de entrada e a regra inteira: contato existente e vinculado a uma
-   * pessoa, nao ignorado, sessao nao pessoal e nao atendida por humano, e
+   * A porta de entrada e a regra inteira: contato existente com uma ultima
+   * pessoa agendada (`lastScheduledCustomerId`), nao ignorado, sessao nao pessoal e nao atendida por humano, e
    * atendimento efetivamente confirmado neste turno. Sem isso, nada e gravado
    * e o motivo volta nomeado.
    */
@@ -353,14 +354,21 @@ export class CustomerMemoryService
       where: {
         tenantId_id: { tenantId: input.tenantId, id: conversation.contactId },
       },
-      select: { ignored: true, customerId: true, categoryOverride: true },
+      select: {
+        ignored: true,
+        lastScheduledCustomerId: true,
+        categoryOverride: true,
+      },
     });
     if (!contact) return { applied: 0, skipped: "no_contact" };
     if (contact.ignored) return { applied: 0, skipped: "contact_ignored" };
     if (contact.categoryOverride === "PERSONAL") {
       return { applied: 0, skipped: "personal_session" };
     }
-    if (!contact.customerId) {
+    // A memoria inferida pertence a pessoa que o turno acabou de agendar, nao a
+    // quem escreve: o vinculo (`customerId`) pode ser o responsavel (Goal146).
+    const scheduledCustomerId = contact.lastScheduledCustomerId;
+    if (!scheduledCustomerId) {
       return { applied: 0, skipped: "customer_not_linked" };
     }
 
@@ -397,7 +405,7 @@ export class CustomerMemoryService
     for (const candidate of candidates) {
       const changed = await this.applyInferredCandidate({
         tenantId: input.tenantId,
-        customerId: contact.customerId,
+        customerId: scheduledCustomerId,
         conversationId: input.conversationId,
         sourceMessageIds: input.sourceMessageIds,
         candidate,

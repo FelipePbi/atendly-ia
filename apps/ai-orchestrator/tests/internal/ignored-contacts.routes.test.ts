@@ -35,8 +35,21 @@ interface ContactRow {
 function fakePrisma(options: { activeChannel: boolean }) {
   const contacts: ContactRow[] = [];
   let sequence = 0;
-  return {
+  const findByKey = (key: {
+    tenantId: string;
+    channelId: string;
+    externalContactId: string;
+  }) =>
+    contacts.find(
+      (row) =>
+        row.tenantId === key.tenantId &&
+        row.channelId === key.channelId &&
+        row.externalContactId === key.externalContactId,
+    );
+  const prisma = {
     contacts,
+    // Goal141: "Remover" grava numa transacao; o falso nao desfaz nada.
+    $transaction: async <T>(fn: (tx: unknown) => Promise<T>) => fn(prisma),
     channelConnection: {
       findUnique: async ({
         where,
@@ -51,10 +64,27 @@ function fakePrisma(options: { activeChannel: boolean }) {
         };
       },
     },
-    // Goal139: "Remover" le o contato antes de gravar e procura as sessoes
-    // abertas dele; esta suite nao tem sessao.
+    // Goal139/141: "Remover" procura as sessoes abertas do contato que
+    // desmarcou; esta suite nao tem sessao.
     conversationSession: { findMany: async () => [] },
     contact: {
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: {
+          tenantId: string;
+          channelId: string;
+          externalContactId: string;
+          ignored: boolean;
+        };
+        data: Partial<ContactRow>;
+      }) => {
+        const existing = findByKey(where);
+        if (!existing || existing.ignored !== where.ignored) return { count: 0 };
+        Object.assign(existing, data);
+        return { count: 1 };
+      },
       findUnique: async ({
         where,
       }: {
@@ -109,6 +139,7 @@ function fakePrisma(options: { activeChannel: boolean }) {
       },
     },
   };
+  return prisma;
 }
 
 async function buildApp(options: { activeChannel: boolean }) {

@@ -136,9 +136,11 @@ function fakePrisma(options: {
       matches(row, composite ?? byId ?? where),
     );
   };
-  return {
+  const prisma = {
     contacts,
     sessions,
+    // Goal141: "Remover" grava numa transacao; o falso nao desfaz nada.
+    $transaction: async <T>(fn: (tx: unknown) => Promise<T>) => fn(prisma),
     channelConnection: {
       findUnique: async ({
         where,
@@ -190,6 +192,17 @@ function fakePrisma(options: {
         if (!existing) throw new Error("contact not found");
         Object.assign(existing, data);
         return existing;
+      },
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: Record<string, unknown>;
+        data: Partial<ContactRow>;
+      }) => {
+        const affected = contacts.filter((row) => matches(row, where));
+        for (const row of affected) Object.assign(row, data);
+        return { count: affected.length };
       },
       upsert: async ({
         where,
@@ -270,6 +283,7 @@ function fakePrisma(options: {
       },
     },
   };
+  return prisma;
 }
 
 async function buildApp(options: Parameters<typeof fakePrisma>[0]) {

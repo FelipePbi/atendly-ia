@@ -501,6 +501,13 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
    * `Contact.upsert` cria o contato quando ele ainda nao existe — a marcacao
    * e a mesma regra absoluta de `setIgnored`, so que a origem ("onboarding")
    * distingue quem marcou sem session/conversa aberta.
+   *
+   * "Remover" (`ignored: false`) e tudo ou nada (Goal141): a limpeza do
+   * contato e a decisao das sessoes abertas acontecem numa transacao so. A
+   * limpeza e condicional a `ignored: true`, entao quem estava ignorado e
+   * decidido pela propria escrita: falha no meio desfaz tudo e o pedido
+   * repetido ainda encontra o contato ignorado; dois pedidos simultaneos
+   * gravam a decisao uma vez so.
    */
   async setIgnoredByExternalContact(input: {
     tenantId: string;
@@ -524,34 +531,41 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
         externalContactId: input.externalContactId,
       },
     };
-    const wasIgnored = input.ignored
-      ? false
-      : ((await this.prisma.contact.findUnique({ where: key }))?.ignored ??
-        false);
     const ignoredFields = {
       ignored: input.ignored,
       ignoredAt: input.ignored ? now : null,
       ignoredBy: input.ignored ? (input.actor ?? null) : null,
       ignoredSource: input.ignored ? (input.source ?? "onboarding") : null,
     };
-    const contact = await this.prisma.contact.upsert({
-      where: key,
-      update: ignoredFields,
-      create: {
-        tenantId: input.tenantId,
-        channelId: input.channelId,
-        externalContactId: input.externalContactId,
-        ...ignoredFields,
-      },
-    });
-    if (wasIgnored) {
-      await this.keepOpenSessionsOutOfAi({
-        tenantId: input.tenantId,
-        contactId: contact.id,
-        actor: input.actor ?? null,
-        now,
+    const upsertContact = (db: DbClient) =>
+      db.contact.upsert({
+        where: key,
+        update: ignoredFields,
+        create: {
+          tenantId: input.tenantId,
+          channelId: input.channelId,
+          externalContactId: input.externalContactId,
+          ...ignoredFields,
+        },
       });
-    }
+    const contact = input.ignored
+      ? await upsertContact(this.prisma)
+      : await this.prisma.$transaction(async (tx) => {
+          const cleared = await tx.contact.updateMany({
+            where: { ...key.tenantId_channelId_externalContactId, ignored: true },
+            data: ignoredFields,
+          });
+          const current = await upsertContact(tx);
+          if (cleared.count === 1) {
+            await this.keepOpenSessionsOutOfAi(tx, {
+              tenantId: input.tenantId,
+              contact: current,
+              actor: input.actor ?? null,
+              now,
+            });
+          }
+          return current;
+        });
     return {
       contactId: contact.id,
       externalContactId: contact.externalContactId,
@@ -606,31 +620,39 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
    * "Remover" por telefone nao devolve a conversa aberta a IA: cada sessao
    * aberta e nao expirada do contato fica `PERSONAL` so nesta conversa. A
    * sessao nova, depois da inatividade, nasce sem a decisao.
+   *
+   * Roda no cliente da transacao de "Remover" e escreve pela sessao achada
+   * pelo contato: e o mesmo recalculo de `setCategoryOverride` com
+   * `scope: "CONVERSATION"`, sem reler a sessao vigente pela conversa.
    */
-  private async keepOpenSessionsOutOfAi(input: {
-    tenantId: string;
-    contactId: string;
-    actor: string | null;
-    now: Date;
-  }): Promise<void> {
-    const open = await this.prisma.conversationSession.findMany({
+  private async keepOpenSessionsOutOfAi(
+    db: DbClient,
+    input: {
+      tenantId: string;
+      contact: ContactRow;
+      actor: string | null;
+      now: Date;
+    },
+  ): Promise<void> {
+    const open = await db.conversationSession.findMany({
       where: {
         tenantId: input.tenantId,
-        contactId: input.contactId,
+        contactId: input.contact.id,
         endedAt: null,
         expiresAt: { gte: input.now },
       },
-      select: { conversationId: true },
     });
     for (const session of open) {
-      await this.setCategoryOverride({
-        tenantId: input.tenantId,
-        conversationId: session.conversationId,
-        category: "PERSONAL",
-        scope: "CONVERSATION",
-        actor: input.actor,
-        now: input.now,
-      });
+      await this.writeEffectiveCategory(
+        input.tenantId,
+        session.id,
+        {
+          sessionOverride: "PERSONAL",
+          decision: { at: input.now, actor: input.actor },
+        },
+        { session, contact: input.contact },
+        db,
+      );
     }
   }
 
@@ -747,7 +769,8 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
    * Recalcula e grava a categoria vigente da sessao sem regravar dado velho.
    *
    * Toda escrita que recalcula a categoria passa por aqui: `resolveContext`,
-   * `recordCategorySuggestion` e `setCategoryOverride`. A escrita e
+   * `recordCategorySuggestion`, `setCategoryOverride` e o "Remover" por
+   * telefone (`keepOpenSessionsOutOfAi`). A escrita e
    * condicional ao que foi lido — decisao da sessao, sugestao, categoria,
    * origem e `updatedAt` da linha —, entao uma categoria calculada antes de
    * uma decisao manual mais nova nao a apaga: a condicao falha, sessao e
@@ -757,6 +780,10 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
    * contato **antes** de recalcular a sessao, e esse recalculo muda a linha da
    * sessao: quem leu o contato antigo ou escreve antes dele (e e sobrescrito)
    * ou encontra a linha mudada e relê.
+   *
+   * `db` e o cliente da transacao quando a escrita faz parte de uma (o
+   * "Remover" por telefone, Goal141); sem ele, `this.prisma`. Nunca abre
+   * transacao propria.
    */
   private async writeEffectiveCategory(
     tenantId: string,
@@ -769,16 +796,18 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
       decision?: { at: Date; actor: string | null };
     },
     firstRead: { session?: SessionRow; contact?: ContactRow } = {},
+    db: DbClient = this.prisma,
   ): Promise<{ session: SessionRow; contact: ContactRow }> {
     let read = firstRead;
     for (let attempt = 0; attempt < CATEGORY_WRITE_ATTEMPTS; attempt += 1) {
       const session =
         read.session ??
-        (await this.prisma.conversationSession.findUniqueOrThrow({
+        (await db.conversationSession.findUniqueOrThrow({
           where: { tenantId_id: { tenantId, id: sessionId } },
         }));
       const contact =
-        read.contact ?? (await this.requireContact(tenantId, session.contactId));
+        read.contact ??
+        (await this.requireContact(tenantId, session.contactId, db));
       read = {};
 
       const sessionOverride =
@@ -825,7 +854,7 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
         data.categoryUpdatedBy = manualStamp?.actor ?? null;
       }
 
-      const written = await this.prisma.conversationSession.updateMany({
+      const written = await db.conversationSession.updateMany({
         where: {
           tenantId,
           id: session.id,
@@ -838,7 +867,7 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
         data,
       });
       if (written.count === 1) {
-        const fresh = await this.prisma.conversationSession.findUniqueOrThrow({
+        const fresh = await db.conversationSession.findUniqueOrThrow({
           where: { tenantId_id: { tenantId, id: session.id } },
         });
         return { session: fresh, contact };
@@ -894,8 +923,12 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
     });
   }
 
-  private async requireContact(tenantId: string, contactId: string) {
-    const contact = await this.prisma.contact.findUnique({
+  private async requireContact(
+    tenantId: string,
+    contactId: string,
+    db: DbClient = this.prisma,
+  ) {
+    const contact = await db.contact.findUnique({
       where: { tenantId_id: { tenantId, id: contactId } },
     });
     if (!contact) {
@@ -916,6 +949,12 @@ type SessionRow = Awaited<
   ReturnType<PrismaClient["conversationSession"]["create"]>
 >;
 type ContactRow = Awaited<ReturnType<PrismaClient["contact"]["create"]>>;
+
+/**
+ * Cliente de banco das escritas que podem rodar dentro de uma transacao
+ * (Goal141). O padrao continua sendo `this.prisma`.
+ */
+type DbClient = PrismaClient | Prisma.TransactionClient;
 
 export function toSnapshot(
   session: SessionRow,

@@ -9188,3 +9188,104 @@ Goal140 aceito na rodada 1 ([review140](reviews/140-review.md)), sem blocker. Co
 | `tooling-tests` (WU-08) | `SKIPPED`: o repositório não declara `test:ia-loop`; não se aplica |
 
 Os dez controles negativos são os do Developer (WU-03); o Tech Lead não os refez. A tela num aparelho real e "Remover", "Ignorar" e "Adicionar" contra um WhatsApp real continuam sem prova.
+
+## "Remover" um contato ignorado grava tudo ou nada, do Goal141
+
+Rodada 1, 2026-10-07, na worktree `goal-141`. Baseline `40273d8`. **Rodada 1:** a transação, o recálculo no cliente da transação, os testes `goal141` de unidade e o ajuste dos falsos de Prisma das suítes `goal139` (WU-01); a integração `goal141` contra PostgreSQL descartável e os controles (a) a (c) (WU-02); os gates do IA Loop (WU-03 a WU-09); e estes registros (WU-10). Os gates do IA Loop rodaram todos na rodada 1, na mesma árvore (`code-v1:458693ba…f260e`) e com `attemptId` `a1`, cada um na primeira tentativa. Só a IA: sem frontend, então sem `validate:ui`; sem `targets.json` e sem `visual:compare`. O Goal foi aceito na rodada 1 ([review141](reviews/141-review.md)), sem blocker; o resultado da WU-11 e a conferência do Tech Lead estão em "Aceite".
+
+### Contagens
+
+Contagens de partida (a baseline `40273d8`, **antes de editar**) e da execução final da IA:
+
+| Suíte | Partida (baseline) | Final | Diferença | Quem obteve |
+| --- | --- | --- | --- | --- |
+| Unidade da IA (`npx vitest run` em `apps/ai-orchestrator`, sem banco) | 98 arquivos passando e 15 pulados; **1262** testes passando e 108 pulados (1370) | 99 arquivos passando e 16 pulados (115); **1272** testes passando e 112 pulados (1384), saída 0, 20,0 s | +1 arquivo e +10 testes passando (`goal141-remove-ignored-contact-atomic.test.ts`, de unidade); +1 arquivo e +4 testes pulados (`goal141-remove-ignored-contact-atomic.test.ts`, de integração, que o gate sem banco pula) | Developer, WU-01 (partida e final); IA Loop, WU-06 (final, sobre a árvore final) |
+
+A primeira rodada da baseline deu 43 arquivos falhando porque faltava o client Prisma gerado na worktree; a WU-01 rodou `npx prisma generate` em `apps/ai-orchestrator` e em `apps/bff` (o pino de contagem de AST do `assistant.service.test.ts` precisa dele) e refez a baseline, que é a da tabela. Isso não entra no diff.
+
+Gates do IA Loop e do Developer:
+
+| Gate | Comando | Resultado (rodada 1) | Quem obteve |
+| --- | --- | --- | --- |
+| Typecheck da IA | `npx tsc --noEmit` (em `apps/ai-orchestrator`) | saída 0, 3,2 s, sem erro | IA Loop, WU-03 |
+| Lint da IA | `npm run lint` (`eslint src --max-warnings=0`) | saída 0, 4,0 s, 0 avisos | IA Loop, WU-04 |
+| Testes `goal141` da IA | `npx vitest run goal141` | saída 0, 1 arquivo passando com **10** testes (unidade) e 1 arquivo **pulado** com 4 testes (integração, sem `AI_TEST_DATABASE_URL`); 14 no total, 10 passando e 4 pulados, 1,3 s | IA Loop, WU-05 |
+| Testes da IA | `npm test` | saída 0, **99** arquivos e **1272** testes passando, 16 arquivos e 112 testes pulados, 20,5 s | IA Loop, WU-06 |
+| `test:gate` | `npm run test:gate` | saída 0, **297** testes, 297 passando, 0 falhas, 0 pulados, 1,0 s (igual à baseline, que é 297 do Goal140) | IA Loop, WU-07 |
+| `validate:core` | `npm run validate:core` | saída 0, 115,1 s, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, que só tem a suíte de integração, rodada no `validate:integration`; `test:health-worker`, pacote sem suíte, só a checagem de sintaxe). A auditoria estática teve 33 checagens passando e 1 pulada (`production_health`, que pede `PRODUCTION_HEALTH_TARGETS`). Primeira execução, sem pino de contagem a corrigir | IA Loop, WU-08 |
+| `validate:integration` | `npm run validate:integration` | saída 0, 772,1 s, 36 passos, **36 passaram**, 0 falharam, 0 pulados, contra `127.0.0.1:55500/ia_bff_test`. O gate autenticado (`rehearse:goal033-authenticated-ui`) deu **310 passed** e retentativas **0** ("every test passed on its first attempt"); igual à baseline do Goal140. Dentro dele, `test:ai-orchestrator-transport-durability` (que roda `vitest run tests/integration` em `apps/ai-orchestrator`, o arquivo `goal141` incluído) e `test:ai-orchestrator-content-purge` com saída 0 | IA Loop, WU-09 |
+| `git diff --check` | `git diff --check` | ver "Verificação final do Developer" abaixo; a WU-11 do IA Loop o roda de novo depois destes registros, na árvore final, e o resultado dela é anotado no review | Developer, WU-10; IA Loop, WU-11 |
+
+**O que não foi contado.** O relatório que o IA Loop guarda de `validate:core` e de `validate:integration` omite o meio da saída, então **não há contagem de testes por passo** dos gates (quantos testes tem `test:ai-orchestrator` ou `test:ai-orchestrator-transport-durability` dentro deles); o que vale deles é a saída 0 e os passos passando. Por isso a contagem de testes da IA acima é a do `vitest run` direto, não a do gate. O `validate:ui` não rodou: nenhum arquivo do frontend mudou, e o Goal não o pede.
+
+### Testes de integração contra banco
+
+- **Os 4 testes de `tests/integration/goal141-remove-ignored-contact-atomic.test.ts` (IA) rodaram contra PostgreSQL, e todos passaram.** (1) Developer, WU-02: contêiner descartável `pgvector/pgvector:0.8.6-pg15-bookworm` (`goal141-ia-test`, `127.0.0.1:55441`, banco `ai_test_goal141`), com `prisma migrate deploy` (todas as migrations OK), removido ao final com `docker rm -f`. `AI_TEST_DATABASE_URL=postgresql://pgtest:pg@127.0.0.1:55441/ai_test_goal141`. `npx vitest run tests/integration/goal141-remove-ignored-contact-atomic.test.ts`: **4 execuções seguidas, 4 de 4 passando em todas**; mais uma execução final, depois de os controles estarem revertidos, de `npx vitest run` dos três arquivos (integração `goal141`, integração `goal139`, unidade `goal141`): 3 arquivos e **21 testes passando** (4 + 7 + 10). Total: **5 execuções** do arquivo contra o banco. A integração `goal139` (7 de 7) rodou junto, sem mudança. (2) IA Loop, WU-09: dentro do `validate:integration`, o passo `test:ai-orchestrator-transport-durability` roda `vitest run tests/integration` e saiu 0, sem contagem de testes retida; o arquivo `goal141` está nessa pasta, então roda ali contra o banco que o gate provisiona (o teste é `describe.skipIf(!AI_TEST_DATABASE_URL)`, e o gate dá a variável).
+- **O mecanismo de falha e de pausa** fica só nos testes: `vi.spyOn(sessions, "writeEffectiveCategory")`, o método que "Remover" chama dentro da transação. A falha é `mockRejectedValueOnce(new Error(...))`. A pausa é um `mockImplementation` que resolve um `Deferred` `reached`, espera um `Deferred` `release` e chama o original (o `bind` é capturado antes do espião). A leitura "de fora" é feita por um segundo `PrismaClient` (outra conexão). `vi.restoreAllMocks()` no `afterEach`. Tenant, canal e telefone próprios (`tenant-goal141-remove`). **Nenhum gancho de teste entrou no código de produção** (`SessionService.ts` diz 84 inserções e 45 remoções, sem ramo de teste).
+- **Os quatro casos.** (i) falha forçada: 5xx; contato com `ignored: true` e `ignoredAt`, `ignoredBy` e `ignoredSource` iguais aos de antes; sessão `UNCLASSIFIED`/`AUTOMATIC` sem override; `evaluate` recusa com `contact_ignored`; repetido sem a falha: 200, contato limpo, sessão `PERSONAL`/`MANUAL` com override e autor, e `evaluate` recusa com motivo diferente de `contact_ignored`. (ii) transação pausada dentro da escrita da sessão, depois da limpeza do contato: o cliente de fora lê o contato ainda `ignored: true` e a sessão sem decisão; liberada a pausa, contato desmarcado e sessão `PERSONAL` aparecem juntos. (iii) dois "Remover" simultâneos: o primeiro pausa na escrita da sessão, o segundo entra e espera 300 ms, a pausa é liberada; ambos 200, `writeEffectiveCategory` chamado 1 vez, contato limpo e uma sessão com override `PERSONAL`. (iv) a sessão anterior expirada: `resolveContext` cria a sessão nova `UNCLASSIFIED`/`AUTOMATIC`, `categoryOverride` nulo e `evaluate` com `reason: null`.
+- **Limite:** (ii) e (iii) dependem de ordem entre duas conexões; as cinco execuções passaram, mas a espera de 300 ms de (iii) não é prova de ausência de corrida sob carga. A falha real do banco no meio da transação (conexão caída) não foi injetada: a falha é a do espião.
+- **A suíte inteira da IA com banco** não foi rodada à parte pelo Developer; o `validate:integration` (WU-09), que roda `tests/integration` e `tests/retention` da IA num banco que ele provisiona, saiu 0 na árvore final.
+
+### Gate autenticado
+
+O gate autenticado deu **310 passed** e 0 retentativas na árvore final (WU-09), igual à baseline do Goal140. O Goal não tocou `authenticated-matrix.spec.ts`, `e2e/routes.ts` nem a semente do gate, e nenhuma tela mudou.
+
+### Controles negativos
+
+Todos depois da última edição de código (o backup `/tmp/SessionService.bak141` de `SessionService.ts` foi tirado depois dela), cada um editando o arquivo, rodando os testes, reprovando e revertendo por cópia do backup, com `cmp` igual ao backup (`CMP_OK` nos três). As mensagens são as da saída bruta do `vitest` que a WU-02 registrou (a WU-10 não os refez). Comandos: `npx vitest run tests/integration/goal141-remove-ignored-contact-atomic.test.ts` e `npx vitest run tests/internal/goal141-remove-ignored-contact-atomic.test.ts` em `apps/ai-orchestrator`, com `AI_TEST_DATABASE_URL`; no (c), também os arquivos `goal139` (`npx vitest run` dos quatro arquivos).
+
+| Controle | Edição | Arquivo e teste que reprovou | Mensagem de asserção |
+| --- | --- | --- | --- |
+| (a) a limpeza do contato feita fora do `tx` | `SessionService.ts`: `tx.contact.updateMany` trocado por `this.prisma.contact.updateMany` | Integração (`tests/integration/goal141-remove-ignored-contact-atomic.test.ts`), **2 de 4** reprovaram: `(i) a failing session write rolls the contact back, and the repeated request applies the whole rule` (linha 207) e `(ii) another client sees the contact still ignored until the transaction commits, then contact and session change together` (linha 264). Unidade (`tests/internal/goal141-remove-ignored-contact-atomic.test.ts`), **4 de 10** reprovaram: as duas variantes de `falha forcada (%s)` e dois testes que fixam o cliente de cada escrita | (i): `AssertionError: expected { …(19) } to match object { ignored: true, …(3) }`. (ii): `AssertionError: expected false to be true // Object.is equality`. Unidade, falha forçada: `AssertionError: expected { tenantId: 'tenant-a', …(12) } to match object { ignored: true, …(3) }`; os outros dois: `AssertionError: expected [ { model: 'contact', …(2) }, …(2) ] to deeply equal [ { model: 'contact', …(2) }, …(2) ]` e `AssertionError: expected "updateMany" to not be called at all, but actually been called 1 times` |
+| (b) a escrita das sessões com a exceção engolida | `SessionService.ts`: o loop de `keepOpenSessionsOutOfAi` com `try { await this.writeEffectiveCategory(...) } catch (error) { console.error(error); }` | Integração, **1 de 4** reprovou: `(i) a failing session write rolls the contact back, and the repeated request applies the whole rule`. Unidade, **2 de 10** reprovaram: as duas variantes de `falha forcada (%s)` | `AssertionError: expected 200 to be greater than or equal to 500` (nos dois lados; as linhas `Error: ...` na saída são o `console.error` do controle, não asserção) |
+| (c) a limpeza sem a condição `ignored: true` | `SessionService.ts`: `where: { ...key.tenantId_channelId_externalContactId, ignored: true }` trocado por `where: { ...key.tenantId_channelId_externalContactId }` | Integração `goal141`, **1 de 4**: `(iii) two simultaneous removals both answer 200 and write one decision`. Unidade `goal141`, **3**: `contato que nao estava ignorado: mesmo resultado de antes, sem decisao de sessao`, `pedido repetido depois do sucesso nao grava a decisao de novo` e `a limpeza e condicional a ignored true e a escrita da sessao e a condicional do recalculo, sem update cru`. `goal139`, **2**: `goal139-ignored-contacts-list.routes.test.ts > Remover pela rota por telefone > contato que nao estava ignorado nao muda nenhuma sessao` (unidade) e `goal139-ignored-contacts.test.ts > does not touch the sessions of a contact that was not ignored` (integração). O conjunto de unidade e `goal139` (4 arquivos): 5 reprovações e 41 passando | (iii): `AssertionError: expected "writeEffectiveCategory" to be called 1 times, but got 2 times`. `contato que nao estava ignorado`, nos dois lados da unidade: `AssertionError: expected { tenantId: 'tenant-a', …(17) } to match object { category: 'COMMERCIAL', …(2) }`. `pedido repetido`: `AssertionError: expected [ { …(3) }, { …(3) } ] to have a length of 1 but got 2`. `a limpeza e condicional`: `AssertionError: expected { tenantId: 'tenant-a', …(2) } to deeply equal { tenantId: 'tenant-a', …(3) }`. Integração `goal139`: `AssertionError: expected { …(27) } to match object { category: 'UNCLASSIFIED', …(1) }` |
+
+Os três controles pedidos no Goal reprovaram os testes que o Goal nomeia: (a) reprova (i) e (ii) da integração e o teste de falha da unidade; (b) reprova o teste de falha da unidade e (i) da integração; (c) reprova o teste do contato que não estava ignorado (unidade) e (iii) da integração, e também o `goal139` equivalente. Antes disso, a WU-01 fez uma versão informal dos três (backup, `sed` e `cmp`) sobre os testes de unidade; os formais, com as mensagens acima, são os da WU-02, depois da última edição de código. Depois de cada controle, `SessionService.ts` foi conferido contra o backup (`cmp` igual); a execução final dos três arquivos (21 de 21) e o `git status` confirmaram o diff de 84 inserções e 45 remoções da WU-01 e o arquivo novo de integração, sem gancho de teste em produção.
+
+### Testes ajustados
+
+Só a forma do falso de Prisma mudou; nenhuma asserção mudou.
+
+1. `apps/ai-orchestrator/tests/internal/goal139-ignored-contacts-list.routes.test.ts` (WU-01): o objeto de retorno virou `const prisma`; ganhou `$transaction`, que chama o callback com ele mesmo, e `contact.updateMany`, que filtra com o `matches` existente e aplica `Object.assign`. A "Remover" agora passa por `$transaction` e `updateMany`, e o falso não os tinha.
+2. `apps/ai-orchestrator/tests/internal/ignored-contacts.routes.test.ts` (WU-01): a mesma troca para `const prisma`, com `$transaction`, o helper `findByKey` e `contact.updateMany` (confere a chave e o `ignored`); o comentário que dizia "le o contato antes de gravar" foi atualizado.
+3. `tests/session/support/fake-prisma.ts` não mudou: já implementa `$transaction`. Nenhum pino de contagem exata foi afetado: `validate:core` passou na primeira execução.
+
+`goal141-remove-ignored-contact-atomic.test.ts` de unidade e o de integração são arquivos **novos** deste Goal. O de unidade usa um falso de Prisma próprio que separa o cliente raiz do cliente da transação, com um diário que desfaz, quando o callback falha, só o que foi escrito pelo `tx` (como o banco), e uma transação aninhada lança erro.
+
+### Escopo
+
+Os arquivos mudados são os do §1, do §2 e da "Documentação" do Goal: `apps/ai-orchestrator/src/modules/session/SessionService.ts`; os testes de `apps/ai-orchestrator/tests/` (`internal/goal141-remove-ignored-contact-atomic.test.ts` e `integration/goal141-remove-ignored-contact-atomic.test.ts`, novos, e os dois falsos ajustados acima); e `DECISIONS.md`, `CURRENT_STATE.md` e este arquivo, todos por acréscimo. `modules/internal/routes.ts`, o BFF, o contrato, o frontend, o banco, `schema.prisma`, `goals/`, `reviews/`, `MIGRATION_STATUS.md` e `MASTER_PLAN.md` não foram tocados.
+
+### Desvios do texto do Goal, para o review
+
+- **Teste de integração no gate dirigido.** O `vitest run goal141` do IA Loop (WU-05) roda sem banco e pula os 4 de integração; eles rodaram contra PostgreSQL no Developer (WU-02, 4 de 4, em cinco execuções) e dentro do `validate:integration` (WU-09, passo `test:ai-orchestrator-transport-durability`, sem contagem retida).
+- **A integração rodou quatro vezes mais uma, não "ao menos três" e só.** São 4 execuções seguidas do arquivo e uma execução final dos três arquivos depois de os controles estarem revertidos, 5 no total.
+- **`prettier --check`.** Acusa `SessionService.ts` e os arquivos `goal139` na própria baseline (`git show HEAD`), por CRLF do checkout do Windows; não é gate do plano e a formatação não foi alterada.
+
+### Não executado
+
+- A contagem de testes por passo de `validate:core` e de `validate:integration` (ver "O que não foi contado").
+- A suíte inteira da IA com banco, à parte do `validate:integration`.
+- A falha real de banco no meio da transação (conexão caída): a falha da prova é a do espião em `writeEffectiveCategory`.
+- "Remover" ponta a ponta num WhatsApp real, e a tela num aparelho real (nenhuma tela mudou).
+- Os controles negativos não foram refeitos na WU-10; valem os da WU-02, sem edição de código de `src` depois.
+- O `validate:ui`, que não se aplica (sem frontend).
+
+### Verificação final do Developer
+
+Ver o resultado do `git diff --check` abaixo, rodado pelo Developer (WU-10) na worktree **depois** de escrever os três registros. A WU-11 do IA Loop o roda de novo depois destes registros, na árvore final; o resultado dela é anotado no review.
+
+`git diff --check`, rodado pelo Developer (WU-10) na worktree **depois** de escrever os três registros: saída 0, sem erro de espaço em branco; só os três avisos de fim de linha do Git (`LF will be replaced by CRLF`, em `SessionService.ts`, `goal139-ignored-contacts-list.routes.test.ts` e `ignored-contacts.routes.test.ts`), que não são erro. A primeira execução, antes de eu tirar a linha em branco que sobrava no fim deste arquivo, deu saída 2 com `new blank line at EOF` em `VALIDATION_GATE.md`; foi corrigida e a execução acima é a que vale. Os dois arquivos de teste novos, não rastreados, ainda não entram nesse `git diff`.
+
+### Aceite
+
+Goal141 aceito na rodada 1 ([review141](reviews/141-review.md)), sem blocker. Conferência do Tech Lead na árvore aceita, sem edição de código no meio:
+
+| Verificação | Resultado |
+| --- | --- |
+| Os cinco arquivos `goal141` e `goal139` da IA (unidade e integração), contra um contêiner pgvector descartável, migrado e removido no fim | 3 execuções, **50 de 50** testes passando em todas |
+| `vitest run tests/integration` da IA inteiro, no mesmo banco ad hoc | só 2 falhas, ambas fora do diff e causadas pelo banco ad hoc: `goal109` recusa um banco com nome fora do padrão descartável, e o fixture legado de `transport-durability` não estava nesse banco. O `validate:integration` da WU-09, com o ambiente próprio, saiu 0 |
+| Contagem da unidade da IA | 98 + 1 = 99 arquivos e 1262 + 10 = 1272 testes passando; 15 + 1 = 16 arquivos e 108 + 4 = 112 testes pulados, coerente com a WU-06 |
+| `git diff --check` (WU-11 do IA Loop, depois destes registros) | saída 0, 77 ms, na árvore `code-v1:458693ba…f260e`, a mesma dos gates WU-03 a WU-09 |
+
+Os três controles negativos são os do Developer (WU-02); o Tech Lead não os refez. A falha real do banco no meio da transação, a corrida sob carga e "Remover" contra um WhatsApp real continuam sem prova.

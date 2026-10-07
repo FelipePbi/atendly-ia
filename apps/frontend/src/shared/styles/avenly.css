@@ -5276,8 +5276,8 @@ button.ignored-row:focus-visible,
 /* Alvo de toque do checkbox nativo (Goal033).
    Sem tamanho declarado o Chromium o desenha com 13×13px — medido assim em
    `/notificacoes` a 360px e a 390px, abaixo do mínimo de 24px do WCAG 2.5.8
-   AA. Com a regra: 24×24px. Mesmo tamanho e mesmo `accent-color` que
-   `.imports-select-row input[type="checkbox"]` já usa. */
+   AA. Com a regra: 24×24px. Mesmo tamanho que
+   `.imports-choice-row input[type="checkbox"]` usa. */
 .switch-row input[type="checkbox"] {
   width: 24px;
   height: 24px;

@@ -308,7 +308,7 @@ describe("incerteza não é falha", () => {
     await user.click(await screen.findByRole("button", { name: "Importar tudo" }));
 
     expect(
-      await screen.findByRole("heading", { name: "Importando seus dados" }),
+      await screen.findByRole("heading", { name: "Importando…" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/Não foi possível importar agora/),
@@ -501,7 +501,7 @@ describe("incerteza não é falha na retomada da execução", () => {
 
       await waitFor(() => expect(getImportState).toHaveBeenCalledTimes(2));
       expect(
-        await screen.findByRole("heading", { name: "Importando seus dados" }),
+        await screen.findByRole("heading", { name: "Importando…" }),
       ).toBeInTheDocument();
       expect(
         screen.queryByText(/Não foi possível continuar a importação/),

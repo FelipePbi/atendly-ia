@@ -320,7 +320,7 @@
       "label": "Preview da importação",
       "route": "/onboarding/importacao",
       "account": "onboarding",
-      "notes": "O quadro mostra o resumo do que foi encontrado; a conta de onboarding não tem sessão de importação, então a sessão READY (startedAt nulo, previewVersion 1) e a prévia vêm de respostas fixas de GET /v1/calendar/imports e de GET /v1/calendar/imports/visual-compare-import-ready/preview (sessionId igual nos dois e no caminho; 12 serviços, 386 clientes, 42 agendamentos futuros, 1.400 atendimentos anteriores e 6 regras de horário, todas com sourceSupported true e needsReviewCount 0), só no navegador da captura. A tela só lê esses dois GET (readPreview) e não chama analyzeImport; nenhum pedido de escrita sai e nenhum passo toca uma caixa, o primário ou \"Conectar outra conta\". Nenhum passo: a tela abre pronta no resumo. Divergências declaradas do Goal132: uma linha por categoria, sem agrupar cancelamentos e faltas sob os atendimentos anteriores (a caixa de cada categoria grava a própria escolha), então a legenda \"incluindo cancelamentos e faltas\" não é usada; a legenda \"segunda a sábado\" dos horários não é usada, porque o contrato só traz a contagem de regras (AVAILABILITY); a ordem das categorias do quadro (horários por último) e o selo dos horários, só nestas telas; o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app.",
+      "notes": "O quadro mostra o resumo do que foi encontrado; a conta de onboarding não tem sessão de importação, então a sessão READY (startedAt nulo, previewVersion 1) e a prévia vêm de respostas fixas de GET /v1/calendar/imports e de GET /v1/calendar/imports/visual-compare-import-ready/preview (sessionId igual nos dois e no caminho; 12 serviços, 386 clientes, 42 agendamentos futuros, 1.400 atendimentos anteriores e 6 regras de horário, todas com sourceSupported true e needsReviewCount 0), só no navegador da captura. A tela só lê esses dois GET (readPreview) e não chama analyzeImport; nenhum pedido de escrita sai e nenhum passo toca uma caixa, o primário ou \"Conectar outra conta\". Nenhum passo: a tela abre pronta no resumo. Divergências declaradas do Goal132: uma linha por categoria, sem agrupar cancelamentos e faltas sob os atendimentos anteriores (a caixa de cada categoria grava a própria escolha), então a legenda \"incluindo cancelamentos e faltas\" não é usada; a legenda \"segunda a sábado\" dos horários não é usada, porque o contrato só traz a contagem de regras (AVAILABILITY); a ordem das categorias do quadro (horários por último) e o selo dos horários, só nestas telas; a ReplaceAccountZone (\"Prefere conectar outra conta?\") abaixo do rodapé, que o quadro não mostra; o chevron do topo, que a moldura do onboarding não mostra nesta etapa (D-145); o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app.",
       "responses": [
         {
           "method": "GET",
@@ -668,6 +668,169 @@
                   "importedCount": 0,
                   "skippedCount": 0,
                   "failedCount": 0
+                }
+              ]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "2.I7",
+      "file": "Onboarding-2-Importacao.dc.html",
+      "label": "Importando",
+      "route": "/onboarding/importacao",
+      "account": "onboarding",
+      "notes": "O quadro mostra a importação em andamento; a conta de onboarding não tem sessão de importação, então a sessão EXECUTING (startedAt preenchido, finishedAt nulo, previewVersion 1, sem interrupção e sem erro) e o andamento vêm de respostas fixas de GET /v1/calendar/imports e de GET /v1/calendar/imports/visual-compare-import-executing/progress (sessionId igual na sessão, no direito, no andamento e no caminho), só no navegador da captura. As categorias seguem a ordem da execução: serviços (12), clientes (386), horários de atendimento (6) e agendamentos futuros (42) concluídos, com pending 0, e os atendimentos anteriores em andamento, com 764 importados e 636 em pending; counts é a soma das categorias (1.210 importados e 636 em pending, 1.846 registros). Todas as categorias têm selected true, skipped, failed e needsReview 0 e failedReasons vazio. A tela só lê esses dois GET e não chama nenhuma rota de escrita; nenhum passo: a tela abre em andamento e nada nela é tocado. Divergências declaradas do Goal133: a ReplaceAccountZone (\"Prefere conectar outra conta?\") abaixo do rodapé, que o quadro não mostra; o chevron do topo, que a moldura do onboarding não mostra nesta etapa (D-145); o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports",
+          "json": {
+            "data": {
+              "right": {
+                "available": true,
+                "sessionId": "visual-compare-import-executing",
+                "completedAt": null
+              },
+              "session": {
+                "sessionId": "visual-compare-import-executing",
+                "status": "EXECUTING",
+                "previewVersion": 1,
+                "provider": "MINHA_AGENDA",
+                "sourceAccountId": "visual-compare-source",
+                "sourceAccountLabel": null,
+                "createdAt": "2026-10-06T12:00:00.000Z",
+                "startedAt": "2026-10-06T12:01:00.000Z",
+                "finishedAt": null,
+                "previewGeneratedAt": "2026-10-06T12:00:30.000Z",
+                "interrupted": false,
+                "lastError": null,
+                "counts": {
+                  "pending": 636,
+                  "imported": 1210,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0
+                },
+                "categories": [
+                  {
+                    "category": "SERVICE",
+                    "pending": 0,
+                    "imported": 12,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "CUSTOMER",
+                    "pending": 0,
+                    "imported": 386,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "AVAILABILITY",
+                    "pending": 0,
+                    "imported": 6,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "FUTURE_APPOINTMENT",
+                    "pending": 0,
+                    "imported": 42,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "PAST_APPOINTMENT",
+                    "pending": 636,
+                    "imported": 764,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  }
+                ]
+              },
+              "history": null
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports/visual-compare-import-executing/progress",
+          "json": {
+            "data": {
+              "sessionId": "visual-compare-import-executing",
+              "status": "EXECUTING",
+              "previewVersion": 1,
+              "startedAt": "2026-10-06T12:01:00.000Z",
+              "finishedAt": null,
+              "interrupted": false,
+              "lastError": null,
+              "counts": {
+                "pending": 636,
+                "imported": 1210,
+                "skipped": 0,
+                "failed": 0,
+                "needsReview": 0
+              },
+              "categories": [
+                {
+                  "category": "SERVICE",
+                  "pending": 0,
+                  "imported": 12,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0,
+                  "failedReasons": []
+                },
+                {
+                  "category": "CUSTOMER",
+                  "pending": 0,
+                  "imported": 386,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0,
+                  "failedReasons": []
+                },
+                {
+                  "category": "AVAILABILITY",
+                  "pending": 0,
+                  "imported": 6,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0,
+                  "failedReasons": []
+                },
+                {
+                  "category": "FUTURE_APPOINTMENT",
+                  "pending": 0,
+                  "imported": 42,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0,
+                  "failedReasons": []
+                },
+                {
+                  "category": "PAST_APPOINTMENT",
+                  "pending": 636,
+                  "imported": 764,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0,
+                  "failedReasons": []
                 }
               ]
             },

@@ -8063,3 +8063,128 @@ Arquivos do Goal: `apps/frontend/src/features/imports/ImportPreviewScreen.tsx`, 
 ### Não executado
 
 A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho. O `test:ia-loop` não existe no repositório.
+
+## O progresso da importação do onboarding igual ao protótipo, do Goal133
+
+Rodada 1, 2026-10-07, na worktree `goal-133`. Baseline `94e949d`. **Rodada 1:** a tela em andamento, os testes dela e a captura da baseline duas vezes (WU-01); o alvo 2.I7 e os testes da captura (WU-02); o `visual:compare`, as medidas, a regressão, a correção de medida do CSS e os nove controles negativos (WU-03); os gates do IA Loop sobre a árvore da rodada 1 (WU-04 a WU-11, todos com o mesmo `codeFingerprint` da árvore, sem mudança de código entre eles); e estes registros (WU-12). Só houve a rodada 1: cada número abaixo é dela, e a coluna diz quem o obteve. Cada gate do IA Loop rodou **uma vez** (`attemptId` `a1`), sem retentativa do harness.
+
+### Contagens
+
+| Gate | Comando | Resultado (rodada 1) |
+| --- | --- | --- |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0, 1,5 s, sem retentativa (IA Loop, WU-04; antes disso, sem saída de erro nas WU-01 e WU-02) |
+| Lint do frontend | `npm run lint`, ou seja, `eslint src tests --max-warnings=0` (em `apps/frontend`) | saída 0, 16,6 s, 0 avisos, sem retentativa (IA Loop, WU-05) |
+| Testes `goal133` | `npx vitest run goal133` (IA Loop, WU-06) | 2 arquivos e **82** testes passando, sem retentativa: `goal133-andamento.test.tsx` 66 (WU-01) e `goal133-alvo-captura.test.ts` 16 (WU-02) |
+| Testes do frontend | `npm test` (IA Loop, WU-07) | **194** arquivos e **2685** testes passando, 0 falhas, sem retentativa (baseline 192 e 2603: +2 arquivos e +82 testes, os de `goal133`; a WU-01 viu 193 e 2669 antes dos 16 da WU-02) |
+| Testes da captura | `node --test scripts/tests/visual-responses.test.mjs` (WU-02, WU-03 e, de novo, na WU-12, sobre a árvore final) | **60** testes, 60 passando, 0 falhas, 0 pulados (baseline 59: +1, o teste do 2.I7) |
+| `test:gate` | `npm run test:gate` (IA Loop, WU-08) | **293** testes, 293 passando, 0 falhas, 0 pulados, 0 cancelados, sem retentativa (baseline 292: +1, o teste do 2.I7 em `visual-responses.test.mjs`) |
+| `validate:core` | `npm run validate:core` (IA Loop, WU-09, 114 s) | saída 0, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, que só tem a suíte de integração, rodada no `validate:integration`; `test:health-worker`, pacote sem suíte, só a checagem de sintaxe), sem retentativa. A auditoria estática dentro dele: 33 verificações passaram, 0 falharam, 1 pulada (`production_health`, que pede `PRODUCTION_HEALTH_TARGETS`) |
+| `validate:ui` | `npm run validate:ui` (IA Loop, WU-10, 46 s) | saída 0, **169 passed**, 21 skipped, retentativas **0** ("every test passed on its first attempt") |
+| `validate:integration` | `npm run validate:integration` (IA Loop, WU-11, 746 s) | saída 0, 36 passos, **36 passaram**, 0 falharam, 0 pulados, contra `127.0.0.1:55500/ia_bff_test`. O gate autenticado (`rehearse:goal033-authenticated-ui`) deu **305 passed** e retentativas **0** ("every test passed on its first attempt"); a baseline é 305 sem retentativa |
+| `git diff --check` | `git diff --check` | saída 0 depois dos três registros (WU-12); a WU-13 do plano o roda de novo no fim. Só o aviso de LF/CRLF do git, que não é erro |
+
+O Developer não rodou `validate:core`, `validate:ui` nem `validate:integration` nesta rodada: os três números acima são os que o IA Loop rodou (WU-09, WU-10 e WU-11) sobre a árvore da rodada 1. Não houve DIAG, FIX nem segunda rodada, então nenhum número foi reaproveitado de outra rodada. Nenhum gate fica pendente. O script `test:ia-loop` não consta do plano desta rodada, e o harness vive fora do repositório.
+
+### Gate autenticado
+
+A WU-01 buscou em `apps/frontend/e2e/authenticated-matrix.spec.ts` por **busca dirigida**: "Importando", "registros processados", "Andamento", "O que ainda não entrou" e "progress". Os únicos acertos são "progress" do onboarding (a barra de progresso da moldura e `ONBOARDING_ROUTES`); **nenhum bloco toca a tela em andamento**, então o arquivo não foi ajustado (escolha 12 do Goal). A mesma WU buscou "Importando seus dados" e "Estamos trazendo seus dados" em `tests`, `src` e `e2e`: só o `goal061-import-async.test.tsx` citava, e foi ajustado. **Não foi a leitura integral do spec.** `ONBOARDING_ROUTES` não mudou: `/onboarding/importacao` segue medida na origem, e `/importacao` está fora de `AUTHENTICATED_ROUTES`. O gate autenticado deu 305 passed e 0 retentativas, e não alcança a tela em andamento: as cores dela são as do quadro (contraste de cada par em D-147), e o alvo de toque de "Revisar itens" (`min-height: 24px`) está provado em jsdom pela regra de CSS, sem altura renderizada medida em px.
+### `visual:compare`
+
+Comando: `npm run visual:compare -- --target 2.I7` (WU-03; a primeira execução e a última, depois da correção de `line-height`, com saída 0). Percentual de pixels diferentes por device:
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| 2.I7, antes da correção de medida | 4,5% | 2,0% | 2,3% | 1,7% |
+| 2.I7, final | 3,7% | 1,6% | 2,0% | 1,5% |
+
+Os **quatro** `side-by-side.png` (protótipo × app) foram abertos pela WU-03, antes e depois da correção. Divergências que restam, nos quatro devices, todas declaradas em D-147:
+
+- os horários em terceiro e concluídos, no lugar de por último e na fila; por isso a linha na fila **não aparece na captura**, e ela é provada só em jsdom;
+- "1.210" e "de 1.846 registros", no lugar de "1.204" e "de 1.840";
+- "Leva alguns minutos." sem "Fique nesta tela até terminar.";
+- a barra de 4 px a 764/1.400 (54,6 %) sem a animação `at-grow2`, que no quadro congela em outra largura;
+- `ReplaceAccountZone` abaixo da lista;
+- no mobile e no tablet retrato, o "Sair" do topo (D-104) e o primeiro segmento da barra do topo mais curto por causa dele, com o segundo segmento derivado por `chapterFraction`; no tablet paisagem e no desktop, o "Sair" do rodapé da barra lateral (D-104); o chevron (o quadro tem 40 px de espaço vazio, o app não mostra o chevron, D-145); a barra de status e o indicador de início do iPhone (recortados no mobile).
+
+### Medidas por pixel, app × quadro
+
+Lidas de `app.png` e `prototype.png` a 1x por scripts de varredura de pixel com `sharp` (`measure.cjs`, `bands.cjs`, `bbox.cjs`, `cropcmp.cjs` e `where.cjs`, em `E:\Projetos\atendly-ia\.ai-worktrees\_goal133-baseline\`, fora do repositório; WU-03), depois da correção:
+
+| Medida | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| Topo da barra de 8 px, app / quadro | 215 / 215 | 255 / 255 | 255 / 255 | 255 / 255 |
+| Altura da barra de 8 px, app / quadro | 8 / 8 | 8 / 8 | 8 / 8 | 8 / 8 |
+| Topo do título, da descrição e do número grande, app / quadro | 91 / 90, 131 / 130, 177 / 176 | 131 / 131, 171 / 171, 217 / 217 | idem tablet retrato | idem tablet retrato |
+| Altura da barra de 4 px, app / quadro | 4 / 4 | 4 / 4 | 4 / 4 | 4 / 4 |
+| Deslocamento da barra de 4 px dentro da linha | 38 / 38 | 38 / 38 | 38 / 38 | 38 / 38 |
+| Passo das linhas concluídas (divisórias), app / quadro | 49 / 49 (293, 342, 391) | 49 / 49 (333, 382, 431) | idem tablet retrato | idem tablet retrato |
+| Círculo concluído | 24 × 24 nos dois | 24 × 24 nos dois | 24 × 24 nos dois | 24 × 24 nos dois |
+| Anel (caixa externa) e ponto | 24 × 24 e 8 × 8 nos dois | idem | idem | idem |
+| Visto (caixa visível; recorte de 28 × 28, pixels diferentes) | 20 × 20; 50 px, o visto ~1 px mais baixo no app, por subpixel | 20 × 20; 3 px, delta máximo 7 | 20 × 20; 46 px, ~1 px mais baixo | 20 × 20; 0 px |
+| Nomes e contagens das linhas | +1 px no app | 0 px | 0 px | 0 px |
+
+O anel fica 23 px abaixo do topo da linha e a barra de 4 px 38 px, nos dois. A linha em andamento tem o mesmo conteúdo e o mesmo deslocamento interno no app e no quadro, mas é a quinta no app e a quarta no quadro (os horários concluídos em terceiro), então o topo dela e o da barra de 4 px ficam **49 px** mais baixos no app, o passo de uma linha concluída. Antes da correção, a barra de 8 px estava 2 px abaixo e a linha em andamento 3 px mais alta (o `line-height: 1.5` do `body` do app, que o protótipo não tem); a correção foi `line-height: normal` em `.imports-running-of` e em `.imports-running-row`. **Não medidos:** a altura de cada linha em andamento isolada (só o deslocamento interno), a linha na fila (não aparece na captura) e "Revisar itens" (a resposta fixa tem `needsReview` 0, então não aparece). Nenhuma diferença acima de 1 px ficou fora das divergências declaradas.
+
+### Ruído da baseline e regressão
+
+**Baseline `94e949d`, duas capturas** (WU-01, antes de qualquer edição, na árvore limpa): `npm run visual:compare -- --target 2.I1,2.I2,2.I3,2.I4,2.I5,I1,I2`, duas vezes, saída 0 nas duas, com os 28 `app.png` de cada uma em `E:\Projetos\atendly-ia\.ai-worktrees\_goal133-baseline\cap1` e `cap2`, fora do repositório. **20 de 28 idênticos por `cmp` e 8 diferentes**, medidos por `pixdiff.cjs`:
+
+| `app.png` | pixels diferentes | delta máximo por canal |
+| --- | --- | --- |
+| `mais-whatsapp-importacao-conta-I1`, desktop | 77 | 5, 3, 3 |
+| `mais-whatsapp-importacao-conta-I2`, desktop | 23 | 1, 1, 1 |
+| `mais-whatsapp-importacao-conta-I2`, tablet paisagem | 18 | 1, 1, 1 |
+| 2.I1, desktop | 15 | 35, 23, 23 |
+| 2.I1, tablet paisagem | 15 | 35, 23, 23 |
+| 2.I2, desktop | 19 | 1, 1, 1 |
+| 2.I4, desktop | 22 | 1, 1, 1 |
+| 2.I4, mobile | 64 | 1, 1, 1 |
+
+Esse é o ruído da própria captura: de 15 a 77 pixels por imagem, delta máximo de 35 por canal.
+
+**Depois das edições** (WU-03): o mesmo comando, duas execuções válidas, com saída 0 (`capN` e `capM`, as duas sobre o mesmo código). Três tentativas anteriores falharam com 429 (limite de logins do BFF) e 409/429 em cascata e foram **descartadas**: só contam as capturas que saíram com saída 0.
+
+- **14 de 28** `app.png` diferem de `cap1` e de `cap2`, no máximo 77 pixels e com delta máximo por canal de 35 (2.I1 desktop, os mesmos 15 pixels da baseline); nenhum passa do que a própria baseline mostra, e as diferenças ficam nos mesmos recortes (cantos arredondados dos cartões, bordas).
+- **`capN` × `capM` (o mesmo código, duas execuções) também diferem em 14 de 28**, com os mesmos deltas (≤ 1, salvo 35, 23 e 23 no 2.I1 desktop e 14, 9 e 9 no I1 tablet retrato, na mesma região do ruído do I1). Isso prova que a diferença é ruído de rasterização, e não código.
+- **Não deu 28 de 28 byte a byte.** O critério 4 fica atendido **pela segunda via** (cada diferença dentro do ruído medido entre as duas capturas da baseline). **Limite declarado:** o relatório da WU-03 resume as 14 diferenças pelo máximo (77 pixels, delta 35) e não tem a tabela por imagem. O CSS novo é todo escopado por `.imports-running`, que só existe na tela em andamento, e os alvos de regressão não a mostram.
+
+### Controles negativos
+
+Rodados na rodada 1 (WU-03), **depois da última edição de código** (a correção de `line-height` foi feita antes; nenhum arquivo versionado mudou depois, e os gates da WU-04 à WU-11 têm o mesmo `codeFingerprint`). Base verde antes dos controles: 82 de 82 (`npx vitest run tests/goal133-andamento.test.tsx tests/goal133-alvo-captura.test.ts`, de `apps/frontend`) e 60 de 60 (`node --test scripts/tests/visual-responses.test.mjs`). Cada um teve o arquivo devolvido da cópia guardada, com `cmp` saída 0 (`ImportRunScreen.tsx` e `targets.json`, de novo no fim) e teste verde depois: 82 de 82 e 60 de 60.
+
+| # | Mudança | Teste que reprovou | Mensagem |
+| --- | --- | --- | --- |
+| a | toda categoria com `pending` em andamento (`category === activeCategory` → `true`) | `goal133-andamento`: "só a primeira categoria com pending está em andamento; as outras ficam na fila", nas duas molduras | `expected [ 'done', 'active', 'active', …(2) ] to deeply equal [ 'done', 'active', 'queued', …(2) ]` |
+| b | os horários com número (`showCount = true`) | `goal133-andamento`: "as linhas seguem a ordem da execução, com o estado das contagens" e "os horários de atendimento nunca mostram número" (concluída e em andamento), nas duas molduras | `expected <span …(1)></span> to be null` |
+| c | o total sem `AVAILABILITY` | `goal133-andamento`: "o número grande e 'de N registros' usam a conta de hoje, inclusive os horários", "a barra mantém o papel e os aria-*…", "o resumo aria-live mantém o texto de hoje…" e "uma leitura que falhou depois de uma boa avisa e mantém os números" | não transcrita no relatório da WU-03 |
+| d | a categoria com `selected: false` na lista (`.filter(() => false)`) | `goal133-andamento`: "categoria que o negócio deixou de fora não entra na lista" | `expected [ 'Serviços', 'Clientes', …(3) ] to deeply equal [ 'Serviços', …(2) ]` |
+| e | a tela nova também com `interrupted` | `goal133-andamento`: "interrompida: a tela é a de hoje, com 'Continuar'" | `expected <div class="imports-running">…(2)</div> to be null` |
+| f | a barra sem `aria-valuenow` | `goal133-andamento`: "a barra mantém o papel e os aria-* de hoje, com a largura processados sobre total", nas duas molduras | não transcrita no relatório da WU-03 |
+| g | o 2.I7 de `targets.json` com um passo (`clickRole` em "Revisar itens") | **os dois:** `goal133-alvo-captura` ("label Importando, conta de onboarding, rota do onboarding e nenhum passo" e "2.I3, 2.I4, 2.I5 e 2.I7 são os únicos donos de responses; o 2.I7 não tem passo") e `visual-responses.test.mjs` ("2.I3, 2.I4, 2.I5 e 2.I7 são os únicos donos…", 59 passam e 1 reprova) | `expected [ { clickRole: { …(2) } } ] to be undefined` e `2.I7: nenhum passo, nada toca em controle que grava` |
+| h1 | o andamento do 2.I7 num `sessionId` diferente da sessão, no **caminho** | **os dois:** `goal133-alvo-captura` (10 testes, o primeiro "declara só os dois GET, com requestId, nunca escrita") e `visual-responses.test.mjs` (o `deepEqual` do caminho exato) | `expected [ 'GET /v1/calendar/imports', …(1) ] to deeply equal …` |
+| h2 | o andamento com outro `sessionId` no **corpo** | `goal133-alvo-captura`: "o sessionId é o mesmo na sessão, no direito, no andamento e no caminho, e diferente dos outros alvos" (`visual-responses.test.mjs` não olha o corpo e passou, como esperado) | `expected 'visual-compare-import-OUTRO' to be 'visual-compare-import-executing'` |
+| i | `AVAILABILITY` em `pending` e `PAST_APPOINTMENT` com processados (fora da ordem da execução; `counts` ajustados para manter a soma) | `goal133-alvo-captura`: "antes da categoria em andamento tudo está concluído (pending 0) e depois dela nada foi processado" e "counts é a soma das categorias" | `expected 'AVAILABILITY' to be 'PAST_APPOINTMENT'` |
+
+Os nove controles reprovaram, o (g) pelos **dois** testes e o (h) em duas formas, e foram revertidos. Em (c), a mensagem do relatório da WU-03 nomeia os testes, e não a asserção exata.
+
+### Testes ajustados
+
+- `apps/frontend/tests/goal061-import-async.test.tsx` (WU-01, 2 pontos): `heading "Importando seus dados"` virou `"Importando…"`. Só o texto do título mudou; nenhuma asserção sobre os pedidos, a releitura, a interrupção, a retomada, a conclusão, a idempotência, os conflitos ou a troca de conta foi mexida.
+- `apps/frontend/tests/goal132-alvos-captura.test.ts` (WU-02): a lista de donos de `responses` do teste "2.I3, 2.I4 e 2.I5 são os únicos donos" ganhou o 2.I7; sem isso ele reprovaria com o alvo novo.
+- `scripts/tests/visual-responses.test.mjs` (WU-02): o 2.I7 entre os donos de `responses`, o teste do `Onboarding-2-Importacao.dc.html` com os donos 2.I3, 2.I4, 2.I5 e 2.I7, e um teste novo (60 no total) que prova que o 2.I7 só declara os dois `GET`, com o caminho exato do andamento, sem passo, que POST, PUT, PATCH e DELETE não casam, que a `/preview` e o andamento da sessão `ready` não casam e que os outros três donos não usam o `sessionId` do 2.I7.
+- Os outros arquivos da evidência 9 (`goal020-import-run`, `goal020-import-preview`, `goal132-resumo` e `goal132-escolha`) passaram sem edição.
+
+### Escopo
+
+Arquivos do Goal: `apps/frontend/src/features/imports/ImportRunScreen.tsx`, `apps/frontend/src/shared/styles/avenly-imports.css`, `apps/frontend/src/shared/styles/avenly.css` (só o texto de um comentário), `apps/frontend/e2e/visual/targets.json` (o 2.I7 e as `notes` do 2.I4), `scripts/tests/visual-responses.test.mjs`, `apps/frontend/tests/goal133-andamento.test.tsx`, `apps/frontend/tests/goal133-alvo-captura.test.ts`, os dois testes ajustados e os três registros em `docs/migration/`. `labels.ts`, `ImportsLayout.tsx` e `authenticated-matrix.spec.ts` não mudaram.
+
+### Desvios do texto do Goal, para o review
+
+- A regressão por `cmp` não deu 28 de 28 byte a byte, pela captura não determinística (acima); o critério 4 fica atendido pela segunda via, com a limitação da tabela por imagem.
+- O `authenticated-matrix.spec.ts` foi lido por busca dirigida, não por inteiro.
+- A linha na fila e "Revisar itens" não aparecem na captura (a resposta fixa e a ordem da execução não os produzem), então a medida em px deles não existe; estão provados em jsdom.
+- Três tentativas do `visual:compare` de regressão falharam com 429 e 409 (limite de logins do BFF) e foram refeitas depois da espera.
+
+### Não executado
+
+A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.

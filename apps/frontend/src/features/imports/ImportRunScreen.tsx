@@ -114,10 +114,14 @@ function executionAdvanced(
   );
 }
 
-/** O que sobrou em cada categoria, em linguagem de produto e sem inventar zero. */
-function outstandingDetail(category: ProgressCategory): string {
+/**
+ * O que sobrou em cada categoria, em linguagem de produto e sem inventar zero.
+ * A tela em andamento (2.I7) não conta o que ainda não foi processado: a linha
+ * já diz isso pelo estado e pela barra.
+ */
+function outstandingDetail(category: ProgressCategory, includePending = true): string {
   const parts: string[] = [];
-  if (category.pending > 0) {
+  if (includePending && category.pending > 0) {
     parts.push(`${importCountFormatter.format(category.pending)} ainda não processados`);
   }
   if (category.needsReview > 0) {
@@ -135,6 +139,181 @@ function orderedCategories(categories: ProgressCategory[]): ProgressCategory[] {
   const byCategory = new Map(categories.map((entry) => [entry.category, entry]));
   return CATEGORY_ORDER.map((category) => byCategory.get(category)).filter(
     (entry): entry is ProgressCategory => entry !== undefined,
+  );
+}
+
+/** `CATEGORY_LABELS` é minúsculo; o quadro do andamento (2.I7) pede o nome com maiúscula. */
+function capitalized(label: string): string {
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+type RowState = "done" | "active" | "queued";
+
+const ROW_STATE_LABELS: Record<RowState, string> = {
+  active: "em andamento",
+  done: "concluída",
+  queued: "na fila",
+};
+
+/**
+ * Tela em andamento (2.I7): só quando o banco diz que há passada em curso. O
+ * estado de cada linha sai das contagens, nunca de relógio nem de animação: a
+ * execução é sequencial na ordem de `CATEGORY_ORDER`, então a categoria em
+ * curso é a primeira da lista com `pending`, as de antes estão concluídas e as
+ * de depois estão na fila. Horários de atendimento nunca mostram número.
+ */
+function ImportRunningBody({
+  busy,
+  categories,
+  failedRead,
+  imported,
+  needsReview,
+  onReview,
+  processed,
+  total,
+}: {
+  busy: boolean;
+  categories: ProgressCategory[];
+  failedRead: boolean;
+  imported: number;
+  needsReview: number;
+  onReview: () => void;
+  processed: number;
+  total: number;
+}) {
+  const activeCategory = categories.find((category) => category.pending > 0);
+  return (
+    <div aria-busy={busy || undefined} className="imports-running">
+      <div className="imports-running-total">
+        <div className="imports-running-figures">
+          <span className="imports-running-processed">
+            {importCountFormatter.format(processed)}
+          </span>
+          <span className="imports-running-of">
+            de {importCountFormatter.format(total)} registros
+          </span>
+        </div>
+        <div
+          aria-label="Andamento da importação"
+          aria-valuemax={total}
+          aria-valuemin={0}
+          aria-valuenow={processed}
+          aria-valuetext={`${importCountFormatter.format(processed)} de ${importCountFormatter.format(total)} registros processados`}
+          className="imports-running-track"
+          role="progressbar"
+        >
+          <span
+            className="imports-running-fill"
+            style={{ width: total > 0 ? `${(processed / total) * 100}%` : "0%" }}
+          />
+        </div>
+        <p aria-live="polite" className="sr-only">
+          {importCountFormatter.format(processed)} de{" "}
+          {importCountFormatter.format(total)} registros processados ·{" "}
+          {importCountFormatter.format(imported)} importados
+        </p>
+      </div>
+      {failedRead && (
+        <p className="imports-note" role="status">
+          A última leitura do andamento falhou. Os números acima são da leitura
+          anterior.
+        </p>
+      )}
+      <ul className="imports-running-list">
+        {categories.map((category) => {
+          const state: RowState =
+            category.pending === 0
+              ? "done"
+              : category === activeCategory
+                ? "active"
+                : "queued";
+          const categoryTotal = totalOf(category);
+          const categoryProcessed = categoryTotal - category.pending;
+          const showCount = category.category !== "AVAILABILITY";
+          const detail = outstandingDetail(category, false);
+          const name = (
+            <>
+              <strong>{capitalized(CATEGORY_LABELS[category.category])}</strong>
+              <span className="sr-only">, {ROW_STATE_LABELS[state]}</span>
+            </>
+          );
+          return (
+            <li
+              className={`imports-running-row is-${state}`}
+              key={category.category}
+            >
+              {state === "done" && (
+                <span aria-hidden="true" className="imports-running-mark is-done">
+                  <svg
+                    fill="none"
+                    height="13"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="3"
+                    viewBox="0 0 24 24"
+                    width="13"
+                  >
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                  </svg>
+                </span>
+              )}
+              {state === "active" && (
+                <span aria-hidden="true" className="imports-running-mark is-active">
+                  <span className="imports-running-halo" />
+                  <span className="imports-running-dot" />
+                </span>
+              )}
+              {state === "queued" && (
+                <span aria-hidden="true" className="imports-running-mark is-queued" />
+              )}
+              {state === "active" ? (
+                <div className="imports-running-body">
+                  <div className="imports-running-line">
+                    <span className="imports-running-name">{name}</span>
+                    {showCount && (
+                      <span className="imports-running-count">
+                        {`${importCountFormatter.format(categoryProcessed)} de ${importCountFormatter.format(categoryTotal)}`}
+                      </span>
+                    )}
+                  </div>
+                  {detail && (
+                    <small className="imports-running-detail">{detail}</small>
+                  )}
+                  <span aria-hidden="true" className="imports-running-bar">
+                    <span
+                      className="imports-running-bar-fill"
+                      style={{ width: `${(categoryProcessed / categoryTotal) * 100}%` }}
+                    />
+                  </span>
+                </div>
+              ) : (
+                <>
+                  <span className="imports-running-name">
+                    {name}
+                    {detail && (
+                      <small className="imports-running-detail">{detail}</small>
+                    )}
+                  </span>
+                  {state === "done" && showCount && (
+                    <span className="imports-running-count">
+                      {importCountFormatter.format(categoryTotal)}
+                    </span>
+                  )}
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {needsReview > 0 && (
+        <div className="imports-running-footer">
+          <button className="imports-text-action" type="button" onClick={onReview}>
+            Revisar itens
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -368,6 +547,18 @@ export function ImportRunScreen({
   const outstanding = outstandingOf(progress.counts);
   const total = totalOf(progress.counts);
   const processed = total - progress.counts.pending;
+  // A tela em andamento (2.I7) só existe com passada em curso de verdade.
+  const running = executing && !interrupted;
+  // A lista segue a ordem da execução e não mostra o que o negócio deixou de
+  // fora na escolha. O estado de cada linha vem só das contagens.
+  const deselected = new Set(
+    session.categories
+      .filter((category) => !category.selected)
+      .map((category) => category.category),
+  );
+  const runningCategories = categories.filter(
+    (category) => !deselected.has(category.category) && totalOf(category) > 0,
+  );
 
   return (
     <>
@@ -376,16 +567,17 @@ export function ImportRunScreen({
           interrupted
             ? "Nada do que já entrou foi perdido."
             : executing
-              ? "Estamos trazendo seus dados do Minha Agenda. Isso pode levar alguns minutos."
+              ? "Leva alguns minutos."
               : terminal
                 ? "Esta importação não continua de onde parou."
                 : "Você já tem uma importação em andamento. Continue de onde parou."
         }
+        eyebrow={!running}
         title={
           interrupted
             ? "Isso parou no meio do caminho"
             : executing
-              ? "Importando seus dados"
+              ? "Importando…"
               : terminal
                 ? "Esta importação não pode continuar"
                 : "Continuar importação"
@@ -410,89 +602,104 @@ export function ImportRunScreen({
           </div>
         )}
 
-        <div className="imports-panel" aria-busy={executing || undefined}>
-          <div className="imports-panel-header">
-            <h2>{STATUS_LABELS[progress.status]}</h2>
-            <p>
-              Minha Agenda
-              {session.sourceAccountLabel ? ` · ${session.sourceAccountLabel}` : ""}
-              {startedAt ? ` · desde ${startedAt}` : ""}
-            </p>
-          </div>
-          <div
-            aria-label="Andamento da importação"
-            aria-valuemax={total}
-            aria-valuemin={0}
-            aria-valuenow={processed}
-            aria-valuetext={`${importCountFormatter.format(processed)} de ${importCountFormatter.format(total)} registros processados`}
-            className="imports-progress-track"
-            role="progressbar"
-          >
-            <span
-              className="imports-progress-fill"
-              style={{ width: total > 0 ? `${(processed / total) * 100}%` : "0%" }}
-            />
-          </div>
-          <p aria-live="polite" className="imports-progress-summary">
-            {importCountFormatter.format(processed)} de{" "}
-            {importCountFormatter.format(total)} registros processados ·{" "}
-            {importCountFormatter.format(progress.counts.imported)} importados
-          </p>
-          {progressError && (
-            <p className="imports-note" role="status">
-              A última leitura do andamento falhou. Os números acima são da
-              leitura anterior.
-            </p>
-          )}
-        </div>
-
-        {outstanding > 0 && (
-          <div className="imports-panel">
-            <div className="imports-panel-header">
-              <h2>
-                O que ainda não entrou (
-                {importCountFormatter.format(outstanding)})
-              </h2>
-              <p>
-                {progress.counts.failed > 0
-                  ? "Itens que falharam não são tentados de novo nesta importação."
-                  : "Nada aqui foi descartado: cada item continua nesta sessão."}
+        {running ? (
+          <ImportRunningBody
+            busy={executing}
+            categories={runningCategories}
+            failedRead={progressError}
+            imported={progress.counts.imported}
+            needsReview={progress.counts.needsReview}
+            onReview={() => setReviewing(true)}
+            processed={processed}
+            total={total}
+          />
+        ) : (
+          <>
+            <div className="imports-panel" aria-busy={executing || undefined}>
+              <div className="imports-panel-header">
+                <h2>{STATUS_LABELS[progress.status]}</h2>
+                <p>
+                  Minha Agenda
+                  {session.sourceAccountLabel ? ` · ${session.sourceAccountLabel}` : ""}
+                  {startedAt ? ` · desde ${startedAt}` : ""}
+                </p>
+              </div>
+              <div
+                aria-label="Andamento da importação"
+                aria-valuemax={total}
+                aria-valuemin={0}
+                aria-valuenow={processed}
+                aria-valuetext={`${importCountFormatter.format(processed)} de ${importCountFormatter.format(total)} registros processados`}
+                className="imports-progress-track"
+                role="progressbar"
+              >
+                <span
+                  className="imports-progress-fill"
+                  style={{ width: total > 0 ? `${(processed / total) * 100}%` : "0%" }}
+                />
+              </div>
+              <p aria-live="polite" className="imports-progress-summary">
+                {importCountFormatter.format(processed)} de{" "}
+                {importCountFormatter.format(total)} registros processados ·{" "}
+                {importCountFormatter.format(progress.counts.imported)} importados
               </p>
+              {progressError && (
+                <p className="imports-note" role="status">
+                  A última leitura do andamento falhou. Os números acima são da
+                  leitura anterior.
+                </p>
+              )}
             </div>
-            <ul className="imports-rows">
-              {outstandingCategories.map((category) => (
-                <li key={category.category}>
-                  <div>
-                    <strong>{CATEGORY_LABELS[category.category]}</strong>
-                    <small>{outstandingDetail(category)}</small>
-                    {category.failed > 0 && category.failedReasons.length > 0 && (
-                      <ul className="imports-failed-reasons">
-                        {category.failedReasons.map((reason) => (
-                          <li key={reason.reasonCode}>
-                            {`${failedReasonLabel(reason.reasonCode)} (${importCountFormatter.format(reason.count)})`}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+
+            {outstanding > 0 && (
+              <div className="imports-panel">
+                <div className="imports-panel-header">
+                  <h2>
+                    O que ainda não entrou (
+                    {importCountFormatter.format(outstanding)})
+                  </h2>
+                  <p>
+                    {progress.counts.failed > 0
+                      ? "Itens que falharam não são tentados de novo nesta importação."
+                      : "Nada aqui foi descartado: cada item continua nesta sessão."}
+                  </p>
+                </div>
+                <ul className="imports-rows">
+                  {outstandingCategories.map((category) => (
+                    <li key={category.category}>
+                      <div>
+                        <strong>{CATEGORY_LABELS[category.category]}</strong>
+                        <small>{outstandingDetail(category)}</small>
+                        {category.failed > 0 && category.failedReasons.length > 0 && (
+                          <ul className="imports-failed-reasons">
+                            {category.failedReasons.map((reason) => (
+                              <li key={reason.reasonCode}>
+                                {`${failedReasonLabel(reason.reasonCode)} (${importCountFormatter.format(reason.count)})`}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <span className="imports-row-count">
+                        {importCountFormatter.format(outstandingOf(category))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {progress.counts.needsReview > 0 && (
+                  <div className="imports-actions">
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      onClick={() => setReviewing(true)}
+                    >
+                      Revisar itens
+                    </button>
                   </div>
-                  <span className="imports-row-count">
-                    {importCountFormatter.format(outstandingOf(category))}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {progress.counts.needsReview > 0 && (
-              <div className="imports-actions">
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  onClick={() => setReviewing(true)}
-                >
-                  Revisar itens
-                </button>
+                )}
               </div>
             )}
-          </div>
+          </>
         )}
 
         {retryError && (

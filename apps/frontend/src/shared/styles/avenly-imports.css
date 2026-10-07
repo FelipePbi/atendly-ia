@@ -661,3 +661,197 @@
   font-size: 15px;
   line-height: 1.45;
 }
+
+/*
+ * Andamento (2.I7, Goal133). Classes próprias: `.imports-progress-*`, `.imports-panel`
+ * e `.imports-rows` seguem servindo à tela parada, aos conflitos e à prévia. Os
+ * mesmos valores nos quatro devices; o único que muda é o respiro do rodapé da
+ * moldura do onboarding (46 px no celular, 32 px de 768 px em diante), como no
+ * protótipo. O anel respira só com movimento permitido; com `reduce` ele fica
+ * parado, e a barra de 4 px muda de largura só quando uma leitura nova chega.
+ */
+.imports-page:has(.imports-running),
+.imports-pushed-body:has(.imports-running) {
+  gap: 22px;
+}
+.onboarding-content.is-frame:has(.imports-running) {
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+.imports-page:has(.imports-running):not(.is-pushed) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 46px;
+}
+.imports-page:has(.imports-running) .imports-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.imports-page:has(.imports-running) .imports-header > p {
+  margin: 0;
+  color: #5f574e;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.imports-running {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.imports-running-total {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.imports-running-figures {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.imports-running-processed {
+  font-family: var(--font-display, Literata, Georgia, serif);
+  font-size: 34px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.imports-running-of {
+  color: #5f574e;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  line-height: normal;
+}
+.imports-running-track {
+  height: 8px;
+  border-radius: 4px;
+  background: #e5ded4;
+  overflow: hidden;
+}
+.imports-running-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: #0f5f63;
+}
+.imports-running-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.imports-running-row {
+  padding: 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid #e5ded4;
+  line-height: normal;
+}
+.imports-running-row:last-child {
+  border-bottom: 0;
+}
+.imports-running-mark {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 50%;
+}
+.imports-running-mark.is-done {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fffdfa;
+  background: #2e7d4f;
+}
+.imports-running-mark.is-active {
+  position: relative;
+}
+.imports-running-halo {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid #0f5f63;
+  border-radius: 50%;
+}
+.imports-running-dot {
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: #0f5f63;
+}
+.imports-running-mark.is-queued {
+  box-sizing: border-box;
+  border: 1.5px solid #d6cec2;
+}
+.imports-running-name {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.imports-running-name strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.imports-running-row.is-queued .imports-running-name strong {
+  color: #716859;
+  font-weight: 500;
+}
+.imports-running-count {
+  color: #5f574e;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.imports-running-detail {
+  color: #716859;
+  font-size: 13px;
+}
+.imports-running-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.imports-running-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+.imports-running-line .imports-running-name {
+  flex: 0 1 auto;
+}
+.imports-running-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: #e5ded4;
+  overflow: hidden;
+}
+.imports-running-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: #0f5f63;
+}
+.imports-running-footer {
+  display: flex;
+  justify-content: center;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .imports-running-halo {
+    animation: at-breathe 2.4s ease-out infinite;
+  }
+  .imports-running-fill {
+    transition: width 240ms ease;
+  }
+}
+@media (min-width: 768px) {
+  .imports-page:has(.imports-running):not(.is-pushed) {
+    padding-bottom: 32px;
+  }
+}

@@ -741,7 +741,7 @@ describe("erros no formato real do BFF", () => {
     await user.click(
       await screen.findByRole("button", { name: "Escolher o que importar" }),
     );
-    await user.click(screen.getByRole("checkbox", { name: /clientes/ }));
+    await user.click(screen.getByRole("checkbox", { name: /clientes/i }));
 
     expect(
       await screen.findByText("Não foi possível salvar essa escolha agora. Tente novamente."),

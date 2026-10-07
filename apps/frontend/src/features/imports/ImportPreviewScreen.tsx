@@ -58,11 +58,29 @@ function isPreviewStaleError(error: unknown): boolean {
   );
 }
 
-function orderedCategories(preview: ImportPreviewSnapshot): ImportPreviewCategory[] {
+/**
+ * A ordem do resumo (2.I4) é a do quadro e só vale nesta tela: horários por
+ * último. `CATEGORY_ORDER` segue como a ordem das outras telas.
+ */
+const SUMMARY_CATEGORY_ORDER: ImportCategory[] = [
+  "SERVICE",
+  "CUSTOMER",
+  "FUTURE_APPOINTMENT",
+  "PAST_APPOINTMENT",
+  "CANCELLED_APPOINTMENT",
+  "NO_SHOW_APPOINTMENT",
+  "TIME_BLOCK",
+  "AVAILABILITY",
+];
+
+function orderedCategories(
+  preview: ImportPreviewSnapshot,
+  order: ImportCategory[] = CATEGORY_ORDER,
+): ImportPreviewCategory[] {
   const byCategory = new Map(preview.categories.map((entry) => [entry.category, entry]));
-  return CATEGORY_ORDER.map((category) => byCategory.get(category)).filter(
-    (entry): entry is ImportPreviewCategory => entry !== undefined,
-  );
+  return order
+    .map((category) => byCategory.get(category))
+    .filter((entry): entry is ImportPreviewCategory => entry !== undefined);
 }
 
 /**
@@ -142,6 +160,17 @@ const ANALYSIS_ROWS: {
     label: "Horários de atendimento",
   },
 ];
+
+/** O nome dos horários no resumo (2.I4): com maiúscula, ao lado do selo. */
+const AVAILABILITY_FOUND_LABEL = "Horários de atendimento";
+
+/** A legenda de "Atendimentos anteriores" na escolha (2.I5). */
+const PAST_APPOINTMENT_CHOICE_LEGEND = "histórico de cada cliente";
+
+/** `CATEGORY_LABELS` é minúsculo; a escolha (2.I5) pede o nome com maiúscula. */
+function capitalized(label: string): string {
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
 
 type Phase =
   | { kind: "working" }
@@ -515,6 +544,7 @@ export function ImportPreviewScreen({
 
   const { preview } = effectivePhase;
   const categories = orderedCategories(preview);
+  const summaryCategories = orderedCategories(preview, SUMMARY_CATEGORY_ORDER);
   const selectedCount = categories
     .filter((category) => selected.has(category.category))
     .reduce((total, category) => total + category.discoveredCount, 0);
@@ -546,33 +576,49 @@ export function ImportPreviewScreen({
   if (mode === "select") {
     return (
       <ImportsPage
-        description="O que ficar de fora não poderá ser importado depois. Nada muda até você confirmar."
+        description="O que ficar de fora não poderá ser importado depois."
+        eyebrow={false}
         title="O que você quer trazer?"
       >
-        <div className="imports-panel">
-          <ul className="imports-select-rows">
-            {categories.map((category) => (
-              <li key={category.category}>
-                <label className="imports-select-row">
-                  <input
-                    checked={selected.has(category.category)}
-                    type="checkbox"
-                    onChange={(event) =>
-                      void toggleCategory(category.category, event.target.checked)
+        <div className="imports-summary is-choice">
+          <ul className="imports-summary-card">
+            {summaryCategories.map((category) => {
+              const checked = selected.has(category.category);
+              // Sob "Atendimentos anteriores" o quadro legenda o que o
+              // histórico traz; a limitação da origem, quando houver, vale
+              // mais e ocupa o lugar dela.
+              const legend = !category.sourceSupported
+                ? limitationLabel(category.limitationCode)
+                : category.category === "PAST_APPOINTMENT"
+                  ? PAST_APPOINTMENT_CHOICE_LEGEND
+                  : null;
+              return (
+                <li key={category.category}>
+                  <label
+                    className={
+                      checked ? "imports-choice-row" : "imports-choice-row is-off"
                     }
-                  />
-                  <div>
-                    <strong>{CATEGORY_LABELS[category.category]}</strong>
-                    {!category.sourceSupported && (
-                      <small>{limitationLabel(category.limitationCode)}</small>
+                  >
+                    <input
+                      checked={checked}
+                      type="checkbox"
+                      onChange={(event) =>
+                        void toggleCategory(category.category, event.target.checked)
+                      }
+                    />
+                    <span className="imports-choice-copy">
+                      <strong>{capitalized(CATEGORY_LABELS[category.category])}</strong>
+                      {legend && <small>{legend}</small>}
+                    </span>
+                    {category.category !== "AVAILABILITY" && (
+                      <span className="imports-choice-count">
+                        {importCountFormatter.format(category.discoveredCount)}
+                      </span>
                     )}
-                  </div>
-                  <span className="imports-row-count">
-                    {importCountFormatter.format(category.discoveredCount)}
-                  </span>
-                </label>
-              </li>
-            ))}
+                  </label>
+                </li>
+              );
+            })}
           </ul>
           {selectionError && (
             <p className="field-help" role="alert">
@@ -585,15 +631,7 @@ export function ImportPreviewScreen({
             {executeError}
           </p>
         )}
-        <div className="imports-actions is-split">
-          <button
-            className="btn btn-secondary"
-            disabled={executing}
-            type="button"
-            onClick={() => setMode("summary")}
-          >
-            Voltar
-          </button>
+        <div className="imports-summary-actions is-choice">
           <button
             className="btn btn-primary"
             disabled={executing || selectedCount === 0}
@@ -603,6 +641,14 @@ export function ImportPreviewScreen({
             {executing
               ? "Importando..."
               : `Importar ${importCountFormatter.format(selectedCount)} registros`}
+          </button>
+          <button
+            className="imports-text-action"
+            disabled={executing}
+            type="button"
+            onClick={() => setMode("summary")}
+          >
+            Voltar
           </button>
         </div>
         <ConflictsZone
@@ -615,29 +661,60 @@ export function ImportPreviewScreen({
   }
 
   return (
-    <ImportsPage
-      description="Isso não altera nada na Avenly. Revise antes de confirmar."
-      title="Encontramos isto no Minha Agenda"
-    >
-      <div className="imports-panel">
-        <ul className="imports-rows">
-          {categories.map((category) => (
-            <li key={category.category}>
-              <div>
-                <strong>{CATEGORY_LABELS[category.category]}</strong>
-                {!category.sourceSupported && (
-                  <small>{limitationLabel(category.limitationCode)}</small>
+    <ImportsPage title="Encontramos isto no Minha Agenda">
+      <div className="imports-summary">
+        <ul className="imports-summary-card">
+          {summaryCategories.map((category) => {
+            // Horários não têm número que o quadro mostre: o selo diz que foram
+            // encontrados. Com 0 regras ou sem suporte da origem, a linha é
+            // como as outras (número ou limitação).
+            const found =
+              category.category === "AVAILABILITY" &&
+              category.sourceSupported &&
+              category.discoveredCount > 0;
+            return (
+              <li
+                className={found ? "imports-summary-row is-seal" : "imports-summary-row"}
+                key={category.category}
+              >
+                {found ? (
+                  <span aria-hidden="true" className="imports-summary-seal">
+                    <svg
+                      fill="none"
+                      height="14"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="3"
+                      viewBox="0 0 24 24"
+                      width="14"
+                    >
+                      <path d="M5 12.5l4.5 4.5L19 7.5" />
+                    </svg>
+                  </span>
+                ) : (
+                  <span className="imports-summary-count">
+                    {importCountFormatter.format(category.discoveredCount)}
+                  </span>
                 )}
-                {category.sourceSupported &&
-                  !selected.has(category.category) && (
-                    <small>Você deixou esta categoria de fora</small>
+                <div className="imports-summary-copy">
+                  <strong>
+                    {found
+                      ? AVAILABILITY_FOUND_LABEL
+                      : CATEGORY_LABELS[category.category]}
+                  </strong>
+                  {found && <span className="sr-only">, encontrados</span>}
+                  {!category.sourceSupported && (
+                    <small>{limitationLabel(category.limitationCode)}</small>
                   )}
-              </div>
-              <span className="imports-row-count">
-                {importCountFormatter.format(category.discoveredCount)}
-              </span>
-            </li>
-          ))}
+                  {category.sourceSupported &&
+                    !selected.has(category.category) && (
+                      <small>Você deixou esta categoria de fora</small>
+                    )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
         {!everythingSelected && (
           <p className="imports-note">
@@ -652,7 +729,7 @@ export function ImportPreviewScreen({
           {executeError}
         </p>
       )}
-      <div className="imports-actions is-stacked">
+      <div className="imports-summary-actions">
         <button
           className="btn btn-primary"
           disabled={executing || selectedCount === 0}
@@ -666,7 +743,7 @@ export function ImportPreviewScreen({
               : `Importar ${importCountFormatter.format(selectedCount)} registros`}
         </button>
         <button
-          className="btn btn-tertiary"
+          className="imports-text-action"
           disabled={executing}
           type="button"
           onClick={() => setMode("select")}

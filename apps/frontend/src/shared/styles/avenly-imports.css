@@ -96,48 +96,6 @@
   align-self: center;
 }
 
-.imports-select-rows {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.imports-select-rows li {
-  border-top: 1px solid var(--border);
-}
-.imports-select-rows li:first-child {
-  border-top: 0;
-}
-.imports-select-row {
-  min-height: 56px;
-  padding: 12px 0;
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
-  cursor: pointer;
-}
-.imports-select-row input[type="checkbox"] {
-  width: 24px;
-  height: 24px;
-  accent-color: var(--accent);
-}
-.imports-select-row strong {
-  display: block;
-  font-size: 15px;
-}
-.imports-select-row small {
-  display: block;
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.imports-select-row .imports-row-count {
-  font-family: var(--font-serif, inherit);
-  font-size: 15px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
 .imports-note {
   color: var(--muted);
   font-size: 13px;
@@ -491,4 +449,215 @@
   .imports-analysis-pill {
     animation: none;
   }
+}
+
+/*
+ * Resumo (2.I4, Goal132). Classes próprias: `.imports-rows` e
+ * `.imports-row-count` seguem servindo a conflitos e execução. Os mesmos
+ * valores nos quatro devices; o único que muda é o respiro do rodapé (46 px no
+ * celular, 32 px de 768 px em diante), como no protótipo. O rodapé fica no pé
+ * da tela só na moldura do onboarding; as zonas de conflitos e de troca de
+ * conta, que o quadro não mostra, vêm depois dele.
+ */
+.imports-page:has(.imports-summary),
+.imports-pushed-body:has(.imports-summary) {
+  gap: 20px;
+}
+.onboarding-content.is-frame:has(.imports-summary) {
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+.imports-page:has(.imports-summary):not(.is-pushed) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 46px;
+}
+.imports-summary {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.imports-summary-card {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e5ded4;
+  border-radius: 16px;
+  background: #fffdfa;
+  line-height: normal;
+  overflow: hidden;
+}
+.imports-summary-row {
+  padding: 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  border-top: 1px solid #e5ded4;
+}
+.imports-summary-row:first-child {
+  border-top: 0;
+}
+.imports-summary-row.is-seal {
+  align-items: center;
+}
+.imports-summary-count {
+  min-width: 72px;
+  font-family: var(--font-display, Literata, Georgia, serif);
+  font-size: 26px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.imports-summary-seal {
+  width: 26px;
+  height: 26px;
+  margin-left: 46px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #2e7d4f;
+  background: #dfefe4;
+}
+.imports-summary-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.imports-summary-copy strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.imports-summary-copy small {
+  margin-top: 0;
+  color: #716859;
+  font-size: 13px;
+}
+.imports-summary-actions {
+  padding: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.imports-summary-actions .btn-primary {
+  min-height: 52px;
+  align-self: stretch;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.imports-text-action {
+  min-height: 24px;
+  padding: 6px 0;
+  border: 0;
+  border-radius: 6px;
+  color: #0f5f63;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: normal;
+}
+.imports-text-action:hover {
+  color: #0b484c;
+}
+.imports-text-action:focus-visible {
+  outline: 2px solid #0f5f63;
+  outline-offset: 2px;
+}
+.imports-text-action:disabled {
+  color: #716859;
+}
+@media (min-width: 768px) {
+  .imports-page:has(.imports-summary):not(.is-pushed) {
+    padding-bottom: 32px;
+  }
+}
+
+/*
+ * Escolha (2.I5, Goal132). Reaproveita a casca do resumo (`.imports-summary`,
+ * o cartão e o rodapé), que o quadro desenha igual. A caixa é a nativa
+ * (`input type="checkbox"`) com `appearance: none`: 24 px, raio 7 px, o visto
+ * claro como fundo quando marcada e a borda de 1,5 px quando não. O rodapé tem
+ * 10 px de espaço em vez dos 14 px do resumo.
+ */
+.imports-summary.is-choice {
+  gap: 8px;
+}
+.imports-summary-card > li + li {
+  border-top: 1px solid #e5ded4;
+}
+.imports-choice-row {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+}
+.imports-choice-row input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  flex: none;
+  box-sizing: border-box;
+  border: 1.5px solid #d6cec2;
+  border-radius: 7px;
+  background: transparent no-repeat center / 14px 14px;
+  appearance: none;
+  cursor: pointer;
+}
+.imports-choice-row input[type="checkbox"]:checked {
+  border-color: #0f5f63;
+  background-color: #0f5f63;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23F7F4EF' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+}
+.imports-choice-row input[type="checkbox"]:focus-visible {
+  outline: 2px solid #0f5f63;
+  outline-offset: 2px;
+}
+.imports-choice-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.imports-choice-copy strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.imports-choice-copy small {
+  color: #716859;
+  font-size: 13px;
+}
+.imports-choice-count {
+  color: #5f574e;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.imports-choice-row.is-off .imports-choice-copy strong {
+  color: #5f574e;
+}
+.imports-choice-row.is-off .imports-choice-count {
+  color: #716859;
+}
+.imports-summary-actions.is-choice {
+  gap: 10px;
+}
+.imports-page:has(.imports-summary.is-choice) .imports-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.imports-page:has(.imports-summary.is-choice) .imports-header > p {
+  margin: 0;
+  color: #5f574e;
+  font-size: 15px;
+  line-height: 1.45;
 }

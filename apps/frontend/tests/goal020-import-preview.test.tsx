@@ -318,7 +318,7 @@ describe("escolher o que importar", () => {
     );
     await screen.findByRole("heading", { name: "O que você quer trazer?" });
 
-    await user.click(screen.getByRole("checkbox", { name: /clientes/ }));
+    await user.click(screen.getByRole("checkbox", { name: /clientes/i }));
 
     await waitFor(() =>
       expect(setImportCategorySelection).toHaveBeenCalledWith(
@@ -374,7 +374,7 @@ describe("escolher o que importar", () => {
       await screen.findByRole("button", { name: "Escolher o que importar" }),
     );
     await screen.findByRole("heading", { name: "O que você quer trazer?" });
-    await user.click(screen.getByRole("checkbox", { name: /serviços/ }));
+    await user.click(screen.getByRole("checkbox", { name: /serviços/i }));
     await waitFor(() => expect(setImportCategorySelection).toHaveBeenCalled());
 
     await user.click(screen.getByRole("button", { name: "Voltar" }));

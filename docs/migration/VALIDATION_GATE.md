@@ -7957,3 +7957,109 @@ Nenhum desvio do texto do Goal na análise depois da rodada 3. A barra é indete
 ### Não executado
 
 A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.
+
+## A prévia e a escolha do que importar no onboarding iguais ao protótipo, do Goal132
+
+Rodada 1, 2026-10-06, na worktree `goal-132`. Baseline `ada0875`. **Rodada 1:** o resumo e os testes dele (WU-01, que também capturou a baseline para a regressão); a escolha e os testes dela (WU-02); os alvos 2.I4 e 2.I5 e os testes da captura (WU-03); o `visual:compare`, as medidas, a regressão por `cmp` e os sete controles negativos (WU-04); os gates do IA Loop sobre a árvore da rodada 1 (WU-05 a WU-13, todos sobre o mesmo `codeFingerprint` da árvore, sem mudança de código entre eles); e estes registros (WU-14). Só houve a rodada 1: cada número abaixo é dela, e a coluna diz quem o obteve.
+
+### Contagens
+
+| Gate | Comando | Resultado (rodada 1) |
+| --- | --- | --- |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0 (IA Loop, WU-05; antes disso, sem saída nas WU-01, WU-02 e WU-03) |
+| Lint do frontend | `npm run lint`, ou seja, `eslint src tests --max-warnings=0` (em `apps/frontend`) | saída 0 (IA Loop, WU-06) |
+| Testes `goal132` | `npx vitest run goal132` (IA Loop, WU-07) | 3 arquivos e **94** testes passando: `goal132-resumo.test.tsx` 26 (WU-01), `goal132-escolha.test.tsx` 40 (WU-02) e `goal132-alvos-captura.test.ts` 28 (WU-03) |
+| Testes do frontend | `npm test` (IA Loop, WU-08) | **192** arquivos e **2603** testes passando, 0 falhas (baseline 189 e 2509: +3 arquivos e +94 testes, os de `goal132`) |
+| Testes da captura | `node --test scripts/tests/visual-responses.test.mjs` (WU-03 e, de novo, na WU-14, sobre a árvore final) | **59** testes, 59 passando, 0 falhas, 0 pulados (baseline 59: a contagem não mudou; os testes da lista fechada de donos de `responses` e do `Onboarding-2-Importacao.dc.html` foram ajustados para 2.I3, 2.I4 e 2.I5) |
+| Testes de ferramenta do IA Loop | `npm run test:ia-loop` (IA Loop, WU-09) | **não se aplica**: o `package.json` da worktree não declara o script `test:ia-loop`, e o harness vive fora do repositório; o IA Loop registrou `SKIPPED`, sem execução |
+| `test:gate` | `npm run test:gate` (IA Loop, WU-10) | **292** testes, 292 passando, 0 falhas, 0 pulados, 0 cancelados (baseline 292: sem mudança) |
+| `validate:core` | `npm run validate:core` (IA Loop, WU-11) | saída 0, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, que só tem a suíte de integração, rodada no `validate:integration`; `test:health-worker`, pacote sem suíte, só a checagem de sintaxe). A auditoria estática dentro dele: 33 verificações passaram, 0 falharam, 1 pulada (`production_health`, que pede `PRODUCTION_HEALTH_TARGETS`) |
+| `validate:ui` | `npm run validate:ui` (IA Loop, WU-12) | saída 0, **169 passed**, 21 skipped, retentativas **0** ("every test passed on its first attempt") |
+| `validate:integration` | `npm run validate:integration` (IA Loop, WU-13, 743 s) | saída 0, 36 passos, **36 passaram**, 0 falharam, 0 pulados, contra `127.0.0.1:55500/ia_bff_test`. O gate autenticado (`rehearse:goal033-authenticated-ui`) deu **305 passed** e retentativas **0** ("every test passed on its first attempt"); a baseline é 305 sem retentativa |
+| `git diff --check` | `git diff --check` | saída 0 depois dos três registros (WU-14); a WU-15 do plano o roda de novo no fim. Só o aviso de LF/CRLF do git, que não é erro |
+
+O Developer não rodou `validate:core`, `validate:ui` nem `validate:integration` nesta rodada: os três números acima são os que o IA Loop rodou (WU-11, WU-12 e WU-13) sobre a árvore da rodada 1. Não houve DIAG, FIX nem segunda rodada, então nenhum número foi reaproveitado de outra rodada.
+
+### Gate autenticado
+
+`apps/frontend/e2e/authenticated-matrix.spec.ts` foi lido por **busca dirigida** (importa, Encontramos, Escolher, trazer, Voltar, registros, checkbox), pela WU-01; **não foi a leitura integral** das 2712 linhas. A busca não achou bloco que toque o resumo ou a escolha: só "Voltar para …" da barra empurrada e `absentRole: checkbox` de `configuracoes-whatsapp`. `ONBOARDING_ROUTES` não mudou: `/onboarding/importacao` segue medida na origem, com o h1 "De onde vamos trazer seus dados?", e `/importacao` está fora de `AUTHENTICATED_ROUTES`. O spec **não foi alterado**. O resumo e a escolha não são alcançados pelo gate: as cores delas são as do quadro (contraste de cada par em D-146), e o alvo de toque da caixa e das duas ações de texto está descrito em D-146 (a caixa de 24 px, medida nas capturas; as ações com `min-height: 24px`, provado em jsdom pela regra de CSS, sem altura renderizada medida em px).
+
+### `visual:compare`
+
+Comando: `npm run visual:compare -- --target 2.I4,2.I5` (WU-04, três execuções, a última sobre a árvore final, sem mudança de arquivo versionado desde a WU-03; deu sempre os mesmos números). Percentual de pixels diferentes por device:
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| 2.I4 | 13,7% | 8,4% | 8,6% | 6,9% |
+| 2.I5 | 12,5% | 7,9% | 7,5% | 6,0% |
+
+Leitura dos lado a lado (protótipo × app): 2.I4 mobile e desktop (WU-04) e tablet retrato (WU-01, durante a implementação, com um alvo temporário que foi revertido; `targets.json` ficou sem mudança até a WU-03); 2.I4 tablet paisagem **só foi medido por pixel, sem leitura do lado a lado**; 2.I5 nos quatro devices (WU-02) e mobile, desktop e tablet retrato de novo (WU-04). Divergências que restam, nos quatro devices:
+
+- as legendas "incluindo cancelamentos e faltas" e "segunda a sábado", não usadas (D-146, item 10): a linha de atendimentos anteriores do 2.I4 mede 72 px no app e 86 px no quadro, e a de horários 59 px e 70 px; o selo fica a 17 px do topo da linha no app e a 23 px no quadro;
+- a zona de troca de conta (`ReplaceAccountZone`) abaixo do rodapé, que o quadro não mostra; ocupa o espaço onde o quadro prende o rodapé ao pé da tela, e por isso o topo do primário difere. **Prova:** um experimento temporário com `.imports-danger-zone { display: none !important }` no CSS (revertido, `cmp` OK): o primário do 2.I4 fica em 668 / 894 / 638 / 638 px, igual ao quadro, com diff de 1,8 / 0,8 / 1,5 / 1,1 %, e a ação de texto, com o glifo em 745 / 971 / 715 / 715, também; o 2.I5 fica 16 px acima do quadro (672 / 898 / 642 / 642 contra 688 / 914 / 658 / 658) porque "Voltar" ocupa o lugar da nota de 12 px, com diff de 5,0 / 2,9 / 3,0 / 2,4 %;
+- no 2.I5, "Voltar" como ação de texto no lugar da nota do resumo por IA, e "Importar 446 registros" no lugar de "440";
+- o chevron do topo, ausente na moldura do onboarding (D-145); o "Sair" (D-104); o preenchimento do segundo segmento da barra (`chapterFraction`); a barra de status do iPhone.
+
+### Medidas por pixel, app × quadro
+
+Lidas de `app.png` e `prototype.png` por um script que decodifica o PNG no Chromium (`/tmp/measure132/measure.mjs`, fora do repositório; WU-04):
+
+| Medida | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| Topo do cartão, app / quadro | 171 / 171 | 178 / 178 | 178 / 177 | 178 / 177 |
+| Largura do cartão (igual nos dois) | 330 | 528 | 488 | 528 |
+| Altura das linhas do 2.I4 | 72 nas três primeiras, iguais; as linhas 4 e 5 diferem só pelas legendas declaradas | idem | idem | idem |
+| Altura das linhas do 2.I5 | 57 / 57 / 57 / 70 / 57, iguais ao quadro | idem | idem | idem |
+| Caixa de seleção | 24 px; topos 184 / 241 / 298 / 425, e a desmarcada em 362 | 24 px; topos 224 / 281 / 338 / 465, e a desmarcada em 402 | idem tablet retrato | idem tablet retrato |
+| Selo dos horários | 26 × 26, mesmo x; o y difere pelas legendas declaradas | idem | idem | idem |
+| Primário | 52 px de altura, mesma esquerda e direita | idem | idem | idem |
+| Número e nome das três primeiras linhas do 2.I4 (x da tinta; o y difere de 0 a 1 px) | 82 / 65 / 79 | 166 / 149 / 164 | 484 / 467 / 482 | 675 / 658 / 673 |
+| Topo do primário do 2.I4, com a zona, app / quadro | 551 / 668 | 756 / 894 | 558 / 638 | 558 / 638 |
+| Topo do primário do 2.I5, com a zona, app / quadro | 530 / 688 | 760 / 914 | 538 / 658 | 538 / 658 |
+
+Nenhuma diferença acima de 1 px ficou fora das divergências declaradas: as de topo do primário vêm da zona e, no 2.I5, de "Voltar" (experimento acima). **A altura renderizada das duas ações de texto não foi medida em px**, só a posição do glifo; o Goal pedia a altura da ação de texto, e este registro não a tem.
+
+### Regressão por `cmp`
+
+A baseline `ada0875` foi capturada pela WU-01 **antes de qualquer edição** (`npm run visual:compare -- --target 2.I1,2.I2,2.I3,I1,I2`, saída 0, 20 capturas), com os `app.png` copiados para `E:\Projetos\atendly-ia-baseline-132\<alvo>-<device>\app.png`, fora do repositório. Depois das edições, a WU-04 rodou o mesmo comando **três vezes** (uma tentativa deu 409 de semeadura, o limite de login do BFF, e foi refeita depois da espera) e comparou os 20 `app.png` com `cmp`:
+
+- **2.I3 ficou idêntico nos quatro devices.** O 2.I1 e o 2.I2 ficaram idênticos em parte das capturas, e o I1 e o I2 também.
+- **Não deu 20 de 20 byte a byte.** Em cada execução, de 8 a 10 dos 20 `app.png` diferem da baseline, **e o conjunto que difere muda a cada execução**: por exemplo, 2.I1 mobile, 2.I1 desktop, 2.I2 mobile, 2.I2 desktop e 2.I2 tablet retrato diferiram na primeira execução e foram idênticos na segunda. Duas capturas da mesma árvore diferem entre si nos mesmos pontos, então a captura não é determinística byte a byte.
+- Cada diferença, medida: de 7 a 77 pixels por imagem, com delta de 1 a 5 por canal na maioria (delta 14 no 2.I1 tablet retrato e 35 no 2.I1 desktop, com 15 a 19 px), nos arcos dos cantos arredondados e nas bordas, em caixas pequenas. O recorte ampliado do I1 tablet retrato mostra o mesmo cartão, o mesmo visto e o mesmo raio, só com o antialiasing do arco diferente.
+- Conclusão: nenhuma diferença estrutural; a origem, as credenciais, a análise, o I1 e o I2 não mudaram. O critério "byte a byte, ou cada diferença explicada" fica atendido **pela segunda via** (a explicação e a medida acima), não pela primeira. Os percentuais de regressão depois das edições não foram transcritos pela WU-04; a prova é o `cmp` e a medida, e o CSS novo é todo escopado por `:has(.imports-summary)`, que só existe no resumo e na escolha.
+
+### Controles negativos
+
+Rodados na rodada 1 (WU-04), **depois da última edição de código** (nenhum arquivo versionado mudou na WU-04). Cada um teve o arquivo devolvido da cópia guardada e conferido com `cmp` (saída 0 nos sete). Comandos, de `apps/frontend`: `npx vitest run tests/goal132-resumo.test.tsx tests/goal132-escolha.test.tsx` para (a) a (e) e `npx vitest run tests/goal132-alvos-captura.test.ts` para (f) e (g). Uma primeira tentativa, feita da raiz do repositório, deu falhas extras por `ENOENT` de caminho de CSS (diretório errado); foi descartada e refeita de `apps/frontend`.
+
+| # | Mudança | Testes que reprovaram | Mensagem |
+| --- | --- | --- | --- |
+| a | o resumo na ordem de `CATEGORY_ORDER` (`ImportPreviewScreen.tsx`) | "as linhas seguem a ordem do quadro, com o número antes do nome", "horários encontrados mostram o selo, sem número…" e "horários com 0 regras…" (resumo), e "cada linha é uma caixa nativa, na ordem do quadro…" (escolha) | `AssertionError: expected [ 'Serviços12', 'Clientes386', …(6) ] to deeply equal […]` |
+| b | a soma sem `AVAILABILITY` | 8 testes, entre eles "'Importar N registros' soma o que está escolhido, inclusive os horários" (nas duas telas) e "a soma inclui AVAILABILITY: só os horários escolhidos dão 6" | `Unable to find an accessible element with the role "button" and name "Importar 1.858 registros"` |
+| c | o primário habilitado com soma 0 | 4 de 66: "com soma 0 o primário fica desabilitado" (resumo, duas execuções do teste) e "soma 0 desabilita o primário" (escolha) | `expect(element).toBeDisabled()` |
+| d | a escolha sem chamar `setImportCategorySelection` | 6: "desmarcar grava uma vez, com o corpo de hoje, e atualiza a soma", "marcar grava com selected: true" e "falha ao gravar desfaz a marca e mostra a mensagem de hoje" | `expected "vi.fn()" to be called 1 times, but got 0 times` |
+| e | "Voltar" sem voltar ao resumo | 2: "'Voltar' é botão de texto e volta ao resumo, sem pedido" (duas execuções) | `Unable to find role="heading" and name "Encontramos isto no Minha Agenda"` |
+| f1 | o 2.I5 de `targets.json` com um segundo passo que toca uma caixa (`checkbox` "Serviços") | 3 de 28 em `goal132-alvos-captura.test.ts`: "label e um só passo, o clickRole em 'Escolher o que importar'", "nenhum passo toca caixa, primário ou 'Conectar outra conta'" e "difere do 2.I4 só no selected de PAST_APPOINTMENT (e no passo)" | `expected [ { clickRole: … }, … ] to have a length of 1 but got 2` |
+| f2 | o 2.I5 com um segundo passo que toca o primário ("Importar 446 registros") | os mesmos 3 | os mesmos |
+| g | o 2.I4 com a prévia num `sessionId` diferente do da sessão | 2: "o sessionId é o mesmo na sessão, no direito, na prévia e no caminho" e "difere do 2.I4 só no selected…" | `expected 'visual-compare-import-outro' to be 'visual-compare-import-ready'` |
+
+Dois limites, declarados: os controles (f) e (g) passaram só por `goal132-alvos-captura.test.ts`, **não** por `scripts/tests/visual-responses.test.mjs`; e o (g) mudou o `sessionId` do **corpo** da prévia, não o do caminho.
+
+### Testes ajustados
+
+`apps/frontend/tests/goal020-import-preview.test.tsx` (4 linhas) e `apps/frontend/tests/goal061-import-async.test.tsx` (2 linhas), na rodada 1 (WU-02): só o nome acessível das caixas da escolha, que ganhou maiúscula, então `name: /clientes/` e `name: /serviços/` viraram `/clientes/i` e `/serviços/i`; nenhuma asserção sobre os pedidos, a escolha gravada, a execução, a idempotência, a prévia obsoleta, os conflitos ou a troca de conta foi mexida. `scripts/tests/visual-responses.test.mjs`: 2.I4 e 2.I5 entre os donos de `responses`, e o teste do `Onboarding-2-Importacao.dc.html` com os donos 2.I3, 2.I4 e 2.I5, só os dois `GET` com o caminho exato da prévia, o 2.I4 sem passos e o 2.I5 só com o `clickRole`. Os outros arquivos que citam as telas (`goal020-a11y`, `goal020-import-run`, `goal020-imports-entry`, `goal020-reachability`, `goal020-shell-invariant`, `goal066-onboarding-importacao` e `goal105-importacao`) passaram sem edição. Nenhum teste citava "Nada muda até você confirmar".
+
+### Escopo
+
+Arquivos do Goal: `apps/frontend/src/features/imports/ImportPreviewScreen.tsx`, `apps/frontend/src/shared/styles/avenly-imports.css`, `apps/frontend/e2e/visual/targets.json`, `scripts/tests/visual-responses.test.mjs`, os três testes `goal132-*`, os dois testes ajustados e os três registros em `docs/migration/`. `labels.ts`, `ImportsLayout.tsx` e `authenticated-matrix.spec.ts` não mudaram.
+
+### Desvios do texto do Goal, para o review
+
+- O rótulo do 2.I4 em `targets.json` é "Preview da importação", não "Resumo da importação": o `visual:compare` casa o rótulo com o `data-screen-label` do quadro, e com o rótulo do Goal deu erro ("0 quadros com o rótulo").
+- A regressão por `cmp` não deu 20 de 20 byte a byte, pela captura não determinística (acima).
+- O `authenticated-matrix.spec.ts` foi lido por busca dirigida, não por inteiro.
+- O lado a lado do 2.I4 tablet paisagem não foi aberto, só medido por pixel; a altura renderizada das ações de texto não foi medida em px.
+
+### Não executado
+
+A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho. O `test:ia-loop` não existe no repositório.

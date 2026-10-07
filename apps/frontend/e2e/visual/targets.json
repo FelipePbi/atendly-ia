@@ -315,6 +315,368 @@
       ]
     },
     {
+      "code": "2.I4",
+      "file": "Onboarding-2-Importacao.dc.html",
+      "label": "Preview da importação",
+      "route": "/onboarding/importacao",
+      "account": "onboarding",
+      "notes": "O quadro mostra o resumo do que foi encontrado; a conta de onboarding não tem sessão de importação, então a sessão READY (startedAt nulo, previewVersion 1) e a prévia vêm de respostas fixas de GET /v1/calendar/imports e de GET /v1/calendar/imports/visual-compare-import-ready/preview (sessionId igual nos dois e no caminho; 12 serviços, 386 clientes, 42 agendamentos futuros, 1.400 atendimentos anteriores e 6 regras de horário, todas com sourceSupported true e needsReviewCount 0), só no navegador da captura. A tela só lê esses dois GET (readPreview) e não chama analyzeImport; nenhum pedido de escrita sai e nenhum passo toca uma caixa, o primário ou \"Conectar outra conta\". Nenhum passo: a tela abre pronta no resumo. Divergências declaradas do Goal132: uma linha por categoria, sem agrupar cancelamentos e faltas sob os atendimentos anteriores (a caixa de cada categoria grava a própria escolha), então a legenda \"incluindo cancelamentos e faltas\" não é usada; a legenda \"segunda a sábado\" dos horários não é usada, porque o contrato só traz a contagem de regras (AVAILABILITY); a ordem das categorias do quadro (horários por último) e o selo dos horários, só nestas telas; o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports",
+          "json": {
+            "data": {
+              "right": {
+                "available": true,
+                "sessionId": "visual-compare-import-ready",
+                "completedAt": null
+              },
+              "session": {
+                "sessionId": "visual-compare-import-ready",
+                "status": "READY",
+                "previewVersion": 1,
+                "provider": "MINHA_AGENDA",
+                "sourceAccountId": "visual-compare-source",
+                "sourceAccountLabel": null,
+                "createdAt": "2026-10-06T12:00:00.000Z",
+                "startedAt": null,
+                "finishedAt": null,
+                "previewGeneratedAt": "2026-10-06T12:00:30.000Z",
+                "interrupted": false,
+                "lastError": null,
+                "counts": {
+                  "pending": 1846,
+                  "imported": 0,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0
+                },
+                "categories": [
+                  {
+                    "category": "SERVICE",
+                    "pending": 12,
+                    "imported": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "CUSTOMER",
+                    "pending": 386,
+                    "imported": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "FUTURE_APPOINTMENT",
+                    "pending": 42,
+                    "imported": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "PAST_APPOINTMENT",
+                    "pending": 1400,
+                    "imported": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "AVAILABILITY",
+                    "pending": 6,
+                    "imported": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  }
+                ]
+              },
+              "history": null
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports/visual-compare-import-ready/preview",
+          "json": {
+            "data": {
+              "sessionId": "visual-compare-import-ready",
+              "previewVersion": 1,
+              "generatedAt": "2026-10-06T12:00:30.000Z",
+              "categories": [
+                {
+                  "category": "SERVICE",
+                  "sourceSupported": true,
+                  "limitationCode": null,
+                  "limitationDetail": null,
+                  "sourceReportedCount": 12,
+                  "readCount": 12,
+                  "discoveredCount": 12,
+                  "pendingCount": 12,
+                  "needsReviewCount": 0,
+                  "importedCount": 0,
+                  "skippedCount": 0,
+                  "failedCount": 0
+                },
+                {
+                  "category": "CUSTOMER",
+                  "sourceSupported": true,
+                  "limitationCode": null,
+                  "limitationDetail": null,
+                  "sourceReportedCount": 386,
+                  "readCount": 386,
+                  "discoveredCount": 386,
+                  "pendingCount": 386,
+                  "needsReviewCount": 0,
+                  "importedCount": 0,
+                  "skippedCount": 0,
+                  "failedCount": 0
+                },
+                {
+                  "category": "FUTURE_APPOINTMENT",
+                  "sourceSupported": true,
+                  "limitationCode": null,
+                  "limitationDetail": null,
+                  "sourceReportedCount": 42,
+                  "readCount": 42,
+                  "discoveredCount": 42,
+                  "pendingCount": 42,
+                  "needsReviewCount": 0,
+                  "importedCount": 0,
+                  "skippedCount": 0,
+                  "failedCount": 0
+                },
+                {
+                  "category": "PAST_APPOINTMENT",
+                  "sourceSupported": true,
+                  "limitationCode": null,
+                  "limitationDetail": null,
+                  "sourceReportedCount": 1400,
+                  "readCount": 1400,
+                  "discoveredCount": 1400,
+                  "pendingCount": 1400,
+                  "needsReviewCount": 0,
+                  "importedCount": 0,
+                  "skippedCount": 0,
+                  "failedCount": 0
+                },
+                {
+                  "category": "AVAILABILITY",
+                  "sourceSupported": true,
+                  "limitationCode": null,
+                  "limitationDetail": null,
+                  "sourceReportedCount": 6,
+                  "readCount": 6,
+                  "discoveredCount": 6,
+                  "pendingCount": 6,
+                  "needsReviewCount": 0,
+                  "importedCount": 0,
+                  "skippedCount": 0,
+                  "failedCount": 0
+                }
+              ]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "2.I5",
+      "file": "Onboarding-2-Importacao.dc.html",
+      "label": "Escolher o que importar",
+      "route": "/onboarding/importacao",
+      "account": "onboarding",
+      "notes": "O quadro mostra a escolha do que importar; a conta de onboarding não tem sessão de importação, então a sessão READY (startedAt nulo, previewVersion 1) e a prévia vêm de respostas fixas de GET /v1/calendar/imports e de GET /v1/calendar/imports/visual-compare-import-ready/preview (sessionId igual nos dois e no caminho; 12 serviços, 386 clientes, 42 agendamentos futuros, 1.400 atendimentos anteriores e 6 regras de horário, todas com sourceSupported true e needsReviewCount 0), só no navegador da captura. A tela só lê esses dois GET (readPreview) e não chama analyzeImport; nenhum pedido de escrita sai e nenhum passo toca uma caixa, o primário ou \"Conectar outra conta\". Um só passo: clickRole em \"Escolher o que importar\", que só troca o modo da tela, sem pedido. \"Atendimentos anteriores\" chega desmarcado pela leitura (session.categories[].selected false), sem PUT. Divergências declaradas do Goal132: o primário mostra \"Importar 446 registros\" e não \"Importar 440 registros\" do quadro, porque a soma (selectedCount) inclui as 6 regras de AVAILABILITY e o Goal132 não muda a soma nem a regra que habilita o primário; a nota \"Sem o histórico, o resumo por IA de cada cliente começa do zero.\" não é usada, porque não é verdade no app (o resumo do cliente não usa os atendimentos anteriores); \"Voltar\" como ação de texto; uma linha por categoria, sem a legenda \"segunda a sábado\"; o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app.",
+      "steps": [
+        {
+          "clickRole": {
+            "role": "button",
+            "name": "Escolher o que importar"
+          }
+        }
+      ],
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports",
+          "json": {
+            "data": {
+              "right": {
+                "available": true,
+                "sessionId": "visual-compare-import-ready",
+                "completedAt": null
+              },
+              "session": {
+                "sessionId": "visual-compare-import-ready",
+                "status": "READY",
+                "previewVersion": 1,
+                "provider": "MINHA_AGENDA",
+                "sourceAccountId": "visual-compare-source",
+                "sourceAccountLabel": null,
+                "createdAt": "2026-10-06T12:00:00.000Z",
+                "startedAt": null,
+                "finishedAt": null,
+                "previewGeneratedAt": "2026-10-06T12:00:30.000Z",
+                "interrupted": false,
+                "lastError": null,
+                "counts": {
+                  "pending": 1846,
+                  "imported": 0,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0
+                },
+                "categories": [
+                  {
+                    "category": "SERVICE",
+                    "pending": 12,
+                    "imported": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "CUSTOMER",
+                    "pending": 386,
+                    "imported": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "FUTURE_APPOINTMENT",
+                    "pending": 42,
+                    "imported": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "PAST_APPOINTMENT",
+                    "pending": 1400,
+                    "imported": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": false
+                  },
+                  {
+                    "category": "AVAILABILITY",
+                    "pending": 6,
+                    "imported": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  }
+                ]
+              },
+              "history": null
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports/visual-compare-import-ready/preview",
+          "json": {
+            "data": {
+              "sessionId": "visual-compare-import-ready",
+              "previewVersion": 1,
+              "generatedAt": "2026-10-06T12:00:30.000Z",
+              "categories": [
+                {
+                  "category": "SERVICE",
+                  "sourceSupported": true,
+                  "limitationCode": null,
+                  "limitationDetail": null,
+                  "sourceReportedCount": 12,
+                  "readCount": 12,
+                  "discoveredCount": 12,
+                  "pendingCount": 12,
+                  "needsReviewCount": 0,
+                  "importedCount": 0,
+                  "skippedCount": 0,
+                  "failedCount": 0
+                },
+                {
+                  "category": "CUSTOMER",
+                  "sourceSupported": true,
+                  "limitationCode": null,
+                  "limitationDetail": null,
+                  "sourceReportedCount": 386,
+                  "readCount": 386,
+                  "discoveredCount": 386,
+                  "pendingCount": 386,
+                  "needsReviewCount": 0,
+                  "importedCount": 0,
+                  "skippedCount": 0,
+                  "failedCount": 0
+                },
+                {
+                  "category": "FUTURE_APPOINTMENT",
+                  "sourceSupported": true,
+                  "limitationCode": null,
+                  "limitationDetail": null,
+                  "sourceReportedCount": 42,
+                  "readCount": 42,
+                  "discoveredCount": 42,
+                  "pendingCount": 42,
+                  "needsReviewCount": 0,
+                  "importedCount": 0,
+                  "skippedCount": 0,
+                  "failedCount": 0
+                },
+                {
+                  "category": "PAST_APPOINTMENT",
+                  "sourceSupported": true,
+                  "limitationCode": null,
+                  "limitationDetail": null,
+                  "sourceReportedCount": 1400,
+                  "readCount": 1400,
+                  "discoveredCount": 1400,
+                  "pendingCount": 1400,
+                  "needsReviewCount": 0,
+                  "importedCount": 0,
+                  "skippedCount": 0,
+                  "failedCount": 0
+                },
+                {
+                  "category": "AVAILABILITY",
+                  "sourceSupported": true,
+                  "limitationCode": null,
+                  "limitationDetail": null,
+                  "sourceReportedCount": 6,
+                  "readCount": 6,
+                  "discoveredCount": 6,
+                  "pendingCount": 6,
+                  "needsReviewCount": 0,
+                  "importedCount": 0,
+                  "skippedCount": 0,
+                  "failedCount": 0
+                }
+              ]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "3.1",
       "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
       "label": "Demonstração da IA",

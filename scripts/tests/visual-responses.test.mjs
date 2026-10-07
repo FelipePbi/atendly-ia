@@ -202,11 +202,11 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, W2, R2, I1, AG2, NT2, 2.6, 2.I3, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1, W2, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I3", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I3", "2.I4", "2.I5", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
   for (const target of declaring) {
-    const owner = target.code === "2.I3"
+    const owner = ["2.I3", "2.I4", "2.I5"].includes(target.code)
       ? "Onboarding-2-Importacao.dc.html"
       : ["W1", "W2", "R2", "I1"].includes(target.code)
       ? "Mais-WhatsApp-Importacao-Conta.dc.html"
@@ -1095,12 +1095,12 @@ test("targets.json: 2.6 é o único dono de responses em Onboarding-1-Negocio-e-
   }
 });
 
-test("targets.json: 2.I3 é o único dono de responses em Onboarding-2-Importacao.dc.html, só com o GET /v1/calendar/imports e sem passos; o 2.I2 não declara responses e só tem os três passos permitidos", () => {
+test("targets.json: 2.I3, 2.I4 e 2.I5 são os únicos donos de responses em Onboarding-2-Importacao.dc.html; o 2.I3 só com o GET /v1/calendar/imports e sem passos; o 2.I4 só com os dois GET (estado e prévia do caminho exato) e sem passos; o 2.I5 com os mesmos dois GET e só o clickRole em \"Escolher o que importar\"; o 2.I2 não declara responses e só tem os três passos permitidos", () => {
   const all = JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "frontend", "e2e", "visual", "targets.json"), "utf8")).targets;
   const inFile = all.filter((target) => target.file === "Onboarding-2-Importacao.dc.html");
   const owners = declaringTargets().filter((target) => target.file === "Onboarding-2-Importacao.dc.html");
-  assert.deepEqual(owners.map((target) => target.code), ["2.I3"]);
-  const [t2i3] = owners;
+  assert.deepEqual(owners.map((target) => target.code), ["2.I3", "2.I4", "2.I5"]);
+  const [t2i3, t2i4, t2i5] = owners;
   const t2i2 = inFile.find((target) => target.code === "2.I2");
   assert.ok(t2i2, "2.I2 precisa estar em targets.json");
   for (const target of [t2i2, t2i3]) {
@@ -1117,6 +1117,27 @@ test("targets.json: 2.I3 é o único dono de responses em Onboarding-2-Importaca
   for (const other of ["/v1/calendar/imports/visual-compare-import-analyzing/preview", "/v1/calendar/imports/visual-compare-import-analyzing/progress", "/v1/settings"]) {
     assert.equal(pickFixedResponse(t2i3, "GET", other), null, `2.I3: ${other} não é servido`);
   }
+  const previewPath = "/v1/calendar/imports/visual-compare-import-ready/preview";
+  for (const target of [t2i4, t2i5]) {
+    assert.equal(target.route, "/onboarding/importacao");
+    assert.equal(target.account, "onboarding");
+    assert.deepEqual(target.responses.map((entry) => `${entry.method} ${entry.path}`), ["GET /v1/calendar/imports", `GET ${previewPath}`], `${target.code}: só os dois GET`);
+    for (const entry of target.responses) assert.equal(typeof entry.json.requestId, "string");
+    assert.equal(pickFixedResponse(target, "GET", "/v1/calendar/imports"), target.responses[0]);
+    assert.equal(pickFixedResponse(target, "GET", previewPath), target.responses[1]);
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      assert.equal(pickFixedResponse(target, method, "/v1/calendar/imports"), null, `${target.code}: ${method} /v1/calendar/imports não deveria casar`);
+      assert.equal(pickFixedResponse(target, method, previewPath), null, `${target.code}: ${method} da prévia não deveria casar`);
+    }
+    for (const other of ["/v1/calendar/imports/visual-compare-import-analyzing/preview", "/v1/calendar/imports/visual-compare-import/preview", "/v1/calendar/imports/visual-compare-import-ready/progress", "/v1/settings"]) {
+      assert.equal(pickFixedResponse(target, "GET", other), null, `${target.code}: ${other} não é servido`);
+    }
+  }
+  assert.equal(t2i4.steps, undefined, "2.I4: nenhum passo, a tela abre sozinha no resumo");
+  assert.deepEqual(t2i5.steps.map((step) => Object.keys(step)), [["clickRole"]], "2.I5: só o clickRole");
+  assert.deepEqual(t2i5.steps[0].clickRole, { role: "button", name: "Escolher o que importar" });
+  assert.notEqual(t2i5.steps[0].optional, true);
+  assert.doesNotMatch(JSON.stringify(t2i5.steps), /Importar|Conectar|checkbox|Enter/);
   assert.equal(t2i2.responses, undefined, "2.I2: a conta de onboarding não tem sessão de importação");
   assert.deepEqual(
     t2i2.steps.map((step) => Object.keys(step)),

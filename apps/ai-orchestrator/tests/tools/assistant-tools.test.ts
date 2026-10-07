@@ -765,7 +765,7 @@ describe("AssistantToolRegistry recurrence offer (Goal011)", () => {
 });
 
 describe("AssistantToolRegistry customer appointment lookup", () => {
-  it("queries by customerId when the contact is already linked to a person", async () => {
+  it("queries the number's list by phone when the contact is already linked to a person", async () => {
     const { prisma } = createPrismaMock({}, "linked-customer-1");
     const { agenda, calls } = createAgendaMock([
       { id: "linked-customer-1", name: null, phone },
@@ -782,10 +782,8 @@ describe("AssistantToolRegistry customer appointment lookup", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(calls.findFutureAppointmentsForCustomer).toEqual([
-      "linked-customer-1",
-    ]);
-    expect(calls.findFutureAppointmentsForPhone).toHaveLength(0);
+    expect(calls.findFutureAppointmentsForPhone).toEqual([phone]);
+    expect(calls.findFutureAppointmentsForCustomer).toHaveLength(0);
   });
 
   it("falls back to phone candidates when the contact is not linked", async () => {

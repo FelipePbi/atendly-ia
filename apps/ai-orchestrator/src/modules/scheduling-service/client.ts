@@ -270,7 +270,7 @@ export interface SchedulingGateway {
   /**
    * Horarios futuros do numero. Sem `options`, so os dos candidatos do
    * telefone; `includeDependents: true` (Goal142) inclui os dos dependentes
-   * confirmados deles. So cancelar, remarcar e a lista sem vinculo pedem.
+   * confirmados deles. So cancelar, remarcar e a lista da IA pedem.
    */
   findFutureAppointmentsForPhone(
     phone: string,

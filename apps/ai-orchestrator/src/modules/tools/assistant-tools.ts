@@ -547,7 +547,7 @@ export class AssistantToolRegistry {
         {
           name: "list_customer_appointments",
           description:
-            "Lista agendamentos futuros reais da cliente identificada pelo telefone do WhatsApp.",
+            "Lista os agendamentos futuros reais das pessoas deste numero (o dono do telefone e quem o responsavel deste numero agenda). Cada horario diz para quem e (customerName); quando houver mais de um, pergunte de qual se trata.",
           schema: noArgsSchema,
         },
       ),
@@ -661,7 +661,7 @@ export class AssistantToolRegistry {
         {
           name: "list_customer_appointments",
           description:
-            "Lista agendamentos futuros reais da cliente identificada pelo telefone do WhatsApp.",
+            "Lista os agendamentos futuros reais das pessoas deste numero (o dono do telefone e quem o responsavel deste numero agenda). Cada horario diz para quem e (customerName); quando houver mais de um, pergunte de qual se trata.",
           schema: noArgsSchema,
         },
       ),
@@ -1461,39 +1461,21 @@ export class AssistantToolRegistry {
   }
 
   /**
-   * Compromissos futuros do contato.
+   * Compromissos futuros das pessoas do numero (Goal145).
    *
-   * Quando o contato ja esta vinculado a uma pessoa (confirmacao de
-   * agendamento anterior), a consulta e por `customerId` — o historico e
-   * dessa pessoa, nao de "todo mundo que compartilha o numero". Sem vinculo,
-   * cai nos candidatos por telefone e nos dependentes confirmados deles
-   * (Goal142), que a IA deve tratar como candidatos — cada horario diz para
-   * quem e.
+   * A lista e sempre a do telefone com os dependentes confirmados deles
+   * (Goal142), com ou sem vinculo do contato: o vinculo muda a cada
+   * atendimento e so serve a pessoa provavel (`resolveScheduleCustomer`).
+   * Cada horario diz para quem e, e e a mesma lista em que cancelar e
+   * remarcar procuram o `appointmentId`. Nao le o vinculo nem os candidatos.
    */
   private async findCustomerAppointments(context: ToolExecutionContext) {
-    const linkedId = await this.linkedCustomerId(context);
-    // O vínculo só vale para pessoa que ainda é do número (Goal143): relação
-    // removida ou vínculo criado antes da conferência não abre a agenda dela.
-    const linkedCustomerId =
-      linkedId &&
-      isCandidateOfNumber(
-        (await this.customerCandidates(context)).candidates,
-        linkedId,
-      )
-        ? linkedId
-        : null;
-    const appointments = linkedCustomerId
-      ? await this.scheduling.findFutureAppointmentsForCustomer(
-          linkedCustomerId,
-          context.businessContext,
-          schedulingContext(context),
-        )
-      : await this.scheduling.findFutureAppointmentsForPhone(
-          context.phone,
-          context.businessContext,
-          schedulingContext(context),
-          { includeDependents: true },
-        );
+    const appointments = await this.scheduling.findFutureAppointmentsForPhone(
+      context.phone,
+      context.businessContext,
+      schedulingContext(context),
+      { includeDependents: true },
+    );
     return {
       appointments: appointments.map((appointment) =>
         this.presentAppointment(appointment),

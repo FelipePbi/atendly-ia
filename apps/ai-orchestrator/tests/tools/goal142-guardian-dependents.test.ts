@@ -743,7 +743,7 @@ describe("Goal142 — Maria cancela e remarca o horário de Pedro", () => {
     ]);
   });
 
-  it("list_customer_appointments sem vínculo usa o número com os dependentes; com vínculo, só a pessoa vinculada", async () => {
+  it("list_customer_appointments usa o número com os dependentes, sem vínculo e com vínculo", async () => {
     const unlinked = createAgenda();
     const withoutLink = await new AssistantToolRegistry(
       createPrisma(null).prisma,
@@ -781,8 +781,10 @@ describe("Goal142 — Maria cancela e remarca o horário de Pedro", () => {
       },
       context(),
     );
-    expect(linked.calls.findFutureAppointmentsForCustomer).toEqual([maria.id]);
-    expect(linked.calls.findFutureAppointmentsForPhone).toHaveLength(0);
+    expect(linked.calls.findFutureAppointmentsForPhone).toEqual([
+      { phone, options: { includeDependents: true } },
+    ]);
+    expect(linked.calls.findFutureAppointmentsForCustomer).toHaveLength(0);
   });
 });
 

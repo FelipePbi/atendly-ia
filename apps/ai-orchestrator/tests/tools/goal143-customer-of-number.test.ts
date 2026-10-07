@@ -664,18 +664,25 @@ describe("Goal143 — list_customer_appointments só usa o vínculo de pessoa do
     args: {},
   };
 
-  it("contato vinculado a pessoa do número: a lista é a da pessoa vinculada, como hoje", async () => {
+  it("contato vinculado a pessoa do número: a lista é a do número, com todas as pessoas dele", async () => {
     const { prisma } = createPrisma(pedro.id);
     const { gateway, calls } = createAgenda();
     const registry = new AssistantToolRegistry(prisma, gateway);
 
     const result = await registry.execute(listCall, context());
 
-    expect(calls.findFutureAppointmentsForCustomer).toEqual([pedro.id]);
-    expect(calls.findFutureAppointmentsForPhone).toHaveLength(0);
+    expect(calls.findFutureAppointmentsForCustomer).toEqual([]);
+    expect(calls.findFutureAppointmentsForPhone).toEqual([
+      { options: { includeDependents: true } },
+    ]);
     expect(result).toMatchObject({
       ok: true,
-      data: { appointments: [{ id: pedroAppointment.id }] },
+      data: {
+        appointments: [
+          { id: mariaAppointment.id },
+          { id: pedroAppointment.id },
+        ],
+      },
     });
   });
 

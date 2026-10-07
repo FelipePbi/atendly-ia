@@ -1,6 +1,6 @@
 # Goal 142 — A IA reconhece pelo número do responsável quem ele agenda
 
-**Status: READY.** Preparado em 2026-10-07 pelo Tech Lead Agent após [Goal141 ACCEPTED](../reviews/141-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED.** Preparado em 2026-10-07 pelo Tech Lead Agent após [Goal141 ACCEPTED](../reviews/141-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_HIGH
 

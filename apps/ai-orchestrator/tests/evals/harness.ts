@@ -546,6 +546,11 @@ function createAgendaStub(
       record("findCustomerCandidatesByPhone", { phone }, context);
       return options.customerCandidates ?? [];
     },
+    // Goal142: nenhum cenário de eval tem dependente confirmado no número.
+    findCustomerDependentsByPhone: async (phone, context) => {
+      record("findCustomerDependentsByPhone", { phone }, context);
+      return [];
+    },
     getAuthorizedCustomerContext: async (customerId, context) => {
       record("getAuthorizedCustomerContext", { customerId }, context);
       return {

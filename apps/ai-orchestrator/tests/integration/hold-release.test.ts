@@ -230,6 +230,7 @@ describeWithDatabases("AssistantToolRegistry hold release against PostgreSQL", (
         futureAppointments,
       findFutureAppointmentsForCustomer: async () => [] as SchedulingAppointment[],
       findCustomerCandidatesByPhone: async () => [],
+      findCustomerDependentsByPhone: async () => [],
       getAuthorizedCustomerContext: async (customerId: string) => ({
         id: customerId,
         name: "Thais",

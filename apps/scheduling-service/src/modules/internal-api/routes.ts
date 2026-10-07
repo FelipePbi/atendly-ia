@@ -297,7 +297,10 @@ const customerPatchSchema = z
 const customerQuerySchema = z.object({
   phone: z.string().trim().min(6).max(32).optional(),
 });
-const relationActorSchema = z.enum(["AI", "PROFESSIONAL", "CUSTOMER"]);
+const customerDependentsQuerySchema = z.object({
+  phone: z.string().trim().min(6).max(32),
+});
+const relationActorSchema =z.enum(["AI", "PROFESSIONAL", "CUSTOMER"]);
 const primaryGuardianBodySchema = z.object({
   guardianCustomerId: z.string().trim().min(1).max(128),
   proposedBy: relationActorSchema,
@@ -644,6 +647,22 @@ export async function registerManagementRoutes(
       // escolha entre eles é sempre explícita.
       filteredByPhone: query.phone !== undefined,
     });
+  });
+
+  /**
+   * Dependentes confirmados dos candidatos de um telefone (Goal142). Rota
+   * estática: o Fastify a prefere a `/internal/customers/:id`, então
+   * `dependents` nunca é lido como identificador.
+   */
+  app.get("/internal/customers/dependents", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    await requireCalendar(prisma, context.tenantId);
+    const query = parse(customerDependentsQuerySchema, request.query ?? {});
+    const items = await new AvenlyCustomerService(
+      prisma,
+      context.tenantId,
+    ).findDependentsByPhone(query.phone);
+    return data(request, { items });
   });
 
   app.get("/internal/customers/:id", internalOnly, async (request) => {

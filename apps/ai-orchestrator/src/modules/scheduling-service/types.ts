@@ -93,6 +93,28 @@ export interface SchedulingCustomerCandidate {
   phone: string | null;
 }
 
+/**
+ * Dependente confirmado de uma pessoa que usa o numero (Goal142).
+ *
+ * So entra quem tem `PRIMARY_GUARDIAN` `CONFIRMED` apontando para um
+ * candidato do telefone. Nao prova identidade: e mais um candidato, e a
+ * escolha continua explicita na conversa.
+ */
+export interface SchedulingCustomerDependent {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  guardian: { id: string; name: string | null };
+}
+
+/**
+ * Leitura dos horarios do numero (Goal142). `includeDependents` (padrao
+ * `false`) inclui os horarios dos dependentes confirmados dos candidatos.
+ */
+export interface FindAppointmentsForPhoneOptions {
+  includeDependents?: boolean;
+}
+
 /** Recorte do cliente que a IA esta autorizada a usar. */
 export interface SchedulingAuthorizedCustomerContext {
   id: string;

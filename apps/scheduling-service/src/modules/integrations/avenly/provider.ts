@@ -133,12 +133,23 @@ export class AvenlyCalendarProvider implements CalendarProvider {
     if (input.customerId) {
       customerIds = [input.customerId];
     } else if (input.customerPhone) {
-      const candidates = await new AvenlyCustomerService(
-        this.prisma,
-        this.tenantId,
-      ).findCandidatesByPhone(input.customerPhone);
+      const customers = new AvenlyCustomerService(this.prisma, this.tenantId);
+      const candidates = await customers.findCandidatesByPhone(
+        input.customerPhone,
+      );
       if (candidates.length === 0) return [];
       customerIds = candidates.map((candidate) => candidate.id);
+      if (input.includeDependents) {
+        const dependents = await customers.findDependentsByPhone(
+          input.customerPhone,
+        );
+        customerIds = [
+          ...new Set([
+            ...customerIds,
+            ...dependents.map((dependent) => dependent.id),
+          ]),
+        ];
+      }
     }
 
     const rangeStart = localDateTimeToInstant(

@@ -973,6 +973,22 @@ export function createDatabaseDouble() {
         withGuardian(await customerRelation.update(args)),
       deleteMany: (args: Parameters<Table["deleteMany"]>[0]) =>
         customerRelation.deleteMany(args),
+      // `include: { customer: true, relatedCustomer: true }` da leitura dos
+      // dependentes (Goal142).
+      findMany: async (args: Parameters<Table["findMany"]>[0] = {}) =>
+        Promise.all(
+          (await customerRelation.findMany(args)).map(async (row) => ({
+            ...(await withGuardian(row)),
+            customer: await customer.findUnique({
+              where: {
+                tenantId_id: {
+                  tenantId: row.tenantId,
+                  id: row.customerId as string,
+                },
+              },
+            }),
+          })),
+        ),
     },
     /**
      * O lock de dia é `pg_advisory_xact_lock(hashtext(tenant:date))`: aqui só

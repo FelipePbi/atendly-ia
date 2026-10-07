@@ -167,6 +167,7 @@ function createExceptionTrap() {
     findService: async () => service,
     getAvailableSlotsForServices: async () => [slot],
     findCustomerCandidatesByPhone: async () => [],
+    findCustomerDependentsByPhone: async () => [],
     getAuthorizedCustomerContext: async () => null,
     findFutureAppointmentsForPhone: async () => [appointment],
     findFutureAppointmentsForCustomer: async () => [appointment],

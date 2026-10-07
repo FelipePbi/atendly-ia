@@ -59,6 +59,14 @@ export interface AppointmentStats {
   firstAppointmentDate: string | null;
 }
 
+/** Dependente confirmado de um responsável que usa o telefone (Goal142). */
+export interface CustomerDependent {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  guardian: { id: string; name: string | null };
+}
+
 /** Ativo o suficiente para contar como próximo atendimento (Goal075). */
 const NEXT_APPOINTMENT_STATUSES = ["CONFIRMED", "SCHEDULED"] as const;
 
@@ -128,6 +136,45 @@ export class AvenlyCustomerService {
     options: { timezone?: string; now?: Date } = {},
   ) {
     return this.list({ phone }, options);
+  }
+
+  /**
+   * Dependentes confirmados dos candidatos de um número (Goal142): quem tem
+   * um `PRIMARY_GUARDIAN` `CONFIRMED` apontando para uma pessoa que usa esse
+   * telefone. Relação `PROPOSED` nunca entra, e a leitura é sempre por
+   * pedido — relação removida some na hora. Uma pessoa sai uma vez só, mesmo
+   * quando ela própria também é candidata do número.
+   */
+  async findDependentsByPhone(phone: string): Promise<CustomerDependent[]> {
+    const guardians = await this.findCandidatesByPhone(phone);
+    if (guardians.length === 0) return [];
+    const relations = await this.database.customerRelation.findMany({
+      where: {
+        tenantId: this.tenantId,
+        type: "PRIMARY_GUARDIAN",
+        status: "CONFIRMED",
+        relatedCustomerId: { in: guardians.map((guardian) => guardian.id) },
+      },
+      include: { customer: true, relatedCustomer: true },
+    });
+    const byId = new Map<string, CustomerDependent>();
+    for (const relation of relations) {
+      if (byId.has(relation.customer.id)) continue;
+      byId.set(relation.customer.id, {
+        id: relation.customer.id,
+        name: relation.customer.name,
+        phone: relation.customer.phone,
+        guardian: {
+          id: relation.relatedCustomer.id,
+          name: relation.relatedCustomer.name,
+        },
+      });
+    }
+    return [...byId.values()].sort(
+      (left, right) =>
+        (left.name ?? "").localeCompare(right.name ?? "") ||
+        left.id.localeCompare(right.id),
+    );
   }
 
   /**

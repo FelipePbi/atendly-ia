@@ -23,6 +23,8 @@ import {
   CUSTOMER_CHANGE_OUTSIDE_POLICY,
   PRESENCE_CONFIRMATION_NOT_ENABLED,
   type SchedulingAppointment,
+  type SchedulingCustomerCandidate,
+  type SchedulingCustomerDependent,
   type SchedulingHold,
   type SchedulingRequestContext,
 } from "../scheduling-service/types.js";
@@ -85,6 +87,23 @@ export type StructuredToolResult<T> =
 export const CONFIRMATION_SAME_TURN = "CONFIRMATION_REQUIRED_SAME_TURN";
 /** Confirmar sem rascunho: nao ha o que confirmar, e nada tem efeito. */
 export const CONFIRMATION_WITHOUT_DRAFT = "NO_PENDING_CONFIRMATION";
+/**
+ * Motivo da proposta quando o contato está vinculado a um dependente
+ * confirmado do número (Goal142): a última pessoa atendida por ele. É
+ * pergunta, nunca certeza — "Seria para o Pedro novamente?".
+ */
+export const LAST_BOOKED_FOR_DEPENDENT = "LAST_BOOKED_FOR_DEPENDENT";
+
+/**
+ * Pessoa que a IA pode agendar por este número (Goal142). `scheduledBy` é o
+ * responsável confirmado que usa o número quando o candidato é dependente
+ * dele; `null` para quem é candidato só pelo próprio telefone.
+ */
+interface CustomerCandidate {
+  customerId: string;
+  name: string | null;
+  scheduledBy: { customerId: string; name: string | null } | null;
+}
 
 type PendingAction =
   | {
@@ -563,7 +582,7 @@ export class AssistantToolRegistry {
         {
           name: "create_appointment",
           description:
-            "Prepara ou confirma agendamento. Use action=prepare antes de pedir confirmacao; action=confirm somente apos confirmacao clara da cliente. Quando o numero tiver mais de uma pessoa cadastrada, pergunte para quem e o atendimento e reenvie prepare com customerId.",
+            "Prepara ou confirma agendamento. Use action=prepare antes de pedir confirmacao; action=confirm somente apos confirmacao clara da cliente. Quando o numero tiver mais de uma pessoa cadastrada, pergunte para quem e o atendimento e reenvie prepare com customerId. Candidato com scheduledBy e uma pessoa que o responsavel deste numero agenda, sem ser dona do numero. Com reason=LAST_BOOKED_FOR_DEPENDENT, a pessoa proposta foi a ultima atendida por este numero: pergunte se e para ela novamente (por exemplo, Seria para o Pedro novamente?), nunca assuma, e se for para outra pessoa reenvie prepare com o customerId dela.",
           schema: createAppointmentSchema,
         },
       ),
@@ -599,7 +618,7 @@ export class AssistantToolRegistry {
         {
           name: "list_customer_candidates",
           description:
-            "Lista as pessoas ja cadastradas para o numero deste contato. Zero, uma ou varias: o numero nao prova de quem e o atendimento.",
+            "Lista as pessoas ja cadastradas para o numero deste contato e as que o responsavel deste numero agenda. Zero, uma ou varias: o numero nao prova de quem e o atendimento. scheduledBy indica o responsavel que agenda por aquela pessoa; nulo quando a pessoa e cadastrada pelo proprio numero. Pergunte para quem e o atendimento, nunca assuma.",
           schema: noArgsSchema,
         },
       ),
@@ -982,18 +1001,57 @@ export class AssistantToolRegistry {
    * quem é o atendimento).
    */
   private async listCustomerCandidates(context: ToolExecutionContext) {
-    const candidates = await this.scheduling.findCustomerCandidatesByPhone(
-      context.phone,
-      schedulingContext(context),
-    );
+    const { candidates } = await this.customerCandidates(context);
     return {
-      candidates: candidates.map((candidate) => ({
-        customerId: candidate.id,
-        name: candidate.name,
-      })),
+      candidates,
       // Um só candidato é proposta, nunca certeza.
       requiresConfirmation: candidates.length > 0,
     };
+  }
+
+  /**
+   * Candidatos do telefone e dependentes confirmados deles (Goal142), sem
+   * repetir pessoa: o dependente que também é candidato do telefone aparece
+   * uma vez só, com o responsável. A ordem é a do telefone, depois a dos
+   * dependentes que só entram pelo responsável.
+   */
+  private async customerCandidates(context: ToolExecutionContext): Promise<{
+    phoneCandidates: SchedulingCustomerCandidate[];
+    dependents: SchedulingCustomerDependent[];
+    candidates: CustomerCandidate[];
+  }> {
+    const [phoneCandidates, dependents] = await Promise.all([
+      this.scheduling.findCustomerCandidatesByPhone(
+        context.phone,
+        schedulingContext(context),
+      ),
+      this.scheduling.findCustomerDependentsByPhone(
+        context.phone,
+        schedulingContext(context),
+      ),
+    ]);
+    const guardianOf = new Map(
+      dependents.map((dependent) => [
+        dependent.id,
+        { customerId: dependent.guardian.id, name: dependent.guardian.name },
+      ]),
+    );
+    const phoneIds = new Set(phoneCandidates.map((candidate) => candidate.id));
+    const candidates: CustomerCandidate[] = [
+      ...phoneCandidates.map((candidate) => ({
+        customerId: candidate.id,
+        name: candidate.name,
+        scheduledBy: guardianOf.get(candidate.id) ?? null,
+      })),
+      ...dependents
+        .filter((dependent) => !phoneIds.has(dependent.id))
+        .map((dependent) => ({
+          customerId: dependent.id,
+          name: dependent.name,
+          scheduledBy: guardianOf.get(dependent.id) ?? null,
+        })),
+    ];
+    return { phoneCandidates, dependents, candidates };
   }
 
   private async getAuthorizedCustomerContext(
@@ -1139,10 +1197,14 @@ export class AssistantToolRegistry {
   /**
    * Para quem é o atendimento.
    *
-   * `customerId` escolhido pela conversa vence. Sem escolha, os candidatos do
-   * número decidem o que perguntar: vários exigem seleção explícita antes de
-   * seguir; um vira proposta a confirmar; nenhum significa cadastro novo, que
-   * só nasce na confirmação do agendamento.
+   * `customerId` escolhido pela conversa vence. Sem escolha, o contato
+   * vinculado a um dependente confirmado do número propõe esse dependente
+   * (Goal142): foi a última pessoa atendida por ele, e a IA pergunta se é
+   * para ela de novo. Senão, os candidatos do **telefone** decidem o que
+   * perguntar: vários exigem seleção explícita antes de seguir; um vira
+   * proposta a confirmar; nenhum significa cadastro novo, que só nasce na
+   * confirmação do agendamento. Os dependentes vão em `candidates` nos três
+   * casos, para a conversa trocar de pessoa.
    */
   private async resolveScheduleCustomer(
     args: { customerId?: string | null },
@@ -1151,26 +1213,19 @@ export class AssistantToolRegistry {
     | {
         customerId: string | null;
         proposedCustomerId: string | null;
-        candidates: Array<{ customerId: string; name: string | null }>;
+        candidates: CustomerCandidate[];
+        requiresConfirmation?: true;
+        reason?: typeof LAST_BOOKED_FOR_DEPENDENT;
       }
     | {
         ok: false;
         code: string;
         error: string;
-        details: {
-          candidates: Array<{ customerId: string; name: string | null }>;
-        };
+        details: { candidates: CustomerCandidate[] };
       }
   > {
-    const candidates = (
-      await this.scheduling.findCustomerCandidatesByPhone(
-        context.phone,
-        schedulingContext(context),
-      )
-    ).map((candidate) => ({
-      customerId: candidate.id,
-      name: candidate.name,
-    }));
+    const { phoneCandidates, dependents, candidates } =
+      await this.customerCandidates(context);
 
     if (args.customerId) {
       return {
@@ -1179,7 +1234,24 @@ export class AssistantToolRegistry {
         candidates,
       };
     }
-    if (candidates.length > 1) {
+    // Só lê o vínculo quando há dependente: número sem dependente segue
+    // exatamente o caminho de antes.
+    if (dependents.length > 0) {
+      const linkedCustomerId = await this.linkedCustomerId(context);
+      const lastBookedFor = dependents.find(
+        (dependent) => dependent.id === linkedCustomerId,
+      );
+      if (lastBookedFor) {
+        return {
+          customerId: null,
+          proposedCustomerId: lastBookedFor.id,
+          candidates,
+          requiresConfirmation: true,
+          reason: LAST_BOOKED_FOR_DEPENDENT,
+        };
+      }
+    }
+    if (phoneCandidates.length > 1) {
       return {
         ok: false,
         code: "CUSTOMER_IDENTITY_AMBIGUOUS",
@@ -1188,11 +1260,11 @@ export class AssistantToolRegistry {
         details: { candidates },
       };
     }
-    if (candidates.length === 1) {
+    if (phoneCandidates.length === 1) {
       // Proposta, não certeza: a pessoa ainda precisa confirmar que é ela.
       return {
         customerId: null,
-        proposedCustomerId: candidates[0].customerId,
+        proposedCustomerId: phoneCandidates[0].id,
         candidates,
       };
     }
@@ -1335,7 +1407,9 @@ export class AssistantToolRegistry {
    * Quando o contato ja esta vinculado a uma pessoa (confirmacao de
    * agendamento anterior), a consulta e por `customerId` — o historico e
    * dessa pessoa, nao de "todo mundo que compartilha o numero". Sem vinculo,
-   * cai nos candidatos por telefone, que a IA deve tratar como candidatos.
+   * cai nos candidatos por telefone e nos dependentes confirmados deles
+   * (Goal142), que a IA deve tratar como candidatos — cada horario diz para
+   * quem e.
    */
   private async findCustomerAppointments(context: ToolExecutionContext) {
     const linkedCustomerId = await this.linkedCustomerId(context);
@@ -1349,6 +1423,7 @@ export class AssistantToolRegistry {
           context.phone,
           context.businessContext,
           schedulingContext(context),
+          { includeDependents: true },
         );
     return {
       appointments: appointments.map((appointment) =>
@@ -1367,8 +1442,10 @@ export class AssistantToolRegistry {
    *    presenca, mesmo que o modelo chame a tool — a decisao e do negocio, e
    *    uma instrucao de prompt nao e garantia.
    * 2. **Dono do telefone.** So confirma atendimento que aparece na agenda
-   *    futura deste numero, como `prepareCancel` e `prepareReschedule`. Um id
-   *    vindo de outro lugar nao vira registro.
+   *    futura deste numero, sem os dependentes que `prepareCancel` e
+   *    `prepareReschedule` incluem (Goal142): o lembrete nao vai para cliente
+   *    sem telefone, e a presenca responde a um lembrete do proprio numero.
+   *    Um id vindo de outro lugar nao vira registro.
    * 3. **Nada alem do registro.** Nao ha rascunho, nao ha efeito colateral e
    *    a resposta devolve `status`, `completedAt` e `noShowAt` exatamente
    *    como o dono os tem: confirmar presenca nao confirma, nao conclui e nao
@@ -1422,6 +1499,11 @@ export class AssistantToolRegistry {
     };
   }
 
+  /**
+   * O responsável confirmado também cancela o horário de quem ele agenda
+   * (Goal142): a lista do número inclui os dependentes, e o horário
+   * apresentado diz para quem é.
+   */
   private async prepareCancel(
     args: { appointmentId: string },
     context: ToolExecutionContext,
@@ -1430,6 +1512,7 @@ export class AssistantToolRegistry {
       context.phone,
       context.businessContext,
       schedulingContext(context),
+      { includeDependents: true },
     );
     const appointment = appointments.find(
       (item) => item.id === args.appointmentId,
@@ -1484,6 +1567,7 @@ export class AssistantToolRegistry {
     }
   }
 
+  /** Mesma lista do número com dependentes do cancelamento (Goal142). */
   private async prepareReschedule(
     args: { appointmentId: string; date: string; startTime: string },
     context: ToolExecutionContext,
@@ -1492,6 +1576,7 @@ export class AssistantToolRegistry {
       context.phone,
       context.businessContext,
       schedulingContext(context),
+      { includeDependents: true },
     );
     const appointment = appointments.find(
       (item) => item.id === args.appointmentId,
@@ -1577,6 +1662,7 @@ export class AssistantToolRegistry {
         context.phone,
         context.businessContext,
         schedulingContext(context),
+        { includeDependents: true },
       );
       const original = current.find(
         (item) => item.id === pending.appointmentId,

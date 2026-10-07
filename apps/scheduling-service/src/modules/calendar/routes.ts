@@ -21,6 +21,12 @@ const listAppointmentsQuerySchema = z.object({
   // candidatos, nunca como prova de identidade.
   customerId: z.string().trim().min(1).max(128).optional(),
   customerPhone: z.string().trim().min(6).max(32).optional(),
+  // Goal142: só a leitura que pede inclui os dependentes confirmados do
+  // número; omitido, a resposta é a de sempre.
+  includeDependents: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => value === "true"),
   startDate: dateSchema,
   endDate: dateSchema,
 });

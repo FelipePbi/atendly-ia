@@ -2523,9 +2523,10 @@ describe("todo egresso HTTP fora da porta do canal é enumerado com resíduo zer
       {
         file: "ai-orchestrator/src/modules/scheduling-service/client.ts",
         // Goal073 (WU-02) acrescentou schema e metodos ao client antes deste
-        // ponto (isencao de politica, leitura de antecedencia minima); a
+        // ponto (isencao de politica, leitura de antecedencia minima), e o
+        // Goal142 (WU-02) a leitura dos dependentes e `includeDependents`; a
         // linha e o numero real, computado pelo AST, nao um valor escolhido.
-        line: 837,
+        line: 881,
         category: "env_var_SCHEDULING_SERVICE_BASE_URL",
       },
       {

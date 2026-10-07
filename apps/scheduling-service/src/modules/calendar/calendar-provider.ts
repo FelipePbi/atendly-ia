@@ -122,6 +122,11 @@ export interface ListAppointmentsInput {
   customerId?: string;
   /** Filtro por candidatos: todas as pessoas que compartilham o número. */
   customerPhone?: string;
+  /**
+   * Com `customerPhone`, inclui também os horários dos dependentes
+   * confirmados dos candidatos (Goal142). Padrão `false`.
+   */
+  includeDependents?: boolean;
   startDate: string;
   endDate: string;
 }

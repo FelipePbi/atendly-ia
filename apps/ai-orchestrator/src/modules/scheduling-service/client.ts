@@ -14,6 +14,7 @@ import type {
   ConfirmAppointmentSeriesInput,
   CreateSchedulingHoldInput,
   CustomerChangePolicy,
+  FindAppointmentsForPhoneOptions,
   NotificationClaimResult,
   NotificationIntentSettlement,
   PreviewAppointmentSeriesInput,
@@ -23,6 +24,7 @@ import type {
   SchedulingAppointment,
   SchedulingAuthorizedCustomerContext,
   SchedulingCustomerCandidate,
+  SchedulingCustomerDependent,
   SchedulingHold,
   SchedulingRequestContext,
   SchedulingSeriesOccurrencePreview,
@@ -95,6 +97,14 @@ const customerListSchema = z.object({
   source: z.string(),
   managedExternally: z.boolean(),
   filteredByPhone: z.boolean().optional(),
+});
+// Dependentes confirmados dos candidatos do numero (Goal142).
+const customerDependentListSchema = z.object({
+  items: z.array(
+    customerCandidateSchema.extend({
+      guardian: z.object({ id: z.string(), name: z.string().nullable() }),
+    }),
+  ),
 });
 const authorizedCustomerSchema = z.object({
   id: z.string(),
@@ -257,10 +267,16 @@ export interface SchedulingGateway {
     context?: SchedulingRequestContext,
     idempotencyKey?: string,
   ): Promise<SchedulingAppointment>;
+  /**
+   * Horarios futuros do numero. Sem `options`, so os dos candidatos do
+   * telefone; `includeDependents: true` (Goal142) inclui os dos dependentes
+   * confirmados deles. So cancelar, remarcar e a lista sem vinculo pedem.
+   */
   findFutureAppointmentsForPhone(
     phone: string,
     businessContext: BusinessContext,
     context?: SchedulingRequestContext,
+    options?: FindAppointmentsForPhoneOptions,
   ): Promise<SchedulingAppointment[]>;
   findFutureAppointmentsForCustomer(
     customerId: string,
@@ -271,6 +287,14 @@ export interface SchedulingGateway {
     phone: string,
     context?: SchedulingRequestContext,
   ): Promise<SchedulingCustomerCandidate[]>;
+  /**
+   * Quem as pessoas do numero agendam (Goal142): os clientes com responsavel
+   * principal `CONFIRMED` entre os candidatos do telefone.
+   */
+  findCustomerDependentsByPhone(
+    phone: string,
+    context?: SchedulingRequestContext,
+  ): Promise<SchedulingCustomerDependent[]>;
   getAuthorizedCustomerContext(
     customerId: string,
     context?: SchedulingRequestContext,
@@ -569,6 +593,23 @@ export class SchedulingClient implements SchedulingGateway {
     return result.items;
   }
 
+  /**
+   * Dependentes confirmados dos candidatos do número (Goal142). Relação
+   * proposta nunca chega aqui: o Scheduling só devolve a confirmada.
+   */
+  async findCustomerDependentsByPhone(
+    phone: string,
+    context?: SchedulingRequestContext,
+  ): Promise<SchedulingCustomerDependent[]> {
+    const query = new URLSearchParams({ phone });
+    const result = await this.request(
+      `/internal/customers/dependents?${query.toString()}`,
+      customerDependentListSchema,
+      { context },
+    );
+    return result.items;
+  }
+
   /** Só o que a pessoa autorizou explicitamente chega ao modelo. */
   async getAuthorizedCustomerContext(
     customerId: string,
@@ -618,6 +659,7 @@ export class SchedulingClient implements SchedulingGateway {
     phone: string,
     businessContext: BusinessContext,
     context?: SchedulingRequestContext,
+    options: FindAppointmentsForPhoneOptions = {},
   ) {
     const startDate = todayInTimeZone(businessContext.timezone);
     const query = new URLSearchParams({
@@ -625,6 +667,8 @@ export class SchedulingClient implements SchedulingGateway {
       startDate,
       endDate: addDays(startDate, DEFAULT_APPOINTMENT_LOOKUP_DAYS),
     });
+    // Omitido por padrão: sem pedido explícito, a consulta é a de sempre.
+    if (options.includeDependents) query.set("includeDependents", "true");
     return (
       await this.request(
         `/internal/appointments?${query.toString()}`,

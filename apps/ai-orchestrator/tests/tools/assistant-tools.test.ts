@@ -1645,6 +1645,8 @@ function createAgendaMock(
       calls.findCustomerCandidatesByPhone.push(value);
       return candidates;
     },
+    // Nenhum cenario deste arquivo tem dependente confirmado (Goal142).
+    findCustomerDependentsByPhone: async () => [],
     getAuthorizedCustomerContext: async (customerId: string) => ({
       id: customerId,
       name: "Thais",

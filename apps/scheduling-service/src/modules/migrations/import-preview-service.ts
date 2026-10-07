@@ -35,6 +35,11 @@ import {
   importWorkFailure,
   newImportLeaseOwner,
 } from "./import-lease.js";
+import {
+  knownPositiveDuration,
+  proposedServiceFrom,
+  resolvePrice,
+} from "./import-source-values.js";
 
 /**
  * Superficie minima que o preview precisa da origem: so a leitura por
@@ -258,6 +263,10 @@ interface MatchableCustomer {
 interface MatchableService {
   id: string;
   name: string;
+  durationMinutes: number | null;
+  priceType: string;
+  /** `Decimal` do banco ou numero: sempre comparado como `Number`, como o DTO do cadastro. */
+  price: { toString(): string } | number | null;
 }
 
 /**
@@ -586,6 +595,18 @@ export class ImportPreviewService {
           category === "AVAILABILITY" && availabilityProposal.rules
             ? (availabilityProposal.rules as unknown as Prisma.InputJsonArray)
             : Prisma.DbNull;
+        // Goal136: a correspondencia sugerida (servico e cliente) e o que a
+        // origem propoe para o servico, gravados para a decisao os mostrar.
+        const matchCandidateInternalIds =
+          category === "SERVICE" || category === "CUSTOMER"
+            ? (classification.candidateInternalIds as unknown as Prisma.InputJsonArray)
+            : Prisma.DbNull;
+        const proposedService =
+          category === "SERVICE"
+            ? (proposedServiceFrom(
+                (record.raw ?? {}),
+              ) as unknown as Prisma.InputJsonObject)
+            : Prisma.DbNull;
         const fingerprint = fingerprintOf(record.raw);
         const existing = existingItemIndex.get(key);
         const isNew = !existing;
@@ -639,6 +660,8 @@ export class ImportPreviewService {
               reasonDetail: classification.reasonDetail,
               fingerprint,
               proposedAvailability,
+              matchCandidateInternalIds,
+              proposedService,
               lastSeenPreviewVersion: nextVersion,
               disappearedAt: null,
             },
@@ -655,6 +678,8 @@ export class ImportPreviewService {
             reasonDetail: classification.reasonDetail,
             fingerprint,
             proposedAvailability,
+            matchCandidateInternalIds,
+            proposedService,
             firstSeenPreviewVersion: nextVersion,
             lastSeenPreviewVersion: nextVersion,
           });
@@ -1053,11 +1078,21 @@ function classifyService(
   let candidateInternalIds: string[] = [];
 
   if (exactMatches.length === 1) {
-    matchClass = "EXACT";
-    reasonCode = "SERVICE_MATCH_EXACT";
-    reasonDetail =
-      "Serviço com nome idêntico a um já cadastrado: pode ser mesclado.";
     candidateInternalIds = [exactMatches[0].id];
+    if (serviceValuesDiverge(exactMatches[0], raw)) {
+      // Pergunta 795: mesmo nome, duracao ou preco diferentes — conflito a
+      // decidir, nunca mesclagem silenciosa.
+      matchClass = "DIVERGENT";
+      status = "NEEDS_REVIEW";
+      reasonCode = "SERVICE_MATCH_DIVERGENT";
+      reasonDetail =
+        "Serviço com o mesmo nome de um já cadastrado, mas com duração ou preço diferentes: compare e decida.";
+    } else {
+      matchClass = "EXACT";
+      reasonCode = "SERVICE_MATCH_EXACT";
+      reasonDetail =
+        "Serviço com nome idêntico a um já cadastrado: pode ser mesclado.";
+    }
   } else if (exactMatches.length > 1) {
     matchClass = "DIVERGENT";
     status = "NEEDS_REVIEW";
@@ -1091,6 +1126,27 @@ function classifyService(
   }
 
   return { label: name, status, reasonCode, reasonDetail, matchClass, candidateInternalIds };
+}
+
+/**
+ * Duracao ou preco da origem conhecidos e diferentes dos do cadastro (Goal136).
+ * Valor desconhecido da origem (duracao ausente, preco ausente ou zero) nunca
+ * fabrica divergencia; cadastro sem duracao ou sem preco `FIXED` conta como
+ * diferente de um valor conhecido. Os valores da origem saem das mesmas
+ * funcoes da execucao.
+ */
+function serviceValuesDiverge(
+  existing: MatchableService,
+  raw: { duration?: unknown; price?: unknown } | null,
+): boolean {
+  const duration = knownPositiveDuration(raw?.duration);
+  if (duration !== null && existing.durationMinutes !== duration) return true;
+  const { priceType, price } = resolvePrice(raw?.price);
+  if (priceType === "FIXED") {
+    if (existing.priceType !== "FIXED" || existing.price === null) return true;
+    if (Number(existing.price) !== price) return true;
+  }
+  return false;
 }
 
 function classifyCustomer(

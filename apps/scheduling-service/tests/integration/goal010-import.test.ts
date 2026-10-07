@@ -914,9 +914,14 @@ describeWithDatabase("goal010 import against PostgreSQL", () => {
 
       const snapshot = buildSnapshot({
         services: category("SERVICE", [
-          // Nome idêntico ao que já existe: correspondência exata, mesclável —
-          // mas mesclar é decisão explícita, e sem decisão importa como novo.
-          { externalId: "900", raw: sourceService({ id: 900, name: "Corte" }) },
+          // Nome, duração e preço idênticos ao que já existe: correspondência
+          // exata, mesclável — mas mesclar é decisão explícita, e sem decisão
+          // importa como novo. (Goal136: com preço ou duração diferentes seria
+          // SERVICE_MATCH_DIVERGENT, em revisão.)
+          {
+            externalId: "900",
+            raw: sourceService({ id: 900, name: "Corte", price: 90 }),
+          },
           // Nome parecido: só sugere, e por isso espera revisão.
           {
             externalId: "901",

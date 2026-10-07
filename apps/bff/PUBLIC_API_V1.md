@@ -434,6 +434,15 @@ Para essa decisão, `GET .../categories/:category/items` acrescenta, **só** nos
 
 Os dois campos estão ausentes em toda outra categoria.
 
+**Correspondência sugerida e valores da origem (Goal136).** `GET .../categories/:category/items` aceita, em qualquer item, mais dois campos **opcionais** — a resposta sem eles continua válida:
+
+| Campo | Valores | Significado |
+| --- | --- | --- |
+| `candidates` | array de candidato | o que o negócio já tem e a análise sugere casar com o registro da origem; a decisão continua do negócio ([D-005](../../docs/migration/DECISIONS.md)) |
+| `proposedService` | `{ durationMinutes, priceType, price }` ou `null` | o que a origem propõe para um serviço, na forma que a execução cria (preço ausente ou `0` já vem como `priceType: "NOT_INFORMED"`, `price: null`); `null` quando a análise não gravou valores |
+
+O candidato de **cliente** é `{ internalId, name }` e nada mais: nunca traz telefone nem outro dado pessoal, e o schema recusa um candidato com campo a mais. O candidato de **serviço** é `{ internalId, name, durationMinutes, priceType, price, active }`. Candidato malformado (campo faltando, `internalId` vazio, `priceType` fora do conjunto) é recusado pelo schema. Nenhuma rota, caminho, método ou corpo de pedido muda.
+
 **Telefone gravado.** `phone` de cliente criado ou editado por `POST /v1/customers`, `PATCH /v1/customers/:id`, pela confirmação de agendamento ou pela importação passa a ser `+` seguido da forma canônica quando o número é brasileiro reconhecido (por exemplo, `+5555999990001`); número não reconhecido continua como digitado, sem espaços nas pontas. Linhas gravadas antes deste Goal não são reescritas: a busca por equivalência é que as encontra. A busca devolve candidatos e nada vincula, funde nem renomeia ([D-005](../../docs/migration/DECISIONS.md)).
 
 **Prova e limite.** Na execução final da rodada 2 do Goal062, `test:bff-integration` (dentro de `validate:integration`) passou com **49** arquivos e **389** testes, inclusive os **3** de `tests/goal062-import.integration.test.ts`, que passam a resposta do Scheduling com `currentAvailability`/`proposedAvailability` pelo schema deste contrato. A contagem de chamadas `this.http.` em `apps/bff/src/clients/` segue **42**. **A conferência humana do §9 do Goal062 não foi feita:** ninguém conferiu contra a conta de teste real da Minha Agenda que `GET /customers` devolve a lista na forma validada, que a contagem de clientes da revisão bate com a da origem, que a troca da grade funciona com a grade real nem que uma mensagem de um número importado encontra a cliente como candidata. Decisão: [D-079](../../docs/migration/DECISIONS.md), `PROPOSED`.

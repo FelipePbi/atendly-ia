@@ -1359,6 +1359,40 @@ export const importAvailabilityGridRuleSchema = z.object({
   endTime: timeSchema,
 });
 
+// Candidato de correspondência de um item (Goal136): o que o negócio já tem
+// e a análise sugere casar com o registro da origem. O de cliente leva só
+// `internalId` e `name` — nunca telefone nem outro dado pessoal; o de serviço
+// leva a forma que a Agenda Avenly já guarda. `.strict()` de propósito: campo a
+// mais (um telefone) é recusado, não descartado em silêncio.
+export const importServiceCandidateSchema = z
+  .object({
+    internalId: z.string().min(1),
+    name: z.string(),
+    durationMinutes: z.number().int().positive().nullable(),
+    priceType: z.enum(["FIXED", "STARTING_AT", "ON_REQUEST", "NOT_INFORMED"]),
+    price: z.number().nonnegative().nullable(),
+    active: z.boolean(),
+  })
+  .strict();
+export const importCustomerCandidateSchema = z
+  .object({
+    internalId: z.string().min(1),
+    name: z.string(),
+  })
+  .strict();
+export const importCandidateSchema = z.union([
+  importServiceCandidateSchema,
+  importCustomerCandidateSchema,
+]);
+
+// O que a origem propõe para um serviço (Goal136), na forma que a execução
+// cria: o que o negócio vê é o que a importação grava.
+export const importProposedServiceSchema = z.object({
+  durationMinutes: z.number().int().positive().nullable(),
+  priceType: z.enum(["FIXED", "STARTING_AT", "ON_REQUEST", "NOT_INFORMED"]),
+  price: z.number().nonnegative().nullable(),
+});
+
 export const importItemSchema = z.object({
   id: z.string().min(1),
   category: importCategorySchema,
@@ -1382,6 +1416,11 @@ export const importItemSchema = z.object({
     .array(importAvailabilityGridRuleSchema)
     .nullable()
     .optional(),
+  // Correspondência sugerida e valores da origem (Goal136): opcionais, a
+  // resposta sem eles continua válida. `proposedService` é `null` quando a
+  // análise não gravou valores.
+  candidates: z.array(importCandidateSchema).optional(),
+  proposedService: importProposedServiceSchema.nullable().optional(),
 });
 
 // Contagens por categoria, nunca uma contagem generica de agendamentos; a

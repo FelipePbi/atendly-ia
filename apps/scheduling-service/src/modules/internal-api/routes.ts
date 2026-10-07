@@ -1636,14 +1636,29 @@ export async function registerManagementRoutes(
               };
             })
           : null;
+      // Correspondencia sugerida (Goal136): so em SERVICE e CUSTOMER, os
+      // cadastros de hoje dos IDs que a analise gravou, uma consulta por pagina.
+      const candidatesOf =
+        category === "SERVICE" || category === "CUSTOMER"
+          ? await importCandidateReader(prisma, context.tenantId, category, page)
+          : null;
       return data(request, {
         sessionId,
         category,
         total: all.length,
         limit: query.limit,
         offset: query.offset,
-        items: page.map((item) =>
-          currentAvailability
+        items: page.map((item) => {
+          if (candidatesOf) {
+            return {
+              ...importItemDto(item),
+              candidates: candidatesOf(item.matchCandidateInternalIds),
+              ...(category === "SERVICE"
+                ? { proposedService: proposedServiceDto(item.proposedService) }
+                : {}),
+            };
+          }
+          return currentAvailability
             ? {
                 ...importItemDto(item),
                 currentAvailability,
@@ -1651,8 +1666,8 @@ export async function registerManagementRoutes(
                   item.proposedAvailability,
                 ),
               }
-            : importItemDto(item),
-        ),
+            : importItemDto(item);
+        }),
       });
     },
   );
@@ -2489,6 +2504,90 @@ function proposedAvailabilityDto(
       : [];
   });
   return sortAvailabilityGrid(rules);
+}
+
+/**
+ * Valores da origem gravados pela analise em `ImportItem.proposedService`,
+ * relidos sem confiar na forma do JSON. Nulo quando a analise nao gravou.
+ */
+function proposedServiceDto(value: unknown): {
+  durationMinutes: number | null;
+  priceType: "FIXED" | "NOT_INFORMED";
+  price: number | null;
+} | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const stored = value as Record<string, unknown>;
+  const priceType = stored.priceType === "FIXED" ? "FIXED" : "NOT_INFORMED";
+  return {
+    durationMinutes:
+      typeof stored.durationMinutes === "number" ? stored.durationMinutes : null,
+    priceType,
+    price:
+      priceType === "FIXED" && typeof stored.price === "number"
+        ? stored.price
+        : null,
+  };
+}
+
+/** IDs gravados em `matchCandidateInternalIds`; qualquer outra forma e lista vazia. */
+function storedCandidateIds(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((id): id is string => typeof id === "string")
+    : [];
+}
+
+/**
+ * Candidatos de correspondencia de uma pagina de itens (Goal136). Uma consulta
+ * so por pagina, sempre com `tenantId` do contexto: um ID de outro negocio
+ * gravado a forca nunca volta. O candidato apagado e omitido e a ordem e a
+ * gravada pela analise. O de cliente leva so `internalId` e `name`.
+ */
+async function importCandidateReader(
+  prisma: PrismaClient,
+  tenantId: string,
+  category: "SERVICE" | "CUSTOMER",
+  page: Array<{ matchCandidateInternalIds: unknown }>,
+): Promise<(stored: unknown) => Array<Record<string, unknown>>> {
+  const ids = [
+    ...new Set(
+      page.flatMap((item) => storedCandidateIds(item.matchCandidateInternalIds)),
+    ),
+  ];
+  const byId = new Map<string, Record<string, unknown>>();
+  if (ids.length > 0 && category === "SERVICE") {
+    const services = await prisma.service.findMany({
+      where: { tenantId, id: { in: ids } },
+    });
+    for (const service of services) {
+      const dto = serviceDto(service);
+      byId.set(service.id, {
+        internalId: dto.id,
+        name: dto.name,
+        durationMinutes: dto.durationMinutes,
+        priceType: dto.priceType,
+        price: dto.price,
+        active: dto.active,
+      });
+    }
+  } else if (ids.length > 0) {
+    const customers = await prisma.customer.findMany({
+      where: { tenantId, id: { in: ids } },
+      select: { id: true, name: true },
+    });
+    for (const customer of customers) {
+      byId.set(customer.id, {
+        internalId: customer.id,
+        name: customer.name ?? "",
+      });
+    }
+  }
+  return (stored) =>
+    storedCandidateIds(stored).flatMap((id) => {
+      const candidate = byId.get(id);
+      return candidate ? [candidate] : [];
+    });
 }
 
 function importDecisionDto(decision: {

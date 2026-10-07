@@ -397,6 +397,30 @@ const importAvailabilityGridRuleSchema = z.object({
   startTime: z.string(),
   endTime: z.string(),
 });
+// Candidato de correspondência e valores propostos pela origem (Goal136):
+// espelho do contrato público. O candidato de cliente nunca traz telefone.
+const importServiceCandidateSchema = z
+  .object({
+    internalId: z.string(),
+    name: z.string(),
+    durationMinutes: z.number().int().positive().nullable(),
+    priceType: z.enum(["FIXED", "STARTING_AT", "ON_REQUEST", "NOT_INFORMED"]),
+    price: z.number().nonnegative().nullable(),
+    active: z.boolean(),
+  })
+  .strict();
+const importCustomerCandidateSchema = z
+  .object({ internalId: z.string(), name: z.string() })
+  .strict();
+const importCandidateSchema = z.union([
+  importServiceCandidateSchema,
+  importCustomerCandidateSchema,
+]);
+const importProposedServiceSchema = z.object({
+  durationMinutes: z.number().int().positive().nullable(),
+  priceType: z.enum(["FIXED", "STARTING_AT", "ON_REQUEST", "NOT_INFORMED"]),
+  price: z.number().nonnegative().nullable(),
+});
 const importItemSchema = z.object({
   id: z.string(),
   category: importCategorySchema,
@@ -417,6 +441,9 @@ const importItemSchema = z.object({
     .array(importAvailabilityGridRuleSchema)
     .nullable()
     .optional(),
+  // Correspondência sugerida e valores da origem (Goal136), opcionais.
+  candidates: z.array(importCandidateSchema).optional(),
+  proposedService: importProposedServiceSchema.nullable().optional(),
 });
 const importDecisionResultSchema = z.object({
   id: z.string(),

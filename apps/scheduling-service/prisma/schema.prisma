@@ -1217,6 +1217,17 @@ model ImportItem {
   /// outra categoria.
   proposedAvailability Json?
 
+  /// IDs de cadastro que a analise calculou como correspondencia do item
+  /// (Goal136): so em itens `SERVICE` e `CUSTOMER`, na ordem da analise.
+  /// Nula em toda outra categoria e nas linhas anteriores a coluna; a
+  /// proxima analise a preenche. A rota de itens le os cadastros no momento.
+  matchCandidateInternalIds Json?
+
+  /// O que a origem propoe para o servico, so em itens `SERVICE` (Goal136):
+  /// `{ durationMinutes, priceType, price }` derivado pelas mesmas funcoes da
+  /// execucao. Nula em toda outra categoria.
+  proposedService Json?
+
   firstSeenPreviewVersion Int @default(0)
   lastSeenPreviewVersion  Int @default(0)
   /// Quando o item deixou de aparecer na origem entre duas analises. A

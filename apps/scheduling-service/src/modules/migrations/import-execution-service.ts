@@ -57,6 +57,7 @@ import {
   type ImportSourceInput,
   resolveImportSource,
 } from "./import-preview-service.js";
+import { knownPositiveDuration, resolvePrice } from "./import-source-values.js";
 
 /** O motor lê a origem pela mesma superfície mínima do preview (WU-02/WU-03). */
 export type ImportExecutionSourceReader = ImportPreviewSourceReader;
@@ -1652,29 +1653,4 @@ function localTime(value: string): string {
 
 function databaseTime(value: string): Date {
   return new Date(`1970-01-01T${value}:00.000Z`);
-}
-
-function knownNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function knownPositiveDuration(value: unknown): number | null {
-  const known = knownNumber(value);
-  return known !== null && known > 0 ? known : null;
-}
-
-/**
- * Preco ausente e preco zero da origem sao a mesma pendencia de negocio
- * (Goal062, WU-01): nenhum dos dois e um preco de verdade, e ambos viram
- * `NOT_INFORMED`/`null`, nunca `FIXED` com zero fabricado.
- */
-function resolvePrice(value: unknown): {
-  priceType: "FIXED" | "NOT_INFORMED";
-  price: number | null;
-} {
-  const known = knownNumber(value);
-  if (known === null || known === 0) {
-    return { priceType: "NOT_INFORMED", price: null };
-  }
-  return { priceType: "FIXED", price: known };
 }

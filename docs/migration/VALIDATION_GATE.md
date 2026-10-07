@@ -8543,3 +8543,71 @@ Arquivos do Goal: `apps/frontend/src/features/imports/ImportRunScreen.tsx`, `Imp
 ### Não executado
 
 A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.
+
+## Os conflitos da importação com a correspondência sugerida e os valores da origem no contrato, do Goal136
+
+Rodada 1, 2026-10-07, na worktree `goal-136`. Baseline `1669efa`. **Rodada 1:** a migration, a gravação da análise, `SERVICE_MATCH_DIVERGENT`, o módulo comum `import-source-values.ts` e os testes de unidade (WU-01); o contrato, o cliente do BFF, `PUBLIC_API_V1.md` e os testes do contrato e do BFF (WU-02); a rota de itens, os testes de integração contra PostgreSQL e os seis controles negativos (WU-03); os gates do IA Loop sobre a árvore da rodada 1 (WU-04 a WU-11, todos com o mesmo `codeFingerprint`, `code-v1:f8ddddad71ca0e9113f31bac188223806e298dba5c57a8a3aa4655097bdc3527`, e cada um rodou **uma vez**, `attemptId` `a1`, sem retentativa do harness); e estes registros (WU-12, que não mexe em código). Não houve segunda rodada: o Goal foi aceito na rodada 1 ([review136](reviews/136-review.md)), sem blocker. O Goal **não toca `apps/frontend/`**, então não tem `validate:ui`, `visual:compare` nem alvo de captura.
+
+### Contagens
+
+| Gate | Comando | Resultado (rodada 1) | Quem obteve |
+| --- | --- | --- | --- |
+| Typecheck do Scheduling | `npx tsc --noEmit` (em `apps/scheduling-service`) | saída 0, 1,9 s, sem erro | IA Loop, WU-04 |
+| Typecheck do BFF | `npx tsc --noEmit` (em `apps/bff`) | saída 0, 2,3 s, sem erro | IA Loop, WU-05 |
+| Lint do Scheduling | `npm run lint`, ou seja, `prisma generate && eslint src --max-warnings=0` | saída 0, 4,0 s, 0 avisos | IA Loop, WU-06 |
+| Lint do BFF | `npm run lint`, ou seja, `eslint src --max-warnings=0` | saída 0, 3,5 s, 0 avisos | IA Loop, WU-07 |
+| Testes `goal136` do Scheduling | `npx vitest run goal136` (em `apps/scheduling-service`) | saída 0, 1 arquivo e **28** testes passando; o arquivo de integração (**9** testes) fica **pulado** neste gate, que roda sem banco descartável | IA Loop, WU-08 |
+| Testes `goal136` do BFF | `npx vitest run goal136` (em `apps/bff`) | saída 0, 1 arquivo e **7** testes passando; o arquivo de integração (**4** testes) fica **pulado** neste gate, pelo mesmo motivo | IA Loop, WU-09 |
+| `validate:core` | `npm run validate:core` | saída 0, 112 s, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, que só tem a suíte de integração, rodada no `validate:integration`; `test:health-worker`, pacote sem suíte, só a checagem de sintaxe). Os passos incluem `build:public-api-contract`, `build:bff`, `build:scheduling-service`, `build:frontend`, `test:scheduling-service`, `test:frontend`, `test:gate-scripts` e `audit:static`. A auditoria estática: 34 verificações, 33 passaram, 0 falharam, 1 pulada (`production_health`, que pede `PRODUCTION_HEALTH_TARGETS`) | IA Loop, WU-10 |
+| `validate:integration` | `npm run validate:integration` | saída 0, 746 s, 36 passos, **36 passaram**, 0 falharam, 0 pulados, contra `127.0.0.1:55500/ia_bff_test`. Dentro dele: `test:bff-integration` (`npx vitest run`, em `apps/bff`) e `test:scheduling-integration` (`npx vitest run --dir tests/integration`, em `apps/scheduling-service`) com saída 0 (os arquivos de integração `goal136` fazem parte dessas duas suítes; a contagem por arquivo não foi guardada); `provision:scheduling-test-database` e `rehearse:goal028-release-migrations` com saída 0 (a migration aplicada com o histórico inteiro). O gate autenticado (`rehearse:goal033-authenticated-ui`) deu **305 passed** e retentativas **0** ("every test passed on its first attempt"); a baseline é 305 sem retentativa | IA Loop, WU-11 |
+| Testes do Scheduling, unidade | `npx vitest run --dir tests/unit` (em `apps/scheduling-service`) | **41** arquivos e **571** testes passando (antes do arquivo novo, 40 e 543: +1 arquivo e +28 testes) | Developer, WU-01; repetido na WU-12 sobre a árvore final, mesmo resultado |
+| Testes do Scheduling, integração | `npx vitest run --dir tests/integration` contra um cluster PostgreSQL 18 descartável (`initdb`, porta 55436, fora do repositório) | **21** arquivos e **161** testes passando, 0 falhas, com os **9** do `goal136`; a primeira rodada tinha 1 falha, no `goal010` (ajuste 1 abaixo), e passou depois do ajuste | Developer, WU-03 |
+| Testes do frontend | `npx vitest run` (em `apps/frontend`) | **198** arquivos e **2819** testes passando, 0 falhas: **igual à baseline** (nenhum arquivo do frontend mudou) | Developer, WU-12 (sobre a árvore final); dentro de `test:frontend` do `validate:core` (WU-10) com saída 0 |
+| Testes `goal135` | `npx vitest run goal135` (em `apps/frontend`) | 2 arquivos e **82** testes passando, igual à baseline, sem nenhuma edição em `apps/frontend/` | Developer, WU-12 |
+| `git diff --check` | `git diff --check` | saída 0, sem erro de espaço em branco, na WU-12 sobre a árvore com estes registros; o IA Loop rodou de novo na WU-13, depois deles, com saída 0 no mesmo `codeFingerprint` e na primeira tentativa | Developer, WU-12; IA Loop, WU-13 |
+
+**O que não foi contado.** O relatório que o IA Loop guarda de `validate:core` e de `validate:integration` omite o meio da saída, então **não há contagem de testes por passo** (por exemplo, quantos testes tem o `test:bff-integration` e o `test:scheduling-integration`) além da que consta acima; o que vale deles é a saída 0 e os passos passando. As contagens de testes dos arquivos `goal136` vêm dos próprios arquivos e das rodadas dirigidas (28, 9, 7 e 4), e as de unidade e de integração do Scheduling, da execução do Developer. `test:gate` (a suíte de scripts da captura visual) e `validate:ui` não fazem parte do plano desta rodada, porque nenhum arquivo de `apps/frontend/` nem de `scripts/` mudou; `test:gate-scripts` rodou dentro do `validate:core` com saída 0. O `test:ia-loop` não consta do plano, e o harness vive fora do repositório. Os testes de integração do BFF (4) não rodaram na WU-02 (sem banco descartável); o `test:bff-integration` do `validate:integration` tem saída 0, e a contagem por arquivo dele não foi guardada.
+
+### Controles negativos
+
+Todos na rodada 1 (WU-03), **depois da última edição de código da rota** e sem edição de código depois (a WU-12 só escreve documentação). Cada um editou o arquivo, rodou o teste, reprovou e foi revertido por cópia do backup (em `%TEMP%/g136bk`, fora do repositório), com `cmp` igual ao backup. As mensagens abaixo são as que a WU-03 registrou da saída do `vitest`; a WU-12 não os refez.
+
+| Controle | Edição | Comando e teste que reprovou | Mensagem de asserção | `cmp` |
+| --- | --- | --- | --- | --- |
+| (a) isolamento | `routes.ts`: tirar `tenantId` do `where` da consulta dos candidatos | `npx vitest run --dir tests/integration goal136` (Scheduling), **2** reprovaram: `isolamento: um ID de outro negócio gravado à força nunca aparece, em SERVICE nem em CUSTOMER` e `uma consulta de cadastro por página, nunca uma por item` | `AssertionError: expected [ 'cmuxu43ms000o8ki43hxah1ex', …(1) ] to deeply equal [ 'cmuxu43mr000n8ki407rlp16q' ]` e `AssertionError: expected '{"id":{"in":["cmuxu43rg001z8ki4echzf2…' to contain 'goal136-wu03-tenant-a'` | igual (`CMP_A_OK`) |
+| (b) duração ausente | `import-preview-service.ts`: `if (existing.durationMinutes !== duration) return true;` (duração ausente da origem conta como diferente) | `npx vitest run tests/unit/goal136-import-match.test.ts` (Scheduling): `SERVICE_MATCH_DIVERGENT: o que continua como era > duração ausente na origem continua SERVICE_DURATION_MISSING, sem fabricar divergência` | `AssertionError: expected 'DIVERGENT' to be 'EXACT' // Object.is equality` | igual (`CMP_B_OK`) |
+| (c) gravação na reanálise | `import-preview-service.ts`: tirar `matchCandidateInternalIds` do `data` do `itemUpdates` não resolvido | `npx vitest run tests/unit/goal136-import-match.test.ts` (Scheduling): `a análise grava matchCandidateInternalIds e proposedService > a reanálise grava os candidatos num item antigo sem a coluna preenchida` | `AssertionError: expected null to deeply equal [ 'service-291' ]` | igual (`CMP_C_OK`) |
+| (d) telefone no candidato | `routes.ts`: `select` do cliente com `phone: true` e `phone: customer.phone` no candidato | `npx vitest run --dir tests/integration goal136` (Scheduling): `cliente: o candidato vem só com internalId e name, na ordem gravada, sem proposedService` | `AssertionError: expected [ { …(3) }, { …(3) } ] to deeply equal [ { …(2) }, { …(2) } ]` | igual (`CMP_D_OK`) |
+| (e) `candidates` obrigatório | `packages/public-api-contract/src/schemas.ts`: `candidates: z.array(importCandidateSchema)` sem `.optional()` (o pacote foi recompilado e `schemas.js` e `schemas.d.ts` copiados **temporariamente** para a cópia em `apps/bff/node_modules/@avenly-ia/public-api-contract/dist`, que não é link) | `npx vitest run tests/goal136-import-match.test.ts` (BFF), **2** reprovaram: `aceita o item sem os dois campos` e `aceita proposedService preenchido, com preço não informado e nulo` | `ZodError` com `"expected": "array"`, `"code": "invalid_type"` e `"message": "Invalid input: expected array, received undefined"` | igual (`CMP_E_OK`); o `dist` foi reconstruído e o teste voltou a **7/7** |
+| (f) divergente com valores iguais | `import-preview-service.ts`: `if (Number(existing.price) === price) return true;` (inverte a comparação do preço) | `npx vitest run tests/unit/goal136-import-match.test.ts` (Scheduling), **5** reprovaram, entre eles `SERVICE_MATCH_DIVERGENT: o que continua como era > valores iguais continuam SERVICE_MATCH_EXACT PENDING` | `AssertionError: expected 'SERVICE_MATCH_DIVERGENT' to be 'SERVICE_MATCH_EXACT'` | igual (`CMP_F_OK`) |
+
+Uma tentativa do controle (d) falhou ao aplicar a edição (o padrão de quebra de linha do script não casou com CRLF), não alterou nada e o teste passou 9/9; foi refeita e é a que reprovou, acima. Na árvore final, `git status` não mostra mutação de `routes.ts`, `import-preview-service.ts` nem `schemas.ts` além das edições do Goal. O controle (b) só reprovou **depois** de o teste "duração ausente na origem continua SERVICE_DURATION_MISSING" ganhar a asserção `expect(item.matchClass).toBe("EXACT")` (o ajuste 2 abaixo): sem ela o `SERVICE_DURATION_MISSING` mascarava o `reasonCode`, e o mesmo controle passava 28/28.
+
+### Testes ajustados
+
+1. `apps/scheduling-service/tests/integration/goal010-import.test.ts` (perto da linha 919): o serviço "900" da origem passou a ter `price: 90`, igual ao do cadastro "Corte". Antes tinha preço 80 contra 90 do cadastro e, com a regra nova, deixou de ser `SERVICE_MATCH_EXACT` e passou a `SERVICE_MATCH_DIVERGENT` (o que este Goal muda). O comentário do teste explica. **Nenhuma asserção foi afrouxada ou removida**; o teste continua afirmando o mesmo sobre `SERVICE_MATCH_EXACT`, a decisão e a execução.
+2. `apps/scheduling-service/tests/unit/goal136-import-match.test.ts` (arquivo **novo** deste Goal, não um teste existente): a WU-03 acrescentou `expect(item.matchClass).toBe("EXACT")` ao teste "duração ausente na origem continua SERVICE_DURATION_MISSING", o que **reforça** a asserção, para que o controle (b) reprove.
+
+`tests/unit/import-preview-service.test.ts` e os demais testes existentes passaram **sem edição** (os casos de serviço de mesmo nome dali usam valores iguais). Nenhum teste do frontend foi editado.
+
+### Gate autenticado
+
+O gate autenticado deu 305 passed e 0 retentativas na árvore da rodada 1 (WU-11), igual à baseline. Este Goal não toca o frontend nem `authenticated-matrix.spec.ts`, e o Developer não verificou se o gate alcança a rota de itens com candidatos; a prova dos campos novos é a dos testes de integração `goal136`.
+
+### Escopo
+
+Os arquivos mudados são os do §1 e do §2 do Goal e os testes em `apps/scheduling-service/tests/` e `apps/bff/tests/`: `prisma/schema.prisma` e a migration `20261007120000_goal136_import_item_match`; `import-source-values.ts` (novo, as funções movidas), `import-preview-service.ts`, `import-execution-service.ts` (só importa as funções de lá) e `internal-api/routes.ts` (só a rota de itens e seus auxiliares); `packages/public-api-contract/src/schemas.ts`; `apps/bff/src/clients/scheduling/index.ts` e `apps/bff/PUBLIC_API_V1.md`; os quatro arquivos de teste `goal136` e o ajuste do `goal010`; e os quatro registros ([DECISIONS](DECISIONS.md), [DATA_MIGRATION](DATA_MIGRATION.md), [CURRENT_STATE](CURRENT_STATE.md) e este). Nada em `apps/frontend/`, em `goals/`, em `reviews/`, em `MIGRATION_STATUS.md` nem em `MASTER_PLAN.md`.
+
+### Desvios do texto do Goal, para o review
+
+- **Módulo comum em vez de exportar da execução.** O Goal diz "exportadas ou movidas para um módulo comum"; a WU-01 moveu `knownNumber`, `knownPositiveDuration` e `resolvePrice` (corpo idêntico) para `import-source-values.ts`, porque exportar da execução criaria ciclo (a execução já importa o preview). Está em D-150, item 2. O `import-execution-service.ts` entra no diff só por essa troca de import.
+- **Dois arquivos de teste fora da lista de arquivos esperados da WU-03:** `goal010-import.test.ts` e o unitário `goal136`, pelos dois ajustes acima.
+- **Ambiente do BFF.** O BFF resolve o contrato público por uma cópia em `apps/bff/node_modules/@avenly-ia/public-api-contract/dist`, não por link; num ambiente limpo o pacote precisa ser reconstruído (`build:public-api-contract`, no `validate:core`) e reinstalado antes de o teste `goal136` do BFF ver os campos novos. Não entra no diff.
+- **CRLF.** `routes.ts`, `import-preview-service.ts` e `schemas.ts` estão em CRLF na árvore de trabalho (o índice, em LF); a convenção foi mantida.
+
+### Não executado
+
+- `validate:ui`, `visual:compare` e a regressão das capturas: o Goal não toca o frontend.
+- O deploy real da migration e a leitura de um banco com dados reais: nenhum banco com dados reais foi migrado.
+- A contagem de testes por passo de `validate:core` e de `validate:integration` (ver "O que não foi contado").
+- Os controles negativos não foram refeitos na WU-12; valem os da WU-03, sem edição de código depois.

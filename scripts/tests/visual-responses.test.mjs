@@ -202,9 +202,9 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1 a W3, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 2.I6, 2.I7, 2.I8, 2.I9, 2.I10, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1 a W3, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 2.I6, 2.I7, 2.I8, 2.I9, 2.I10, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL8, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I10", "2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2", "W3"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I10", "2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "CL8", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2", "W3"]);
   for (const target of declaring) {
     const owner = ["2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "2.I10"].includes(target.code)
       ? "Onboarding-2-Importacao.dc.html"
@@ -542,6 +542,40 @@ test("targets.json: NT2 é o único dono de responses em Notificacoes.dc.html, s
   for (const other of ["/v1/notifications/preferences", "/v1/settings", "/v1/dashboard", "/v1/whatsapp"]) {
     assert.equal(pickFixedResponse(nt2, "GET", other), null, `NT2: ${other} vem da conta de teste`);
   }
+});
+
+test("targets.json: CL8 é o único alvo com responses em Clientes.dc.html além de CL2, CL3 e CL10, só declara GET e não tem passo", () => {
+  const owners = declaringTargets().filter((target) => target.file === "Clientes.dc.html");
+  assert.deepEqual(owners.map((target) => target.code).sort(), ["CL10", "CL2", "CL3", "CL8"]);
+  const cl8 = owners.find((target) => target.code === "CL8");
+  assert.equal(cl8.label, "Cliente · responsável");
+  assert.equal(cl8.route, "/clientes/detalhes?id=visual-compare-cl8-pedro");
+  assert.equal(cl8.steps, undefined, "CL8: nenhum passo, nada toca em Confirmar nem em Remover");
+  assert.deepEqual(
+    cl8.responses.map((entry) => `${entry.method} ${entry.path}`),
+    [
+      "GET /v1/status",
+      "GET /v1/customers/visual-compare-cl8-pedro",
+      "GET /v1/customers/visual-compare-cl8-pedro/memory",
+      "GET /v1/conversations",
+      "GET /v1/customers",
+    ],
+  );
+  for (const entry of cl8.responses) {
+    assert.equal(entry.method, "GET");
+    assert.equal(entry.status, undefined);
+    assert.equal(typeof entry.json.requestId, "string");
+  }
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    for (const route of ["/v1/customers/visual-compare-cl8-pedro", "/v1/customers/visual-compare-cl8-pedro/primary-guardian", "/v1/customers/visual-compare-cl8-pedro/primary-guardian/confirm", "/v1/customers/visual-compare-cl8-pedro/memory", "/v1/customers"]) {
+      assert.equal(pickFixedResponse(cl8, method, route), null, `CL8: ${method} ${route} não deveria casar`);
+    }
+  }
+  for (const other of ["/v1/customers/visual-compare-cl8-pedro/summary", "/v1/customers/visual-compare-cl8-pedro/primary-guardian", "/v1/settings", "/v1/calendar"]) {
+    assert.equal(pickFixedResponse(cl8, "GET", other), null, `CL8: ${other} vem da conta de teste`);
+  }
+  assert.match(cl8.notes, /Goal144/);
+  assert.match(cl8.notes, /Nenhum passo grava/);
 });
 
 test("targets.json: NT1 continua sem responses, com a lista da conta visual", () => {

@@ -22,6 +22,8 @@ import { CustomerMemory } from "./CustomerMemory";
 import { CustomerNotes } from "./CustomerNotes";
 import { CustomerNextAppointment, CustomerSummary } from "./CustomerSummary";
 import { CustomerTags } from "./CustomerTags";
+import { GuardianCard } from "./GuardianCard";
+import { initials } from "./initials";
 import { PrimaryGuardianPanel } from "./PrimaryGuardianPanel";
 
 type CustomerProfileProps = { customerId?: string };
@@ -132,6 +134,15 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
     setCustomer((current) => (current ? { ...current, tags } : current));
   }, []);
 
+  // O cartão do responsável (CL8) só existe com a relação confirmada: proposta
+  // ou ausente, o perfil fica como era. Sem telefone próprio, a linha sob o
+  // nome diz isso em vez de "Telefone não informado".
+  const confirmedGuardian =
+    customer?.primaryGuardian?.status === "CONFIRMED"
+      ? customer.primaryGuardian
+      : null;
+  const dependent = Boolean(confirmedGuardian && !customer?.phone?.trim());
+
   const editable = Boolean(calendar?.capabilities.manageCustomers);
   const canSchedule = Boolean(calendar?.capabilities.createAppointments);
   useShellConfig({
@@ -209,7 +220,12 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
               tab !== "resumo" && "is-compact",
             )}
           >
-            <div className="directory-detail-identity">
+            <div
+              className={clsx(
+                "directory-detail-identity",
+                tab === "resumo" && dependent && "is-dependent",
+              )}
+            >
               <span className="avatar" aria-hidden="true">
                 {initials(customer.name)}
               </span>
@@ -221,7 +237,9 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
                         customer.phone
                           ? (formatBrazilianPhone(customer.phone, "plus") ??
                             customer.phone)
-                          : "Telefone não informado",
+                          : dependent
+                            ? "Sem telefone próprio"
+                            : "Telefone não informado",
                         sinceLabel(customer),
                       ]
                         .filter(Boolean)
@@ -242,7 +260,20 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
                 )}
               </div>
             </div>
-            <div className="directory-detail-actions" hidden={tab !== "resumo"}>
+            {tab === "resumo" && confirmedGuardian && (
+              <GuardianCard
+                customer={customer}
+                guardian={confirmedGuardian}
+                timezone={calendar?.timezone ?? "America/Sao_Paulo"}
+              />
+            )}
+            <div
+              className={clsx(
+                "directory-detail-actions",
+                dependent && "is-dependent",
+              )}
+              hidden={tab !== "resumo"}
+            >
               {conversationId && (
                 <Link
                   className="btn btn-secondary"
@@ -523,16 +554,6 @@ function requestError(error: unknown, fallback: string): string {
   };
   const message = messages[error.code] ?? fallback;
   return `${message} Referência: ${error.requestId}`;
-}
-
-function initials(name: string | null): string {
-  if (!name?.trim()) return "?";
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toLocaleUpperCase("pt-BR"))
-    .join("");
 }
 
 function formText(data: FormData, name: string): string {

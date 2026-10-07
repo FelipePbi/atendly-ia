@@ -1159,6 +1159,115 @@
   gap: 20px;
 }
 
+/* Perfil · quem agenda por um cliente sem telefone próprio (CL8) */
+.customer-profile .directory-detail-identity.is-dependent {
+  align-items: center;
+}
+.customer-profile .directory-detail-identity.is-dependent .avatar {
+  background: var(--surface-interactive);
+  color: var(--fg-soft);
+}
+.customer-profile .directory-detail-identity.is-dependent .directory-detail-phone {
+  margin-top: 3px;
+  line-height: normal;
+}
+.customer-profile .directory-detail-actions.is-dependent .btn {
+  min-height: 46px;
+  background: transparent;
+}
+.customer-profile .directory-detail-actions.is-dependent .btn:hover {
+  background: var(--surface-interactive);
+}
+@media (min-width: 768px) {
+  .customer-profile .directory-detail-identity.is-dependent .directory-detail-phone {
+    margin-top: 0;
+  }
+}
+.customer-guardian-card {
+  margin-top: 14px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.customer-guardian-avatar {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--at-color-primary-tint-strong);
+  color: var(--at-color-primary-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: normal;
+}
+.customer-guardian-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.customer-guardian-title {
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: normal;
+}
+.customer-guardian-detail {
+  color: var(--fg-soft);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  line-height: normal;
+}
+.customer-guardian-link {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--at-color-primary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: normal;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.customer-guardian-link:hover {
+  color: var(--at-color-primary-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.customer-guardian-note {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: 12px;
+  background: var(--surface-interactive);
+  color: var(--fg-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.customer-guardian-dot {
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--at-color-primary);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .customer-guardian-link {
+    transition: color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+}
+
 /* Perfil · Atendimentos (CL6) */
 .customer-appts {
   flex: 1;

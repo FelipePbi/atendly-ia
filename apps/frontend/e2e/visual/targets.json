@@ -3985,6 +3985,131 @@
       "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
     },
     {
+      "code": "CL8",
+      "file": "Clientes.dc.html",
+      "label": "Cliente · responsável",
+      "route": "/clientes/detalhes?id=visual-compare-cl8-pedro",
+      "notes": "Respostas fixas (Goal144, GET só no navegador da captura, nada é gravado) porque a conta de teste não tem o estado do quadro: um cliente sem telefone próprio com responsável confirmado. Nenhum passo grava: o alvo não tem passo e só declara GET /v1/status, GET /v1/customers/visual-compare-cl8-pedro, GET /v1/customers/visual-compare-cl8-pedro/memory, GET /v1/conversations e GET /v1/customers (a lista ao lado do perfil de 1024 px em diante); o calendário vem da conta visual. Divergências declaradas: (1) o quadro mostra “mãe” na segunda linha do cartão e “Maria Souza agenda para Pedro”; o contrato não traz o tipo de relação (pergunta 141 do vault, sem caminho), então o app mostra “Maria Souza agenda para Pedro” sem “mãe”. (2) O quadro mostra “sáb 20/09” no Próximo; 20/09/2026 cai num domingo, então o app mostra o dia da semana da data real (“dom 20/09”). (3) O quadro mostra “30 min · R$ 50 · marcado pela IA com Maria” e “Corte masculino” no Próximo; o resumo do agendamento no contrato não traz serviço, duração, preço nem quem marcou (limitação do CL5, já aceita no Goal094). (4) O painel “Responsável principal” no fim do Resumo, que o quadro não tem, pertence ao app (escolha 6 do Goal144). (5) A lista de clientes ao lado do perfil (de 1024 px em diante) traz Pedro Souza e Maria Souza com o telefone na segunda linha, como nas outras linhas do app; o quadro mostra “agenda para Pedro Souza” sob Maria Souza e a lista não traz de quem o cliente é responsável (Goal121). (6) O resumo da IA e as preferências vêm da conta visual, onde o id fixo não existe, e não aparecem como no quadro por estado vazio; a barra do iPhone do quadro não existe no app. (7) A cor dos títulos h2 do app é var(--fg) (avenly.css), como nos outros alvos (review135, blocker 1). (8) O quadro mostra a ação “Conversa com Maria” ao lado de “Agendar”; o app mostra só “Agendar”, em largura total: o Goal144 não muda as ações (escolha 6), o perfil só oferece “Conversa” para a conversa do próprio cliente e o contrato não liga o dependente à conversa do responsável. (9) No celular, o app começa o perfil 14 px abaixo do quadro: o quadro reserva 60 px para a barra de status do iPhone (62 px recortados) e a barra de voltar do app tem 12 px de respiro, como em CL5, CL6 e CL7; do identificador ao fim das abas, o app fica nesses mesmos 14 px de deslocamento, sem diferença acima de 1 px entre blocos. (10) A caixa de toque de “Ver Maria” tem 24 px de altura (alvo mínimo de toque) contra 18 px do texto do quadro; o texto fica na mesma posição.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/customers/visual-compare-cl8-pedro",
+          "json": {
+            "data": {
+              "id": "visual-compare-cl8-pedro",
+              "name": "Pedro Souza",
+              "phone": null,
+              "createdAt": "2026-08-12T13:00:00.000Z",
+              "updatedAt": "2026-08-12T13:00:00.000Z",
+              "nextAppointment": {
+                "date": "2026-09-20",
+                "startTime": "10:00",
+                "status": "CONFIRMED"
+              },
+              "lastAppointment": null,
+              "primaryGuardian": {
+                "id": "visual-compare-cl8-relation",
+                "status": "CONFIRMED",
+                "guardian": {
+                  "id": "visual-compare-cl8-maria",
+                  "name": "Maria Souza",
+                  "phone": "5511987651100"
+                },
+                "proposedBy": "PROFESSIONAL",
+                "proposedByActor": null,
+                "proposedAt": "2026-08-12T13:00:00.000Z",
+                "confirmedBy": "PROFESSIONAL",
+                "confirmedByActor": null,
+                "confirmedAt": "2026-08-12T13:05:00.000Z"
+              },
+              "notes": [],
+              "tags": [],
+              "appointmentStats": {
+                "completed": 2,
+                "noShows": 0,
+                "cancelled": 0,
+                "averageIntervalDays": 28,
+                "firstAppointmentDate": "2026-08-12"
+              }
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/customers/visual-compare-cl8-pedro/memory",
+          "json": {
+            "data": [],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations",
+          "json": {
+            "data": [],
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/customers",
+          "json": {
+            "data": {
+              "items": [
+                {
+                  "id": "visual-compare-cl8-pedro",
+                  "name": "Pedro Souza",
+                  "phone": null,
+                  "nextAppointment": {
+                    "date": "2026-09-20",
+                    "startTime": "10:00",
+                    "status": "CONFIRMED"
+                  },
+                  "lastAppointment": null
+                },
+                {
+                  "id": "visual-compare-cl8-maria",
+                  "name": "Maria Souza",
+                  "phone": "5511987651100",
+                  "nextAppointment": null,
+                  "lastAppointment": null
+                }
+              ],
+              "source": "AVENLY",
+              "managedExternally": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "S1",
       "file": "Servicos.dc.html",
       "label": "Serviços · lista",

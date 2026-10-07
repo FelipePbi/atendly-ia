@@ -9498,3 +9498,145 @@ Goal143 aceito na rodada 1 ([review143](reviews/143-review.md)), sem blocker. Co
 | `git diff --check` (WU-11 do IA Loop, depois destes registros) | saída 0, 81 ms, na árvore `code-v1:59b25f26…8350fe`, a mesma dos gates WU-03 a WU-09 |
 
 Os quatro controles negativos são os do Developer (WU-02); o Tech Lead não os refez, e as mensagens registradas vêm do relatório da WU-02. A IA contra o Scheduling real numa conversa de WhatsApp e a contagem de testes por passo de `validate:core` e de `validate:integration` continuam sem prova.
+
+## O perfil de quem é agendado por um responsável igual ao protótipo, do Goal144
+
+Rodada 1, 2026-10-07, na worktree `goal-144`. Baseline `23f447e`. **Rodada 1:** o cartão, a nota, a linha sob o nome, o CSS e os testes `goal144` do perfil (WU-01); o alvo CL8, o teste de captura e `visual-responses.test.mjs` (WU-02); a fidelidade visual, as medidas e as correções (WU-03); os controles negativos (a) a (g) (WU-04); os gates do IA Loop (WU-05 a WU-12); e estes registros (WU-13). Os gates do IA Loop rodaram todos na rodada 1, na mesma árvore (`code-v1:8a36aa6f…9f5ee2`, o mesmo `codeFingerprint` nos oito) e com `attemptId` `a1`, cada um na primeira tentativa. Só o frontend e a captura: sem BFF, IA, Scheduling, contrato público, `PUBLIC_API_V1.md`, semente da captura e do gate nem migration. O Goal foi aceito na rodada 1 ([review144](reviews/144-review.md)), sem blocker, e a [D-158](DECISIONS.md) está ACCEPTED; o resultado da WU-14 e a conferência do Tech Lead estão em "Aceite".
+
+### Contagens
+
+Contagens de partida (a baseline `23f447e`, **antes de editar**, medidas pela WU-01) e da execução final:
+
+| Suíte | Partida (baseline) | Final | Diferença | Quem obteve |
+| --- | --- | --- | --- | --- |
+| Frontend (`npx vitest run` em `apps/frontend`) | **204** arquivos e **2964** testes passando, saída 0 | **206** arquivos e **3017** testes passando, saída 0, 53,45 s (o vitest) | +2 arquivos e +53 testes (`goal144-perfil-responsavel.test.tsx` 43 e `goal144-alvos-captura.test.ts` 10) | Developer, WU-01 (partida; 205 arquivos e 3007 testes depois das edições da WU-01); IA Loop, WU-08 (final, sobre a árvore final) |
+| `goal144` do frontend | arquivos novos: sem partida | **53** de 53 passando (2 arquivos) | +2 arquivos e +53 testes | IA Loop, WU-07 |
+| `scripts/tests/visual-responses.test.mjs` | **64** passando | **65** passando, 0 falhas | +1 teste (o do CL8) | Developer, WU-02 e WU-04; IA Loop, WU-09 (dentro do `test:gate`) |
+
+A partida bate com a última contagem aceita (Goal140: 204 arquivos e 2964 testes; `visual-responses.test.mjs` 64).
+
+Gates do IA Loop e do Developer:
+
+| Gate | Comando | Resultado (rodada 1) | Quem obteve |
+| --- | --- | --- | --- |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0, 1,5 s, sem erro | IA Loop, WU-05 |
+| Lint do frontend | `npm run lint` (`eslint src tests --max-warnings=0`) | saída 0, 20,4 s, 0 avisos | IA Loop, WU-06 |
+| Testes `goal144` | `npx vitest run goal144` | saída 0, 2 arquivos passando com **53** testes, 3,0 s | IA Loop, WU-07 |
+| Testes do frontend | `npm test` | saída 0, **206** arquivos e **3017** testes passando, 53,8 s | IA Loop, WU-08 |
+| `test:gate` | `npm run test:gate` | saída 0, **298** testes, 298 passando, 0 falhas, 0 cancelados, 0 pulados (era **297** no Goal143; +1 é o teste do CL8 em `visual-responses.test.mjs`), 1,2 s | IA Loop, WU-09 |
+| `validate:core` | `npm run validate:core` | saída 0, 119,3 s, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, que só tem a suíte de integração, rodada no `validate:integration`; `test:health-worker`, pacote sem suíte, só a checagem de sintaxe). A auditoria estática teve 34 checagens, 33 passando e 1 pulada (`production_health`, que pede `PRODUCTION_HEALTH_TARGETS`). Primeira execução, sem pino de contagem a corrigir | IA Loop, WU-10 |
+| `validate:ui` | `npm run validate:ui` | saída 0, 45,9 s, **169 passed**, 21 pulados, retentativas **0** ("every test passed on its first attempt"); igual ao Goal140 | IA Loop, WU-11 |
+| `validate:integration` | `npm run validate:integration` | saída 0, 774,1 s, 36 passos, **36 passaram**, 0 falharam, 0 pulados, contra `127.0.0.1:55500/ia_bff_test`. O gate autenticado (`rehearse:goal033-authenticated-ui`) deu **310 passed** e retentativas **0**; igual ao Goal143 | IA Loop, WU-12 |
+| `git diff --check` | `git diff --check` | saída 0, sem erro de espaço em branco, rodado pelo Developer (WU-13) na worktree **depois** de escrever os três registros (ver "Verificação final do Developer") | Developer, WU-13 |
+
+Também rodados pelo Developer: na WU-01, `npx tsc --noEmit` e `npx eslint src tests --max-warnings=0` em `apps/frontend` (sem erro) e `npx vitest run tests/goal144-perfil-responsavel.test.tsx` (43 de 43); na WU-02, `node --test scripts/tests/visual-responses.test.mjs` (65 passando) e os testes `goal127` a `goal140` que leem `targets.json` mais `goal144-alvos-captura` (13 arquivos, 178 testes passando); na WU-03, `npx vitest run tests/goal144-alvos-captura.test.ts tests/goal144-perfil-responsavel.test.tsx tests/goal094-clientes.test.tsx` (71 passando), `tsc --noEmit` e `eslint src/features/customers tests/goal144-*.ts*` (sem erro).
+
+**O que não foi contado.** O relatório que o IA Loop guarda de `validate:core` e de `validate:integration` omite o meio da saída, então **não há contagem de testes por passo** (quantos testes tem `test:ai-orchestrator`, `test:scheduling-service` ou `test:frontend` dentro de `validate:core`); o que vale deles é a saída 0 e os passos passando. A contagem de testes do frontend acima é a do `npm test` direto (WU-08), não a do gate. A IA e o Scheduling não mudaram, então as contagens deles (IA: 101 arquivos e 1310 testes, Goal143; Scheduling: 43 arquivos e 594 testes, Goal142) **não** foram refeitas por este Goal.
+
+### Gate autenticado
+
+O gate autenticado deu **310 passed** e 0 retentativas na árvore final (WU-12, 10,9 min), igual ao Goal143, e o `validate:ui` deu **169 passed**, 21 pulados e 0 retentativas, igual ao Goal140. O Goal não tocou `e2e/routes.ts`, `authenticated-matrix.spec.ts` nem a semente do gate, e nenhuma rota é nova, então a contagem não mudou.
+
+### Fidelidade visual
+
+Comando: `npm run visual:compare -- --target CL8,CL5,CL6,CL7,CL1,CL3` na worktree, depois da última mudança de código (WU-03). Antes, `--target CL8` (com uma cópia do `visual-compare` em `%TEMP%`, fora do repositório, com um gancho de medição do DOM no app e no quadro). Os `side-by-side.png` de CL8, CL5, CL6 e CL7 nos quatro devices estão em `apps/frontend/e2e-results/visual/<página>-<quadro>-<device>/`.
+
+**CL8, diff do `visual:compare`** (tendência, não critério): celular **9,1%**, tablet em retrato **3,5%**, tablet em paisagem **4,5%**, desktop **3,5%** (antes das correções da WU-03: 8,7 / 3,6 / 4,6 / 3,7). No celular o diff sobe porque o conteúdo ficou 14 px mais fora do quadro; a diferença é só a barra de status do iPhone. Os quatro `side-by-side.png` foram abertos: o celular e o tablet em retrato **depois** das correções; o tablet em paisagem e o desktop **antes** delas (as correções são de alinhamento da identidade, da linha sob o nome e do "Agendar"; as medidas do DOM abaixo foram refeitas nos quatro devices depois delas, e a captura final foi regerada pelo `visual:compare` completo). O que resta, todo declarado nas `notes` e em D-158: "mãe"; "sáb 20/09" contra "dom 20/09"; "30 min · R$ 50 · marcado pela IA com Maria"; "Conversa com Maria"; o "Resumo da IA", as preferências e o painel "Responsável principal"; a lista ao lado com Pedro e Maria; a barra do iPhone e o deslocamento de 14 px no celular.
+
+**Medidas (DOM, no app e no quadro, depois das correções).** As posições do quadro são relativas ao quadro, com o recorte de 62 px no celular.
+
+| Device | Blocos medidos | Diferença em Y e X | Tamanhos |
+| --- | --- | --- | --- |
+| Celular | nome, subtítulo, avatar, cartão, título e detalhe do cartão, avatar do cartão, nota, ponto, "Agendar" e abas | **+14,0 px** em Y e 0,0 em X em todos (a barra de status do iPhone, divergência declarada); entre blocos, **0,0 px** | cartão 362 × 102 nos dois; nota 362 × 80,53 nos dois; avatar do cartão 40 × 40; ponto 6 × 6; "Agendar" 46 de altura nos dois |
+| Tablet em retrato | nome, subtítulo, avatar, cartão, avatar do cartão, nota, ponto, "Agendar" e abas | **0,0 px** em X e em Y | cartão 712 × 66; avatar do cartão 40 × 40; nota 712 × 61,69; ponto 6 × 6; "Agendar" 46 de altura; abas com +0,5 px de largura e de altura (dentro da tolerância) |
+| Tablet em paisagem | os mesmos | **0,0 px** em Y; X = **-1,0 px** (a coluna do perfil começa 1 px antes, dentro da tolerância) | igual ao retrato, com +1,0 px na largura do cartão e da nota |
+| Desktop | os mesmos | **0,0 px** em Y; X = **-1,0 px** | igual ao tablet em paisagem |
+
+Nas propriedades que o script compara (`font-size`, `font-weight`, `font-family`, `color`, `background`, largura e cor da borda, raio e `padding`), **não há diferença** nos quatro devices, salvo o `padding` do "Agendar", que a WU-03 cita como a única diferença entre essas propriedades (a altura dele é 46 px nos dois): raio de 14 px no cartão e 12 px na nota, borda de 1 px da mesma cor, `padding` 12 × 14, as cores do nome, do detalhe, do link e do ponto. "Ver Maria": o texto na mesma posição; a caixa tem 24 px contra 18 px (divergência 8.9). "Conversa com Maria": ausente no app (divergência 8.4). Nenhuma diferença acima de 1 px ficou fora das divergências declaradas.
+
+**Regressão: CL5, CL6, CL7, CL1 e CL3, quatro devices cada (20 imagens).** A baseline é o `HEAD` exportado por `git archive` para um diretório temporário (`git diff --stat 23f447e HEAD -- apps packages scripts` vazio: os mesmos arquivos de `23f447e`), com `node_modules` copiado e o `next dev` do próprio `visual:compare`, capturada **três vezes** contra o mesmo BFF; o "depois" é a captura da worktree. Comparação por pixel (`sharp`). Formato: pixels diferentes / delta máximo por canal. As três linhas de cada célula são os pares b1×b2, b1×b3 e b2×b3 (ruído) e depois×b1, depois×b2 e depois×b3.
+
+| Alvo | Device | Ruído entre as baselines | Depois × baselines | Leitura |
+| --- | --- | --- | --- | --- |
+| CL1 | celular, tablet em retrato | 0/0, 0/0, 0/0 | 0/0 | idêntica por byte |
+| CL1 | tablet em paisagem | 26/8, 0/0, 26/8 | 0/0, 26/8, 0/0 | dentro do ruído |
+| CL1 | desktop | 8/5, 34/8, 26/8 | 26/8, 34/8, 8/5 | dentro do ruído |
+| CL3 | os quatro devices | 0/0, 0/0, 0/0 | 0/0 | idêntica por byte |
+| CL5 | celular, tablet em retrato, tablet em paisagem | 0/0, 0/0, 0/0 | 0/0 | idêntica por byte |
+| CL5 | desktop | 26/8, 0/0, 26/8 | 26/8, 0/0, 26/8 | dentro do ruído |
+| CL6 | celular, tablet em retrato, tablet em paisagem | 0/0, 0/0, 0/0 | 0/0 | idêntica por byte |
+| CL6 | desktop | 34/8, 26/8, 8/5 | 34/8, 0/0, 8/5 | dentro do ruído |
+| CL7 | celular, tablet em retrato, tablet em paisagem | 0/0, 0/0, 0/0 | 0/0 | idêntica por byte |
+| CL7 | desktop | 0/0, 26/8, 26/8 | 0/0 | idêntica por byte (o relatório da WU-03 só retém o 0/0 do "depois" e o ruído de 26/8 entre baselines) |
+
+**16 das 20 imagens saíram idênticas por byte** à baseline, e as 4 que diferem (CL1 em paisagem e em desktop, CL5 e CL6 em desktop) ficam dentro do ruído medido: no máximo **34 px** diferentes e delta de canal **até 8**, e cada uma tem ao menos uma comparação com a baseline em 0/0 ou igual ao ruído da própria baseline. Os percentuais de diff do `visual:compare` ficaram idênticos aos da baseline: CL5 10,0 / 4,5 / 6,0 / 5,3; CL6 7,1 / 2,9 / 5,1 / 4,3; CL7 8,0 / 3,3 / 6,0 / 5,2; CL1 8,8 / 3,6 / 3,0 / 2,7; CL3 2,2 / 0,4 / 0,3 / 0,3 (celular, tablet em retrato, tablet em paisagem, desktop). Esses perfis não têm responsável confirmado, então o cartão não renderiza. Como as imagens de CL5, CL6 e CL7 são idênticas por byte (ou dentro do ruído) à baseline, os `side-by-side.png` deles não foram reabertos um a um.
+
+**Duas capturas anteriores, para o ruído.** (1) A WU-01 capturou a baseline `23f447e` três vezes na própria worktree (`run1` a `run3`, fora do repositório): 14 de 20 idênticas e ruído só em tablet em paisagem e desktop (CL1 desktop 8 px / Δ5; CL1 em paisagem 26 px / Δ8; CL5 desktop 26 px / Δ8; CL6 desktop 26 px / Δ8; CL7 desktop 8 a 34 px / Δ5 a 8). (2) A primeira captura "depois" saiu diferente (CL5 celular 35643 px; as outras cerca de 500 px) porque o relógio passou das 14:00: a semente tem um atendimento "hoje 14:00", que virou "Último hoje". A WU-01 confirmou olhando o recorte e refez duas baselines no mesmo relógio (diferença só em CL3 desktop 15 px / Δ32, CL5 desktop 34 px / Δ8 e CL6 desktop 26 px / Δ8); contra elas, 17 de 20 saíram em 0 px e as três que diferiram (CL1 em paisagem 26 px / Δ8, CL6 em paisagem 26 px / Δ8, CL7 desktop 34 px / Δ8) ficaram dentro do ruído. A tabela acima, da WU-03, usa baselines e "depois" do mesmo relógio e substitui essas duas.
+
+### Controles negativos
+
+Todos feitos pela WU-04 depois da última edição de código, cada um mutando só o arquivo indicado, rodando o comando, reprovando e revertendo por `cp` do backup (`/tmp/wu04-backup`, fora do repositório, com `md5` de `GuardianCard.tsx`, `CustomerProfile.tsx` e `targets.json`), com `cmp` e `md5sum -c` iguais ao backup nos sete. Antes dos controles: `npx vitest run tests/goal144-perfil-responsavel.test.tsx tests/goal144-alvos-captura.test.ts` = 53 passando e `node --test scripts/tests/visual-responses.test.mjs` = 65 passando. Comando de (a) a (e), em `apps/frontend`: `npx vitest run tests/goal144-perfil-responsavel.test.tsx`; de (f) e (g): `npx vitest run tests/goal144-alvos-captura.test.ts` e, na raiz, `node --test scripts/tests/visual-responses.test.mjs`. Depois dos sete, `git status --short` ficou igual ao anterior e nenhum arquivo do repositório ficou alterado.
+
+| Controle | Edição | Teste que reprovou | Mensagem de asserção |
+| --- | --- | --- | --- |
+| (a) o cartão com `PROPOSED` | `CustomerProfile.tsx`: `primaryGuardian?.status === "CONFIRMED"` virou `primaryGuardian`. **4 reprovados** | `tests/goal144-perfil-responsavel.test.tsx`: "O cartão do responsável (escolhas 2 e 3) > não aparece com a relação PROPOSED"; "A linha sob o nome (escolha 5) > cliente sem telefone com responsável só proposto: 'Telefone não informado'"; "O painel Responsável principal e o cartão (escolha 6) > confirmar pelo painel faz o cartão aparecer na hora, sem nova leitura do perfil"; "… > propor continua pedindo PROFESSIONAL e não mostra cartão enquanto PROPOSED" | `AssertionError: expected <section …(2)>…(2)</section> to be null` (a do primeiro teste, o nomeado) |
+| (b) a data em UTC | `GuardianCard.tsx`: `dayMonthLabel(guardian.confirmedAt, "UTC")`. **1 reprovado** | "A segunda linha do cartão > a data vem no fuso do negócio: o mesmo instante muda de dia entre São Paulo e Auckland" | `TestingLibraryElementError: Unable to find an element with the text: /confirmado por você em 11\/08$/. This could be because the text is broken up by multiple elements. …` (a mensagem do testing-library segue com o DOM e foi cortada aqui) |
+| (c) `PROFESSIONAL` e `CUSTOMER` com os textos trocados | `GuardianCard.tsx`: os dois rótulos de `CONFIRMED_BY_LABELS` trocados. **8 reprovados**, todos em "A segunda linha do cartão" | entre eles: "telefone formatado e 'confirmado por você em <dd/mm>' para PROFESSIONAL" e "confirmedBy CUSTOMER dá 'confirmado pelo cliente em 12/08'" | `Unable to find an element with the text: +55 11 98765-1100 · confirmado por você em 12/08.` e `Unable to find an element with the text: +55 11 98765-1100 · confirmado pelo cliente em 12/08.` (ambas `TestingLibraryElementError`, cortadas no DOM) |
+| (d) a nota para cliente com telefone | `GuardianCard.tsx`: `const showNote = phone !== null;`. **1 reprovado** | "A nota do que a IA faz (escolha 4) > cliente com telefone próprio: cartão sem nota" | `AssertionError: expected <span><em></em></span> to be null` |
+| (e) "Sem telefone próprio" sem responsável | `CustomerProfile.tsx`: o ramo `: "Telefone não informado"` virou `: "Sem telefone próprio"`. **3 reprovados** | "A linha sob o nome (escolha 5) > cliente sem telefone e sem responsável: 'Telefone não informado'"; "… > cliente sem telefone com responsável só proposto: 'Telefone não informado'"; "O painel Responsável principal e o cartão (escolha 6) > remover pelo painel faz o cartão e a nota sumirem na hora" | `TestingLibraryElementError: Unable to find an element with the text: Telefone não informado · cliente desde ago 2026. This could be because the text is broken up by multiple elements. …` |
+| (f) o CL8 com um passo que toca "Confirmar" | `targets.json`: o CL8 com `steps: [{ "clickRole": { "role": "button", "name": "Confirmar" } }]`. **os dois testes**: `goal144` 2 reprovados e `visual-responses.test.mjs` 64 passando e 1 reprovado | `goal144-alvos-captura.test.ts`: "alvo CL8 do visual:compare (perfil com responsável) > o CL8 é novo: rota própria, arquivo e label do quadro, sem passo e único" e "… > nenhum passo e nenhuma resposta grava: nada toca Confirmar, Remover nem Propor". `scripts/tests/visual-responses.test.mjs`: "targets.json: CL8 é o único alvo com responses em Clientes.dc.html além de CL2, CL3 e CL10, só declara GET e não tem passo" | `AssertionError: expected [ { clickRole: { …(2) } } ] to be undefined` e `AssertionError: expected '[{"clickRole":{"role":"button","name"…' not to match /Confirmar\|Remover\|Propor/`. `AssertionError [ERR_ASSERTION]: CL8: nenhum passo, nada toca em Confirmar nem em Remover` (actual `[ { clickRole: [Object] } ]`, expected `undefined`) |
+| (g) a relação do perfil do CL8 com `PROPOSED` | `targets.json`: `"status": "PROPOSED"` em `visual-compare-cl8-relation`. **1 reprovado** no `goal144` (o `visual-responses.test.mjs` seguiu em 65 passando, e o critério só exige o `goal144`) | `goal144-alvos-captura.test.ts`: "alvo CL8 do visual:compare (perfil com responsável) > a relação é CONFIRMED com confirmedAt, e a Maria tem o telefone do quadro" | `AssertionError: expected 'PROPOSED' to be 'CONFIRMED' // Object.is equality` |
+
+Os sete controles reprovaram os testes que o Goal nomeia: (a) o cartão com `PROPOSED`; (b) a data no fuso do negócio; (c) os textos de `PROFESSIONAL` e `CUSTOMER`; (d) a nota só sem telefone próprio; (e) "Sem telefone próprio" só com responsável confirmado; (f) o CL8 sem passo, pelos **dois** testes; (g) a relação `CONFIRMED` do alvo. Depois de todos, a árvore voltou à da WU-03 (`cmp` igual, `goal144` 53 de 53, `visual-responses.test.mjs` 65 passando).
+
+**Limite do registro dos controles.** A WU-13 não refez os controles nem leu a saída bruta do `vitest` e do `node --test`: as mensagens acima vêm do relatório da WU-04, que as leu da saída. Onde a mensagem é do `testing-library` (`Unable to find an element with the text: …`), o texto vem cortado antes do despejo do DOM. Em (a), (c), (e) e (f), o relatório traz a mensagem do teste nomeado e a dos outros reprovados só pelo nome. A primeira tentativa de (f) escreveu `\n` literal, quebrou o JSON (`SyntaxError` no carregamento) e foi descartada, revertida e refeita com quebra de linha real; só a segunda vale.
+
+### Testes ajustados
+
+**Nenhum teste existente do frontend foi editado.** Os sete arquivos que citam "Telefone não informado", `primaryGuardian` e `directory-detail-phone` (`goal015-customers`, `goal015-shell-invariant`, `goal075-customer-profile`, `goal088-list-detail`, `goal094-clientes`, `goal112-clientes-servicos` e `goal093-detalhe-cancelar-remarcar`) passam sem edição, 122 de 122 (WU-01), e os testes `goal1xx-alvos-captura` que leem `targets.json` passam sem edição (178 testes em 13 arquivos, WU-02). Nenhuma asserção foi removida nem afrouxada.
+
+Em `scripts/tests/visual-responses.test.mjs` (**um** arquivo existente, só o que o Goal muda): (1) o título e a lista ordenada de donos de `responses` do teste "targets.json: só W1 a W3, … declaram responses" ganharam o `CL8` (a asserção `deepEqual` continua exata, com um código a mais, e o laço seguinte, que confere o arquivo de cada dono, não mudou); (2) um teste **novo** ("targets.json: CL8 é o único alvo com responses em Clientes.dc.html além de CL2, CL3 e CL10, só declara GET e não tem passo") prova a lista fechada de donos do arquivo `Clientes.dc.html` (`CL10`, `CL2`, `CL3`, `CL8`), os cinco `GET` do CL8, que nenhum método que grava casa com `pickFixedResponse`, e que o CL8 não tem passo. A prova de que o CL2, o CL3 e o CL10 só declaram o que declaravam continua nos testes deles.
+
+`goal144-perfil-responsavel.test.tsx` e `goal144-alvos-captura.test.ts` (`apps/frontend/tests/`) são arquivos **novos** deste Goal.
+
+### Escopo
+
+Os arquivos mudados são os do §1, do §2 e da "Documentação" do Goal. Frontend (`apps/frontend/src/`): `features/customers/CustomerProfile.tsx`, `GuardianCard.tsx` (novo), `initials.ts` (novo) e `shared/styles/avenly-customers.css`. Captura: `apps/frontend/e2e/visual/targets.json` e `scripts/tests/visual-responses.test.mjs`. Testes novos acima. E `DECISIONS.md`, `CURRENT_STATE.md` e este arquivo, todos por acréscimo. `PrimaryGuardianPanel.tsx`, `CustomerSummary.tsx`, `CustomerMemory.tsx`, `features/settings/dayMonth.ts`, `data/services/`, `shared/ui/`, `e2e/routes.ts`, `e2e/authenticated-matrix.spec.ts`, o contrato, o BFF, a IA, o Scheduling, o banco, a semente da captura e do gate, `goals/`, `reviews/`, `MIGRATION_STATUS.md` e `MASTER_PLAN.md` não foram tocados. As pastas `apps/frontend/e2e-results/` são geradas pela captura e não entram no diff.
+
+### Desvios do texto do Goal, para o review
+
+- **"Conversa com Maria" existe no quadro.** A evidência 1 do Goal diz "só 'Agendar' nas ações (sem 'Conversa')". Na captura, o quadro mostra "Conversa com Maria" e "Agendar" (WU-03, `Clientes.dc.html`, linha 221). A escolha 6 do Goal manda não mudar as ações, e o contrato não liga o dependente à conversa do responsável, então a WU-03 não implementou o botão e o declarou como divergência 8.4 nas `notes` e em D-158. O "Agendar" do app fica em largura total.
+- **Três valores de CSS fora do texto do Goal**, vistos na captura e só com `.is-dependent`: identidade centrada na vertical, avatar neutro do cliente e "Agendar" com 46 px e fundo transparente (D-158, escolha 7). A WU-01 pôs o avatar neutro no avatar e a WU-03 moveu o modificador para a identidade e para as ações.
+- **A nota sem nome do responsável.** O Goal não define o texto; a WU-01 usou "As mensagens chegam pelo WhatsApp de quem agenda. Quando essa pessoa escrever, a IA pode perguntar …", sem gênero.
+- **"Agendar" de CL5, CL6 e CL7** fica com 44 px e fundo `var(--surface)`, e o quadro tem 46 px e fundo transparente: a diferença de 2 px já existia na baseline e o critério pede os três iguais à baseline. Registrado em D-158, "Fora deste Goal".
+- **Baseline.** A primeira tentativa da WU-03 de reverter temporariamente os arquivos da worktree para capturar a baseline foi recusada pelo ambiente; a baseline vem do `HEAD` exportado por `git archive` num diretório temporário (idêntico a `23f447e` em `apps`, `packages` e `scripts`).
+- **Borda do cartão.** 1,31:1, abaixo de 3:1 de não texto; é o `--border` do app e do quadro. Ponto para o review (D-158, "Contrastes calculados").
+- **Mensagens dos controles.** Registradas a partir do relatório da WU-04, não da saída bruta (ver "Limite do registro dos controles").
+
+### Não executado
+
+- A contagem de testes por passo de `validate:core` e de `validate:integration` (ver "O que não foi contado").
+- A unidade da IA e a do Scheduling, à parte do `validate:core` (não mudaram), e a suíte de integração da IA e do Scheduling com banco, à parte do `validate:integration`.
+- Uma conta real com um responsável confirmado de ponta a ponta, e uma conversa real no WhatsApp: o CL8 usa respostas fixas de `GET` na captura.
+- A refação dos controles negativos pela WU-13 e a leitura da saída bruta deles.
+- A abertura um a um dos `side-by-side.png` de CL5, CL6 e CL7 depois das edições, porque as imagens são idênticas por byte (ou dentro do ruído) à baseline; e a abertura do tablet em paisagem e do desktop do CL8 **depois** das correções da WU-03 (a medida do DOM nos quatro devices e a captura final cobrem essa parte).
+- `prettier --check` nos arquivos editados: acusa os arquivos tocados e também arquivos que o Goal não tocou (`CustomerSummary.tsx`, `avenly-agenda.css`), por causa do CRLF do checkout; não é regressão deste Goal. `GuardianCard.tsx` e o teste novo foram formatados com `prettier --write`.
+
+### Verificação final do Developer
+
+`git diff --check`, rodado pelo Developer (WU-13) na worktree **depois** de escrever os três registros: saída 0, sem erro de espaço em branco. Os arquivos novos e não rastreados (`GuardianCard.tsx`, `initials.ts` e os dois testes `goal144`) ainda não entram nesse `git diff`. A WU-14 do IA Loop o roda de novo, por último, na árvore final, e o resultado dela é anotado no review.
+
+### Aceite
+
+Goal144 aceito na rodada 1 ([review144](reviews/144-review.md)), sem blocker. Conferência do Tech Lead na árvore aceita, sem edição de código no meio:
+
+| Verificação | Resultado |
+| --- | --- |
+| `npm run visual:compare -- --target CL8,CL5,CL6,CL7`, no review, com os `side-by-side.png` do CL8 abertos nos quatro devices | CL8: identidade, linha sob o nome, cartão, nota, "Agendar" e abas sobrepostos ao quadro no tablet e no desktop; no celular, os mesmos blocos deslocados 14 px pela barra do iPhone; diferenças restantes só as declaradas (8.1 a 8.9) |
+| Regressão de CL5, CL6 e CL7: os `app.png` do review contra as baselines do Developer | CL6 e CL7 no celular e no tablet em retrato idênticos por byte; as diferenças restantes estão na coluna da lista e no bloco "Próximo" do CL5, por um agendamento da conta visual às 14:00 do dia que já tinha passado (estado de horário, não CSS) |
+| `npx vitest run goal144` em `apps/frontend`, no fechamento | 2 arquivos, **53 de 53** passando (43 e 10) |
+| `node --test scripts/tests/visual-responses.test.mjs`, no fechamento | **65 de 65** passando |
+| Escopo do diff | 11 arquivos (7 rastreados e 4 novos); só `features/customers/`, `avenly-customers.css`, `targets.json`, `visual-responses.test.mjs`, os dois testes `goal144` e os três registros; nada em `PrimaryGuardianPanel.tsx`, `data/services/`, `packages/`, no BFF, na IA, no Scheduling ou no banco |
+| `git diff --check` (WU-14 do IA Loop, depois destes registros) | saída 0, 104 ms, na árvore `code-v1:8a36aa6f…9f5ee2`, a mesma dos gates WU-05 a WU-12 |
+
+Os sete controles negativos são os do Developer (WU-04); o Tech Lead não os refez, e as mensagens registradas vêm do relatório da WU-04. CL1 e CL3 não foram recapturados pelo Tech Lead; vale a tabela por imagem da WU-03. Um responsável confirmado de ponta a ponta numa conta real e a contagem de testes por passo de `validate:core` e de `validate:integration` continuam sem prova.

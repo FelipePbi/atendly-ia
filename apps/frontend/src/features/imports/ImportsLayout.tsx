@@ -41,17 +41,21 @@ export function ImportsFrameProvider({
  * some de 1024 px em diante, com a lista ao lado). O título de cada tela vira
  * `<h2>`. Na moldura do onboarding o `<h1>` daqui é o único da tela
  * (Goal066). `bare` dispensa o cabeçalho da tela; sem `description`, o
- * cabeçalho é só o título (a origem, 2.I1).
+ * cabeçalho é só o título (a origem, 2.I1). `eyebrow={false}` tira o
+ * "Importação" do onboarding das duas telas que o quadro não mostra com ele
+ * (as credenciais, 2.I2, e a análise, 2.I3): o único eyebrow é o da moldura.
  */
 export function ImportsPage({
   bare = false,
   children,
   description,
+  eyebrow = true,
   title,
 }: {
   bare?: boolean;
   children: ReactNode;
   description?: string;
+  eyebrow?: boolean;
   title: string;
 }) {
   const frame = useContext(ImportsFrameContext);
@@ -59,7 +63,9 @@ export function ImportsPage({
   const Heading = onboarding ? "h1" : "h2";
   const header = !bare && (
     <header className="imports-header">
-      {onboarding && description && <p className="eyebrow">Importação</p>}
+      {onboarding && eyebrow && description && (
+        <p className="eyebrow">Importação</p>
+      )}
       <Heading>{title}</Heading>
       {description && <p>{description}</p>}
     </header>

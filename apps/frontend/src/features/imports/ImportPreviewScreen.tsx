@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { BffHttpError } from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
@@ -97,6 +97,51 @@ function analysisStarted(
     (after.lastError?.code ?? null) !== (before.lastError?.code ?? null)
   );
 }
+
+/**
+ * As cinco linhas da análise (2.I3), na ordem do quadro e não na de
+ * `CATEGORY_ORDER`. Sem número: enquanto lê, a Avenly ainda não sabe quantos
+ * registros existem, e `session.categories` nunca é fonte de contagem aqui.
+ * Nenhuma linha se distingue das outras: o sistema não sabe qual categoria já
+ * foi lida.
+ */
+const ANALYSIS_ROWS: {
+  icon: ReactNode;
+  label: string;
+}[] = [
+  { icon: <path d="M4 7h16M4 12h16M4 17h10" />, label: "Serviços" },
+  {
+    icon: (
+      <>
+        <circle cx="12" cy="8.5" r="3.5" />
+        <path d="M5 20a7 7 0 0 1 14 0" />
+      </>
+    ),
+    label: "Clientes",
+  },
+  {
+    icon: (
+      <>
+        <rect height="14.5" rx="2.5" width="16" x="4" y="5.5" />
+        <path d="M4 10h16M8 3.5v4M16 3.5v4" />
+      </>
+    ),
+    label: "Agendamentos futuros",
+  },
+  {
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="8" />
+        <path d="M12 8v4.5l3 2" />
+      </>
+    ),
+    label: "Atendimentos anteriores",
+  },
+  {
+    icon: <path d="M4 7h16M4 12h16M4 17h16" />,
+    label: "Horários de atendimento",
+  },
+];
 
 type Phase =
   | { kind: "working" }
@@ -430,17 +475,39 @@ export function ImportPreviewScreen({
     return (
       <ImportsPage
         description="Nada muda na Avenly até você confirmar."
+        eyebrow={false}
         title="Analisando seus dados…"
       >
-        <div className="imports-panel" aria-busy="true">
-          <p className="imports-note">Isso pode levar alguns minutos.</p>
-          <div className="imports-skeleton-rows">
-            {CATEGORY_ORDER.slice(0, 4).map((category) => (
-              <div className="imports-skeleton-row" key={category}>
-                <span>{CATEGORY_LABELS[category]}</span>
-              </div>
-            ))}
+        <div className="imports-analysis" aria-busy="true">
+          <div
+            aria-label="Analisando seus dados"
+            className="imports-analysis-bar"
+            role="progressbar"
+          >
+            <span className="imports-analysis-fill" />
           </div>
+          <ul className="imports-analysis-card">
+            {ANALYSIS_ROWS.map((row) => (
+              <li className="imports-analysis-row" key={row.label}>
+                <svg
+                  aria-hidden="true"
+                  fill="none"
+                  height="22"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.75"
+                  viewBox="0 0 24 24"
+                  width="22"
+                >
+                  {row.icon}
+                </svg>
+                <span className="imports-analysis-label">{row.label}</span>
+                <span aria-hidden="true" className="imports-analysis-pill" />
+              </li>
+            ))}
+          </ul>
+          <p className="imports-analysis-note">Isso pode levar alguns minutos.</p>
         </div>
       </ImportsPage>
     );

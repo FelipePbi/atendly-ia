@@ -45,7 +45,7 @@ async function fillCredentials(
 ) {
   await user.click(await screen.findByRole("button", { name: "Continuar" }));
   await user.type(await screen.findByLabelText("E-mail do Minha Agenda"), email);
-  await user.type(screen.getByLabelText("Senha do Minha Agenda"), password);
+  await user.type(screen.getByLabelText("Senha"), password);
 }
 
 beforeEach(() => {
@@ -60,7 +60,7 @@ test("só existem os campos de e-mail e senha", async () => {
   expect(
     await screen.findByLabelText("E-mail do Minha Agenda"),
   ).toBeInTheDocument();
-  expect(screen.getByLabelText("Senha do Minha Agenda")).toBeInTheDocument();
+  expect(screen.getByLabelText("Senha")).toBeInTheDocument();
   expect(screen.queryByText(/Chave de acesso/)).not.toBeInTheDocument();
   expect(
     screen.queryByText("Endereço da sua conta no Minha Agenda"),
@@ -78,7 +78,7 @@ test("o texto explica que os dados servem só a esta importação e são apagado
 
   expect(
     await screen.findByText(
-      /Eles não ficam guardados: são apagados assim que você concluir a importação\./,
+      /Ele é apagado assim que você concluir a importação\./,
     ),
   ).toBeInTheDocument();
 });
@@ -96,7 +96,7 @@ test("o envio manda { email, password }", async () => {
   renderScreen();
 
   await fillCredentials(user);
-  await user.click(screen.getByRole("button", { name: "Conectar Minha Agenda" }));
+  await user.click(screen.getByRole("button", { name: "Analisar meus dados" }));
 
   expect(connectIntegration).toHaveBeenCalledWith({
     email: "camila@example.com",
@@ -174,7 +174,7 @@ describe("classes de erro do §4, por details.upstreamCode", () => {
 
       await fillCredentials(user);
       await user.click(
-        screen.getByRole("button", { name: "Conectar Minha Agenda" }),
+        screen.getByRole("button", { name: "Analisar meus dados" }),
       );
 
       const alert = await screen.findByRole("alert");
@@ -202,7 +202,7 @@ describe("IMPORT_ALREADY_COMPLETED e VALIDATION_ERROR mantêm o tratamento atual
     renderScreen();
 
     await fillCredentials(user);
-    await user.click(screen.getByRole("button", { name: "Conectar Minha Agenda" }));
+    await user.click(screen.getByRole("button", { name: "Analisar meus dados" }));
 
     expect(
       await screen.findByText(
@@ -224,7 +224,7 @@ describe("IMPORT_ALREADY_COMPLETED e VALIDATION_ERROR mantêm o tratamento atual
     renderScreen();
 
     await fillCredentials(user);
-    await user.click(screen.getByRole("button", { name: "Conectar Minha Agenda" }));
+    await user.click(screen.getByRole("button", { name: "Analisar meus dados" }));
 
     expect(
       await screen.findByText("Confira os dados preenchidos e tente novamente."),

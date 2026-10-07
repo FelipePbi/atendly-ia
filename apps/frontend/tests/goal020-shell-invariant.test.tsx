@@ -236,9 +236,9 @@ describe("ShellConfigProvider + conexão da origem não excede a profundidade de
       screen.getByLabelText("E-mail do Minha Agenda"),
       "camila@example.com",
     );
-    await user.type(screen.getByLabelText("Senha do Minha Agenda"), "super-secret");
+    await user.type(screen.getByLabelText("Senha"), "super-secret");
 
-    expect(screen.getByLabelText("Senha do Minha Agenda")).toHaveValue("super-secret");
+    expect(screen.getByLabelText("Senha")).toHaveValue("super-secret");
     expect(startImport).not.toHaveBeenCalled();
   });
 });

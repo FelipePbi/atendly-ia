@@ -212,8 +212,8 @@ describe("conexão: IMPORT_ALREADY_COMPLETED no envelope real", () => {
       await screen.findByLabelText("E-mail do Minha Agenda"),
       "camila@example.com",
     );
-    await user.type(screen.getByLabelText("Senha do Minha Agenda"), "super-secret");
-    await user.click(screen.getByRole("button", { name: "Conectar Minha Agenda" }));
+    await user.type(screen.getByLabelText("Senha"), "super-secret");
+    await user.click(screen.getByRole("button", { name: "Analisar meus dados" }));
 
     expect(
       await screen.findByText(

@@ -246,12 +246,12 @@ describe("importacao sem sessão: a tela de conectar, na moldura do onboarding",
       }),
     ).toBeVisible();
     expect(
-      screen.queryByRole("heading", { level: 2, name: "Entre no Minha Agenda" }),
+      screen.queryByRole("heading", { name: "Entre no Minha Agenda" }),
     ).toBeNull();
     await user.click(screen.getByRole("button", { name: "Continuar" }));
     expect(
       await screen.findByRole("heading", {
-        level: 2,
+        level: 1,
         name: "Entre no Minha Agenda",
       }),
     ).toBeVisible();

@@ -202,11 +202,13 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, W2, R2, I1, AG2, NT2, 2.6, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1, W2, R2, I1, AG2, NT2, 2.6, 2.I3, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I3", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
   for (const target of declaring) {
-    const owner = ["W1", "W2", "R2", "I1"].includes(target.code)
+    const owner = target.code === "2.I3"
+      ? "Onboarding-2-Importacao.dc.html"
+      : ["W1", "W2", "R2", "I1"].includes(target.code)
       ? "Mais-WhatsApp-Importacao-Conta.dc.html"
       : target.code === "AG2"
         ? "Mais-Negocio-Agenda-IA.dc.html"
@@ -1091,4 +1093,44 @@ test("targets.json: 2.6 é o único dono de responses em Onboarding-1-Negocio-e-
     assert.equal(other.responses, undefined, `${code} continua sem responses`);
     assert.equal(other.steps, undefined, `${code} continua sem passos`);
   }
+});
+
+test("targets.json: 2.I3 é o único dono de responses em Onboarding-2-Importacao.dc.html, só com o GET /v1/calendar/imports e sem passos; o 2.I2 não declara responses e só tem os três passos permitidos", () => {
+  const all = JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "frontend", "e2e", "visual", "targets.json"), "utf8")).targets;
+  const inFile = all.filter((target) => target.file === "Onboarding-2-Importacao.dc.html");
+  const owners = declaringTargets().filter((target) => target.file === "Onboarding-2-Importacao.dc.html");
+  assert.deepEqual(owners.map((target) => target.code), ["2.I3"]);
+  const [t2i3] = owners;
+  const t2i2 = inFile.find((target) => target.code === "2.I2");
+  assert.ok(t2i2, "2.I2 precisa estar em targets.json");
+  for (const target of [t2i2, t2i3]) {
+    assert.equal(target.route, "/onboarding/importacao");
+    assert.equal(target.account, "onboarding");
+  }
+  assert.equal(t2i3.steps, undefined, "2.I3: nenhum passo, a tela abre sozinha na análise");
+  assert.deepEqual(t2i3.responses.map((entry) => `${entry.method} ${entry.path}`), ["GET /v1/calendar/imports"]);
+  assert.equal(typeof t2i3.responses[0].json.requestId, "string");
+  assert.equal(pickFixedResponse(t2i3, "GET", "/v1/calendar/imports"), t2i3.responses[0]);
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    assert.equal(pickFixedResponse(t2i3, method, "/v1/calendar/imports"), null, `2.I3: ${method} /v1/calendar/imports não deveria casar`);
+  }
+  for (const other of ["/v1/calendar/imports/visual-compare-import-analyzing/preview", "/v1/calendar/imports/visual-compare-import-analyzing/progress", "/v1/settings"]) {
+    assert.equal(pickFixedResponse(t2i3, "GET", other), null, `2.I3: ${other} não é servido`);
+  }
+  assert.equal(t2i2.responses, undefined, "2.I2: a conta de onboarding não tem sessão de importação");
+  assert.deepEqual(
+    t2i2.steps.map((step) => Object.keys(step)),
+    [["clickRole"], ["fill"], ["fill"]],
+    "2.I2: só clickRole e fill, sem press nem click",
+  );
+  assert.deepEqual(t2i2.steps[0].clickRole, { role: "button", name: "Continuar" });
+  assert.deepEqual(t2i2.steps.slice(1).map((step) => step.fill.label), ["E-mail do Minha Agenda", "Senha"]);
+  assert.ok(t2i2.steps.every((step) => step.optional !== true));
+  assert.ok(t2i2.steps[2].fill.value.length === 8, "2.I2: a senha do passo tem oito caracteres");
+  const touched = JSON.stringify(t2i2.steps);
+  assert.doesNotMatch(touched, /Analisar meus dados|Enter|Conectar/);
+  const origem = inFile.find((target) => target.code === "2.I1");
+  assert.ok(origem, "2.I1 precisa continuar em targets.json");
+  assert.equal(origem.responses, undefined, "2.I1 continua sem responses");
+  assert.equal(origem.steps, undefined, "2.I1 continua sem passos");
 });

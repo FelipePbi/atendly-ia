@@ -1,9 +1,10 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
 
 import { BffHttpError } from "@/data";
 import { schedulingRefusalCode } from "@/data/http/schedulingRefusal";
+import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
 import { newIdempotencyKey } from "./idempotency";
@@ -97,6 +98,9 @@ export function ConnectSourceScreen({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const emailId = useId();
+  const passwordId = useId();
 
   function setField(field: FieldName, value: string) {
     setValues((current) => ({ ...current, [field]: value }));
@@ -143,27 +147,24 @@ export function ConnectSourceScreen({
 
   return (
     <ImportsPage
-      description="Copie seus dados do Minha Agenda uma única vez. Nada muda na Avenly até você confirmar."
-      title={replace ? "Conectar outra conta do Minha Agenda" : "Importar do Minha Agenda"}
+      description="Usamos seu acesso só para ler seus dados durante a importação. Ele é apagado assim que você concluir a importação."
+      eyebrow={false}
+      title={replace ? "Conectar outra conta do Minha Agenda" : "Entre no Minha Agenda"}
     >
       <form
-        className="imports-panel"
+        className="imports-credentials"
         noValidate
         onSubmit={(event) => void handleSubmit(event)}
       >
-        <div className="imports-panel-header">
-          <h2>Entre no Minha Agenda</h2>
-          <p>
-            Usamos seu e-mail e senha só para esta importação. Eles não ficam
-            guardados: são apagados assim que você concluir a importação.
-          </p>
-        </div>
-        <div className="settings-form-grid">
-          <label className={`field${fieldErrors.email ? " field-error" : ""}`}>
-            <span className="label">E-mail do Minha Agenda</span>
+        <div className="imports-credentials-body">
+          <div className={`field${fieldErrors.email ? " field-error" : ""}`}>
+            <label className="label" htmlFor={emailId}>
+              E-mail do Minha Agenda
+            </label>
             <input
               autoComplete="username"
               className="input"
+              id={emailId}
               type="email"
               value={values.email}
               onChange={(event) => setField("email", event.target.value)}
@@ -171,27 +172,42 @@ export function ConnectSourceScreen({
             {fieldErrors.email && (
               <span className="field-help">{fieldErrors.email}</span>
             )}
-          </label>
-          <label className={`field${fieldErrors.password ? " field-error" : ""}`}>
-            <span className="label">Senha do Minha Agenda</span>
-            <input
-              autoComplete="current-password"
-              className="input"
-              type="password"
-              value={values.password}
-              onChange={(event) => setField("password", event.target.value)}
-            />
+          </div>
+          <div className={`field${fieldErrors.password ? " field-error" : ""}`}>
+            <label className="label" htmlFor={passwordId}>
+              Senha
+            </label>
+            <span className="input-wrap">
+              <input
+                autoComplete="current-password"
+                className="input input-with-action"
+                id={passwordId}
+                type={passwordVisible ? "text" : "password"}
+                value={values.password}
+                onChange={(event) => setField("password", event.target.value)}
+              />
+              <button
+                aria-label={passwordVisible ? "Ocultar senha" : "Mostrar senha"}
+                aria-pressed={passwordVisible}
+                className="field-action"
+                type="button"
+                onClick={() => setPasswordVisible((current) => !current)}
+                onMouseDown={(event) => event.preventDefault()}
+              >
+                <Icon name="eye" />
+              </button>
+            </span>
             {fieldErrors.password && (
               <span className="field-help">{fieldErrors.password}</span>
             )}
-          </label>
+          </div>
+          {formError && (
+            <p className="field-help" role="alert">
+              {formError}
+            </p>
+          )}
         </div>
-        {formError && (
-          <p className="field-help" role="alert">
-            {formError}
-          </p>
-        )}
-        <div className="imports-actions is-split">
+        <div className="imports-credentials-actions">
           {onCancel && (
             <button
               className="btn btn-secondary"
@@ -203,7 +219,7 @@ export function ConnectSourceScreen({
             </button>
           )}
           <button className="btn btn-primary" disabled={submitting} type="submit">
-            {submitting ? "Conectando..." : "Conectar Minha Agenda"}
+            {submitting ? "Conectando…" : "Analisar meus dados"}
           </button>
         </div>
       </form>

@@ -7862,3 +7862,98 @@ Arquivos do Goal: `apps/frontend/src/features/onboarding/{OnboardingScreen.tsx,O
 ### Não executado
 
 A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.
+
+## As credenciais e a análise da importação do onboarding iguais ao protótipo, do Goal131
+
+Rodadas 1 a 5, 2026-10-06 e 2026-10-07, na worktree `goal-131`. Baseline `77b1f1e`. **Rodada 1:** as credenciais e os testes delas (WU-01); a análise e os testes dela (WU-02); os alvos 2.I2 e 2.I3, os testes da captura, o `visual:compare`, os controles negativos e os registros (WU-03); e os gates do IA Loop sobre a árvore da rodada 1. **Rodada 2:** só refez as capturas do `visual:compare` (FIX-001), sem mudar arquivo fora de `docs/`; por isso o IA Loop reaproveitou os gates da rodada 1. **Rodada 3 (FIX-001):** a correção da barra, das cores e da altura das linhas da análise (`avenly-imports.css`, `ImportPreviewScreen.tsx`), o comentário de `ImportsLayout.tsx`, as `notes` do 2.I3, os testes novos de `goal131-analise.test.tsx` e estes registros. **Rodada 4 (FIX-001):** só documentação; o IA Loop reaproveitou da rodada 3 os gates de código e rodou de novo o `validate:integration` (WU-12). **Rodada 5 (FIX-001):** a altura do campo das credenciais (54 px por fora, como o content-box de 52 px do quadro) e o `letter-spacing: 0.2em` da senha mascarada (`avenly-imports.css`), dois testes novos em `goal131-toque-senha.test.ts`, as capturas do `visual:compare` e estes registros. Cada número abaixo diz a rodada em que foi obtido.
+
+### Contagens
+
+| Gate | Comando | Resultado |
+| --- | --- | --- |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0 (rodadas 1, 3 e 5) |
+| Lint do frontend | `rtk proxy npx eslint src tests --max-warnings=0` (em `apps/frontend`) | saída 0 (rodadas 1, 3 e 5) |
+| Testes do frontend | `npx vitest run` (dentro do `validate:core`, rodada 3) | **Rodada 5** (FIX-001, árvore final, `npx vitest run` solto e dentro do `validate:core`): **189** arquivos e **2509** testes passando (baseline 185 e 2464: +4 arquivos e +45 testes, os de `goal131`; a rodada 1 deu 2502, a rodada 3 acrescentou 5 testes em `goal131-analise.test.tsx` (2507) e a rodada 5, 2 em `goal131-toque-senha.test.ts`) |
+| Testes `goal131` | `goal131-credenciais.test.tsx` (WU-01), `goal131-analise.test.tsx` (WU-02, com 19 testes depois da rodada 3), `goal131-alvos-captura.test.ts` e `goal131-toque-senha.test.ts` (WU-03) | 4 arquivos e 45 testes (10, 19, 12 e 4, depois da rodada 5; `goal131-toque-senha.test.ts` tinha 2) |
+| Testes da captura | `node --test scripts/tests/visual-responses.test.mjs` | **59** testes passando, 0 falhas (baseline 58: +1; rodadas 1, 3 e 5) |
+| `test:gate` | `npm run test:gate` | **292** testes, 292 passando, 0 falhas, 0 pulados (baseline 291: +1, o da captura; rodadas 1, 3 e 5) |
+| `git diff --check` | `git diff --check` | saída 0 (rodadas 1, 3 e 5) |
+| `validate:core` | `npm run validate:core` | **Rodada 1** (IA Loop, WU-10, árvore da rodada 1): saída 0, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, que só tem a suíte de integração, rodada no `validate:integration`; `test:health-worker`, pacote sem suíte, só a checagem de sintaxe). **Rodada 2:** reaproveitado da rodada 1 pelo IA Loop (nenhum arquivo fora de `docs/` mudou). **Rodada 3** (FIX-001, árvore corrigida, sem as variáveis `*_TEST_DATABASE_URL`, como no passo determinístico): saída 0, 17 passos, 15 passaram, 0 falharam, os mesmos 2 pulados; o `test:frontend` dele deu 189 arquivos e 2507 testes passando. **Rodada 4:** reaproveitado da rodada 3 pelo IA Loop (só `docs/` mudou). **Rodada 5** (FIX-001, árvore final, sem as quatro `*_TEST_DATABASE_URL`): saída 0, 17 passos, **15 passaram**, 0 falharam, os mesmos 2 pulados (`test:bff`, `test:health-worker`); o `test:frontend` dele deu 189 arquivos e **2509** testes passando. **Rodada 5** (IA Loop, WU-10, árvore final): saída 0, 17 passos, **15 passaram**, 0 falharam, 2 pulados |
+| `validate:ui` | `npm run validate:ui` | **Rodada 1** (IA Loop, WU-11): saída 0, **169 passed**, 21 skipped, retentativas 0 ("every test passed on its first attempt"). Rodada 2: reaproveitado. **Rodada 3** (FIX-001, árvore corrigida, duas execuções): saída 0, **169 passed**, 21 skipped, retentativas 0 nas duas. Rodada 4: reaproveitado da rodada 3. **Rodada 5** (FIX-001, árvore final): saída 0, **169 passed**, 21 skipped, retentativas 0 ("every test passed on its first attempt"). **Rodada 5** (IA Loop, WU-11, árvore final): saída 0, **169 passed**, 21 skipped, retentativas 0 ("every test passed on its first attempt") |
+| `validate:integration` | `npm run validate:integration` | **Rodada 1** (IA Loop, WU-12, árvore da rodada 1): saída 0, 36 passos, **36 passaram**, 0 pulados. O gate autenticado (`rehearse:goal033-authenticated-ui`): saída 0, **304 passed** e **1 flaky** (1 retentativa), `[mobile-390] G-4 pushed screen below 1024px: configuracoes detail`, que falhou na primeira tentativa ("the authenticated shell did not mark \"configuracoes\" as the current destination within 20000ms") e passou na retentativa; a baseline é 305 passed sem retentativa. Rodada 2: reaproveitado da rodada 1. Rodada 3: a FIX-001 não o executou (o gate sobe BFF, Scheduling e IA sobre bancos descartáveis que o harness provisiona e o Developer não deve subir nem tocar). **Rodada 4** (IA Loop, WU-12, a execução que o IA Loop rodou de fato sobre a árvore da rodada 3, que a rodada 4 não alterou em código): saída 0, 36 passos, **36 passaram**, 0 pulados; o gate autenticado deu **305 passed**, **0 flaky**, "retries: 0 — every test passed on its first attempt" (a baseline é 305 sem retentativa; o flaky da rodada 1 não voltou). **Rodada 5** (IA Loop, WU-12, árvore final, depois da correção do campo e da máscara): saída 0, 36 passos, **36 passaram**, 0 pulados. O gate autenticado deu **304 passed** e **1 flaky** (1 retentativa): `[mobile-390] onboarding-demonstracao-da-ia › measured, logged in`, que falhou na primeira tentativa ("/onboarding/demonstracao-da-ia did not render its own heading … within 20000ms") e passou na retentativa. É uma tela fora deste Goal. `/onboarding/importacao` passou nas cinco larguras. A baseline é 305 sem retentativa, e a rodada 4 deu 305 sem retentativa sobre código que difere só no CSS das credenciais, que o gate não alcança (`/onboarding/importacao` é medida só na origem; as credenciais e a análise não são alcançadas por ele). A FIX-001 da rodada 5 não o executou, pelo mesmo motivo da rodada 3 |
+
+### Gate autenticado
+
+`apps/frontend/e2e/authenticated-matrix.spec.ts` foi lido (o laço de `ONBOARDING_ROUTES`, os blocos `reached by real click`, G-1 a G-8, `ONBOARDING_FRAME_PATHS` e a busca por todo `getByRole`, `getByText`, `click` e `goto`). O único bloco de onboarding que clica é o de `onboarding-horarios` ("Personalizar dias diferentes", do Goal130). **Nenhum bloco toca `/onboarding/importacao`, "Continuar" da origem ou as credenciais**, e `/importacao` está fora de `AUTHENTICATED_ROUTES`. `ONBOARDING_ROUTES` não mudou: `/onboarding/importacao` segue medida na origem, com o h1 "De onde vamos trazer seus dados?". O spec **não foi alterado**. As credenciais e a análise não são alcançadas pelo gate; as cores delas são as do quadro (contraste de cada par em D-145) e o alvo de toque de "Mostrar senha" (32 px) é provado em `goal131-toque-senha.test.ts`.
+
+### `visual:compare`
+
+Comando: `npm run visual:compare -- --target 2.I2,2.I3` (saída 0, 8 pares, nenhum com erro). Rodado na rodada 1 (duas vezes), na rodada 2 (só as capturas, sem mudança de código), na **rodada 3, depois da última mudança de `src/`** (a barra, as cores e a pílula da análise; depois dela `targets.json` mudou só nas `notes`) de novo na rodada 4 (FIX-001), sem mudança de código, com os mesmos percentuais da rodada 3 nos oito pares, e na **rodada 5 (FIX-001), depois da última mudança de código** (a altura do campo e o `letter-spacing` da senha mascarada; saída 0, 8 pares, nenhum com erro). Percentual de pixels diferentes por device **na rodada 5** (na rodada 3 o 2.I2 deu 16,1 / 1,5 / 1,4 / 1,5 %; o 2.I3 não mudou desde a rodada 3; na rodada 1 o 2.I3 deu 3,3 / 1,3 / 1,8 / 1,2 %):
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| 2.I2 | 16,1% | 1,5% | 0,9% | 1,5% |
+| 2.I3 | 3,9% | 1,7% | 2,1% | 1,5% |
+
+O 2.I3 subiu alguns décimos porque a barra do app, indeterminada, aparece na captura (feita com `prefers-reduced-motion: reduce`) como o trilho inteiro em tom claro, e o quadro mostra o preenchimento escuro até 78 %; é a divergência declarada. As capturas lado a lado dos oito pares foram abertas (protótipo, app e diferenças). O 16,1% do 2.I2 mobile é quase todo o teclado do iOS do quadro, que o app não tem. Divergências que restam, nos quatro devices:
+
+- 2.I2: o teclado do iOS (mobile) e o foco do campo de senha, que na captura fica no último campo preenchido; a descrição com a segunda frase do app, que quebra em mais uma linha e desce os campos em 16 a 19 px; o chevron de voltar, que a moldura do onboarding não mostra na etapa; o segundo segmento da barra (`chapterFraction`); o "Sair" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone. Título, eyebrow, rótulos, campos e olho coincidem. **Rodada 5:** o campo de e-mail e o de senha saíam 2 px mais baixos que o quadro, que é `height:52px` em content-box (52 px de conteúdo mais a borda: 54 px por fora, 55 px em foco); o app agora declara `height: 54px; min-height: 0` (a convenção de `.onboarding-form .field .input`), e no tablet paisagem o campo de senha começa na mesma linha do quadro nas capturas. A máscara tinha outra tipografia: o quadro escreve os oito pontos com `letter-spacing:.2em`, o app os mostrava juntos; `.imports-credentials .input[type="password"]` agora leva `letter-spacing: 0.2em`, só com o campo mascarado (o texto de "Mostrar senha" não muda), e os pontos ocupam a mesma largura do quadro no mobile. Os dois pontos são proibidos de voltar por `goal131-toque-senha.test.ts` (controles j e k abaixo). **"Analisar meus dados" e a cor:** no tablet retrato, no tablet paisagem e no desktop o botão sai, na captura do app, com o pixel `rgb(11,79,82)` (`#0B4F52`, o estado `:hover`), e o do protótipo é `rgb(15,95,99)` (`#0F5F63`). É efeito da captura, não do produto: o ponteiro fica onde o passo `clickRole` tocou "Continuar" da origem, que é o mesmo lugar do botão novo, e o botão fica em `:hover`. A cor em repouso é `var(--accent)`, `#0F5F63`, a do quadro; no mobile o ponteiro não cai no botão e o pixel é `rgb(15,95,99)` nos dois. Conferido na rodada 3, contando os pixels dessas duas cores nas capturas.
+- 2.I3: as contagens (12, 386, 42 e 1.400), que a leitura não traz, e a pílula no lugar; as linhas do cartão, que na rodada 3 têm a altura da última linha do quadro (a pílula não tem mais a margem de 6 px que o app inventava: o quadro tem `width:54px;height:14px;border-radius:7px` e nada mais): nas capturas, cada divisória do app fica a 55 ou 56 px da anterior (subpixel), contra 55 px da última linha do quadro, dentro de 1 px nos quatro devices, e o cartão fica mais baixo que o do quadro só pelas quatro linhas que ali têm o número (63 px); a barra indeterminada do app (o trilho inteiro em tom claro na captura, com movimento reduzido) no lugar da que cresce até 78 % no quadro; as cinco linhas com o ícone `#716859` e o nome `#5F574E`, as cores da última linha do quadro, enquanto o quadro pinta as quatro primeiras com `#0F5F63` e `#221E1A`; o chevron e o "Sair"; o segundo segmento da barra; a barra de status. Cabeçalho, ícones, nomes, o cartão e a nota abaixo dele coincidem.
+
+Regressão: `npm run visual:compare -- --target 2.I1,I1,I2` (saída 0, 12 pares), depois da última edição de código. **Não há `app.png` de antes capturado nesta rodada:** o passo "capturar a regressão de antes, sem editar nada" (Validação e ordem, 1) não foi feito antes das edições da WU-01 e da WU-02, e devolver os arquivos de `src/` à baseline para capturá-lo foi recusado pelo ambiente desta execução, então a regressão não é um `cmp` do `app.png`. A comparação é com os percentuais já registrados neste arquivo:
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop | Registro contra o qual se compara |
+| --- | --- | --- | --- | --- | --- |
+| 2.I1 | 2,7% | 1,8% | 2,1% | 1,6% | 2,7 / 1,8 / 2,1 / 1,6, Goal102 e Goal105: igual |
+| I1 | 10,0% | 4,4% | 6,7% | 5,6% | 10,0 / 4,4 / 6,7 / 5,6, Goal105: igual |
+| I2 | 16,0% | 11,3% | 12,2% | 10,8% | 16,0 / 11,3 / 12,2 / 10,8, Goal112: igual |
+
+Os doze percentuais são iguais aos registrados, o que indica a origem, o I1 e o I2 sem mudança, mas é prova mais fraca que o `cmp` byte a byte, porque o percentual é tendência.
+
+### Controles negativos
+
+Rodados na rodada 1, depois da última edição de código de `src/`. Cada um teve o arquivo devolvido e conferido com `cmp` contra a cópia guardada antes da mudança (saída 0 nos seis). (a) a (d) com `npx vitest run` do arquivo `goal131` indicado (em `apps/frontend`); (e) e (f) com `npx vitest run tests/goal131-alvos-captura.test.ts` e `node --test scripts/tests/visual-responses.test.mjs`.
+
+| # | Mudança | Teste que reprovou | Mensagem |
+| --- | --- | --- | --- |
+| a | uma linha da análise que mostra `session.categories[0].discoveredCount` (`ImportPreviewScreen.tsx`) | 2 de 14 em `goal131-analise.test.tsx` (uma por moldura): "nenhuma linha mostra número, mesmo com contagens na sessão" | `AssertionError: expected 'Serviços12' not to match /\d/` |
+| b | a barra da análise com `aria-valuenow={40}` (`ImportPreviewScreen.tsx`) | 2 de 14 em `goal131-analise.test.tsx`: "a barra é progressbar nomeada e sem aria-valuenow" | `Expected the element not to have attribute` |
+| c | "Mostrar senha" que não troca o `type` (`type="password"` fixo, em `ConnectSourceScreen.tsx`) | 2 de 10 em `goal131-credenciais.test.tsx`: "troca o type, o nome e o aria-pressed sem perder o valor" e "é alcançável pelo teclado e não envia o formulário" | `expect(element).toHaveAttribute("type", "text")` |
+| d | o envio que deixa de chamar `startImport` (`ConnectSourceScreen.tsx`) | 1 de 10 em `goal131-credenciais.test.tsx`: "chama connectIntegration e startImport uma vez cada, nessa ordem" | `AssertionError: expected "vi.fn()" to be called 1 times, but got 0 times` |
+| e1 | o 2.I2 de `targets.json` com um quarto passo `clickRole` em "Analisar meus dados" | 2 de 12 em `goal131-alvos-captura.test.ts` ("tem só os três passos…" e "nenhum passo envia o formulário") e 1 de 59 em `visual-responses.test.mjs` | `expected [ { clickRole: { …(2) } }, …(3) ] to have a length of 3 but got 4` e `2.I2: só clickRole e fill, sem press nem click` |
+| e2 | o 2.I2 com um quarto passo `press` "Enter" | os mesmos 2 de 12 e 1 de 59 | os mesmos |
+| f1 | o 2.I3 com uma segunda resposta (`GET /v1/status`) | 1 de 12 em `goal131-alvos-captura.test.ts` ("declara só o GET /v1/calendar/imports…") e 1 de 59 em `visual-responses.test.mjs` | `expected [ { method: 'GET', …(2) }, …(1) ] to have a length of 1 but got 2` e `Expected values to be strictly deep-equal` |
+| f2 | o 2.I3 com a resposta em `POST` | o mesmo de 12 e **34** de 59 em `visual-responses.test.mjs` (a regra de `responses` recusa o `POST` em alvo com sessão, e `declaringTargets()` recusa o arquivo inteiro) | `expected 'POST' to be 'GET'` e `targets.json: alvo 2.I3 (Onboarding-2-Importacao.dc.html): responses[0].method "POST" não é aceito; só "GET"` |
+
+Os dois controles (e) e os dois (f) cobrem as duas formas pedidas em cada item do Goal; os seis controles do Goal são os seis (a) a (f). Antes de cada controle (e) e (f), o primeiro intento do script falhou por não achar o trecho (o arquivo usa quebra de linha CRLF) e não alterou o arquivo; os controles da tabela são os da segunda tentativa, com a mutação feita sobre o JSON.
+
+Controles da rodada 3, sobre os testes novos de `goal131-analise.test.tsx` (`npx vitest run tests/goal131-analise.test.tsx`, em `apps/frontend`), cada um com o arquivo devolvido e conferido com `cmp` (saída 0):
+
+| # | Mudança | Teste que reprovou | Mensagem |
+| --- | --- | --- | --- |
+| g | `margin-block: 6px` de volta em `.imports-analysis-pill` (`avenly-imports.css`) | 1 de 19: "a pílula não tem margem e as linhas usam uma cor só" | `AssertionError: expected '\n  width: 54px;\n  height: 14px;\n  …' not to match /margin/` |
+| h | `width: 78%` no lugar do `translateX` no keyframe da barra | 1 de 19: "nenhum keyframe da barra mexe na largura e o trecho corre em laço" | `AssertionError: expected '\n  from {\n    transform: translateX…' not to match /width/` |
+| i | `is-pending` na linha "Serviços" (`ImportPreviewScreen.tsx`) | 2 de 19 (uma por moldura): "nenhuma linha tem classe ou estado diferente das outras" | `AssertionError: expected 'imports-analysis-row is-pending' not to match /pending\|active\|done/` |
+
+Controles da rodada 5, sobre os dois testes novos de `goal131-toque-senha.test.ts` (`npx vitest run tests/goal131-toque-senha.test.ts`, em `apps/frontend`), cada um com `avenly-imports.css` devolvido da cópia guardada antes da mudança (4 testes passando depois):
+
+| # | Mudança | Teste que reprovou | Mensagem |
+| --- | --- | --- | --- |
+| j | `letter-spacing: 0` em `.imports-credentials .input[type="password"]` | 1 de 4: "a máscara da senha tem letter-spacing de 0.2em só no campo mascarado" | falha em `expect(/letter-spacing:\s*0?\.2em/.exec(masked)).not.toBeNull()` |
+| k | `height: 52px` em `.imports-credentials .input` | 1 de 4: "o campo mede 54 px por fora, como o content-box de 52 px do quadro" | falha em `expect(/(?<![-\w])height:\s*54px/.exec(block)).not.toBeNull()` |
+
+### Testes ajustados
+
+Oito arquivos existentes do frontend (WU-01), só no texto, na ordem ou na ação que o Goal muda, sem afrouxar asserção sobre os pedidos, a validação, as mensagens, a idempotência, a retomada ou a troca de conta: `goal020-imports-entry.test.tsx`, `goal020-shell-invariant.test.tsx`, `goal060-connect-source.test.tsx`, `goal066-onboarding-importacao.test.tsx`, `goal082-connect-source-client-rejected.test.tsx`, `goal105-importacao.test.tsx`, `goal112-configuracoes-importacao.test.tsx` e `goal120-importacao-recusas.test.tsx` ("Analisar meus dados" no lugar de "Conectar Minha Agenda", "Senha" no lugar de "Senha do Minha Agenda", o título "Entre no Minha Agenda" no lugar do subtítulo `h2` e a descrição nova). `scripts/tests/visual-responses.test.mjs`: o 2.I3 entre os donos de `responses` e o teste novo dos alvos 2.I2 e 2.I3.
+
+### Escopo
+
+Arquivos do Goal: `apps/frontend/src/features/imports/{ConnectSourceScreen.tsx,ImportPreviewScreen.tsx,ImportsLayout.tsx}`, `apps/frontend/src/shared/styles/avenly-imports.css`, `apps/frontend/e2e/visual/targets.json`, `scripts/tests/visual-responses.test.mjs`, os quatro testes `goal131-*`, os oito testes ajustados e os três registros em `docs/migration/`. `authenticated-matrix.spec.ts` e `labels.ts` não mudaram.
+
+### Desvios do texto do Goal, para o review
+
+Nenhum desvio do texto do Goal na análise depois da rodada 3. A barra é indeterminada, como a escolha 4 manda: um trecho que corre no trilho em laço (D-145, item 9), sem movimento e sem fração com `prefers-reduced-motion: reduce`, e sem `aria-valuenow`. As cinco linhas usam uma cor só, a da última linha do quadro (D-145, item 8). As divergências que restam contra o quadro são as declaradas: a barra que o quadro faz crescer até 78 %, as contagens, as cores das quatro primeiras linhas e a altura das linhas com número.
+
+### Não executado
+
+A conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho.

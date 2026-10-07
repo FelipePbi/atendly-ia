@@ -43,8 +43,8 @@ async function connectRejectedWith(code: string, status: number) {
     await screen.findByLabelText("E-mail do Minha Agenda"),
     "camila@example.com",
   );
-  await user.type(screen.getByLabelText("Senha do Minha Agenda"), "super-secret");
-  await user.click(screen.getByRole("button", { name: "Conectar Minha Agenda" }));
+  await user.type(screen.getByLabelText("Senha"), "super-secret");
+  await user.click(screen.getByRole("button", { name: "Analisar meus dados" }));
   return (await screen.findByRole("alert")).textContent ?? "";
 }
 

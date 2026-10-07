@@ -488,7 +488,7 @@ describe("Goal105 prova 1: I2 e a entrada da importação", () => {
     expect(illustration?.textContent).toContain("Avenly");
 
     expect(credentialsLabel()).toBeNull();
-    expect(screen.queryByLabelText("Senha do Minha Agenda")).toBeNull();
+    expect(screen.queryByLabelText("Senha")).toBeNull();
     expect(
       screen.queryByRole("heading", { name: "Entre no Minha Agenda" }),
     ).toBeNull();
@@ -519,7 +519,7 @@ describe("Goal105 prova 1: I2 e a entrada da importação", () => {
       await screen.findByRole("heading", { name: "Entre no Minha Agenda" }),
     ).toBeVisible();
     expect(screen.getByLabelText("E-mail do Minha Agenda")).toBeVisible();
-    expect(screen.getByLabelText("Senha do Minha Agenda")).toBeVisible();
+    expect(screen.getByLabelText("Senha")).toBeVisible();
     expect(connectIntegration).not.toHaveBeenCalled();
     expect(startImport).not.toHaveBeenCalled();
   });
@@ -546,8 +546,8 @@ describe("Goal105 prova 1: I2 e a entrada da importação", () => {
       await screen.findByLabelText("E-mail do Minha Agenda"),
       "camila@example.com",
     );
-    await user.type(screen.getByLabelText("Senha do Minha Agenda"), "super-secret");
-    await user.click(screen.getByRole("button", { name: "Conectar Minha Agenda" }));
+    await user.type(screen.getByLabelText("Senha"), "super-secret");
+    await user.click(screen.getByRole("button", { name: "Analisar meus dados" }));
 
     await screen.findByRole("heading", { name: "Importação concluída" });
     expect(connectIntegration).toHaveBeenCalledTimes(1);
@@ -598,7 +598,7 @@ describe("Goal105 prova 2: a origem (2.I1) vem antes das credenciais", () => {
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     expect(await screen.findByLabelText("E-mail do Minha Agenda")).toBeVisible();
-    expect(screen.getByLabelText("Senha do Minha Agenda")).toBeVisible();
+    expect(screen.getByLabelText("Senha")).toBeVisible();
   });
 
   test("'Conectar outra conta', numa sessão viva, abre na origem; 'Cancelar' volta à sessão sem pedido", async () => {

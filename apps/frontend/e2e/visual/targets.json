@@ -255,6 +255,66 @@
       "notes": "A conta de onboarding grava a fonte da agenda e não tem sessão de importação, então a rota abre a importação no início, sem estado a mais; se a captura mostrar outra etapa, o estado da conta de onboarding não alcança este quadro."
     },
     {
+      "code": "2.I2",
+      "file": "Onboarding-2-Importacao.dc.html",
+      "label": "Credenciais Minha Agenda",
+      "route": "/onboarding/importacao",
+      "account": "onboarding",
+      "notes": "Sem responses: a conta de onboarding não tem sessão de importação, então a rota abre a origem, e os três passos só leem e preenchem: \"Continuar\" na origem leva às credenciais, e os dois campos recebem um e-mail e uma senha de oito caracteres. Nenhum passo toca \"Analisar meus dados\" nem pressiona Enter, que enviariam as credenciais ao BFF e iniciariam uma importação. getByLabel('Senha') casa também com o botão \"Mostrar senha\", mas o campo vem antes no DOM e o passo usa o primeiro. Divergências declaradas do Goal131: o teclado do iOS do quadro mobile não é capturado, e o campo de senha do quadro está em foco, enquanto o foco da captura fica no último campo preenchido; a segunda frase da descrição (\"Ele não fica guardado.\") não é usada, porque o acesso fica guardado, cifrado, durante a importação e a conclusão o apaga, então o app diz \"Ele é apagado assim que você concluir a importação.\", que quebra em mais uma linha e desce os campos em 16 a 19 px; o chevron de voltar do quadro, que a moldura do onboarding não mostra na etapa importacao (o comportamento do chevron não muda no Goal131); o preenchimento do segundo segmento da barra, derivado por chapterFraction (D-104); o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app.",
+      "steps": [
+        { "clickRole": { "role": "button", "name": "Continuar" } },
+        { "fill": { "label": "E-mail do Minha Agenda", "value": "camila.reis@gmail.com" } },
+        { "fill": { "label": "Senha", "value": "senha123" } }
+      ]
+    },
+    {
+      "code": "2.I3",
+      "file": "Onboarding-2-Importacao.dc.html",
+      "label": "Analisando dados",
+      "route": "/onboarding/importacao",
+      "account": "onboarding",
+      "notes": "O quadro mostra a análise em curso; a conta de onboarding não tem sessão de importação, então a sessão em ANALYZING vem de resposta fixa de GET /v1/calendar/imports (right disponível, history null, session ANALYZING com previewVersion 0, interrupted false, lastError null e nenhuma categoria), só no navegador da captura. A tela só relê esse GET (pollUntilSettled) e nenhum pedido de escrita sai; nenhum passo. Divergências declaradas do Goal131: as cinco linhas não mostram número (12, 386, 42 e 1.400 no quadro), porque a análise lê a origem inteira e só depois grava as categorias (ImportPreviewService.recordAnalysis), então a leitura não traz contagem enquanto corre, e todas ficam como a última linha do quadro, com a pílula que brilha; a barra é role progressbar sem aria-valuenow, porque o contrato não traz progresso da análise (indeterminada para a tecnologia assistiva); o preenchimento do segundo segmento da barra de progresso, derivado por chapterFraction (D-104); o chevron do topo, que a moldura não mostra nesta etapa (o quadro também não o tem aqui); as linhas do cartão com a altura da última linha do quadro (55 px, a que ainda lê; o app dá 55 a 56 px, dentro de 1 px), porque a pílula é de 54 × 14 px e sem margem, como no quadro, e mais baixas que as linhas com número do quadro (63 px) por não terem o número; as cinco linhas com o ícone #716859 e o nome #5F574E, as cores da última linha do quadro, porque o sistema não sabe qual categoria já foi lida e nenhuma linha afirma estar lida ou por ler; a barra indeterminada, com um trecho que corre no trilho em laço, no lugar da que cresce uma vez até 78 % no quadro; a captura roda com prefers-reduced-motion: reduce, e nesse estado a barra do app é o trilho inteiro em tom claro (#DCECEB), sem fração e sem movimento; o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports",
+          "json": {
+            "data": {
+              "right": {
+                "available": true,
+                "sessionId": "visual-compare-import-analyzing",
+                "completedAt": null
+              },
+              "session": {
+                "sessionId": "visual-compare-import-analyzing",
+                "status": "ANALYZING",
+                "previewVersion": 0,
+                "provider": "MINHA_AGENDA",
+                "sourceAccountId": "visual-compare-source",
+                "sourceAccountLabel": null,
+                "createdAt": "2026-10-06T12:00:00.000Z",
+                "startedAt": "2026-10-06T12:00:05.000Z",
+                "finishedAt": null,
+                "previewGeneratedAt": null,
+                "interrupted": false,
+                "lastError": null,
+                "counts": {
+                  "pending": 0,
+                  "imported": 0,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0
+                },
+                "categories": []
+              },
+              "history": null
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "3.1",
       "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
       "label": "Demonstração da IA",

@@ -96,22 +96,6 @@
   align-self: center;
 }
 
-.imports-skeleton-rows {
-  display: grid;
-  gap: 12px;
-}
-.imports-skeleton-row {
-  min-height: 44px;
-  padding: 12px 0;
-  border-top: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 14px;
-}
-.imports-skeleton-row:first-child {
-  border-top: 0;
-  padding-top: 0;
-}
-
 .imports-select-rows {
   margin: 0;
   padding: 0;
@@ -258,4 +242,253 @@
 .imports-progress-summary {
   font-size: 14px;
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Credenciais do Minha Agenda (2.I2, Goal131). Os mesmos valores nos quatro
+ * devices do protótipo; vale para as duas molduras, porque a tela é a mesma.
+ */
+.onboarding-column:has(.imports-credentials) .onboarding-top {
+  gap: 10px;
+}
+.onboarding-content.is-frame:has(.imports-credentials) {
+  padding-top: 6px;
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+.imports-page:has(.imports-credentials) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.imports-page:has(.imports-credentials) .imports-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.imports-page:has(.imports-credentials) .imports-header > p {
+  margin: 0;
+  color: #5f574e;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.imports-credentials {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.imports-credentials-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.imports-credentials .field {
+  gap: 6px;
+}
+.imports-credentials .label {
+  color: #5f574e;
+  font-size: 13px;
+  line-height: normal;
+  font-weight: 600;
+}
+.imports-credentials .input {
+  height: 54px;
+  min-height: 0;
+  padding: 0 16px;
+  border-color: #d6cec2;
+  border-radius: 14px;
+  background: #fffdfa;
+  font-size: 16px;
+}
+.imports-credentials .input[type="password"] {
+  letter-spacing: 0.2em;
+}
+.imports-credentials .input-with-action {
+  padding-right: 52px;
+}
+.imports-credentials .input:focus {
+  border-width: 1.5px;
+  border-color: #0f5f63;
+  box-shadow: 0 0 0 3px #dceceb;
+}
+.imports-credentials .field-error .input {
+  border-color: var(--danger);
+}
+.imports-credentials .field-action {
+  top: 50%;
+  right: 11px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: #716859;
+  transform: translateY(-50%);
+}
+.imports-credentials .field-action .icon {
+  width: 20px;
+  height: 20px;
+}
+.imports-credentials-actions {
+  margin-top: auto;
+  padding: 10px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.imports-credentials-actions .btn {
+  min-height: 52px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.imports-credentials-actions .btn-primary {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.imports-credentials-actions .btn-secondary {
+  min-width: 96px;
+}
+
+/*
+ * Análise (2.I3, Goal131). A barra é indeterminada e o cartão não mostra
+ * número: o quadro revela contagens, mas a leitura ainda não sabe quantos
+ * registros existem, então a pílula ocupa o lugar do número. As cinco linhas
+ * têm a cor e a altura da última linha do quadro (a que ainda lê): o sistema
+ * não sabe qual categoria já foi lida. Com movimento reduzido, a barra vira o
+ * trilho inteiro em tom claro, sem fração.
+ */
+.imports-page:has(.imports-analysis),
+.imports-pushed-body:has(.imports-analysis) {
+  gap: 24px;
+}
+.imports-page:has(.imports-analysis) .imports-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.imports-page:has(.imports-analysis) .imports-header > p {
+  margin: 0;
+  color: #5f574e;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.imports-analysis {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.imports-analysis-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: #e5ded4;
+  overflow: hidden;
+}
+.imports-analysis-fill {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: 3px;
+  background: #0f5f63;
+  animation: imports-analysis-slide 1.6s ease-in-out infinite;
+}
+.imports-analysis-card {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e5ded4;
+  border-radius: 16px;
+  background: #fffdfa;
+  overflow: hidden;
+}
+.imports-analysis-row {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid #e5ded4;
+  color: #716859;
+  animation: imports-analysis-reveal 0.4s ease-out both;
+}
+.imports-analysis-row:first-child {
+  border-top: 0;
+}
+.imports-analysis-row:nth-child(1) {
+  animation-delay: 0.5s;
+}
+.imports-analysis-row:nth-child(2) {
+  animation-delay: 1.3s;
+}
+.imports-analysis-row:nth-child(3) {
+  animation-delay: 2.2s;
+}
+.imports-analysis-row:nth-child(4) {
+  animation-delay: 3.1s;
+}
+.imports-analysis-row:nth-child(5) {
+  animation-delay: 4s;
+}
+.imports-analysis-row svg {
+  flex: none;
+}
+.imports-analysis-label {
+  flex: 1;
+  color: #5f574e;
+  font-size: 15px;
+  font-weight: 600;
+}
+.imports-analysis-pill {
+  width: 54px;
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, #efeae2 25%, #f7f4ef 50%, #efeae2 75%);
+  background-size: 200% 100%;
+  animation: imports-analysis-shimmer 1.4s linear infinite;
+}
+.imports-analysis-note {
+  margin: 0;
+  color: #716859;
+  font-size: 13px;
+  text-align: center;
+}
+@keyframes imports-analysis-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+@keyframes imports-analysis-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes imports-analysis-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .imports-analysis-fill {
+    width: 100%;
+    background: #dceceb;
+    animation: none;
+  }
+  .imports-analysis-row,
+  .imports-analysis-pill {
+    animation: none;
+  }
 }

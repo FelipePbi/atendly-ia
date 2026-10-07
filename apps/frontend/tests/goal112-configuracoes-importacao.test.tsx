@@ -247,7 +247,7 @@ async function openCredentials(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Continuar" }));
   return {
     email: await screen.findByLabelText("E-mail do Minha Agenda"),
-    password: screen.getByLabelText("Senha do Minha Agenda"),
+    password: screen.getByLabelText("Senha"),
   };
 }
 
@@ -311,7 +311,7 @@ describe("Goal112 I2: /importacao guarda a fase e as credenciais", () => {
 
     media.resize(to);
     expect(screen.getByLabelText("E-mail do Minha Agenda")).toBe(email);
-    expect(screen.getByLabelText("Senha do Minha Agenda")).toBe(password);
+    expect(screen.getByLabelText("Senha")).toBe(password);
     expect(email).toHaveValue("camila@example.com");
     expect(password).toHaveValue("super-secret");
     expect(password).toHaveFocus();
@@ -321,7 +321,7 @@ describe("Goal112 I2: /importacao guarda a fase e as credenciais", () => {
 
     media.resize(from);
     expect(screen.getByLabelText("E-mail do Minha Agenda")).toBe(email);
-    expect(screen.getByLabelText("Senha do Minha Agenda")).toBe(password);
+    expect(screen.getByLabelText("Senha")).toBe(password);
     expect(email).toHaveValue("camila@example.com");
     expect(password).toHaveValue("super-secret");
     expect(password).toHaveFocus();
@@ -362,7 +362,7 @@ describe("Goal112 I2: /importacao guarda a fase e as credenciais", () => {
       "Configurações",
     );
     expect(screen.getByLabelText("E-mail do Minha Agenda")).toBe(email);
-    expect(screen.getByLabelText("Senha do Minha Agenda")).toBe(password);
+    expect(screen.getByLabelText("Senha")).toBe(password);
     expect(email).toHaveValue("camila@example.com");
     expect(password).toHaveValue("super-secret");
     expect(password).toHaveFocus();

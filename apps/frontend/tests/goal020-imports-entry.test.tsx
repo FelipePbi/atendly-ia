@@ -149,7 +149,7 @@ async function fillCredentials(user: ReturnType<typeof userEvent.setup>) {
     await screen.findByLabelText("E-mail do Minha Agenda"),
     "camila@example.com",
   );
-  await user.type(screen.getByLabelText("Senha do Minha Agenda"), "super-secret");
+  await user.type(screen.getByLabelText("Senha"), "super-secret");
 }
 
 beforeEach(() => {
@@ -262,7 +262,7 @@ describe("conexão da origem", () => {
     renderScreen();
 
     await fillCredentials(user);
-    await user.click(screen.getByRole("button", { name: "Conectar Minha Agenda" }));
+    await user.click(screen.getByRole("button", { name: "Analisar meus dados" }));
 
     await waitFor(() =>
       expect(connectIntegration).toHaveBeenCalledWith({
@@ -300,7 +300,7 @@ describe("conexão da origem", () => {
     renderScreen();
 
     await fillCredentials(user);
-    await user.click(screen.getByRole("button", { name: "Conectar Minha Agenda" }));
+    await user.click(screen.getByRole("button", { name: "Analisar meus dados" }));
 
     expect(
       await screen.findByText(
@@ -330,7 +330,7 @@ describe("conexão da origem", () => {
     renderScreen();
 
     await fillCredentials(user);
-    await user.click(screen.getByRole("button", { name: "Conectar Minha Agenda" }));
+    await user.click(screen.getByRole("button", { name: "Analisar meus dados" }));
     await screen.findByText(/Não foi possível entrar no Minha Agenda/);
 
     expect(window.localStorage.length).toBe(0);

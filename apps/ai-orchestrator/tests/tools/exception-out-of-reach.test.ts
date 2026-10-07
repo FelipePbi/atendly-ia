@@ -166,7 +166,10 @@ function createExceptionTrap() {
     listActiveServices: async () => [service],
     findService: async () => service,
     getAvailableSlotsForServices: async () => [slot],
-    findCustomerCandidatesByPhone: async () => [],
+    // Goal143: `customerId` so chega ao Scheduling se for pessoa do numero.
+    findCustomerCandidatesByPhone: async () => [
+      { id: "customer-1", name: "Thais", phone },
+    ],
     findCustomerDependentsByPhone: async () => [],
     getAuthorizedCustomerContext: async () => null,
     findFutureAppointmentsForPhone: async () => [appointment],

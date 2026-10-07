@@ -62,7 +62,11 @@ function createEffectTrap() {
     listActiveServices: async () => [service],
     findService: async () => service,
     getAvailableSlotsForServices: async () => [slot],
-    findCustomerCandidatesByPhone: async () => [],
+    // Goal143: `customerId` so chega ao Scheduling se for pessoa do numero.
+    findCustomerCandidatesByPhone: async () => [
+      { id: CUSTOMER_ID, name: "Thais", phone: PHONE },
+    ],
+    findCustomerDependentsByPhone: async () => [],
     getAuthorizedCustomerContext: async () => ({
       name: "Thais",
       notes: ["Prefere corte curto"],

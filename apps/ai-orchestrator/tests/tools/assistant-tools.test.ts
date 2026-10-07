@@ -767,7 +767,9 @@ describe("AssistantToolRegistry recurrence offer (Goal011)", () => {
 describe("AssistantToolRegistry customer appointment lookup", () => {
   it("queries by customerId when the contact is already linked to a person", async () => {
     const { prisma } = createPrismaMock({}, "linked-customer-1");
-    const { agenda, calls } = createAgendaMock();
+    const { agenda, calls } = createAgendaMock([
+      { id: "linked-customer-1", name: null, phone },
+    ]);
     const registry = new AssistantToolRegistry(prisma, agenda);
 
     const result = await registry.execute(

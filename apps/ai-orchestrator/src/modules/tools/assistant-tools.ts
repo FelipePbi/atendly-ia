@@ -93,6 +93,17 @@ export const CONFIRMATION_WITHOUT_DRAFT = "NO_PENDING_CONFIRMATION";
  * pergunta, nunca certeza — "Seria para o Pedro novamente?".
  */
 export const LAST_BOOKED_FOR_DEPENDENT = "LAST_BOOKED_FOR_DEPENDENT";
+/**
+ * `customerId` escrito pelo modelo que não é de nenhuma das pessoas do número
+ * (Goal143): os candidatos do telefone e os dependentes confirmados deles. A
+ * recusa vem antes de ler a pessoa ou de criar qualquer efeito (D-005).
+ */
+export const CUSTOMER_NOT_OF_THIS_NUMBER = "CUSTOMER_NOT_OF_THIS_NUMBER";
+/**
+ * Confirmar a série para uma pessoa diferente da que foi preparada (Goal143):
+ * a pessoa da série é a do rascunho, nunca a do argumento do turno.
+ */
+export const RECURRING_CUSTOMER_MISMATCH = "RECURRING_CUSTOMER_MISMATCH";
 
 /**
  * Pessoa que a IA pode agendar por este número (Goal142). `scheduledBy` é o
@@ -165,6 +176,12 @@ type PendingAction =
       holdIds: string[];
       serviceIds: string[];
       intervalDays?: number;
+      /**
+       * Pessoa da série (Goal143); `null` quando não informada. Ausente em
+       * rascunho gravado antes deste Goal: a confirmação confere o
+       * `customerId` do argumento contra as pessoas do número.
+       */
+      customerId?: string | null;
       idempotencyKey: string;
       preparedInTurnId?: string;
     };
@@ -516,7 +533,7 @@ export class AssistantToolRegistry {
         {
           name: "get_customer_context",
           description:
-            "Observacoes e tags de uma pessoa que estao autorizadas para uso pela IA. O que nao foi autorizado nao existe para esta ferramenta.",
+            "Observacoes e tags de uma pessoa deste numero (customerId de list_customer_candidates) que estao autorizadas para uso pela IA. O que nao foi autorizado nao existe para esta ferramenta, e pessoa de fora do numero e recusada.",
           schema: customerContextSchema,
         },
       ),
@@ -582,7 +599,7 @@ export class AssistantToolRegistry {
         {
           name: "create_appointment",
           description:
-            "Prepara ou confirma agendamento. Use action=prepare antes de pedir confirmacao; action=confirm somente apos confirmacao clara da cliente. Quando o numero tiver mais de uma pessoa cadastrada, pergunte para quem e o atendimento e reenvie prepare com customerId. Candidato com scheduledBy e uma pessoa que o responsavel deste numero agenda, sem ser dona do numero. Com reason=LAST_BOOKED_FOR_DEPENDENT, a pessoa proposta foi a ultima atendida por este numero: pergunte se e para ela novamente (por exemplo, Seria para o Pedro novamente?), nunca assuma, e se for para outra pessoa reenvie prepare com o customerId dela.",
+            "Prepara ou confirma agendamento. Use action=prepare antes de pedir confirmacao; action=confirm somente apos confirmacao clara da cliente. Quando o numero tiver mais de uma pessoa cadastrada, pergunte para quem e o atendimento e reenvie prepare com customerId, sempre de uma pessoa de list_customer_candidates; customerId de fora do numero e recusado. Candidato com scheduledBy e uma pessoa que o responsavel deste numero agenda, sem ser dona do numero. Com reason=LAST_BOOKED_FOR_DEPENDENT, a pessoa proposta foi a ultima atendida por este numero: pergunte se e para ela novamente (por exemplo, Seria para o Pedro novamente?), nunca assuma, e se for para outra pessoa reenvie prepare com o customerId dela.",
           schema: createAppointmentSchema,
         },
       ),
@@ -594,7 +611,7 @@ export class AssistantToolRegistry {
         {
           name: "prepare_recurring_appointments",
           description:
-            "Prepara uma serie finita de atendimentos recorrentes a partir de um servico, segurando um horario (hold) por ocorrencia ja ajustado a grade do negocio e aos buffers. Nao confirma nada ainda; nunca cria excecao, bloqueio ou override.",
+            "Prepara uma serie finita de atendimentos recorrentes a partir de um servico, segurando um horario (hold) por ocorrencia ja ajustado a grade do negocio e aos buffers. Nao confirma nada ainda; nunca cria excecao, bloqueio ou override. customerId, quando informado, vem so de list_customer_candidates e e a pessoa da serie; de fora do numero e recusado.",
           schema: prepareRecurringAppointmentsSchema,
         },
       ),
@@ -606,7 +623,7 @@ export class AssistantToolRegistry {
         {
           name: "confirm_recurring_appointments",
           description:
-            "Confirma de uma vez todas as ocorrencias preparadas por prepare_recurring_appointments, usando os holdIds recebidos. So chame apos confirmacao explicita da cliente. Se algum hold venceu, nada e confirmado e e preciso preparar de novo.",
+            "Confirma de uma vez todas as ocorrencias preparadas por prepare_recurring_appointments, usando os holdIds recebidos. So chame apos confirmacao explicita da cliente. Se algum hold venceu, nada e confirmado e e preciso preparar de novo. A serie e confirmada para a pessoa que foi preparada: nao envie outro customerId.",
           schema: confirmRecurringAppointmentsSchema,
         },
       ),
@@ -630,7 +647,7 @@ export class AssistantToolRegistry {
         {
           name: "get_customer_context",
           description:
-            "Observacoes e tags de uma pessoa que estao autorizadas para uso pela IA. O que nao foi autorizado nao existe para esta ferramenta.",
+            "Observacoes e tags de uma pessoa deste numero (customerId de list_customer_candidates) que estao autorizadas para uso pela IA. O que nao foi autorizado nao existe para esta ferramenta, e pessoa de fora do numero e recusada.",
           schema: customerContextSchema,
         },
       ),
@@ -892,6 +909,15 @@ export class AssistantToolRegistry {
     });
     if (!serviceResult.ok) return serviceResult;
 
+    // A pessoa da série é uma das pessoas do número (Goal143); a recusa vem
+    // antes de qualquer hold e de gravar o rascunho.
+    if (args.customerId) {
+      const { candidates } = await this.customerCandidates(context);
+      if (!isCandidateOfNumber(candidates, args.customerId)) {
+        return customerNotOfThisNumber(candidates);
+      }
+    }
+
     const occurrences = await this.scheduling.previewAppointmentSeries(
       {
         serviceIds: serviceResult.serviceIds,
@@ -916,6 +942,7 @@ export class AssistantToolRegistry {
       holdIds,
       serviceIds: serviceResult.serviceIds,
       intervalDays: args.intervalDays,
+      customerId: args.customerId ?? null,
       idempotencyKey: context.idempotencyKey,
       preparedInTurnId: context.turnId,
     });
@@ -964,13 +991,36 @@ export class AssistantToolRegistry {
       };
     }
 
+    // A pessoa da série é a do rascunho (Goal143). O argumento do turno da
+    // confirmação só pode repeti-la; rascunho anterior ao Goal, sem o campo,
+    // passa pela conferência das pessoas do número.
+    let seriesCustomerId: string | undefined;
+    if (draft.pending.customerId !== undefined) {
+      if (args.customerId && args.customerId !== draft.pending.customerId) {
+        return {
+          ok: false as const,
+          code: RECURRING_CUSTOMER_MISMATCH,
+          error:
+            "A serie foi preparada para outra pessoa. Confirme sem customerId, ou prepare a serie de novo para a pessoa certa.",
+          details: { preparedCustomerId: draft.pending.customerId },
+        };
+      }
+      seriesCustomerId = draft.pending.customerId ?? undefined;
+    } else if (args.customerId) {
+      const { candidates } = await this.customerCandidates(context);
+      if (!isCandidateOfNumber(candidates, args.customerId)) {
+        return customerNotOfThisNumber(candidates);
+      }
+      seriesCustomerId = args.customerId;
+    }
+
     try {
       const appointments = await this.scheduling.confirmAppointmentSeries(
         {
           holdIds: args.holdIds,
           serviceIds: serviceResult.serviceIds,
           intervalDays: args.intervalDays,
-          customerId: args.customerId ?? undefined,
+          customerId: seriesCustomerId,
           customerName: args.customerName,
           customerPhone: context.phone,
         },
@@ -1058,6 +1108,12 @@ export class AssistantToolRegistry {
     args: { customerId: string },
     context: ToolExecutionContext,
   ) {
+    // Só as pessoas do número (Goal143): a pessoa de fora, ou o dependente
+    // cuja relação foi removida, é recusada antes de qualquer leitura dela.
+    const { candidates } = await this.customerCandidates(context);
+    if (!isCandidateOfNumber(candidates, args.customerId)) {
+      return customerNotOfThisNumber(candidates);
+    }
     return this.scheduling.getAuthorizedCustomerContext(
       args.customerId,
       schedulingContext(context),
@@ -1228,6 +1284,9 @@ export class AssistantToolRegistry {
       await this.customerCandidates(context);
 
     if (args.customerId) {
+      if (!isCandidateOfNumber(candidates, args.customerId)) {
+        return customerNotOfThisNumber(candidates);
+      }
       return {
         customerId: args.customerId,
         proposedCustomerId: null,
@@ -1412,7 +1471,17 @@ export class AssistantToolRegistry {
    * quem e.
    */
   private async findCustomerAppointments(context: ToolExecutionContext) {
-    const linkedCustomerId = await this.linkedCustomerId(context);
+    const linkedId = await this.linkedCustomerId(context);
+    // O vínculo só vale para pessoa que ainda é do número (Goal143): relação
+    // removida ou vínculo criado antes da conferência não abre a agenda dela.
+    const linkedCustomerId =
+      linkedId &&
+      isCandidateOfNumber(
+        (await this.customerCandidates(context)).candidates,
+        linkedId,
+      )
+        ? linkedId
+        : null;
     const appointments = linkedCustomerId
       ? await this.scheduling.findFutureAppointmentsForCustomer(
           linkedCustomerId,
@@ -2136,6 +2205,24 @@ function formatNoticeHours(hours: number | null): string | null {
   if (hours === null) return null;
   const text = Number.isInteger(hours) ? hours.toFixed(0) : hours.toFixed(1);
   return `${text} hora(s)`;
+}
+
+function isCandidateOfNumber(
+  candidates: CustomerCandidate[],
+  customerId: string,
+): boolean {
+  return candidates.some((candidate) => candidate.customerId === customerId);
+}
+
+/** Recusa de `customerId` fora das pessoas do número (Goal143). */
+function customerNotOfThisNumber(candidates: CustomerCandidate[]) {
+  return {
+    ok: false as const,
+    code: CUSTOMER_NOT_OF_THIS_NUMBER,
+    error:
+      "Essa pessoa nao e uma das pessoas deste numero. Use um customerId de list_customer_candidates, ou siga sem customerId.",
+    details: { candidates },
+  };
 }
 
 /** Todo hold que um rascunho segura, qualquer que seja o tipo dele. */

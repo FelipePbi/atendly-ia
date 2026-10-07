@@ -9402,3 +9402,99 @@ Goal142 aceito na rodada 1 ([review142](reviews/142-review.md)), sem blocker. Co
 | `git diff --check` (WU-16 do IA Loop, depois destes registros) | saída 0, 94 ms, na árvore `code-v1:f081e88b…bd9d84`, a mesma dos gates WU-04 a WU-14 |
 
 Os quatro controles negativos são os do Developer (WU-03); o Tech Lead não os refez. A IA contra o Scheduling real numa conversa de WhatsApp, a contagem de testes de `test:scheduling-integration` dentro do `validate:integration`, a partida limpa da unidade do Scheduling e a mensagem completa de dois dos três testes que reprovaram no controle (c) continuam sem prova.
+
+## A IA só usa as pessoas do número que escreve, do Goal143
+
+Rodada 1, 2026-10-07, na worktree `goal-143`. Baseline `354f1f7`. **Rodada 1:** as escolhas 1 a 5 em `assistant-tools.ts`, os testes `goal143` da IA e os ajustes de forma nos falsos (WU-01); os controles negativos (a) a (d) (WU-02); os gates do IA Loop (WU-03 a WU-09); e estes registros (WU-10). Os gates do IA Loop rodaram todos na rodada 1, na mesma árvore (`code-v1:59b25f26…8350fe`, o mesmo `codeFingerprint` nos sete) e com `attemptId` `a1`, cada um na primeira tentativa. Só a IA: sem frontend, então sem `validate:ui`; sem `targets.json` e sem `visual:compare`; sem Scheduling, BFF, contrato público, `PUBLIC_API_V1.md` nem migration. O Goal foi aceito na rodada 1 ([review143](reviews/143-review.md)), sem blocker, e a [D-157](DECISIONS.md) está ACCEPTED; o resultado da WU-11 e a conferência do Tech Lead estão em "Aceite".
+
+### Contagens
+
+Contagens de partida (a baseline `354f1f7`, **antes de editar**, medidas pela WU-01) e da execução final da IA:
+
+| Suíte | Partida (baseline) | Final | Diferença | Quem obteve |
+| --- | --- | --- | --- | --- |
+| Unidade da IA (`npx vitest run` em `apps/ai-orchestrator`, sem banco) | 100 arquivos passando e 16 pulados (116); **1292** testes passando e 112 pulados (1404) | 101 arquivos passando e 16 pulados (117); **1310** testes passando e 112 pulados (1422), saída 0, 19,9 s (o vitest) | +1 arquivo e +18 testes passando (`goal143-customer-of-number.test.ts`, em `tests/tools/`); nenhum arquivo nem teste a mais pulado | Developer, WU-01 (partida e final); IA Loop, WU-06 (final, sobre a árvore final) |
+| `goal143` da IA | arquivo novo: sem partida | **18** de 18 passando | +1 arquivo e +18 testes | Developer, WU-01 e WU-02; IA Loop, WU-05 |
+
+A partida bate com a última contagem aceita (Goal142: 100 arquivos e 1292 testes passando, 16 e 112 pulados). Na baseline, a primeira execução do `vitest run` falhou porque faltava o client Prisma gerado na worktree; a WU-01 rodou `npx prisma generate` em `apps/ai-orchestrator` e a segunda execução falhou em 2 testes de contagem de arquivos de `tests/assistant/assistant.service.test.ts` (esperava 210 arquivos `.ts` e achou 186) porque faltava o client do BFF; depois de `npx prisma generate` em `apps/bff`, a baseline deu os números da tabela. O `generated` do Prisma é ignorado pelo git, então isso não entra no diff.
+
+Gates do IA Loop e do Developer:
+
+| Gate | Comando | Resultado (rodada 1) | Quem obteve |
+| --- | --- | --- | --- |
+| Typecheck da IA | `npx tsc --noEmit` (em `apps/ai-orchestrator`) | saída 0, 3,1 s, sem erro | IA Loop, WU-03 |
+| Lint da IA | `npm run lint` (`eslint src --max-warnings=0`) | saída 0, 3,9 s, 0 avisos | IA Loop, WU-04 |
+| Testes `goal143` da IA | `npx vitest run goal143` (em `apps/ai-orchestrator`) | saída 0, 1 arquivo passando com **18** testes, 0,8 s | IA Loop, WU-05 |
+| Testes da IA | `npm test` | saída 0, **101** arquivos e **1310** testes passando, 16 arquivos e 112 testes pulados, 20,3 s | IA Loop, WU-06 |
+| `test:gate` | `npm run test:gate` | saída 0, **297** testes, 297 passando, 0 falhas, 0 cancelados, 0 pulados (igual ao Goal142, que é 297), 1,0 s | IA Loop, WU-07 |
+| `validate:core` | `npm run validate:core` | saída 0, 115,1 s, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, que só tem a suíte de integração, rodada no `validate:integration`; `test:health-worker`, pacote sem suíte, só a checagem de sintaxe). A auditoria estática teve 34 checagens, 33 passando e 1 pulada (`production_health`, que pede `PRODUCTION_HEALTH_TARGETS`). Primeira execução, sem pino de contagem a corrigir depois dela | IA Loop, WU-08 |
+| `validate:integration` | `npm run validate:integration` | saída 0, 771,3 s, 36 passos, **36 passaram**, 0 falharam, 0 pulados, contra `127.0.0.1:55500/ia_bff_test`. O gate autenticado (`rehearse:goal033-authenticated-ui`) deu **310 passed** e retentativas **0** ("every test passed on its first attempt"); igual ao Goal142 | IA Loop, WU-09 |
+| `git diff --check` | `git diff --check` | saída 0, sem erro de espaço em branco, rodado pelo Developer (WU-10) na worktree **depois** de escrever os três registros (ver "Verificação final do Developer") | Developer, WU-10 |
+
+Também rodados pelo Developer na WU-01, depois da última edição de código: `npx tsc -p tsconfig.json --noEmit` (sem erros; o `tsconfig` inclui `tests/`) e `rtk proxy npx eslint src --max-warnings=0` (saída 0), em `apps/ai-orchestrator`.
+
+**O que não foi contado.** O relatório que o IA Loop guarda de `validate:core` e de `validate:integration` omite o meio da saída, então **não há contagem de testes por passo** dos gates (quantos testes tem `test:ai-orchestrator` ou `test:scheduling-service` dentro de `validate:core`); o que vale deles é a saída 0 e os passos passando. Por isso a contagem de testes de unidade da IA acima é a do `npm test` direto (WU-06), não a do gate. O Scheduling e o frontend não mudaram, então as contagens deles (Scheduling: unidade 43 arquivos e 594 testes, Goal142; frontend: 204 arquivos e 2964 testes, Goal140) **não** foram refeitas por este Goal. O `validate:ui` não rodou: nenhum arquivo do frontend mudou, e o Goal não o pede.
+
+### Gate autenticado
+
+O gate autenticado deu **310 passed** e 0 retentativas na árvore final (WU-09, 10,9 min), igual ao Goal142. O Goal não tocou `authenticated-matrix.spec.ts`, `e2e/routes.ts` nem a semente do gate, e nenhuma tela mudou.
+
+### Controles negativos
+
+Todos feitos pela WU-02 depois da última edição de código (a WU-01 já estava fechada), cada um editando só `apps/ai-orchestrator/src/modules/tools/assistant-tools.ts`, rodando o mesmo comando, reprovando e revertendo por cópia do backup (`/tmp/wu02/backup.ts`, fora do repositório, `sha256` `c3896ccdfb01266e059b9fafd552b60bada901bd7801767d13789b7ac2d89156`), com `cmp /tmp/wu02/backup.ts src/modules/tools/assistant-tools.ts` igual ao backup nos quatro (`CMP_EQUAL`). Depois dos quatro, o `sha256` do arquivo ficou igual ao do backup, o `git status --short` mostrou só os cinco arquivos da WU-01 e `goal143` voltou a **18 passed**. Comando de todos, em `apps/ai-orchestrator`: `npx vitest run tests/tools/goal143-customer-of-number.test.ts` (antes dos controles: 18 passed). Arquivo de teste de todos: `apps/ai-orchestrator/tests/tools/goal143-customer-of-number.test.ts`. São **11 testes reprovados** no total (4 + 2 + 3 + 2). As mensagens são as da saída do `vitest` como a WU-02 as registrou; as reticências `…(n)` são do próprio `vitest`. A WU-10 só escreveu os registros e não refez os controles (ver "Limite" abaixo).
+
+| Controle | Edição | Teste que reprovou (linha) | Mensagem de asserção |
+| --- | --- | --- | --- |
+| (a) `getAuthorizedCustomerContext` sem a conferência | `getAuthorizedCustomerContext` sem `customerCandidates` nem `isCandidateOfNumber`: devolve direto `this.scheduling.getAuthorizedCustomerContext`. **4 reprovados, 14 passando** (2 por modo, `execute` e `executeReadOnly`) | 1 e 2. `Goal143 — get_customer_context só das pessoas do número > execute > pessoa de fora do número é recusada sem ler a pessoa no Scheduling` e `… > executeReadOnly > pessoa de fora do número é recusada sem ler a pessoa no Scheduling` (linha 355). 3 e 4. `… > execute > dependente com a relação removida é recusado sem ler a pessoa no Scheduling` e `… > executeReadOnly > dependente com a relação removida é recusado sem ler a pessoa no Scheduling` (linha 369) | Os quatro: `AssertionError: expected { requestId: 'request-1', …(6) } to match object { ok: false, error: { …(2) } }`, com a diferença `- "error": { "code": "CUSTOMER_NOT_OF_THIS_NUMBER", "details": { "candidates": [ {"customerId": "cust-maria"}, {"customerId": "cust-pedro"} ] } }`, `- "ok": false` e `+ "ok": true`. Nos dois da relação removida, `candidates` traz só `cust-maria` |
+| (b) `resolveScheduleCustomer` aceitando `args.customerId` sem conferir | em `resolveScheduleCustomer`, a conferência `isCandidateOfNumber` do `args.customerId` tirada. **2 reprovados, 16 passando** | 1. `Goal143 — create_appointment prepare só com pessoa do número > customerId de fora: recusa, sem hold, rascunho igual e o confirm não agenda nem nem vincula essa pessoa` (linha 399). 2. `… > customerId de fora sem rascunho: recusa, nenhum rascunho e o confirm seguinte não tem o que agendar` (linha 428) | Os dois: `AssertionError: expected { requestId: 'request-1', …(6) } to match object { ok: false, error: { …(2) } }` (`10 matching properties omitted from actual`), com a diferença de `CUSTOMER_NOT_OF_THIS_NUMBER` e `candidates` `cust-maria` e `cust-pedro` esperados e `+ "ok": true` |
+| (c) `confirmRecurringAppointments` usando `args.customerId` em vez do rascunho | `seriesCustomerId = args.customerId ?? undefined`, sem a recusa por divergência nem a conferência do rascunho antigo. **3 reprovados, 15 passando** | 1. `Goal143 — a série recorrente é da pessoa preparada > confirm com customerId diferente do rascunho: recusa e nenhum confirmAppointmentSeries` (linha 576, o teste que o Goal nomeia). 2. `… > confirm sem customerId confirma com o do rascunho; repetir o do rascunho também` (linha 608). 3. `… > rascunho antigo, sem o campo, com customerId de fora: recusa; com candidato, confirma` (linha 636) | 1: `AssertionError: expected { requestId: 'request-1', …(6) } to match object { ok: false, …(1) }` (`7 matching properties omitted from actual`), com a diferença `- "error": { "code": "RECURRING_CUSTOMER_MISMATCH" }`, `- "ok": false` e `+ "ok": true`. 2: `AssertionError: expected undefined to be 'cust-pedro' // Object.is equality`. 3: `AssertionError: expected { requestId: 'request-1', …(6) } to match object { ok: false, error: { …(2) } }`, com `CUSTOMER_NOT_OF_THIS_NUMBER` esperado e `+ "ok": true` |
+| (d) `findCustomerAppointments` usando o vínculo sem conferir | `const linkedCustomerId = linkedId;` (o vínculo usado direto, sem `isCandidateOfNumber`). **2 reprovados, 16 passando** | 1. `Goal143 — list_customer_appointments só usa o vínculo de pessoa do número > contato vinculado a Ana, que não é do número: a lista é a do número e não traz o horário dela` (linha 689). 2. `… > contato vinculado a Pedro depois que a relação foi removida: a lista é a do número, sem o horário dele` (linha 707, o teste que o Goal nomeia) | 1: `AssertionError: expected [ 'cust-ana' ] to deeply equal []`. 2: `AssertionError: expected [ 'cust-pedro' ] to deeply equal []` |
+
+Os quatro controles reprovaram os testes que o Goal nomeia: (a) o da pessoa de fora em `get_customer_context`, nas duas tools; (b) o do `prepare` com a pessoa de fora; (c) o da série com pessoa diferente; (d) o do vínculo com pessoa que deixou de ser do número. Depois de todos, a árvore voltou à da WU-01 (`cmp` igual, `goal143` 18 de 18).
+
+**Limite do registro dos controles.** A WU-10 não refez os controles e não leu a saída bruta do `vitest`: as mensagens acima vêm do relatório da WU-02, que as leu da saída. Onde o relatório diz "mesma mensagem" (os dois testes da relação removida em (a) e o segundo teste de (b)), o texto acima repete a mensagem do primeiro teste do mesmo controle, com a única diferença que o relatório anotou (`candidates` só com `cust-maria` em (a)); a diferença completa de cada um desses não foi guardada à parte. Os dois testes de (c) que não são o nomeado e os dois de (d) têm a linha de asserção, não o diff inteiro.
+
+### Testes ajustados
+
+Só a forma de falsos mudou; nenhuma asserção mudou (WU-01: o `git diff` dos três arquivos só toca a construção do falso).
+
+1. `apps/ai-orchestrator/tests/tools/assistant-tools.test.ts`, teste "queries by customerId when the contact is already linked to a person": `createAgendaMock()` virou `createAgendaMock([{ id: "linked-customer-1", name: null, phone }])`, para a pessoa vinculada ser candidata do número. As asserções (`findFutureAppointmentsForCustomer` com `["linked-customer-1"]` e `findFutureAppointmentsForPhone` com 0 chamadas) ficaram iguais. Foi o único teste existente que reprovou com a mudança de código (1 reprovado, 1291 passando).
+2. `apps/ai-orchestrator/tests/tools/suggestion-out-of-reach.test.ts`, `createEffectTrap`: `findCustomerCandidatesByPhone: async () => []` virou um candidato `{ id: CUSTOMER_ID, name: "Thais", phone: PHONE }`, e entrou `findCustomerDependentsByPhone: async () => []`, que o falso não tinha. O teste não reprovava, mas sem isso `get_customer_context` de `customer-1` deixaria de chegar ao Scheduling e o falso passaria a provar menos.
+3. `apps/ai-orchestrator/tests/tools/exception-out-of-reach.test.ts`, `createExceptionTrap`: `findCustomerCandidatesByPhone: async () => []` virou `[{ id: "customer-1", name: "Thais", phone }]`, pela mesma razão; o falso já tinha `findCustomerDependentsByPhone`.
+
+`tests/evals/harness.ts` e as suítes de `tests/activation-test/`, `tests/assistant/` e `tests/integration/` não precisaram mudar. Nenhum pino de contagem exata foi afetado: o `validate:core` passou na primeira execução, e nem `lib/errors.ts` nem a linha do egresso de `client.ts` mudaram. `goal143-customer-of-number.test.ts` (`tests/tools/`) é arquivo **novo** deste Goal.
+
+### Escopo
+
+Os arquivos mudados são os do §1, do §2 e da "Documentação" do Goal. IA (`apps/ai-orchestrator/src/modules/`): só `tools/assistant-tools.ts` (`lib/errors.ts` não foi tocado: o código novo vive no arquivo da tool, como `LAST_BOOKED_FOR_DEPENDENT`). Testes de `apps/ai-orchestrator/tests/tools/` acima (os três falsos e o arquivo novo). E `DECISIONS.md`, `CURRENT_STATE.md` e este arquivo, todos por acréscimo. O Scheduling, o BFF, o contrato público, `PUBLIC_API_V1.md`, o frontend, o banco (sem migration, sem backfill), o prompt, `goals/`, `reviews/`, `MIGRATION_STATUS.md` e `MASTER_PLAN.md` não foram tocados.
+
+### Desvios do texto do Goal, para o review
+
+- **Um segundo código de domínio.** Além de `CUSTOMER_NOT_OF_THIS_NUMBER`, a WU-01 exportou `RECURRING_CUSTOMER_MISMATCH`, para a confirmação da série com pessoa diferente da preparada. O Goal só nomeia o primeiro; a razão está na escolha 2 da D-157.
+- **Prisma gerado na baseline.** A partida só saiu depois de `npx prisma generate` em `apps/ai-orchestrator` e em `apps/bff` (ver "Contagens"); é ambiente, não diff.
+- **Mensagens dos controles.** Registradas a partir do relatório da WU-02, não da saída bruta (ver "Limite do registro dos controles").
+
+### Não executado
+
+- A contagem de testes por passo de `validate:core` e de `validate:integration` (ver "O que não foi contado").
+- A suíte de integração da IA com banco, à parte do `validate:integration`, e a unidade do Scheduling e do frontend (não mudaram).
+- A refação dos controles negativos pela WU-10 e a leitura da saída bruta do `vitest` dos controles.
+- Uma conversa real no WhatsApp, e a tela do CL8 (nenhuma tela mudou, e o CL8 não é deste Goal).
+- O `validate:ui`, que não se aplica (sem frontend).
+
+### Verificação final do Developer
+
+`git diff --check`, rodado pelo Developer (WU-10) na worktree **depois** de escrever os três registros: saída 0, sem erro de espaço em branco. O arquivo de teste novo, não rastreado, ainda não entra nesse `git diff`. A WU-11 do IA Loop o roda de novo, na árvore final, e o resultado dela é anotado no review.
+
+### Aceite
+
+Goal143 aceito na rodada 1 ([review143](reviews/143-review.md)), sem blocker. Conferência do Tech Lead na árvore aceita, sem edição de código no meio:
+
+| Verificação | Resultado |
+| --- | --- |
+| `goal143`, `assistant-tools`, `suggestion-out-of-reach`, `exception-out-of-reach` e `goal142-guardian-dependents` da IA (`tests/tools/`), no review | 5 arquivos, **87 de 87** passando |
+| `goal143` e `goal142-guardian-dependents` da IA, no fechamento | 2 arquivos, **38 de 38** passando (18 e 20) |
+| Escopo do diff | 8 arquivos (7 rastreados e 1 novo); só `assistant-tools.ts`, `apps/ai-orchestrator/tests/tools/` e os três registros; nada em `lib/errors.ts`, no Scheduling, no BFF, no frontend ou em `packages/` |
+| `git diff --check` (WU-11 do IA Loop, depois destes registros) | saída 0, 81 ms, na árvore `code-v1:59b25f26…8350fe`, a mesma dos gates WU-03 a WU-09 |
+
+Os quatro controles negativos são os do Developer (WU-02); o Tech Lead não os refez, e as mensagens registradas vêm do relatório da WU-02. A IA contra o Scheduling real numa conversa de WhatsApp e a contagem de testes por passo de `validate:core` e de `validate:integration` continuam sem prova.

@@ -15,8 +15,8 @@
  * 2. Ações: desconectar e trocar número pedem confirmação, "voltar" não envia
  *    nada, confirmar chama `whatsapp.disconnect` uma vez e a tela mostra o
  *    consentimento; a falha mantém a tela conectada com o alerta de hoje.
- * 3. Contatos ignorados: a linha abre a folha com o componente movido; marcar
- *    por telefone e por conversa usa os mesmos pedidos; fechar volta à tela.
+ * 3. Contatos ignorados: a linha leva à rota própria (Goal140), sem folha; os
+ *    pedidos de marcar são provados na tela dessa rota.
  * 4. Onboarding intacto: `/onboarding/whatsapp-conectar` conectado mostra o
  *    corpo próprio do quadro 4.4 (Goal129), sem a identidade do W1; a etapa de contatos ignorados
  *    mostra o componente movido com os mesmos pedidos.
@@ -81,6 +81,7 @@ const whatsappDisconnect = vi.fn();
 const conversationsList = vi.fn();
 const setIgnored = vi.fn();
 const ignoreByPhone = vi.fn();
+const listIgnoredContacts = vi.fn();
 const getOnboarding = vi.fn();
 const updateOnboarding = vi.fn();
 const completeOnboarding = vi.fn();
@@ -96,6 +97,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
     conversations: {
       ignoreByPhone,
       list: conversationsList,
+      listIgnoredContacts,
       setIgnored,
     },
     knowledge: { getOtherInfo: knowledgeGetOtherInfo, list: knowledgeList },
@@ -271,6 +273,7 @@ beforeEach(() => {
     conversationsList,
     setIgnored,
     ignoreByPhone,
+    listIgnoredContacts,
     getOnboarding,
     updateOnboarding,
     completeOnboarding,
@@ -323,6 +326,7 @@ beforeEach(() => {
   whatsappGet.mockResolvedValue(connectionFixture());
   whatsappDisconnect.mockResolvedValue(undefined);
   conversationsList.mockResolvedValue([]);
+  listIgnoredContacts.mockResolvedValue({ items: [], total: 0 });
   getActivationTest.mockResolvedValue(null);
   getOnboarding.mockResolvedValue(onboardingFixture());
   updateOnboarding.mockResolvedValue(onboardingFixture());
@@ -472,7 +476,7 @@ describe("Goal106 prova 1: W1 conectado em /configuracoes/whatsapp", () => {
   test("linhas, texto de uso normal e área de atenção na ordem do quadro, sem o que o quadro tira", async () => {
     await renderConnected();
 
-    const ignored = screen.getByRole("button", {
+    const ignored = screen.getByRole("link", {
       name: /^Contatos que a IA nunca responde/,
     });
     const swap = swapRow();
@@ -598,84 +602,25 @@ describe("Goal106 prova 2: ações do W1", () => {
 });
 
 describe("Goal106 prova 3: contatos ignorados em Configurações", () => {
-  async function openSheet(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(
-      screen.getByRole("button", { name: /^Contatos que a IA nunca responde/ }),
-    );
-    return screen.getByRole("dialog", { name: "Contatos que a IA nunca responde" });
-  }
-
-  test("a linha abre a folha com o componente movido e 'Fechar' volta à tela", async () => {
+  // Goal140: a folha saiu. A linha agora é um link para a rota própria; marcar
+  // por telefone (`SETTINGS`), marcar uma conversa (`CONVERSATION`) e a falha
+  // de marcar passam a ser provados na tela da rota, em
+  // `goal140-contatos-ignorados.test.tsx`.
+  test("a linha leva à rota própria, sem abrir folha, e a tela segue conectada", async () => {
     const user = userEvent.setup();
     await renderConnected();
 
-    const sheet = await openSheet(user);
-    expect(await within(sheet).findByText("Conversas já existentes")).toBeVisible();
-    expect(within(sheet).getByText("Informar um número manualmente")).toBeVisible();
-    expect(within(sheet).getByPlaceholderText("+55 11 99999-0000")).toBeVisible();
-
-    await user.click(within(sheet).getByRole("button", { name: "Fechar" }));
+    const row = screen.getByRole("link", {
+      name: /^Contatos que a IA nunca responde/,
+    });
+    expect(row).toHaveAttribute("href", "/configuracoes/whatsapp/contatos-ignorados");
+    await user.click(row);
 
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(disconnectRow()).toBeVisible();
     expect(whatsappDisconnect).not.toHaveBeenCalled();
-  });
-
-  test("marcar por telefone chama conversations.ignoreByPhone uma vez, com o número digitado", async () => {
-    ignoreByPhone.mockResolvedValue({
-      contactId: "contact-1",
-      externalContactId: "5511977770000",
-      ignored: true,
-      ignoredAt: "2026-09-27T12:00:00.000Z",
-    });
-    const user = userEvent.setup();
-    await renderConnected();
-
-    const sheet = await openSheet(user);
-    await user.type(
-      within(sheet).getByPlaceholderText("+55 11 99999-0000"),
-      "+55 11 97777-0000",
-    );
-    await user.click(within(sheet).getByRole("button", { name: "Adicionar" }));
-
-    expect(ignoreByPhone).toHaveBeenCalledTimes(1);
-    expect(ignoreByPhone).toHaveBeenCalledWith("+55 11 97777-0000", true, "SETTINGS");
-    expect(await within(sheet).findByText("5511977770000 ignorado")).toBeVisible();
-    expect(setIgnored).not.toHaveBeenCalled();
-  });
-
-  test("marcar uma conversa chama conversations.setIgnored uma vez", async () => {
-    conversationsList.mockResolvedValue([
-      { customerName: "Maria", externalContactId: "5511988880000", id: "conv-1" },
-    ]);
-    setIgnored.mockResolvedValue({});
-    const user = userEvent.setup();
-    await renderConnected();
-
-    const sheet = await openSheet(user);
-    await user.click(await within(sheet).findByRole("button", { name: "Ignorar" }));
-
-    expect(setIgnored).toHaveBeenCalledTimes(1);
-    expect(setIgnored).toHaveBeenCalledWith("conv-1", true, "CONVERSATION");
-    expect(await within(sheet).findByRole("button", { name: "Ignorado" })).toBeDisabled();
     expect(ignoreByPhone).not.toHaveBeenCalled();
-  });
-
-  test("a falha de marcar mostra a mensagem de hoje dentro da folha", async () => {
-    ignoreByPhone.mockRejectedValue(new Error("falhou"));
-    const user = userEvent.setup();
-    await renderConnected();
-
-    const sheet = await openSheet(user);
-    await user.type(
-      within(sheet).getByPlaceholderText("+55 11 99999-0000"),
-      "+55 11 97777-0000",
-    );
-    await user.click(within(sheet).getByRole("button", { name: "Adicionar" }));
-
-    expect(await within(sheet).findByRole("alert")).toHaveTextContent(
-      "Não foi possível marcar este número. Tente novamente.",
-    );
+    expect(setIgnored).not.toHaveBeenCalled();
   });
 });
 
@@ -711,9 +656,7 @@ describe("Goal106 prova 4: onboarding intacto", () => {
     expect(
       screen.queryByRole("button", { name: /^Desconectar WhatsApp/ }),
     ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: /^Contatos que a IA nunca responde/ }),
-    ).toBeNull();
+    expect(screen.queryByText(/Contatos que a IA nunca responde/)).toBeNull();
   });
 
   test("a etapa de contatos ignorados marca por telefone com o mesmo pedido", async () => {

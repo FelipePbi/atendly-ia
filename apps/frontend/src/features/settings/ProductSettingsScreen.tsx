@@ -17,6 +17,7 @@ import { BusinessKnowledgeSettings } from "./BusinessKnowledgeSettings";
 import { BusinessSettings } from "./BusinessSettings";
 import { CalendarSettings } from "./CalendarSettings";
 import { ConversationsSettings } from "./ConversationsSettings";
+import { IgnoredContactsScreen } from "./IgnoredContactsScreen";
 import { OfferRulesSettings } from "./OfferRulesSettings";
 import { SettingsHub, SettingsHubPanel } from "./SettingsHub";
 import { SettingsMessage, SettingsPage } from "./shared/SettingsPage";
@@ -183,6 +184,8 @@ function SettingsSection({
   if (scenario === "business-faq") return <BusinessKnowledgeSettings />;
   if (scenario === "ai")
     return <AiSettings settings={settings} onSaved={setSettings} />;
+  if (scenario === "whatsapp-ignored")
+    return <IgnoredContactsScreen settings={settings} />;
   if (scenario.startsWith("whatsapp"))
     return (
       <WhatsAppSettings

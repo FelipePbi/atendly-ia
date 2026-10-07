@@ -6518,7 +6518,7 @@
       "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
       "label": "Configurações · WhatsApp",
       "route": "/configuracoes/whatsapp",
-      "notes": "O quadro mostra WhatsApp conectado; a conta de teste não tem número, então o estado conectado vem de resposta fixa de GET /v1/whatsapp (responses), só no navegador da captura. O resto da casca (GET /v1/status, que decide o banner e o item Notificações) continua real.",
+      "notes": "O quadro mostra WhatsApp conectado; a conta de teste não tem número, então o estado conectado vem de resposta fixa de GET /v1/whatsapp (responses), só no navegador da captura. O resto da casca (GET /v1/status, que decide o banner e o item Notificações) continua real. Goal140: a segunda linha de \"Contatos que a IA nunca responde\" vem de resposta fixa de GET /v1/conversations/ignored-contacts (a conta de teste não marcou ninguém), com os dois primeiros itens do W3, só no navegador da captura; a tela só lê esse GET e nenhum passo grava. Divergência declarada: a linha mostra \"Mãe, Dudu ❤️\", o nome como foi marcado (o mesmo \"Dudu ❤️\" do W3), e o quadro a encurta para \"Mãe, Dudu\". Divergências declaradas que seguem de D-118: a barra de status e o indicador de início do iPhone; o estado da casca (o banner \"Atendimento automático parado\", \"Notificações\" na sidebar e o estado da linha \"WhatsApp\" na lista do hub); o nome e as iniciais \"Studio Camila Reis\" e \"SC\"; o cartão da IA desligada (\"A IA não está atendendo neste número\" com \"Ver em IA\"); a linha \"Uso pessoal\" ausente; \"Desconectar WhatsApp\" fora do viewport. A divergência 5 de D-118 (a segunda linha sem os nomes) deixou de existir.",
       "responses": [
         {
           "method": "GET",
@@ -6533,6 +6533,32 @@
             },
             "requestId": "visual-compare-fixed-response"
           }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/ignored-contacts",
+          "json": {
+            "data": {
+              "items": [
+                {
+                  "contactId": "visual-compare-ignored-mae",
+                  "externalContactId": "5511999001122",
+                  "displayName": "Mãe",
+                  "ignoredAt": "2026-09-10T13:00:00.000Z",
+                  "origin": "ONBOARDING"
+                },
+                {
+                  "contactId": "visual-compare-ignored-dudu",
+                  "externalContactId": "5511988776655",
+                  "displayName": "Dudu ❤️",
+                  "ignoredAt": "2026-09-10T13:05:00.000Z",
+                  "origin": "ONBOARDING"
+                }
+              ],
+              "total": 2
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
         }
       ]
     },
@@ -6541,7 +6567,7 @@
       "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
       "label": "WhatsApp · desconectar",
       "route": "/configuracoes/whatsapp",
-      "notes": "Mesmo estado conectado do W1 (resposta fixa de GET /v1/whatsapp, só no navegador da captura). Os passos abrem a folha pelo botão \"Desconectar WhatsApp\" e terminam num clique no título da folha, que tira o ponteiro dos botões (o :hover escureceria um deles, o que o quadro não tem): nenhum passo toca em \"Desconectar\", que desconectaria o número da conta visual. Divergência declarada do Goal124: a terceira linha traz \"refazer o teste\" sem \"de 3 minutos\" (nenhuma tela do app promete essa duração). Estado da casca da conta visual, que o quadro não tem e é diferença esperada (D-118): o banner \"Atendimento automático parado\", \"WhatsApp desconectado\" e as linhas do hub, mais o nome e o telefone do negócio ao fundo.",
+      "notes": "Mesmo estado conectado do W1 (resposta fixa de GET /v1/whatsapp, só no navegador da captura). Os passos abrem a folha pelo botão \"Desconectar WhatsApp\" e terminam num clique no título da folha, que tira o ponteiro dos botões (o :hover escureceria um deles, o que o quadro não tem): nenhum passo toca em \"Desconectar\", que desconectaria o número da conta visual. Divergência declarada do Goal124: a terceira linha traz \"refazer o teste\" sem \"de 3 minutos\" (nenhuma tela do app promete essa duração). Estado da casca da conta visual, que o quadro não tem e é diferença esperada (D-118): o banner \"Atendimento automático parado\", \"WhatsApp desconectado\" e as linhas do hub, mais o nome e o telefone do negócio ao fundo. Goal140: a segunda linha de \"Contatos que a IA nunca responde\" vem de resposta fixa de GET /v1/conversations/ignored-contacts (os dois primeiros itens do W3), só no navegador da captura; a tela só lê esse GET e nenhum passo grava. Divergência declarada: atrás do véu, a linha mostra \"Mãe, Dudu ❤️\" (o nome como foi marcado) e o quadro esvazia o cartão de fundo, que traz só a identidade esmaecida.",
       "steps": [
         { "clickRole": { "role": "button", "name": "Desconectar WhatsApp" } },
         { "click": "Desconectar o WhatsApp?" }
@@ -6557,6 +6583,74 @@
               "status": "CONNECTED",
               "connectedAt": "2026-09-18T15:00:00.000Z",
               "updatedAt": "2026-10-01T15:00:00.000Z"
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/conversations/ignored-contacts",
+          "json": {
+            "data": {
+              "items": [
+                {
+                  "contactId": "visual-compare-ignored-mae",
+                  "externalContactId": "5511999001122",
+                  "displayName": "Mãe",
+                  "ignoredAt": "2026-09-10T13:00:00.000Z",
+                  "origin": "ONBOARDING"
+                },
+                {
+                  "contactId": "visual-compare-ignored-dudu",
+                  "externalContactId": "5511988776655",
+                  "displayName": "Dudu ❤️",
+                  "ignoredAt": "2026-09-10T13:05:00.000Z",
+                  "origin": "ONBOARDING"
+                }
+              ],
+              "total": 2
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
+      "code": "W3",
+      "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
+      "label": "WhatsApp · contatos ignorados",
+      "route": "/configuracoes/whatsapp/contatos-ignorados",
+      "notes": "Goal140. A lista vem de resposta fixa de GET /v1/conversations/ignored-contacts (a conta de teste não marcou ninguém), com Mãe, Dudu ❤️ e Renata na ordem do quadro, só no navegador da captura; a tela só lê esse GET, nenhum passo grava (o alvo não tem passo: nada toca em \"Remover\", \"Ignorar\" nem \"Adicionar\") e a busca vazia não lê conversa nenhuma. Divergência declarada: a barra de status e o indicador de início do iPhone nos quadros mobile (a barra da tela empurrada do app, PushedBar, começa 14 px mais acima do que a do quadro, que tem 60 px de cabeçalho sob a barra de status recortada, e tudo abaixo dela acompanha). Divergência declarada: a linha da lista sem :hover nem cursor: pointer (a linha não leva a lugar nenhum; o quadro não diz para onde). Divergência declarada: a busca vazia, como no quadro, sem o bloco de resultados. Estado da casca da conta visual, que o quadro não tem e é diferença esperada (D-118): o banner \"Atendimento automático parado\" e, no tablet em paisagem e no desktop, a lista de Configurações ao lado, com \"WhatsApp desconectado\", \"Notificações\" e o nome e as iniciais do negócio (\"Studio Camila Reis\", \"SC\"). A área de toque de \"Remover\" tem 40 px de altura e margem negativa de 8 px à direita: o texto fica no mesmo ponto do quadro e as colunas do nome e da legenda ficam 7 a 8 px mais estreitas, sem quebra diferente. O título \"A IA nunca responde\" tem letter-spacing normal só nesta rota (o h1 global leva -0.02em; o quadro não tem) e nenhum h2 novo.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/conversations/ignored-contacts",
+          "json": {
+            "data": {
+              "items": [
+                {
+                  "contactId": "visual-compare-ignored-mae",
+                  "externalContactId": "5511999001122",
+                  "displayName": "Mãe",
+                  "ignoredAt": "2026-09-10T13:00:00.000Z",
+                  "origin": "ONBOARDING"
+                },
+                {
+                  "contactId": "visual-compare-ignored-dudu",
+                  "externalContactId": "5511988776655",
+                  "displayName": "Dudu ❤️",
+                  "ignoredAt": "2026-09-10T13:05:00.000Z",
+                  "origin": "ONBOARDING"
+                },
+                {
+                  "contactId": "visual-compare-ignored-renata",
+                  "externalContactId": "5511977665544",
+                  "displayName": "Renata",
+                  "ignoredAt": "2026-09-18T15:00:00.000Z",
+                  "origin": "CONVERSATION"
+                }
+              ],
+              "total": 3
             },
             "requestId": "visual-compare-fixed-response"
           }

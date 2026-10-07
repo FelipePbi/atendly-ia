@@ -9,8 +9,10 @@
  *    valida a resposta pelo schema da rota; `setIgnored` e `ignoreByPhone`
  *    só levam `origin` no corpo quando informado.
  * 2. `OnboardingIgnoredContacts` manda `ONBOARDING` nas duas marcações.
- * 3. `IgnoredContactsPanel` (a folha de Configurações) manda `SETTINGS` no
- *    telefone e `CONVERSATION` na conversa.
+ * 3. (Goal140) a folha de Configurações saiu: `SETTINGS` no telefone e
+ *    `CONVERSATION` na conversa passam a ser provados na tela da rota nova, em
+ *    `goal140-contatos-ignorados.test.tsx` ("Ignorar grava CONVERSATION" e
+ *    "Adicionar grava SETTINGS").
  * 4. O chat segue sem `origin`.
  *
  * Nenhum texto, layout ou estado de tela muda: só o argumento das chamadas.
@@ -24,10 +26,7 @@ import type { Conversation } from "@/data";
 import { BffHttpClient } from "@/data/http/BffHttpClient";
 import { BffConversationService } from "@/data/services/BffConversationService";
 import { ProductConversationsScreen } from "@/features/conversations/ProductConversationsScreen";
-import {
-  IgnoredContactsPanel,
-  OnboardingIgnoredContacts,
-} from "@/features/whatsapp/IgnoredContactsPanel";
+import { OnboardingIgnoredContacts } from "@/features/whatsapp/IgnoredContactsPanel";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
 vi.mock("next/navigation", () => ({
@@ -232,36 +231,6 @@ describe("Goal139 onboarding", () => {
       "+55 11 97777-0000",
       true,
       "ONBOARDING",
-    );
-  });
-});
-
-describe("Goal139 folha de Configurações", () => {
-  test("marcar uma conversa manda origin CONVERSATION", async () => {
-    const user = userEvent.setup();
-    render(<IgnoredContactsPanel />);
-
-    await user.click(await screen.findByRole("button", { name: "Ignorar" }));
-
-    expect(setIgnored).toHaveBeenCalledTimes(1);
-    expect(setIgnored).toHaveBeenCalledWith("conv-1", true, "CONVERSATION");
-  });
-
-  test("marcar por telefone manda origin SETTINGS", async () => {
-    const user = userEvent.setup();
-    render(<IgnoredContactsPanel />);
-
-    await user.type(
-      screen.getByPlaceholderText("+55 11 99999-0000"),
-      "+55 11 97777-0000",
-    );
-    await user.click(screen.getByRole("button", { name: "Adicionar" }));
-
-    expect(ignoreByPhone).toHaveBeenCalledTimes(1);
-    expect(ignoreByPhone).toHaveBeenCalledWith(
-      "+55 11 97777-0000",
-      true,
-      "SETTINGS",
     );
   });
 });

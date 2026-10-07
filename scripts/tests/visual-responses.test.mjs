@@ -202,13 +202,13 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1, W2, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 2.I6, 2.I7, 2.I8, 2.I9, 2.I10, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1 a W3, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 2.I6, 2.I7, 2.I8, 2.I9, 2.I10, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I10", "2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I10", "2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2", "W3"]);
   for (const target of declaring) {
     const owner = ["2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "2.I10"].includes(target.code)
       ? "Onboarding-2-Importacao.dc.html"
-      : ["W1", "W2", "R2", "I1"].includes(target.code)
+      : ["W1", "W2", "W3", "R2", "I1"].includes(target.code)
       ? "Mais-WhatsApp-Importacao-Conta.dc.html"
       : target.code === "AG2"
         ? "Mais-Negocio-Agenda-IA.dc.html"
@@ -400,9 +400,9 @@ test("targets.json: L2 preenche e-mail e senha, envia com Enter e espera o erro;
   for (const target of [l2, l6, l7]) assert.match(target.notes, /[Dd]ivergência declarada/);
 });
 
-test("targets.json: W1 e I1 declaram só o seu GET", () => {
+test("targets.json: W1 declara o GET do WhatsApp e o da lista dos ignorados, e I1 só o seu GET", () => {
   const [w1, i1] = ["W1", "I1"].map((code) => declaringTargets().find((target) => target.code === code));
-  assert.equal(w1.responses.length, 1);
+  assert.deepEqual(w1.responses.map((entry) => `${entry.method} ${entry.path}`), ["GET /v1/whatsapp", "GET /v1/conversations/ignored-contacts"]);
   assert.equal(i1.responses.length, 1);
   const [whatsapp] = w1.responses;
   assert.equal(whatsapp.path, "/v1/whatsapp");
@@ -435,11 +435,11 @@ function settingsSheetTarget(code) {
   return target;
 }
 
-test("targets.json: W2 e R2 declaram só o GET do próprio caminho e abrem a folha por passos obrigatórios", () => {
+test("targets.json: W2 e R2 declaram só GET e abrem a folha por passos obrigatórios", () => {
   const w2 = settingsSheetTarget("W2");
   const r2 = settingsSheetTarget("R2");
   assert.equal(w2.route, "/configuracoes/whatsapp");
-  assert.deepEqual(w2.responses.map((entry) => `${entry.method} ${entry.path}`), ["GET /v1/whatsapp"]);
+  assert.deepEqual(w2.responses.map((entry) => `${entry.method} ${entry.path}`), ["GET /v1/whatsapp", "GET /v1/conversations/ignored-contacts"]);
   assert.deepEqual(w2.responses[0], settingsSheetTarget("W1").responses[0]);
   assert.equal(r2.route, "/configuracoes/conversas");
   assert.deepEqual(r2.responses.map((entry) => `${entry.method} ${entry.path}`), ["GET /v1/settings/retention"]);
@@ -455,6 +455,29 @@ test("targets.json: W2 e R2 declaram só o GET do próprio caminho e abrem a fol
   }
   assert.equal(w2.steps[0].clickRole.name, "Desconectar WhatsApp");
   assert.deepEqual(r2.steps.map((step) => step.clickRole?.name ?? step.click), ["30 dias", "Salvar", "Guardar conversas comerciais por 30 dias?"]);
+});
+
+test("targets.json: W3 só declara o GET da lista dos ignorados, não tem passo e a lista do W1 e do W2 são os dois primeiros itens dele", () => {
+  const w3 = settingsSheetTarget("W3");
+  assert.equal(w3.label, "WhatsApp · contatos ignorados");
+  assert.equal(w3.route, "/configuracoes/whatsapp/contatos-ignorados");
+  assert.equal(w3.steps, undefined, "W3: nenhum passo, nada toca em Remover, Ignorar nem Adicionar");
+  assert.deepEqual(w3.responses.map((entry) => `${entry.method} ${entry.path}`), ["GET /v1/conversations/ignored-contacts"]);
+  const [list] = w3.responses;
+  assert.equal(list.json.data.total, list.json.data.items.length);
+  assert.deepEqual(list.json.data.items.map((item) => item.displayName), ["Mãe", "Dudu ❤️", "Renata"]);
+  for (const code of ["W1", "W2"]) {
+    const owner = settingsSheetTarget(code);
+    const fixed = owner.responses.find((entry) => entry.path === "/v1/conversations/ignored-contacts");
+    assert.deepEqual(fixed.json.data.items, list.json.data.items.slice(0, 2), `${code}: os dois primeiros do W3`);
+    assert.equal(fixed.json.data.total, 2);
+  }
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    assert.equal(pickFixedResponse(w3, method, "/v1/conversations/ignored-contacts"), null, `W3: ${method} não deveria casar`);
+  }
+  assert.equal(pickFixedResponse(w3, "GET", "/v1/conversations"), null, "W3: a busca vazia não lê conversa");
+  assert.equal(pickFixedResponse(w3, "GET", "/v1/whatsapp"), null, "W3: o estado do número vem da conta de teste");
+  assert.match(w3.notes, /[Dd]ivergência declarada/);
 });
 
 test("targets.json: AG2 é o único dono de responses em Mais-Negocio-Agenda-IA.dc.html, com o GET dos lembretes e sem passos", () => {

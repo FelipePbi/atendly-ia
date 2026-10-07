@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import type { SettingsState } from "@/data";
-import { IgnoredContactsPanel } from "@/features/whatsapp/IgnoredContactsPanel";
+import type { IgnoredContactEntry, SettingsState } from "@/data";
 import type { WhatsAppConnectedContext } from "@/features/whatsapp/WhatsAppConnectionPanel";
 import { Icon } from "@/shared/icons/Icon";
 import { formatBrazilianPhone } from "@/shared/phone";
+import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Dialog } from "@/shared/ui/Dialog";
+
+import { dayMonthLabel } from "./dayMonth";
 
 function initials(value: string): string {
   return value
@@ -19,18 +21,26 @@ function initials(value: string): string {
     .join("");
 }
 
-function connectedSince(
-  connectedAt: string | null,
-  timeZone: string,
+const IGNORED_ROUTE = "/configuracoes/whatsapp/contatos-ignorados";
+/** Nomes que a segunda linha da linha de contatos ignorados mostra. */
+const IGNORED_PREVIEW_LIMIT = 2;
+
+function ignoredPreview(
+  items: IgnoredContactEntry[],
+  total: number,
 ): string | null {
-  if (!connectedAt) return null;
-  const date = new Date(connectedAt);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    timeZone,
-  });
+  if (items.length === 0) return null;
+  const names = items
+    .map(
+      (item) =>
+        item.displayName ??
+        formatBrazilianPhone(item.externalContactId, "plus") ??
+        item.externalContactId,
+    )
+    .join(", ");
+  return total > items.length
+    ? `${names} e mais ${total - items.length}`
+    : names;
 }
 
 function RowSvg({ children }: { children: React.ReactNode }) {
@@ -65,17 +75,35 @@ export function WhatsAppConnectedSettings({
   context: WhatsAppConnectedContext;
   settings: SettingsState;
 }) {
-  const [sheet, setSheet] = useState<"ignored" | "swap" | null>(null);
+  const [sheet, setSheet] = useState<"swap" | null>(null);
+  const [ignoredPreviewText, setIgnoredPreviewText] = useState<string | null>(
+    null,
+  );
   const { busy, connection, disconnect, error, openDisconnectDialog } = context;
   const businessName = settings.business?.name ?? null;
   const phone = connection.phoneNumber
     ? formatBrazilianPhone(connection.phoneNumber, "plus")
     : null;
-  const since = connectedSince(
+  const since = dayMonthLabel(
     connection.connectedAt,
     settings.business?.timezone ?? "America/Sao_Paulo",
   );
   const aiEnabled: boolean | null = settings.ai.enabled;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getProductServices()
+      .conversations.listIgnoredContacts(
+        { limit: IGNORED_PREVIEW_LIMIT },
+        controller.signal,
+      )
+      .then((list) => {
+        if (controller.signal.aborted) return;
+        setIgnoredPreviewText(ignoredPreview(list.items, list.total));
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
 
   async function swapNumber() {
     const ok = await disconnect();
@@ -134,20 +162,21 @@ export function WhatsAppConnectedSettings({
         </div>
       )}
       <div className="wa-rows">
-        <button
-          className="wa-row"
-          type="button"
-          onClick={() => setSheet("ignored")}
-        >
+        <Link className="wa-row" href={IGNORED_ROUTE}>
           <RowSvg>
             <circle cx="12" cy="12" r="8" />
             <path d="M6.5 6.5l11 11" />
           </RowSvg>
           <span className="wa-row-copy">
-            <span className="wa-row-title">Contatos que a IA nunca responde</span>
+            <span className="wa-row-title">
+              Contatos que a IA nunca responde
+            </span>
+            {ignoredPreviewText && (
+              <span className="wa-row-detail">{ignoredPreviewText}</span>
+            )}
           </span>
           <Icon name="chevron-right" />
-        </button>
+        </Link>
         <button
           className="wa-row"
           type="button"
@@ -190,14 +219,6 @@ export function WhatsAppConnectedSettings({
           <Icon name="chevron-right" />
         </button>
       </div>
-      <Dialog
-        onClose={() => setSheet(null)}
-        open={sheet === "ignored"}
-        title="Contatos que a IA nunca responde"
-        variant="sheet"
-      >
-        <IgnoredContactsPanel />
-      </Dialog>
       <Dialog
         onClose={() => setSheet(null)}
         open={sheet === "swap"}

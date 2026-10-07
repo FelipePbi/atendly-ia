@@ -15,17 +15,19 @@
  * 4. O rodapé soma a escolha ("Continuar", "Continuar · 1 pessoa", "Continuar ·
  *    N pessoas") sem contar duas vezes; "Continuar" vem antes de "Pular por
  *    agora", e os dois vão para o teste real sem gravar nada nem concluir.
- * 5. A folha de Configurações segue com a forma e os pedidos de hoje.
+ * 5. (Goal140) a folha de Configurações saiu: a lista, "Ignorar" (`CONVERSATION`)
+ *    e "Adicionar" (`SETTINGS`) passam a ser provados na tela da rota nova, em
+ *    `goal140-contatos-ignorados.test.tsx`.
  */
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { OnboardingState, SettingsState } from "@/data";
+import type { OnboardingState } from "@/data";
 
 const push = vi.fn();
 const replace = vi.fn();
@@ -70,7 +72,6 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 
 import { OnboardingRuntimeProvider } from "@/features/onboarding/OnboardingRuntime";
 import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
-import { WhatsAppSettings } from "@/features/settings/WhatsAppSettings";
 
 const CONNECTED = {
   connectedAt: "2026-09-18T15:00:00.000Z",
@@ -157,33 +158,6 @@ function onboardingState(): OnboardingState {
     service: null,
     whatsapp: { phoneNumber: "5511987654321", status: "CONNECTED" },
   } as unknown as OnboardingState;
-}
-
-function settingsFixture(): SettingsState {
-  return {
-    ai: { enabled: true, tone: "BALANCED" },
-    availability: {
-      customerChangeMinNoticeMinutes: 0,
-      granularityMinutes: 30,
-      maxLeadDays: 90,
-      minLeadMinutes: 0,
-      rules: [],
-      timezone: "America/Sao_Paulo",
-    },
-    business: null,
-    calendar: {
-      capabilities: {
-        createAppointments: true,
-        manageAvailability: true,
-        manageCustomers: true,
-        manageServices: true,
-        migrate: true,
-      },
-      integration: null,
-      source: "AVENLY",
-      timezone: "America/Sao_Paulo",
-    },
-  };
 }
 
 function deferred<T>() {
@@ -667,88 +641,5 @@ describe("4.5: alvo de toque", () => {
     expect(rule(".ignored-row")).toMatch(/min-height:\s*24px/);
     expect(rule(".ignored-box")).toMatch(/width:\s*24px/);
     expect(rule(".ignored-box")).toMatch(/height:\s*24px/);
-  });
-});
-
-describe("a folha de Configurações segue com a forma e os pedidos de hoje", () => {
-  async function openSheet(user: ReturnType<typeof userEvent.setup>) {
-    render(
-      <WhatsAppSettings
-        onStatusChange={() => {}}
-        settings={settingsFixture()}
-      />,
-    );
-    await user.click(
-      await screen.findByRole("button", {
-        name: /^Contatos que a IA nunca responde/,
-      }),
-    );
-    return screen.getByRole("dialog", {
-      name: "Contatos que a IA nunca responde",
-    });
-  }
-
-  test("lê só as conversas não ignoradas e mostra as duas seções de sempre", async () => {
-    listConversations.mockResolvedValue([
-      conversation({
-        customerName: "Maria",
-        externalContactId: "5511988880000",
-        id: "conv-1",
-        ignored: false,
-      }),
-    ]);
-    const user = userEvent.setup();
-    const sheet = await openSheet(user);
-
-    expect(await within(sheet).findByText("Conversas já existentes")).toBeVisible();
-    expect(within(sheet).getByText("Informar um número manualmente")).toBeVisible();
-    expect(within(sheet).getByPlaceholderText("+55 11 99999-0000")).toBeVisible();
-    expect(listConversations).toHaveBeenCalledWith({ ignored: false, limit: 20 });
-
-    // Sem a busca, sem caixa de marcar e sem o rodapé do onboarding.
-    expect(within(sheet).queryByRole("searchbox")).not.toBeInTheDocument();
-    expect(within(sheet).queryByRole("checkbox")).not.toBeInTheDocument();
-    expect(
-      within(sheet).queryByRole("button", { name: "Adicionar por telefone" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Pular por agora" }),
-    ).not.toBeInTheDocument();
-  });
-
-  test("'Ignorar' faz o mesmo PUT e vira 'Ignorado'; o telefone usa o mesmo pedido", async () => {
-    listConversations.mockResolvedValue([
-      conversation({
-        customerName: "Maria",
-        externalContactId: "5511988880000",
-        id: "conv-1",
-        ignored: false,
-      }),
-    ]);
-    ignoreByPhone.mockResolvedValue({
-      contactId: "contact-1",
-      externalContactId: "5511977770000",
-      ignored: true,
-      ignoredAt: "2026-10-01T12:00:00.000Z",
-    });
-    const user = userEvent.setup();
-    const sheet = await openSheet(user);
-
-    await user.click(await within(sheet).findByRole("button", { name: "Ignorar" }));
-    expect(setIgnored).toHaveBeenCalledTimes(1);
-    expect(setIgnored).toHaveBeenCalledWith("conv-1", true, "CONVERSATION");
-    expect(
-      await within(sheet).findByRole("button", { name: "Ignorado" }),
-    ).toBeDisabled();
-
-    await user.type(
-      within(sheet).getByPlaceholderText("+55 11 99999-0000"),
-      "+55 11 97777-0000",
-    );
-    await user.click(within(sheet).getByRole("button", { name: "Adicionar" }));
-    expect(ignoreByPhone).toHaveBeenCalledWith("+55 11 97777-0000", true, "SETTINGS");
-    expect(
-      await within(sheet).findByText("5511977770000 ignorado"),
-    ).toBeVisible();
   });
 });

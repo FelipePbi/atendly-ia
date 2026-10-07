@@ -9,6 +9,7 @@ export type SettingsScenario =
   | "whatsapp-reconnecting"
   | "whatsapp-expired"
   | "whatsapp-error"
+  | "whatsapp-ignored"
   | "calendar"
   | "calendar-external"
   | "calendar-reminders"

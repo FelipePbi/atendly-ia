@@ -38,11 +38,12 @@ const logout = vi.fn();
 const refreshSession = vi.fn();
 const setUnauthenticated = vi.fn();
 const listConversations = vi.fn();
+const listIgnoredContacts = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     auth: { logout },
-    conversations: { list: listConversations },
+    conversations: { list: listConversations, listIgnoredContacts },
     onboarding: { complete: vi.fn(), get: getOnboarding, update: vi.fn() },
     whatsapp: {
       connect: vi.fn(),
@@ -123,6 +124,7 @@ beforeEach(() => {
   getOnboarding.mockResolvedValue(onboardingState());
   refreshSession.mockResolvedValue(null);
   listConversations.mockResolvedValue({ conversations: [], nextCursor: null });
+  listIgnoredContacts.mockResolvedValue({ items: [], total: 0 });
   if (typeof window.matchMedia !== "function") {
     window.matchMedia = (query: string) =>
       ({

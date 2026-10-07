@@ -8990,3 +8990,201 @@ Goal139 aceito na rodada 1 ([review139](reviews/139-review.md)), sem blocker. Co
 | Gates do IA Loop | todos com `attemptId` `a1`; o único com saída diferente de 0 é a primeira execução de `validate:core` (WU-15), corrigida pela DIAG-001 e refeita com saída 0 (WU-15-g2) na árvore final `code-v1:d093135d903b7dbf7f8a0a035f1f8ca986177b3cbe5756da2dfde499a05abc83`, a mesma de `validate:ui` (WU-16), `validate:integration` (WU-17) e `git diff --check` (WU-19) |
 
 Os oito controles negativos são os do Developer (WU-01, WU-02 e WU-03); o Tech Lead não os refez. A contagem de partida do BFF continua por conta, não medida, como desvio declarado.
+
+## Os contatos que a IA nunca responde iguais ao protótipo, do Goal140
+
+Rodada 1, 2026-10-07, na worktree `goal-140`. Baseline `7a1f2f2` (`7a1f2f22e8e9e77309ca6b6ec935ea5580890f13`). **Rodada 1:** a tela do W3, a lista, a legenda, "Remover", a busca, o CSS e a rota em `e2e/routes.ts` (WU-01); a linha do W1, a função de data comum, o fim da folha e os ajustes dos testes existentes (WU-02); os alvos W3, W1 e W2, o teste de captura, a captura de antes e de depois, as medidas, dois ajustes de CSS e os controles negativos (a) a (j) (WU-03); os gates do IA Loop (WU-04 a WU-12); e estes registros (WU-13). Os gates do IA Loop rodaram todos sobre **uma só árvore**, `code-v1:1900711e…8ac01` (`code-v1:1900711e7c35bf8f7f635f515a572a10fba68070e959fb1ce72e56d55fd8ac01`), todos na rodada 1 e todos com `attemptId` `a1`; nenhum precisou ser refeito. Nenhum gate está pendente: todos os números abaixo são da execução final, e o `git diff --check` da WU-14, que o IA Loop roda depois destes registros, não entra aqui (ver "Não executado"). O Goal foi aceito na rodada 1 ([review140](reviews/140-review.md)), sem blocker; o resultado da WU-14 e a conferência do Tech Lead estão em "Aceite".
+
+### Contagens
+
+Contagens de partida (a baseline `7a1f2f2`, as do Goal139 aceito) e da execução final:
+
+| Suíte | Partida (baseline) | Final | Diferença | Quem obteve |
+| --- | --- | --- | --- | --- |
+| Unidade do frontend (`npm test`) | 202 arquivos e **2915** testes passando (Goal139) | **204** arquivos e **2964** testes passando, 0 falhas, 51,5 s | +2 arquivos e +49 testes: +56 de `goal140` (42 + 14) e −7 da folha que saiu (ver "Testes ajustados") | IA Loop, WU-07 |
+| `scripts/tests/visual-responses.test.mjs` | **63** (Goal138) | **64**, 0 falhas | +1 teste (o do W3); os dois do W1 e do W2 foram ajustados, sem mudar a conta | Developer, WU-03 |
+| `test:gate` | **296** (Goal139) | **297** testes, 297 passando, 0 falhas, 0 pulados, 2,4 s | +1 (o teste do W3 em `visual-responses.test.mjs`) | IA Loop, WU-09 |
+| `validate:ui` | **169** `passed` e 21 pulados, sem retentativa (Goal139) | **169** `passed` e 21 pulados, sem retentativa | **0**: o gate público ignora `authenticated-matrix.spec.ts` e a rota nova é autenticada | IA Loop, WU-11 |
+| Gate autenticado (dentro de `validate:integration`) | **305** `passed`, sem retentativa (Goal139) | **310** `passed`, sem retentativa | **+5**: um teste "measured, logged in" por rota e por largura (cinco larguras) | IA Loop, WU-12 |
+
+A IA e o BFF não foram tocados e não foram rodados à parte neste Goal: a unidade da IA (98 arquivos e 1262 testes) e a do BFF (24 arquivos e 193 testes) ficam como no Goal139; o que os cobre aqui são os passos `test:ai-orchestrator` e `test:bff` do `validate:core` e do `validate:integration`.
+
+Gates do IA Loop e do Developer:
+
+| Gate | Comando | Resultado (rodada 1) | Quem obteve |
+| --- | --- | --- | --- |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0, 1,5 s, sem erro | IA Loop, WU-04 |
+| Lint do frontend | `npm run lint` (`eslint src tests --max-warnings=0`) | saída 0, 17,4 s, 0 avisos | IA Loop, WU-05 |
+| Testes `goal140` do frontend | `npx vitest run goal140` | saída 0, 2 arquivos e **56** testes passando (`goal140-alvos-captura.test.ts` **14** e `goal140-contatos-ignorados.test.tsx` **42**), 7,4 s | IA Loop, WU-06 |
+| Testes do frontend | `npm test` | saída 0, **204** arquivos e **2964** testes passando, 0 falhas, 51,5 s | IA Loop, WU-07 |
+| `tooling-tests` | `npm run test:ia-loop` | **não se aplica** (`SKIPPED`): o `package.json` da worktree não declara o script; o harness vive fora do repositório e este Goal não o altera. Não é falha | IA Loop, WU-08 |
+| `test:gate` | `npm run test:gate` | saída 0, **297** testes, 297 passando, 0 falhas, 0 pulados, 2,4 s | IA Loop, WU-09 |
+| `validate:core` | `npm run validate:core` | saída 0, 118,6 s, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, que só tem a suíte de integração, rodada no `validate:integration`; `test:health-worker`, pacote sem suíte, só a checagem de sintaxe). A auditoria estática teve 33 checagens passando e 1 pulada (`production_health`, que pede `PRODUCTION_HEALTH_TARGETS`) | IA Loop, WU-10 |
+| `validate:ui` | `npm run validate:ui` | saída 0, 44,9 s, **169 passed**, 21 skipped, retentativas **0** ("every test passed on its first attempt"); igual à baseline | IA Loop, WU-11 |
+| `validate:integration` | `npm run validate:integration` | saída 0, 770,4 s, 36 passos, **36 passaram**, 0 falharam, 0 pulados, contra `127.0.0.1:55500/ia_bff_test`. O gate autenticado (`rehearse:goal033-authenticated-ui`) deu **310 passed** em 10,9 min e retentativas **0** ("every test passed on its first attempt") | IA Loop, WU-12 |
+
+**O que não foi contado.** O relatório que o IA Loop guarda de `validate:core` e de `validate:integration` omite o meio da saída, então **não há contagem de testes por passo** (quantos testes tem `test:ai-orchestrator` ou `test:frontend` dentro do `validate:core`); o que vale deles é a saída 0 e os passos passando.
+
+### Gate autenticado
+
+O gate autenticado deu **310 passed** e 0 retentativas na árvore final, contra **305** na baseline do Goal139. A diferença é **+5**, e a causa é a rota nova: `e2e/routes.ts` ganhou `/configuracoes/whatsapp/contatos-ignorados` (`sessionMarker` `configuracoes`, `contentMarker` "A IA nunca responde") em `AUTHENTICATED_ROUTES`, e `authenticated-matrix.spec.ts` roda um teste "measured, logged in" por rota e por largura (`mobile-360`, `mobile-390`, `tablet-768`, `notebook-1024`, `desktop-1440`). A busca em `authenticated-matrix.spec.ts` por "nunca responde" e "ignorad" **não achou nenhuma ocorrência**, e por `Dialog` e `sheet` só achou o das notificações e o sheet "Novo", sem relação: **não havia bloco que abrisse a folha**, o arquivo não mudou e nenhuma asserção foi afrouxada. **`validate:ui` não mudou** (169 passed e 21 skipped): o `playwright.config.ts` do gate público faz `testIgnore` de `authenticated-matrix.spec.ts` e mede `PUBLIC_ROUTES`, e a rota nova não é pública. O Goal esperava mudança nas duas contagens; a de `validate:ui` não ocorre (desvio abaixo).
+
+### `visual:compare` do W3, do W1 e do W2
+
+`npm run visual:compare -- --target W3,W1,W2`, nos quatro devices, com o bundler padrão (a captura final é de 10:27 a 10:28). Diff por imagem (percentual de pixels diferentes entre o quadro e o app): mobile / tablet-retrato / tablet-paisagem / desktop.
+
+| Alvo | Mobile | Tablet retrato | Tablet paisagem | Desktop |
+| --- | --- | --- | --- | --- |
+| W3 | 7,6 % | 3,5 % | 5,8 % | 4,9 % |
+| W1 | 8,1 % | 3,7 % | 6,3 % | 5,2 % |
+| W2 | 2,3 % | 6,2 % | 7,7 % | 6,3 % |
+
+Os **doze** `side-by-side.png` (W3, W1 e W2, quadro × app, nos quatro devices) foram abertos pela WU-03. Os do W3 no desktop e no tablet retrato e os do W1 no mobile e no desktop foram abertos **antes** dos dois ajustes de CSS da WU-03 (o campo de 48 px e o `letter-spacing` do título) e conferidos de novo pelas medidas; os outros oito foram abertos depois. O que resta é só o que as `notes` declaram:
+
+- **W3:** a barra de status do iPhone (o conteúdo do mobile fica 14 px mais acima); a casca da conta visual (banner "Atendimento automático parado", o hub ao lado com "WhatsApp desconectado", a IA desligada, "Studio Camila Reis", "Notificações"); a linha sem `:hover` nem `cursor: pointer`; a busca vazia; a área de toque de "Remover".
+- **W1:** "Mãe, Dudu ❤️" no app contra "Mãe, Dudu" no quadro; as divergências 1 a 4 e 6 de D-118; "Desconectar WhatsApp" fora do viewport.
+- **W2:** "de 3 minutos" (Goal124); o fundo, que atrás do véu mostra a linha preenchida onde o quadro esvazia o cartão.
+
+A WU-03 rodou também `--target W3,W1,W2` com `VISUAL_NEXT_BUNDLER=webpack` (o bundler da baseline, ver abaixo): os mesmos diffs e saída 0.
+
+### Regressão dos 32 `app.png`
+
+**A captura de antes é da baseline `7a1f2f2`**, extraída com `git archive` para fora do repositório (a junção de `node_modules` foi apagada ao fim). O Turbopack recusou a junção, então a baseline e o depois rodaram com `VISUAL_NEXT_BUNDLER=webpack`. Foram **três capturas completas** da baseline antes de editar (`base1` a `base3`), mais uma completa e duas só de desktop (`base4` a `base6`), e do depois, duas completas e duas só de desktop (`after1` a `after4`): as capturas extras vieram porque 5 imagens passaram do ruído das três primeiras baselines (C2 desktop 41 px, C2 tablet paisagem 35 px, R1 desktop 41 px, R2 tablet paisagem 23 px, I2 desktop 69 px) e ficaram dentro do ruído com as extras. A comparação é por pixel (`PIL` e `numpy`, `table2.py`, fora do repositório): "ruído" é o maior número de pixels e o maior delta por canal entre duas capturas da **mesma** árvore (entre as baselines e entre as do depois); uma imagem está dentro do ruído quando o depois × baselines não passa nem dos pixels nem do delta desse maior ruído, ou quando a diferença é zero. O delta máximo por canal é **8**, na 4.5 mobile (130 px de ruído só entre baselines), e nos outros casos ≤ 5, nos cantos arredondados.
+
+| imagem | n base / n depois | ruído entre baselines (px / delta máx) | ruído entre depois (px / delta) | depois × baselines (px / delta máx) | veredito |
+|---|---|---|---|---|---|
+| mais-negocio-agenda-ia-IA1-desktop | 4 / 2 | 8 / 5 | 8 / 5 | 8 / 5 | dentro do ruído |
+| mais-negocio-agenda-ia-IA1-mobile | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| mais-negocio-agenda-ia-IA1-tablet-landscape | 4 / 2 | 35 / 1 | 0 / 0 | 35 / 1 | dentro do ruído |
+| mais-negocio-agenda-ia-IA1-tablet-portrait | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| mais-whatsapp-importacao-conta-C1-desktop | 4 / 2 | 115 / 5 | 0 / 0 | 107 / 5 | dentro do ruído |
+| mais-whatsapp-importacao-conta-C1-mobile | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| mais-whatsapp-importacao-conta-C1-tablet-landscape | 4 / 2 | 44 / 4 | 0 / 0 | 44 / 4 | dentro do ruído |
+| mais-whatsapp-importacao-conta-C1-tablet-portrait | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| mais-whatsapp-importacao-conta-C2-desktop | 6 / 4 | 8 / 5 | 90 / 5 | 90 / 5 | dentro do ruído |
+| mais-whatsapp-importacao-conta-C2-mobile | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| mais-whatsapp-importacao-conta-C2-tablet-landscape | 4 / 2 | 0 / 0 | 35 / 1 | 35 / 1 | dentro do ruído |
+| mais-whatsapp-importacao-conta-C2-tablet-portrait | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| mais-whatsapp-importacao-conta-I1-desktop | 4 / 2 | 69 / 3 | 23 / 1 | 49 / 3 | dentro do ruído |
+| mais-whatsapp-importacao-conta-I1-mobile | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| mais-whatsapp-importacao-conta-I1-tablet-landscape | 4 / 2 | 39 / 4 | 32 / 1 | 39 / 4 | dentro do ruído |
+| mais-whatsapp-importacao-conta-I1-tablet-portrait | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| mais-whatsapp-importacao-conta-I2-desktop | 6 / 4 | 69 / 5 | 69 / 3 | 69 / 5 | dentro do ruído |
+| mais-whatsapp-importacao-conta-I2-mobile | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| mais-whatsapp-importacao-conta-I2-tablet-landscape | 4 / 2 | 78 / 4 | 7 / 4 | 78 / 4 | dentro do ruído |
+| mais-whatsapp-importacao-conta-I2-tablet-portrait | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| mais-whatsapp-importacao-conta-R1-desktop | 6 / 4 | 8 / 5 | 41 / 5 | 41 / 5 | dentro do ruído |
+| mais-whatsapp-importacao-conta-R1-mobile | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| mais-whatsapp-importacao-conta-R1-tablet-landscape | 4 / 2 | 44 / 4 | 44 / 4 | 44 / 4 | dentro do ruído |
+| mais-whatsapp-importacao-conta-R1-tablet-portrait | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| mais-whatsapp-importacao-conta-R2-desktop | 6 / 4 | 29 / 4 | 8 / 4 | 29 / 4 | dentro do ruído |
+| mais-whatsapp-importacao-conta-R2-mobile | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| mais-whatsapp-importacao-conta-R2-tablet-landscape | 4 / 2 | 0 / 0 | 23 / 1 | 23 / 1 | dentro do ruído |
+| mais-whatsapp-importacao-conta-R2-tablet-portrait | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| onboarding-3-ia-e-whatsapp-4.5-desktop | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| onboarding-3-ia-e-whatsapp-4.5-mobile | 4 / 2 | 130 / 8 | 0 / 0 | 112 / 8 | dentro do ruído |
+| onboarding-3-ia-e-whatsapp-4.5-tablet-landscape | 4 / 2 | 0 / 0 | 0 / 0 | 0 / 0 | dentro do ruído |
+| onboarding-3-ia-e-whatsapp-4.5-tablet-portrait | 4 / 2 | 42 / 1 | 0 / 0 | 42 / 1 | dentro do ruído |
+
+O W1 e o W2 contra a baseline: **acima da segunda linha, 0 px diferente** (exceto o desktop do W1, com 19 px e delta 5, dentro do ruído de 23). No W1, a segunda linha desloca em cerca de 16 px o que vem abaixo; os tablets e o desktop ficam **idênticos (0 px)** depois do deslocamento, e o mobile tem 55 px diferentes, com delta máximo 15, em y 485 a 515, na linha "Trocar número": é o deslocamento fracionário, que não alinha por pixel. O W2 muda só no fundo, atrás do véu. A única diferença fora do ruído é, portanto, a segunda linha.
+
+### Medidas
+
+Em cada device, no app e no quadro, com a diferença (app − quadro) em px; o app foi medido com o banner da casca da conta visual **escondido só na medição** (o `side-by-side.png` mostra o banner). As medidas vêm de um script temporário (`scripts/_measure.mjs`, apagado ao fim; a saída está em `E:\tmp-goal140-captures\measure.txt`, fora do repositório). W3:
+
+| Medida | Mobile | Tablet retrato | Tablet paisagem | Desktop |
+| --- | --- | --- | --- | --- |
+| Topo do título da barra (y) | +14,1 | +0,1 | +0,1 | +0,1 |
+| Topo da descrição (y) | +14 | 0 | 0 | 0 |
+| Topo do campo (y); altura × largura no app | +14; 48 × 362 | 0; 48 × 712 | 0; 48 × 588 | 0; 48 × 698 |
+| Topo da lista (y); altura | +14; 196 | 0; 196 | 0; 196 | 0; 196 |
+| Topo da nota (y) | +14 | 0 | 0 | 0 |
+| Raio e borda do campo | 14 px, 1 px `#D6CEC2`, fundo `#FFFDFA`, iguais | iguais | iguais | iguais |
+| Raio e borda da lista | 16 px, 1 px `#E5DED4`, fundo `#FFFDFA`, iguais | iguais | iguais | iguais |
+| Altura de cada linha (3) | 64 / 65 / 65, diferença 0 | 0 | 0 | 0 |
+| Avatar | 40 × 40, diferença 0 | 0 | 0 | 0 |
+| Nome e legenda: topo (y); largura | +14; −8 | 0; −8 | 0; −7 | 0; −7 |
+| "Remover": texto (borda direita) | no mesmo ponto | no mesmo ponto | no mesmo ponto | no mesmo ponto |
+| "Remover": área de toque, app × texto do quadro | 72 × 40 contra 56 × 18 | idem | idem | idem |
+| x e largura (campo, descrição, lista, nota, linhas) | 0 | 0 | −1 e +1 | −1 e +1 |
+
+No mobile o +14 é **uniforme** (do título à nota): é a barra de status do iPhone (divergência 1 de D-118), não uma medida errada; a `PushedBar` tem 12 px de recorte onde o quadro tem 60 px de cabeçalho menos o recorte de 62. No tablet em paisagem e no desktop, o x e a largura têm 1 px de diferença (a coluna da lista de Configurações ao lado), dentro da tolerância. O título tem a mesma largura (149,44 px) nos quatro. A diferença de "Remover" é a área de toque declarada (margem negativa de 8 px, altura mínima de 40): o texto fica onde o quadro o põe, e é ela que deixa as colunas do nome e da legenda 7 a 8 px mais estreitas.
+
+W1, a linha com a segunda linha: altura **64 px** no app contra **63 px** no quadro (1 px, dentro da tolerância); o detalhe é 13 px `#5F574E` nos dois. O deslocamento vertical da linha no W1 (−2 px no mobile e −17 px nos tablets e no desktop) vem do cartão da IA mais curto e da linha "Uso pessoal" ausente, as divergências 4 e 6 de D-118, e não da segunda linha. Corrigidos nesta passada, por estarem acima de 1 px sem serem divergência declarada: a **altura do campo** (46 → 48 px) e o **`letter-spacing` do título** (título 6 px mais estreito). Nada acima de 1 px ficou fora das divergências declaradas.
+
+### Controles negativos
+
+Todos depois da última edição de código de `src` da WU-03, cada um editando o arquivo, rodando o teste com `rtk proxy` (que mostra a saída sem filtro), reprovando e revertendo por cópia do backup, com `cmp` igual ao backup. As mensagens são as da saída bruta (guardada em `E:\tmp-goal140-captures\ctl\`, fora do repositório). Comando dos controles (a) a (h), de `apps/frontend`: `rtk proxy npx vitest run tests/goal140-contatos-ignorados.test.tsx` (42 testes, 42 passando sem o controle). Comando de (i) e (j): `rtk proxy npx vitest run tests/goal140-alvos-captura.test.ts`, e, só para (i), também `rtk proxy node --test scripts/tests/visual-responses.test.mjs` (da raiz).
+
+| Controle | Edição | Arquivo editado; teste que reprovou | Mensagem de asserção |
+| --- | --- | --- | --- |
+| (a) a legenda de `CONVERSATION` com o telefone | `IgnoredContactsScreen.tsx`: a legenda de `CONVERSATION` passa a `${phone} · marcada na conversa · ${date}` | **3** reprovaram, entre eles `Goal140 a legenda e o avatar > CONVERSATION: marcada na conversa e a data, sem telefone` (os outros: `CONVERSATION sem ignoredAt: sem data` e `a data segue o fuso do negócio, não o UTC`) | `TestingLibraryElementError: Unable to find an element with the text: marcada na conversa · 18/09. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.` |
+| (b) as legendas de `ONBOARDING` e de `CONVERSATION` trocadas | `IgnoredContactsScreen.tsx`: o ramo sem telefone passa de `origin === "CONVERSATION"` para `"ONBOARDING"`, e o ramo de "desde o início" passa de `"ONBOARDING"` para `"CONVERSATION"` | **5** reprovaram, entre eles `Goal140 a legenda e o avatar > ONBOARDING: telefone e desde o início` e `Goal140 a legenda e o avatar > sem displayName o nome é o telefone e a legenda não o repete` | `TestingLibraryElementError: Unable to find an element with the text: +55 11 99900-1122 · desde o início. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.` e, no segundo, `Error: expect(element).toHaveTextContent()` com `Expected element to have text content: +55 11 99900-1122desde o início` e `Received: +55 11 99900-1122marcada na conversa · 10/09Remover` |
+| (c) "Remover" tirando a linha antes da resposta | `IgnoredContactsScreen.tsx`: o `setItems` que tira a linha passa para antes do `await` de `ignoreByPhone` | **2** reprovaram: `Goal140 Remover > chama ignoreByPhone(externalContactId, false) sem origin, uma vez, e a linha sai depois da resposta` e `Goal140 Remover > a falha mantém a linha e mostra o alerta` | `TestingLibraryElementError: Unable to find an element with the text: Dudu ❤️. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.` e `TestingLibraryElementError: Unable to find an element with the text: Mãe. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.` |
+| (d) "Remover" mandando `origin` | `IgnoredContactsScreen.tsx`: `ignoreByPhone(contact.externalContactId, false, "SETTINGS")` | **1** reprovou: `Goal140 Remover > chama ignoreByPhone(externalContactId, false) sem origin, uma vez, e a linha sai depois da resposta` | `AssertionError: expected "vi.fn()" to be called with arguments: [ '5511988776655', false ]` |
+| (e1) "Adicionar" mandando `CONVERSATION` | `IgnoredContactsScreen.tsx`: o `"SETTINGS"` de `ignoreByPhone(query, true, …)` passa a `"CONVERSATION"` | **1** reprovou: `Goal140 a busca > Adicionar grava SETTINGS com o texto, esvazia o campo e relê a lista` | `AssertionError: expected "vi.fn()" to be called with arguments: [ '+55 11 96666-5555', true, …(1) ]` |
+| (e2) "Adicionar" sem `origin` | `IgnoredContactsScreen.tsx`: o `"SETTINGS"` de `ignoreByPhone(query, true, …)` é removido | **1** reprovou, o mesmo teste de (e1) | `AssertionError: expected "vi.fn()" to be called with arguments: [ '+55 11 96666-5555', true, …(1) ]` |
+| (f) "Ignorar" mandando `ONBOARDING` | `IgnoredContactsScreen.tsx`: o `"CONVERSATION"` de `setIgnored(…, true, …)` na busca passa a `"ONBOARDING"` | **1** reprovou: `Goal140 a busca > Ignorar grava CONVERSATION, esvazia o campo e relê a lista do começo` | `AssertionError: expected "vi.fn()" to be called with arguments: [ 'conv-1', true, 'CONVERSATION' ]` |
+| (g) a data em UTC no lugar do fuso do negócio | `dayMonth.ts`: `timeZone` passa a `timeZone: "UTC"` no `toLocaleDateString` | **2** reprovaram: `Goal140 a legenda e o avatar > a data segue o fuso do negócio, não o UTC` e `Goal140 a legenda e o avatar > sem fuso lido, usa o de São Paulo` | `TestingLibraryElementError: Unable to find an element with the text: marcada na conversa · 17/09. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.` e `TestingLibraryElementError: Unable to find an element with the text: /desde 17\/09/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.` |
+| (h) a segunda linha do W1 sem " e mais N" | `WhatsAppConnectedSettings.tsx`: `ignoredPreview` devolve `names` no lugar de `` `${names} e mais ${total - items.length}` `` | **2** reprovaram: `Goal140 a linha do W1 > com total maior que os itens, termina com ' e mais N'` e `Goal140 a linha do W1 > com um só item e total maior, mostra o nome e ' e mais N'` | `TestingLibraryElementError: Unable to find an element with the text: Mãe, Dudu ❤️ e mais 3. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.` e `TestingLibraryElementError: Unable to find an element with the text: Mãe e mais 1. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.` |
+| (i) o W3 de `targets.json` com um passo que toca "Remover" | `targets.json`: o W3 com `"steps": [{ "clickRole": { "role": "button", "name": "Remover Mãe" } }]`. **Reprovam os dois testes** | (i1) `goal140-alvos-captura.test.ts`, **2** reprovaram: `alvos W3, W1 e W2 do visual:compare (contatos ignorados) > o W3 é novo: rota própria, arquivo e label do quadro, sem passo` e `… > nenhum passo dos três alvos grava: nada toca Remover, Ignorar, Adicionar nem Desconectar o número`. (i2) `scripts/tests/visual-responses.test.mjs`, **1** reprovou (63 de 64): `targets.json: W3 só declara o GET da lista dos ignorados, não tem passo e a lista do W1 e do W2 são os dois primeiros itens dele` | (i1) `AssertionError: expected [ { clickRole: { …(2) } } ] to be undefined` e `AssertionError: W3: expected '[{"clickRole":{"role":"button","name"…' not to match /Remover\|Ignorar\|Adicionar/`; (i2) `AssertionError [ERR_ASSERTION]: W3: nenhum passo, nada toca em Remover, Ignorar nem Adicionar` |
+| (j) o `total` do W3 diferente do número de itens | `targets.json`: o `total` do W3 passa de 3 para 4 | `goal140-alvos-captura.test.ts`, **1** reprovou: `alvos W3, W1 e W2 do visual:compare (contatos ignorados) > o total do W3 é o número de itens, e o do W1 e o do W2 também` | `AssertionError: W3: expected 4 to be 3 // Object.is equality` |
+
+Os controles (i) e (j) rodaram quando `goal140-alvos-captura.test.ts` tinha **12** testes (a saída bruta diz "2 failed | 10 passed (12)" e "1 failed | 11 passed (12)"); a WU-03 acrescentou depois **2** testes de `notes` (agora 14), sem mudar os testes que os controles exercitam. Depois de cada controle, o arquivo voltou do backup com `cmp` igual (a, b, c, d, e1, e2, f, g, h, i, j) e o `goal140` ficou verde na árvore final (56 de 56, WU-06).
+
+### Testes ajustados
+
+Só mudou o que o Goal muda (a folha que vira rota, a linha do W1 que vira link e a leitura nova da lista); nenhum ajuste afrouxa asserção sobre os pedidos, a origem, o onboarding ou as outras telas.
+
+1. `apps/frontend/tests/goal106-whatsapp.test.tsx` (WU-02): (i) o mock de `conversations.listIgnoredContacts` (padrão `{ items: [], total: 0 }`), porque a tela conectada agora lê a lista; (ii) no teste das linhas e da área de atenção, a linha deixou de ser `button` e virou `link`, e a ordem, o texto e a ausência de "Mãe" e "Dudu" com lista vazia ficam iguais; (iii) as **5** provas da folha viraram **1** (a linha leva à rota pelo `href`, não abre `dialog`, não desconecta e não chama `ignoreByPhone` nem `setIgnored`). Removidas: "abre a folha / Fechar volta" (provava a folha e o Fechar, que não existem mais; o `href` e a ausência de `dialog` estão no teste novo); "marcar por telefone chama `ignoreByPhone` uma vez" (`"+55 11 97777-0000", true, "SETTINGS"`, que continua em `goal140` "Adicionar grava SETTINGS com o texto, esvazia o campo e relê a lista"); "marcar conversa chama `setIgnored`" (`"conv-1", true, "CONVERSATION"`, que continua em `goal140` "Ignorar grava CONVERSATION, esvazia o campo e relê a lista do começo"); "falha de marcar mostra a mensagem" (continua em `goal140` "Adicionar com outra falha mostra a mensagem geral"). (iv) Na prova do onboarding, `queryByRole("button", /Contatos que a IA nunca responde/)` virou `queryByText(/Contatos…/)` nulo, **mais estrita**.
+2. `apps/frontend/tests/goal129-contatos-ignorados.test.tsx` (WU-02): removido o bloco "a folha de Configurações segue com a forma e os pedidos de hoje" (**2** testes) e os imports e a fixture que só ele usava (`within`, `WhatsAppSettings`, `settingsFixture`, `SettingsState`). O primeiro provava a leitura `{ ignored: false, limit: 20 }` e as duas seções da folha, que agora são a tela da rota (`goal140` "lê uma vez com limit 100 e offset 0, na ordem da resposta" e "lê depois de 250 ms com ignored false e search, uma vez"); o segundo provava `CONVERSATION` na conversa e `SETTINGS` no telefone, que continuam em `goal140`. Os testes do onboarding (4.5) ficam intactos.
+3. `apps/frontend/tests/goal139-contatos-ignorados.test.tsx` (WU-02): removido o bloco "Goal139 folha de Configurações" (**2** testes: `CONVERSATION` na conversa e `SETTINGS` no telefone) e o import de `IgnoredContactsPanel`; a prova continua em `goal140` ("Ignorar grava CONVERSATION…" e "Adicionar grava SETTINGS…"). Os testes de `ONBOARDING`, do serviço e do chat (sem `origin`) não mudaram.
+4. `apps/frontend/tests/goal129-whatsapp-conectado.test.tsx` (WU-02, fora da lista de arquivos esperados, ajuste mínimo): só o mock `listIgnoredContacts` (`{ items: [], total: 0 }`). Nenhuma asserção mudou; sem o mock a tela conectada lançava `listIgnoredContacts is not a function` no efeito.
+5. `scripts/tests/visual-responses.test.mjs` (WU-03): o W3 entra na lista de donos de `responses` e no arquivo esperado; os testes do W1 e do W2 passam a esperar **2** respostas (o `GET /v1/whatsapp` e o da lista); teste novo do W3. A asserção de que nada grava continua valendo para os três alvos.
+
+Na primeira passada da suíte do frontend (WU-02), 27 testes reprovaram (o mock sem `listIgnoredContacts` e um import removido); com os ajustes acima a suíte deu 203 arquivos e 2950 testes e, com os 14 de `goal140-alvos-captura.test.ts` da WU-03, os **204** e **2964** da execução final. Conta: 2915 + 56 (42 + 14) − 7 (−3 em `goal106`, −2 em `goal129-contatos-ignorados`, −2 em `goal139-contatos-ignorados`) = 2964.
+
+`goal140-contatos-ignorados.test.tsx` e `goal140-alvos-captura.test.ts` são arquivos **novos** deste Goal.
+
+### Escopo
+
+Os arquivos mudados são os do §1, do §2 e do §3 do Goal, os testes e os registros: em `apps/frontend/src/`, `app/(platform)/configuracoes/whatsapp/contatos-ignorados/page.tsx` (novo), `features/settings/IgnoredContactsScreen.tsx` (novo), `features/settings/dayMonth.ts` (novo), `features/settings/types.ts`, `features/settings/ProductSettingsScreen.tsx`, `features/settings/WhatsAppConnectedSettings.tsx`, `features/whatsapp/IgnoredContactsPanel.tsx` e `shared/styles/avenly-settings.css`; `apps/frontend/e2e/routes.ts` e `e2e/visual/targets.json`; `scripts/tests/visual-responses.test.mjs`; os testes de `apps/frontend/tests/` (os dois `goal140` novos e os quatro ajustados); e `DECISIONS.md`, `CURRENT_STATE.md` e este arquivo, todos por acréscimo. `data/services/`, `shared/ui/`, `features/onboarding/`, `e2e/authenticated-matrix.spec.ts`, o contrato, o BFF, a IA, o banco, a semente da captura e do gate, `goals/`, `reviews/`, `MIGRATION_STATUS.md` e `MASTER_PLAN.md` não foram tocados. O script de medição temporário `scripts/_measure.mjs` foi apagado, e as capturas, as tabelas e as saídas brutas dos controles ficam em `E:\tmp-goal140-captures\`, fora do repositório.
+
+### Desvios do texto do Goal, para o review
+
+- **`validate:ui` não muda de contagem.** O Goal diz que as contagens de `validate:ui` e do gate autenticado mudam pela rota nova. Só a do gate autenticado muda (+5); a de `validate:ui` ficou em 169 passed e 21 skipped porque o gate público não mede rotas autenticadas (acima).
+- **O campo de busca tem 48 px, não 46.** O quadro declara `height: 46px` em caixa de conteúdo mais a borda de 1 px; no `border-box` do app isso são 48 px. O Goal manda "46 px de altura"; vale a medida do quadro renderizado.
+- **`letter-spacing: normal` no título** da tela, por um seletor escopado, e **`text-decoration: none` em `.wa-row`** (regra que o W1 e o W2 usam), por causa do `<a>`: duas declarações que o Goal não previa, medidas na captura.
+- **O texto do campo de busca** é um `span` `aria-hidden` por baixo de um `input` transparente com `aria-label`, e não um `placeholder`: o quadro quebra o texto em duas linhas e o `placeholder` o trunca. O nome acessível é o que o Goal manda.
+- **A área de toque de "Remover"** é 72 × 40 px (o texto do quadro tem 56 × 18); declarada nas `notes` e em D-154.
+- **A baseline foi capturada com o webpack** (`VISUAL_NEXT_BUNDLER=webpack`), porque o Turbopack recusou a junção de `node_modules` da cópia da baseline fora do repositório; o depois rodou nos dois bundlers (os mesmos diffs). A baseline teve **seis** capturas (três completas exigidas, mais três), e o depois **quatro**, porque cinco imagens passaram do ruído das três primeiras baselines.
+- **Os controles (i) e (j) rodaram com 12 testes** em `goal140-alvos-captura.test.ts` (hoje 14), sem mudança nos testes que exercitam.
+- **`goal129-whatsapp-conectado.test.tsx`** não estava entre os arquivos que o Goal cita; ganhou só o mock da leitura.
+- **Quatro dos doze `side-by-side.png`** (W3 desktop, W3 tablet retrato, W1 mobile, W1 desktop) foram abertos antes dos dois ajustes de CSS e conferidos de novo pelas medidas, não reabertos.
+
+### Não executado
+
+- A contagem de testes por passo de `validate:core` e de `validate:integration` (ver "O que não foi contado").
+- A IA e o BFF à parte (`vitest` direto); nenhum arquivo deles mudou, e os passos `test:ai-orchestrator` e `test:bff-integration` dos gates passaram.
+- O `git diff --check` da WU-14, que o IA Loop roda depois destes registros: o do Developer, sobre a árvore com os registros, está em "Verificação final do Developer", e o da WU-14 fica no review.
+- A tela num aparelho real, e "Remover", "Ignorar" e "Adicionar" ponta a ponta contra um WhatsApp real: a captura só lê (nenhum `PUT`), o jsdom prova os pedidos e o efeito na IA é o provado no Goal139.
+- O `avenly-settings.css` tem data de modificação (10:29) **posterior** à captura final do `visual:compare` (10:27 a 10:28); a WU-03 reporta, sobre ele, a checagem de formatação e as medidas, não uma nova captura depois. Se o review exigir o `visual:compare` depois da última escrita do arquivo, é rodá-lo de novo.
+
+### Verificação final do Developer
+
+`git diff --check`, rodado pelo Developer (WU-13) na worktree, **depois** de escrever os três registros: saída 0, sem erro de espaço em branco; só os dois avisos de fim de linha do Git (`LF will be replaced by CRLF`, em `IgnoredContactsPanel.tsx` e `avenly-settings.css`), que não são erro. Os arquivos novos não rastreados ainda não entram nesse `git diff`. A WU-14 do IA Loop o roda de novo depois destes registros, na árvore final; o resultado dela é anotado no review.
+
+### Aceite
+
+Goal140 aceito na rodada 1 ([review140](reviews/140-review.md)), sem blocker. Conferência do Tech Lead na árvore aceita, sem edição de código no meio:
+
+| Verificação | Resultado |
+| --- | --- |
+| `npx vitest run goal140 goal106 goal129 goal139` (frontend) | 7 arquivos e 135 testes passando |
+| `npm run visual:compare -- --target W3,W1,W2` | saída 0; W3 7,6 / 3,5 / 5,8 / 4,9 %, W1 8,1 / 3,7 / 6,3 / 5,2 %, W2 2,3 / 6,2 / 7,7 / 6,3 %. Rodado depois da última escrita de `avenly-settings.css`, o que resolve a ressalva de "Não executado" sobre a data de modificação do arquivo |
+| Os doze `side-by-side.png` (W3, W1 e W2, quatro devices) | abertos; o W3 com a mesma estrutura, ordem, avatar, legendas, "Remover", raios, bordas e nota do quadro; restam só as divergências declaradas (a casca de D-118, a barra do iPhone no mobile, o hub ao lado; "Mãe, Dudu ❤️" no W1; o W2 muda só atrás do véu). O campo de busca de 48 px confere com o quadro |
+| Contagem do frontend | 2915 + 56 − 7 = 2964, coerente com a WU-07 |
+| `git diff --check` (WU-14 do IA Loop, depois destes registros) | saída 0, 88 ms, na árvore `code-v1:1900711e…8ac01`, a mesma dos gates WU-04 a WU-12 |
+| `tooling-tests` (WU-08) | `SKIPPED`: o repositório não declara `test:ia-loop`; não se aplica |
+
+Os dez controles negativos são os do Developer (WU-03); o Tech Lead não os refez. A tela num aparelho real e "Remover", "Ignorar" e "Adicionar" contra um WhatsApp real continuam sem prova.

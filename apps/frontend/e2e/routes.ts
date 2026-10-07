@@ -82,6 +82,14 @@ export const AUTHENTICATED_ROUTES = [
     sessionMarker: "configuracoes",
     contentMarker: "WhatsApp",
   },
+  // Goal140 (W3): os contatos que a IA nunca responde, em rota própria. O h1 é
+  // o título da barra; a lista pode estar vazia ou sem canal, o título não muda.
+  {
+    path: "/configuracoes/whatsapp/contatos-ignorados",
+    name: "configuracoes-whatsapp-contatos-ignorados",
+    sessionMarker: "configuracoes",
+    contentMarker: "A IA nunca responde",
+  },
   {
     path: "/configuracoes/conversas",
     name: "configuracoes-conversas",

@@ -772,6 +772,7 @@ export function ImportRunScreen({
           setReviewCategory(null);
           setReadToken((value) => value + 1);
         }}
+        readyCount={progress.counts.imported}
         sessionId={session.sessionId}
       />
     );

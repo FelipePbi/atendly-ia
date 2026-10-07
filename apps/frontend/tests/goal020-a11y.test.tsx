@@ -337,27 +337,23 @@ describe("conflitos por item", () => {
     return { user, ...result };
   }
 
-  test("lista de categorias com conflito sem violação de acessibilidade", async () => {
+  test("lista de cartões de conflito sem violação de acessibilidade", async () => {
     const { container } = await openConflicts();
 
-    await screen.findByRole("heading", { name: "Itens que precisam da sua decisão" });
+    await screen.findByRole("heading", { name: "1 registro precisa da sua decisão" });
     await expectNoA11yViolations(container);
   });
 
-  test("item expandido: grupo de decisão alcançável por teclado e sem violação", async () => {
+  test("cartão aberto: as decisões são alcançáveis por teclado e sem violação", async () => {
     const { container, user } = await openConflicts();
 
-    await user.click(await screen.findByRole("button", { name: /serviços/ }));
-    await user.click(await screen.findByRole("button", { name: "Resolver" }));
-
-    const group = screen.getByRole("group", {
-      name: "O que fazer com este item?",
-    });
-    const includeOption = within(group).getByRole("radio", {
-      name: "Incluir mesmo assim",
-    });
-    await tabUntilFocused(user, includeOption);
-    expect(includeOption).toHaveFocus();
+    await screen.findByRole("heading", { name: "1 registro precisa da sua decisão" });
+    const keep = await screen.findByRole("button", { name: "Criar outro serviço" });
+    await tabUntilFocused(user, keep);
+    expect(keep).toHaveFocus();
+    const exclude = screen.getByRole("button", { name: "Não importar" });
+    await tabUntilFocused(user, exclude);
+    expect(exclude).toHaveFocus();
 
     await expectNoA11yViolations(container);
   });

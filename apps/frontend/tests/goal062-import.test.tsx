@@ -172,11 +172,10 @@ async function openAvailabilityConflict(user: ReturnType<typeof userEvent.setup>
   await user.click(
     await screen.findByRole("button", { name: "Revisar conflitos" }),
   );
-  await user.click(
-    await screen.findByRole("button", { name: /horários de atendimento/ }),
-  );
-  await screen.findByRole("heading", { name: "horários de atendimento" });
-  await user.click(await screen.findByRole("button", { name: "Resolver" }));
+  // O primeiro cartão sem decisão já abre aberto (2.I6): sem a lista de
+  // categorias nem o "Resolver" de antes.
+  await screen.findByRole("heading", { name: "1 registro precisa da sua decisão" });
+  await screen.findByText("Horários atuais");
 }
 
 beforeEach(() => {

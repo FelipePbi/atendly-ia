@@ -8611,3 +8611,160 @@ Os arquivos mudados são os do §1 e do §2 do Goal e os testes em `apps/schedul
 - O deploy real da migration e a leitura de um banco com dados reais: nenhum banco com dados reais foi migrado.
 - A contagem de testes por passo de `validate:core` e de `validate:integration` (ver "O que não foi contado").
 - Os controles negativos não foram refeitos na WU-12; valem os da WU-03, sem edição de código depois.
+
+## Os conflitos da importação do onboarding iguais ao protótipo, do Goal137
+
+Rodada 1, 2026-10-07, na worktree `goal-137`. Baseline `b119baf`. **Rodada 1:** as três capturas da baseline, a lista única de cartões, o mapeamento das decisões, os textos, `readyCount`, o CSS, os testes `goal137` da tela e os ajustes dos testes existentes (WU-01); o alvo 2.I6 e os testes da captura (WU-02); o `visual:compare`, as medidas, a regressão e os dez controles negativos (WU-03); os gates do IA Loop sobre a árvore final (WU-04 a WU-11, todos com o mesmo `codeFingerprint` `code-v1:1145e3bf01d52121d824bdf991bf6ed97d23a5b63784eb877f47949821c62045` e `attemptId` `a1`, ou seja, uma execução cada, sem retentativa do harness); estes registros (WU-12); e `git diff --check` depois deles (WU-13, mesmo `codeFingerprint`, `attemptId` `a1`). Só há a rodada 1: nenhum número abaixo é de outra rodada. O Goal foi aceito na rodada 1 ([review137](reviews/137-review.md)), sem blocker.
+
+### Contagens
+
+| Gate | Comando | Resultado (rodada 1) | Quem obteve |
+| --- | --- | --- | --- |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0, 1,7 s, sem erro | IA Loop, WU-04 |
+| Lint do frontend | `npm run lint`, ou seja, `eslint src tests --max-warnings=0` | saída 0, 17,3 s, 0 avisos | IA Loop, WU-05 |
+| Testes `goal137` | `npx vitest run goal137` | saída 0, 2 arquivos e **78** testes passando: `goal137-conflitos.test.tsx` 63 (WU-01) e `goal137-alvo-captura.test.ts` 15 (WU-02) | IA Loop, WU-06 |
+| Testes do frontend | `npm test` | saída 0, **200** arquivos e **2897** testes passando, 0 falhas, 51 s (a baseline aceita é 198 e 2819: +2 arquivos e +78 testes, exatamente os de `goal137`). Na WU-01, antes do arquivo da captura, o Developer viu 199 e 2881 | IA Loop, WU-07; Developer, WU-01 |
+| Testes da captura | `node --test scripts/tests/visual-responses.test.mjs` | **63** testes passando, 0 falhas (a baseline é 62: +1, o teste do 2.I6); de novo 63 de 63 depois dos controles negativos (WU-03) | Developer, WU-02 e WU-03; dentro do `test:gate` da WU-08 |
+| `test:gate` | `npm run test:gate` | saída 0, **296** testes, 296 passando, 0 falhas, 0 pulados, 1,2 s (a baseline é 295: +1, o teste novo de `visual-responses.test.mjs`) | IA Loop, WU-08 |
+| `validate:core` | `npm run validate:core` | saída 0, 112 s, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, que só tem a suíte de integração, rodada no `validate:integration`; `test:health-worker`, pacote sem suíte, só a checagem de sintaxe). Os passos incluem os `build:*`, `test:ai-orchestrator`, `test:scheduling-service`, `test:frontend`, `test:gate-scripts`, `audit:static` e `repro:a03-contract-drift`. A auditoria estática teve `production_health` pulada (pede `PRODUCTION_HEALTH_TARGETS`) | IA Loop, WU-09 |
+| `validate:ui` | `npm run validate:ui` | saída 0, 44,9 s, **169 passed**, 21 skipped, retentativas **0** ("every test passed on its first attempt"); a baseline é 169 passed e 21 pulados | IA Loop, WU-10 |
+| `validate:integration` | `npm run validate:integration` | saída 0, 756 s, 36 passos, **36 passaram**, 0 falharam, 0 pulados, contra `127.0.0.1:55500/ia_bff_test`. O gate autenticado (`rehearse:goal033-authenticated-ui`) deu **305 passed** em 10,7 min e retentativas **0** ("every test passed on its first attempt"); a baseline é 305 sem retentativa. Dentro dele, `test:scheduling-integration` com saída 0 | IA Loop, WU-11 |
+| `git diff --check` | `git diff --check` | saída 0, sem erro de espaço em branco, sobre a árvore com estes registros (WU-12); na WU-01 e na WU-02 também saída 0, só com o aviso de LF/CRLF do `.gitattributes`. A WU-13 do IA Loop o rodou de novo depois destes registros: saída 0, sem saída | Developer, WU-01, WU-02 e WU-12; IA Loop, WU-13 |
+
+**O que não foi contado.** O relatório que o IA Loop guarda de `validate:core` e de `validate:integration` omite o meio da saída, então **não há contagem de testes por passo** (por exemplo, quantos testes tem `test:scheduling-service`, `test:frontend` ou `test:scheduling-integration`); o que vale deles é a saída 0 e os passos passando. O Goal137 não tocou o Scheduling, o BFF nem o contrato, então as contagens de unidade (**41** arquivos e **571** testes) e de integração (**21** e **161**) do Scheduling são as do Goal136, e o Developer não as refez. A contagem do frontend dentro de `test:frontend` do `validate:core` não foi guardada; a contagem acima é a do `npm test` da WU-07.
+
+### Gate autenticado
+
+O gate autenticado deu **305 passed** e 0 retentativas na árvore final (WU-11), igual à baseline. A WU-01 repetiu a busca da evidência 9 do Goal em `apps/frontend/e2e/authenticated-matrix.spec.ts` por "Revisar conflitos", "precisam da sua decisão" e "Resolver": **zero ocorrências em cada termo**, e uma busca mais larga em `e2e/` e `scripts/` também deu zero. O arquivo **não foi alterado**: a conta do gate não tem sessão de importação, `ONBOARDING_ROUTES` mede `/onboarding/importacao` na origem (D-119 (f)), e a tela de conflitos não é alcançada por ele. Nenhum ajuste do gate foi necessário, e nenhuma asserção dele foi afrouxada.
+
+O tipo `ImportItem` do frontend já trazia `candidates` e `proposedService` (conferido em `node_modules/@avenly-ia/public-api-contract/dist/schemas.d.ts`), então o pacote do contrato **não foi reconstruído** nem reinstalado (lição 6 do Goal).
+
+### Controles negativos
+
+Todos na rodada 1 (WU-03), depois da última edição de código da tela (`ImportConflictsScreen.tsx`, `labels.ts` e o CSS) e sem edição de código depois. Cada um editou o arquivo, rodou o teste, reprovou e foi revertido por cópia do backup (em `E:\Projetos\baseline-137\neg-backup`, fora do repositório, com o script `neg.sh` e um log por controle), com `cmp` igual ao backup (`CMP_IGUAL`). As mensagens abaixo são as que a WU-03 registrou da saída do `vitest` e do `node --test`; a WU-12 não os refez. Comando base: `npx vitest run tests/goal137-conflitos.test.tsx` (em `apps/frontend`), ou `tests/goal137-alvo-captura.test.ts` nos controles (i) e (j).
+
+| Controle | Edição | Teste que reprovou | Mensagem de asserção |
+| --- | --- | --- | --- |
+| (a) sem alvo | `ImportConflictsScreen.tsx`: "Manter o da Avenly" envia `KEEP_EXISTING` sem `targetInternalId` | `goal137-conflitos.test.tsx`: `'Manter o da Avenly' envia KEEP_EXISTING com o candidato...` e `SERVICE_DURATION_MISSING com candidato` | `AssertionError: expected [ 'session-1', 's1', …(1) ] to deeply equal [ 'session-1', 's1', { …(2) } ]` (falta `"targetInternalId": "svc-1"`) e `AssertionError: expected { decision: 'KEEP_EXISTING' } to deeply equal { decision: 'KEEP_EXISTING', …(1) }` |
+| (b) decisão trocada | `ImportConflictsScreen.tsx`: "Criar outro serviço" envia `KEEP_EXISTING` | `goal137-conflitos.test.tsx`: `'Criar outro serviço' envia CREATE_NEW sem alvo` (também em "dois candidatos: 'Criar outro serviço' funciona sem escolha" e "decidir o último deixa todos decididos") | `AssertionError: expected { decision: 'KEEP_EXISTING' } to deeply equal { decision: 'CREATE_NEW' }` |
+| (c) juntar sem juntar | `ImportConflictsScreen.tsx`: "Sim, juntar" envia `CREATE_NEW` | `goal137-conflitos.test.tsx`: `'Sim, juntar' envia MERGE_WITH_EXISTING com o candidato...` e o de dois candidatos | `AssertionError: expected [ 'session-1', 'c1', { …(2) } ] to deeply equal [ 'session-1', 'c1', { …(2) } ]` e `AssertionError: expected { decision: 'CREATE_NEW', …(1) } to deeply equal { …(2) }` |
+| (d) identificador de volta | `ImportConflictsScreen.tsx`: o campo "Identificador do cadastro existente" no cartão do cliente | `goal137-conflitos.test.tsx`: `nenhum campo do identificador, nenhum Resolver…`, nas duas molduras (`tests/goal137-conflitos.test.tsx:332`) | `AssertionError: expected <input type="text"></input> to be null` |
+| (e) todos abertos | `ImportConflictsScreen.tsx`: `open={!records[item.id]}`, todos os cartões sem decisão abertos | `goal137-conflitos.test.tsx`, **9** reprovaram; o central, `só o primeiro abre, e o outro é um botão fechado com o título e o motivo no nome` | `TestingLibraryElementError: Found multiple elements with the role "button" and name "Manter o da Avenly"` |
+| (f) preço como duração | `labels.ts`: "serviço · duração diferente" quando só o preço difere | `goal137-conflitos.test.tsx`: `duração, preço, os dois, e o valor desconhecido da origem nunca diverge` e `preço fixo da origem contra um cadastro sem preço fixo diverge` | `AssertionError: expected 'serviço · duração diferente' to be 'serviço · preço diferente' // Object.is equality` |
+| (g) duração desconhecida | `labels.ts`: duração desconhecida da origem conta como diferente | `goal137-conflitos.test.tsx`: `duração, preço, os dois, e o valor desconhecido da origem nunca diverge` | `AssertionError: expected 'serviço · preço e duração diferentes' to be 'serviço · preço diferente' // Object.is equality` |
+| (h) decidido some | `ImportConflictsScreen.tsx`: o cartão decidido sai da lista (`return null`) | `goal137-conflitos.test.tsx`, **16** reprovaram; o central, `depois da decisão o próximo abre sozinho, e o decidido fica com o resultado e sem ações` | `TestingLibraryElementError: Unable to find role="status"` |
+| (i) passo que toca decisão | `targets.json`: segundo passo no 2.I6, `clickRole` em "Manter o da Avenly" | **os dois testes.** `goal137-alvo-captura.test.ts`: `só tem o clickRole no botão Revisar conflitos: nenhum passo grava nem toca decisão ou Continuar`; e `node --test scripts/tests/visual-responses.test.mjs` (62 passaram, 1 falhou): `targets.json: o 2.I6 só declara os quatro GET da sessão de conflitos e só clica em "Revisar conflitos"` | `AssertionError: expected [ { clickRole: { …(2) } }, …(1) ] to deeply equal [ { clickRole: { …(2) } } ]` e `AssertionError [ERR_ASSERTION]: 2.I6: só o clique em Revisar conflitos` |
+| (j) contagem da prévia | `targets.json` (linha 796): `needsReviewCount` de `SERVICE` na prévia do 2.I6 de 2 para 3 | `goal137-alvo-captura.test.ts`, **3** reprovaram | `AssertionError: expected { SERVICE: [ 12, 3, true ], …(4) } to deeply equal { SERVICE: [ 12, 2, true ], …(4) }`; `AssertionError: expected { SERVICE: 2, CUSTOMER: 1, …(3) } to deeply equal { SERVICE: 3, CUSTOMER: 1, …(3) }`; `AssertionError: expected [ { id: '2301', …(14) }, …(1) ] to have a length of 3 but got 2` |
+
+**Duas ressalvas sobre a ordem.** (1) O controle (d) **não reprovou na primeira tentativa** (63 passaram): a asserção de ausência do campo só olhava o cartão aberto na abertura (o do serviço), e o campo foi posto no cartão do cliente. A WU-03 reforçou o teste `nenhum campo do identificador, nenhum Resolver…` (abre o cartão do cliente e confere de novo o rótulo e o `textbox`), conferiu que os 63 testes continuam passando sem a mutação e repetiu o controle, que reprovou nas duas molduras; a reprovação acima é a da repetição. (2) Essa edição do teste aconteceu depois dos controles (a), (b) e (c) e antes dos controles (e) a (j); os três primeiros não foram refeitos depois dela, e a edição só acrescentou asserções ao teste do campo, sem tocar `src/`. Depois de todos os controles: `goal137-conflitos` e `goal137-alvo-captura` 78 de 78, `visual-responses.test.mjs` 63 de 63 e o lint do teste alterado limpo.
+
+### `visual:compare` do 2.I6
+
+Comando: `npm run visual:compare -- --target 2.I6` (WU-03, saída 0, sobre a árvore final). Percentual de pixels diferentes por device:
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| 2.I6 | 4,5% | 1,5% | 1,8% | 1,9% |
+
+A WU-01 iterou o CSS com um alvo **temporário** em `targets.json`, que ela reverteu (`git checkout`) e que deu os mesmos percentuais; o alvo real é o da WU-02. Os **quatro** `side-by-side.png` (protótipo × app) foram abertos pela WU-03 (três também pela WU-01; o de tablet paisagem só pela WU-03), em `apps/frontend/e2e-results/visual/onboarding-2-importacao-2.I6-{mobile,tablet-portrait,tablet-landscape,desktop}/`.
+
+**Medidas por DOM** (o quadro → o app, em px, medidas pela WU-03 num script temporário que copiava `visual-compare.mjs` com um gancho de medição e foi apagado; os JSON ficam em `E:\Projetos\baseline-137\m137`). A diferença é a do app menos a do quadro, e tudo que passa de 1 px é divergência declarada:
+
+| Medida | mobile (402 × 812) | tablet retrato (768 × 1024) | tablet paisagem (1024 × 768) | desktop (1366 × 768) |
+| --- | --- | --- | --- | --- |
+| Topo do título | 83,6 → 84,0 | 124,1 → 124,0 | 124,1 → 124,0 | 123,6 → 124,0 |
+| Topo da descrição | 158,8 → 159,2 | 165,7 → 165,6 | 165,7 → 165,6 | 165,2 → 165,6 |
+| Largura do conteúdo (título, descrição, cartão, "Continuar") | 362 → 362 | 560 → 560 | 520 → 520 | 560 → 560 |
+| Topo do primeiro cartão | 215,4 → 215,8 | 202,0 → 201,9 | 222,3 → 222,2 | 201,5 → 201,9 |
+| Altura do primeiro cartão | 153 → 207 (+54, declarada) | 153 → 207 (+54, declarada) | 153 → 207 (+54, declarada) | 153 → 207 (+54, declarada) |
+| Topo das duas peças | 264,4 → 264,8 | 251,0 → 250,9 | 271,3 → 271,2 | 250,5 → 250,9 |
+| Largura × altura de cada peça | 160 × 58 → 160 × 58 | 259 × 58 → 259 × 58 | 239 × 58 → 239 × 58 | 259 × 58 → 259 × 58 |
+| Espaço entre as peças | 8 → 8 | 8 → 8 | 8 → 8 | 8 → 8 |
+| Altura dos botões do cartão | 42 → 42 | 42 → 42 | 42 → 42 | 42 → 42 |
+| Altura do cartão fechado | 67 → 67 | 67 → 67 | 67 → 67 | 67 → 67 |
+| Topo de "Continuar" | 687,6 → 688,0 | 914,1 → 914,0 | 658,1 → 658,0 | 657,6 → 658,0 |
+| Altura de "Continuar" | 52 → 52 | 52 → 52 | 52 → 52 | 52 → 52 |
+| Topo da nota | 749,6 → 750,0 | 976,1 → 976,0 | 720,1 → 720,0 | 719,6 → 720,0 |
+
+Os botões do cartão têm a largura da peça (160, 259, 239 e 259 px), como o "Sim, juntar" do quadro. O **estilo computado** do cartão (preenchimento de 16 px, raio de 16 px, borda de 1 px `#E5DED4`, fundo `#FFFDFA`), do cartão fechado (`14px 16px`), da peça (`10px 12px`, raio de 12 px, borda de 1 px `#D6CEC2`) e de "Continuar" (raio de 14 px, fundo `#0F5F63`, 16 px 600) é igual ao do quadro. As únicas diferenças de estilo computado são o `box-sizing` (os retângulos saem iguais), o preenchimento horizontal interno de 6 px dos botões e de "Continuar" (retângulo igual) e a borda neutra da peça "Avenly" sem decisão, que é divergência declarada. O eyebrow só tem medida no mobile e no tablet retrato (nos outros dois o seletor pegou o item da sidebar). Nenhuma correção de CSS ou de TSX foi necessária depois das medidas.
+
+Divergências que restam, todas declaradas em D-151 ou nas `notes` do alvo:
+
+- o cartão do serviço aberto e sem decisão, 54 px mais alto que o "Corte feminino" decidido do quadro (os botões "Manter o da Avenly" e "Criar outro serviço", "Não importar este item" e as peças neutras), o que desloca o "Escova" e o cliente (a altura de cada cartão fechado é a mesma, 67 px);
+- a ordem dos cartões e o cliente fechado; a pergunta do cliente; "1.843" no lugar de "1.837";
+- o chevron e o "Sair" do topo, o preenchimento dos segmentos da barra, o item da sidebar e a barra de status do iPhone (D-104, D-145);
+- a sidebar do tablet paisagem e do desktop 1 px mais baixa no diff, como nos outros quadros da importação (o Goal não a tocou).
+
+Na varredura dos quatro `side-by-side.png`, nada além disso. A WU-01 tinha medido o cartão fechado "Escova" em 61 px por varredura de pixels do mobile e a WU-03 mediu 67 px por DOM, igual ao do quadro; os dois métodos são diferentes, e a medida de referência é a do DOM.
+
+### Regressão dos 44 `app.png`
+
+**Ruído da baseline, medido antes de editar (WU-01).** `npm run visual:compare -- --target 2.I1,2.I2,2.I3,2.I4,2.I5,2.I7,2.I8,2.I9,2.I10,I1,I2` rodado **três vezes** na baseline `b119baf` (as três com saída 0), 44 `app.png` cada, em `E:\Projetos\baseline-137\cap1`, `cap2` e `cap3` (fora do repositório). Entre as capturas, 29 dos 44 saíram iguais byte a byte entre `cap1` e `cap3`, 31 entre `cap1` e `cap2` e 33 entre `cap2` e `cap3`. Tabela por imagem das que diferem (pixels diferentes e delta máximo por canal); as imagens que não aparecem foram iguais nos três pares:
+
+| Imagem | cap1 × cap2 | cap1 × cap3 | cap2 × cap3 |
+| --- | --- | --- | --- |
+| I1 Mais, desktop | igual | 43 px, Δ1 | 43 px, Δ1 |
+| I1 Mais, tablet paisagem | 66 px, Δ4 | 14 px, Δ1 | 52 px, Δ4 |
+| I2 Mais, desktop | 20 px, Δ1 | 43 px, Δ32 | 23 px, Δ32 |
+| I2 Mais, tablet paisagem | 66 px, Δ4 | 78 px, Δ4 | 12 px, Δ1 |
+| 2.I1, mobile | igual | 13 px, Δ2 | 13 px, Δ2 |
+| 2.I2, desktop | 19 px, Δ1 | 19 px, Δ1 | igual |
+| 2.I2, mobile | 31 px, Δ1 | 31 px, Δ1 | igual |
+| 2.I2, tablet retrato | igual | 19 px, Δ1 | 19 px, Δ1 |
+| 2.I4, desktop | 33 px, Δ1 | 55 px, Δ1 | 22 px, Δ1 |
+| 2.I4, tablet paisagem | 33 px, Δ1 | igual | 33 px, Δ1 |
+| 2.I4, tablet retrato | 54 px, Δ1 | 22 px, Δ1 | 32 px, Δ1 |
+| 2.I5, tablet retrato | 40 px, Δ1 | 40 px, Δ1 | igual |
+| 2.I7, desktop | igual | 9 px, Δ1 | 9 px, Δ1 |
+| 2.I7, tablet retrato | 15 px, Δ1 | 15 px, Δ1 | igual |
+| 2.I8, desktop | 19 px, Δ1 | 19 px, Δ1 | igual |
+| 2.I8, mobile | 35 px, Δ1 | 35 px, Δ1 | igual |
+| 2.I8, tablet paisagem | 19 px, Δ1 | igual | 19 px, Δ1 |
+
+Pior caso de cada imagem que varia: 78 px (I2 Mais, tablet paisagem) e Δ32 (I2 Mais, desktop, 43 px); as outras ficam em 66 px ou menos e Δ4 ou menos. A tabela completa, com os três pares das 44 imagens, está em `E:\Projetos\baseline-137\noise-baseline-137.tsv`.
+
+**Depois das edições (WU-03).** `npm run visual:compare -- --target 2.I1,2.I2,2.I3,2.I4,2.I5,2.I7,2.I8,2.I9,2.I10,I1,I2` (saída 0) sobre a árvore final, comparado com as três capturas. Resultado: **40** de 44 iguais por `cmp` a pelo menos uma das três capturas da baseline; **1** dentro do ruído medido (I2 do Mais, desktop: 12 a 55 px, Δ1 a Δ32, contra o ruído da baseline de 43 px e Δ32); **3** fora do envelope das três capturas, que a WU-03 investigou com mais execuções (tabela abaixo). Nenhuma imagem mudou por causa da tela nova. A tabela por imagem, com o ruído da baseline, a árvore nova contra cada captura e o veredito, está em `E:\Projetos\baseline-137\regressao-wu03.tsv`; as 40 imagens iguais a pelo menos uma captura estão marcadas ali com o veredito "idêntico a uma captura da baseline".
+
+| Imagem | Ruído da baseline | Árvore nova × cap1 / cap2 / cap3 | O que a WU-03 fez e o veredito |
+| --- | --- | --- | --- |
+| I2 do Mais, desktop | 43 px, Δ32 | 12 px Δ1 / 32 px Δ1 / 55 px Δ32 | dentro do ruído medido |
+| 2.I7, desktop | 9 px, Δ1 | 37 px Δ1 / 37 px Δ1 / 46 px Δ1 | fora das três; 3 re-execuções da árvore nova: `rr1` igual a `cap3`, `rr2` igual a `cap1` e a `cap2`, ou seja, a árvore nova **reproduz os bytes da baseline**; a variante é de 37 a 46 px e Δ1 no botão "Conectar outra conta" (x 1001–1172, y 696–735), que o Goal não tocou: ruído |
+| 2.I7, tablet paisagem | 0 (as três iguais) | 37 px Δ1 nas três | fora das três; `rr3` igual às três capturas; variante de 37 px e Δ1 no mesmo botão (x 770–941, y 696–735): ruído |
+| 2.I1, tablet retrato | 0 (as três iguais) | 19 px Δ14 nas três | fora das três; a árvore nova deu a mesma variante nas 4 execuções (19 px, Δ14, no canto e no visto de um cartão, x 623–662, y 183–218); a WU-03 rodou a **árvore da baseline** (os 5 arquivos de `src` trocados por `git show HEAD:`, restaurados com `cmp` igual): uma execução saiu `cmp` igual às três capturas e a outra saiu com **135 px de diferença**; a tela varia sem as mudanças do Goal, e nenhuma regra de CSS nova casa fora de `:has(.imports-conflicts)`: ruído |
+
+**Conclusão e limite.** O envelope de três capturas foi **estreito** para 2.I1 em tablet retrato e para 2.I7 em desktop e tablet paisagem (a baseline deu 0 ou 9 px entre as três, e execuções seguintes da mesma árvore deram variantes de 37 a 135 px); por isso o veredito de "ruído" dessas três imagens se apoia nas execuções adicionais (`rr1` a `rr3`, `ex1` e `ex2`, em `E:\Projetos\baseline-137`), não só nas três capturas. Duas execuções adicionais pegaram o limite de login do BFF (429) e foram repetidas. Na WU-01, uma regressão rápida logo depois das edições (antes da WU-03) mostrou 18 dos 44 diferentes de `cap1`, todos com 78 px ou menos e Δ1 a Δ5, salvo `2.I1` em tablet paisagem (15 px, Δ35), que ao ser repetido saiu igual à baseline; essa é uma execução anterior à da WU-03 e **não** a substitui.
+
+### Testes ajustados
+
+Cada ajuste só troca o texto ou a forma que este Goal muda (as duas telas que viram uma lista, "Resolver", o `fieldset`, o campo do identificador, "Cancelar", "Confirmar decisão", "Voltar" e o item decidido que fica). Nenhum afrouxou asserção sobre os pedidos, o corpo da decisão, a chave, o guarda, a regra do grupo dos horários, `IMPORT_ITEM_ALREADY_DECIDED` ou as outras telas.
+
+1. `goal020-a11y.test.tsx`: "lista de categorias com conflito sem violação" virou "lista de cartões de conflito sem violação" (o título "Itens que precisam da sua decisão" virou "1 registro precisa da sua decisão"); o teste do grupo de rádios ("O que fazer com este item?", "Incluir mesmo assim") virou o teste do teclado e do axe sobre os botões do cartão aberto ("Criar outro serviço", "Não importar"). A asserção removida provava que o grupo de rádios da decisão era alcançável por teclado; a prova de que cada decisão é alcançável por teclado continua no cartão novo, e a de ausência de violação continua no axe do mesmo teste.
+2. `goal020-import-conflicts.test.tsx`: o fixture ganhou `candidates` e `proposedService`; o teste de `MERGE_WITH_EXISTING` com o identificador digitado virou `KEEP_EXISTING` com o `targetInternalId` do candidato e sem campo de identificador; os testes de "Já decidido" e de axe passaram a usar o cartão aberto. A asserção removida provava que o identificador digitado ia no pedido; o alvo no pedido continua provado aqui (o `targetInternalId` do candidato) e em `goal137-conflitos` (cada botão, nas duas molduras).
+3. `goal020-import-run.test.tsx`, `goal020-reachability.test.tsx` e `goal133-andamento.test.tsx`: a asserção do título "Itens que precisam da sua decisão" (e dos botões `/serviços/` ou `/clientes/`) passou para o título "N registros precisam da sua decisão"; "Voltar" virou "Continuar". O teste do `import-run` confere também a descrição com `readyCount` 42. As asserções removidas provavam a lista de categorias, que acabou; o título, as leituras e o `onBack` continuam provados.
+4. `goal020-shell-invariant.test.tsx`: o laço de expandir, alternar e cancelar virou abrir um cartão e depois o outro (o fixture ganhou um segundo item); "Voltar" virou "Continuar". A invariante do shell (a moldura não muda enquanto a tela abre e fecha cartões) continua afirmada.
+5. `goal062-import.test.tsx`: `openAvailabilityConflict` não passa mais pela categoria nem por "Resolver" (o primeiro cartão abre aberto). As asserções de pedido (`INCLUDE` e `EXCLUDE`) e as de grade ficaram iguais.
+6. `goal120-importacao-recusas.test.tsx`: o caminho "categoria, Resolver, radio, Confirmar decisão" virou clicar "Não importar" (a mesma decisão, `EXCLUDE`), nos dois testes. As asserções de `IMPORT_ITEM_ALREADY_DECIDED` e de erro genérico ficaram iguais.
+7. `goal135-pendencias.test.tsx`: três asserções da "lista de categorias" passaram para o título e os cartões; o teste "sem a prop nova abre na lista de categorias" virou "mostra os itens de todas as categorias, uma leitura por categoria"; o teste de `initialCategory` troca "Voltar" por "Continuar". Cada asserção removida provava a tela de categorias, que acabou; o título, as leituras e o `onBack` continuam provados.
+8. `goal132-alvos-captura.test.ts`, `goal133-alvo-captura.test.ts`, `goal134-alvo-captura.test.ts` e `goal135-alvos-captura.test.ts` (WU-02): a lista fechada de donos de `responses` passou a incluir o 2.I6. Nenhuma asserção afrouxada; a lista nova está afirmada também em `visual-responses.test.mjs` e em `goal137-alvo-captura.test.ts`.
+
+`tests/goal137-conflitos.test.tsx` e `tests/goal137-alvo-captura.test.ts` são arquivos **novos** deste Goal, não testes existentes; `scripts/tests/visual-responses.test.mjs` ganhou o teste do 2.I6 e a lista dos oito donos (62 para 63).
+
+### Escopo
+
+Os arquivos mudados são os do §1 e do §2 do Goal, os testes e os registros: `apps/frontend/src/features/imports/ImportConflictsScreen.tsx` (reescrita), `labels.ts`, `ImportPreviewScreen.tsx` e `ImportRunScreen.tsx` (só `readyCount`), `apps/frontend/src/shared/styles/avenly-imports.css`, `apps/frontend/e2e/visual/targets.json` (100 alvos), `scripts/tests/visual-responses.test.mjs`, os testes de `apps/frontend/tests/` listados acima e os dois novos de `goal137`, e `DECISIONS.md`, `CURRENT_STATE.md` e este arquivo. `authenticated-matrix.spec.ts`, o BFF, o Scheduling, o contrato, `PUBLIC_API_V1.md`, o banco, a semente da captura e do gate, `goals/`, `reviews/`, `MIGRATION_STATUS.md` e `MASTER_PLAN.md` não foram alterados.
+
+### Desvios do texto do Goal, para o review
+
+- **Peça "Minha Agenda" destacada em `CREATE_NEW` de serviço.** O Goal fixa o estilo "Avenly" só para a peça mantida; o Developer destacou também a "Minha Agenda" quando a decisão é criar outro serviço, porque o serviço novo entra com os valores da origem. Está em D-151, item 10, com a divergência declarada. O nome do candidato só entra na peça quando difere do nome do item.
+- **`DECISION_LABELS`, `decisionsForCategory` e `decisionRequiresTarget` removidos**, como o Goal previa para o caso de ficarem sem consumidor (grep em `src` e `tests`).
+- **Tabela de ruído com envelope estreito.** O envelope de três capturas não bastou para 2.I1 em tablet retrato e para 2.I7 em desktop e tablet paisagem; o veredito dessas três se apoia nas execuções adicionais acima.
+- **Controle (d)** exigiu reforçar o teste (acima).
+- **Quatro testes de captura fora da lista de arquivos esperados da WU-02** (`goal132`, `goal133`, `goal134` e `goal135`), pelo ajuste da lista de donos.
+- **CRLF.** `ImportConflictsScreen.tsx` está em LF na árvore de trabalho e o Git avisa que o converterá para CRLF (`.gitattributes`); não é erro de espaço em branco.
+
+### Não executado
+
+- A tela num aparelho real, e a decisão enviada a um Scheduling real a partir da tela nova (a captura não grava; o envio é provado em jsdom).
+- A altura renderizada, em px, da ação de texto "Não importar este item": vem da regra de CSS (`padding: 12px 8px` e `margin: -12px 0`), o jsdom não faz layout e o gate autenticado não alcança a tela.
+- A contagem de testes por passo de `validate:core` e de `validate:integration` (ver "O que não foi contado").
+- Os controles negativos não foram refeitos na WU-12; valem os da WU-03, sem edição de código depois.

@@ -408,9 +408,10 @@ describe.each<ImportsFrame>(["onboarding", "platform"])(
 
       await user.click(await screen.findByRole("button", { name: "Nomear Cliente sem nome (origem #1042)" }));
       // Abre direto na categoria, sem passar pela lista.
+      // O título conta só a categoria do item.
       expect(
-        screen.queryByRole("heading", { name: "Itens que precisam da sua decisão" }),
-      ).not.toBeInTheDocument();
+        await screen.findByRole("heading", { name: "1 registro precisa da sua decisão" }),
+      ).toBeInTheDocument();
       await waitFor(() =>
         expect(listImportItems).toHaveBeenCalledWith(
           "session-1",
@@ -420,23 +421,23 @@ describe.each<ImportsFrame>(["onboarding", "platform"])(
         ),
       );
       const reads = getImportProgress.mock.calls.length;
-      await user.click(await screen.findByRole("button", { name: "Voltar" }));
+      await user.click(await screen.findByRole("button", { name: "Continuar" }));
 
       await settled();
       await waitFor(() => expect(getImportProgress.mock.calls.length).toBeGreaterThan(reads));
     });
 
-    test("'Revisar pendências' abre a lista de categorias", async () => {
+    test("'Revisar pendências' abre a lista única dos itens em revisão", async () => {
       const user = userEvent.setup();
       renderRun(frame);
 
       await user.click(await screen.findByRole("button", { name: "Revisar pendências" }));
 
       expect(
-        await screen.findByRole("heading", { name: "Itens que precisam da sua decisão" }),
+        await screen.findByRole("heading", { name: "3 registros precisam da sua decisão" }),
       ).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /serviços/ })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /clientes/ })).toBeInTheDocument();
+      expect(await screen.findByText("Escova")).toBeInTheDocument();
+      expect(screen.getByText("Design de sobrancelha")).toBeInTheDocument();
     });
 
     test("falha da leitura dos itens: nota com role=status, uma linha por categoria e ações livres", async () => {
@@ -453,7 +454,7 @@ describe.each<ImportsFrame>(["onboarding", "platform"])(
       expect(review).toBeEnabled();
       await user.click(review);
       expect(
-        await screen.findByRole("heading", { name: "Itens que precisam da sua decisão" }),
+        await screen.findByRole("heading", { name: "3 registros precisam da sua decisão" }),
       ).toBeInTheDocument();
     });
 
@@ -694,7 +695,8 @@ describe("o que não muda", () => {
     expect(listImportItems).not.toHaveBeenCalled();
   });
 
-  test("ImportConflictsScreen sem a prop nova abre na lista de categorias", async () => {
+  test("ImportConflictsScreen sem a prop nova mostra os itens de todas as categorias, uma leitura por categoria", async () => {
+    listImportItems.mockResolvedValue(pageOf("SERVICE", []));
     render(
       <ImportsFrameProvider frame="onboarding">
         <ImportConflictsScreen
@@ -706,9 +708,9 @@ describe("o que não muda", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "Itens que precisam da sua decisão" }),
+      screen.getByRole("heading", { name: "2 registros precisam da sua decisão" }),
     ).toBeInTheDocument();
-    expect(listImportItems).not.toHaveBeenCalled();
+    await waitFor(() => expect(listImportItems).toHaveBeenCalledTimes(1));
   });
 
   test("ImportConflictsScreen com initialCategory abre na categoria e voltar sai da tela", async () => {
@@ -727,7 +729,7 @@ describe("o que não muda", () => {
     );
 
     await waitFor(() => expect(listImportItems).toHaveBeenCalledTimes(1));
-    await user.click(await screen.findByRole("button", { name: "Voltar" }));
+    await user.click(await screen.findByRole("button", { name: "Continuar" }));
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 });

@@ -677,6 +677,304 @@
       ]
     },
     {
+      "code": "2.I6",
+      "file": "Onboarding-2-Importacao.dc.html",
+      "label": "Conflitos da importação",
+      "route": "/onboarding/importacao",
+      "account": "onboarding",
+      "notes": "O quadro mostra a revisão dos conflitos da importação; a conta de onboarding não tem sessão de importação, então a sessão READY (startedAt nulo, previewVersion 1, todas as categorias selected, 1.843 pendentes e 3 em revisão) e a prévia vêm de respostas fixas de GET /v1/calendar/imports e de GET /v1/calendar/imports/visual-compare-import-conflicts/preview, e os itens em revisão vêm de GET /v1/calendar/imports/visual-compare-import-conflicts/categories/SERVICE/items e de GET /v1/calendar/imports/visual-compare-import-conflicts/categories/CUSTOMER/items (sessionId igual no direito, na sessão, na prévia, nos caminhos e nas páginas), só no navegador da captura. A prévia tem as categorias do 2.I4 (12 serviços, 386 clientes, 42 agendamentos futuros, 1.400 atendimentos anteriores e 6 regras de horário, todas com sourceSupported true), com needsReviewCount 2 em SERVICE, 1 em CUSTOMER e 0 nas outras, e cada página traz tantos itens NEEDS_REVIEW quanto o needsReviewCount da categoria. Serviços: Corte feminino (candidato de 45 min, FIXED, R$ 90, ativo; proposto de 50 min, FIXED, R$ 95) e Escova (candidato de 40 min, FIXED, R$ 70, ativo; proposto de 50 min, FIXED, R$ 70), ambos SERVICE_MATCH_DIVERGENT; cliente: Ana Paula, CUSTOMER_MATCH_SIMILAR, com o candidato Ana P. Souza (só internalId e name). A tela só lê esses quatro GET e não chama nenhuma rota de escrita. Um só passo: clickRole em \"Revisar conflitos\", que só troca o modo da tela, sem pedido; nenhum passo grava e nenhum passo toca um cartão, um botão de decisão ou \"Continuar\". Divergências declaradas do Goal137: o cartão do serviço aberto e sem decisão na captura, no lugar do \"Corte feminino\" decidido do quadro, porque a decisão sai por POST e nenhum passo grava; os botões \"Manter o da Avenly\" e \"Criar outro serviço\", a ação \"Não importar este item\" e as duas peças com a borda neutra; a ordem dos cartões por categoria (os dois serviços e depois o cliente) e o cliente fechado na captura, por \"um por vez\"; a pergunta do cliente \"Nomes parecidos. São a mesma pessoa?\", no lugar da do quadro, que é o CUSTOMER_PHONE_SHARED que o Scheduling não põe em revisão; \"Os outros 1.843 já estão prontos.\" no lugar de \"1.837\", porque a soma conta as 6 regras de AVAILABILITY (como em D-147 e D-149); o preço como formatServicePrice o escreve, se não for \"R$ 90\"; a cor do título, porque avenly.css dá color: var(--fg) a todo h2 e o título recebe a cor do quadro explicitamente; a ReplaceAccountZone (\"Prefere conectar outra conta?\") abaixo do rodapé, que o quadro não mostra; o chevron do topo, que a moldura do onboarding não mostra nesta etapa (D-145); o preenchimento dos segmentos da barra do topo, derivado por chapterFraction, e o estado do item \"Sua agenda\" na sidebar (D-104); o \"Sair\" do topo abaixo de 1024 px e o do rodapé da sidebar (D-104); a barra de status e o indicador de início do iPhone, que não existem no app; sem as animações de entrada e as transições, porque a captura usa reducedMotion reduce.",
+      "steps": [
+        {
+          "clickRole": {
+            "role": "button",
+            "name": "Revisar conflitos"
+          }
+        }
+      ],
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports",
+          "json": {
+            "data": {
+              "right": {
+                "available": true,
+                "sessionId": "visual-compare-import-conflicts",
+                "completedAt": null
+              },
+              "session": {
+                "sessionId": "visual-compare-import-conflicts",
+                "status": "READY",
+                "previewVersion": 1,
+                "provider": "MINHA_AGENDA",
+                "sourceAccountId": "visual-compare-source",
+                "sourceAccountLabel": null,
+                "createdAt": "2026-10-06T12:00:00.000Z",
+                "startedAt": null,
+                "finishedAt": null,
+                "previewGeneratedAt": "2026-10-06T12:00:30.000Z",
+                "interrupted": false,
+                "lastError": null,
+                "counts": {
+                  "pending": 1843,
+                  "imported": 0,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 3
+                },
+                "categories": [
+                  {
+                    "category": "SERVICE",
+                    "pending": 10,
+                    "imported": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 2,
+                    "selected": true
+                  },
+                  {
+                    "category": "CUSTOMER",
+                    "pending": 385,
+                    "imported": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 1,
+                    "selected": true
+                  },
+                  {
+                    "category": "FUTURE_APPOINTMENT",
+                    "pending": 42,
+                    "imported": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "PAST_APPOINTMENT",
+                    "pending": 1400,
+                    "imported": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  },
+                  {
+                    "category": "AVAILABILITY",
+                    "pending": 6,
+                    "imported": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0,
+                    "selected": true
+                  }
+                ]
+              },
+              "history": null
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports/visual-compare-import-conflicts/preview",
+          "json": {
+            "data": {
+              "sessionId": "visual-compare-import-conflicts",
+              "previewVersion": 1,
+              "generatedAt": "2026-10-06T12:00:30.000Z",
+              "categories": [
+                {
+                  "category": "SERVICE",
+                  "sourceSupported": true,
+                  "limitationCode": null,
+                  "limitationDetail": null,
+                  "sourceReportedCount": 12,
+                  "readCount": 12,
+                  "discoveredCount": 12,
+                  "pendingCount": 10,
+                  "needsReviewCount": 2,
+                  "importedCount": 0,
+                  "skippedCount": 0,
+                  "failedCount": 0
+                },
+                {
+                  "category": "CUSTOMER",
+                  "sourceSupported": true,
+                  "limitationCode": null,
+                  "limitationDetail": null,
+                  "sourceReportedCount": 386,
+                  "readCount": 386,
+                  "discoveredCount": 386,
+                  "pendingCount": 385,
+                  "needsReviewCount": 1,
+                  "importedCount": 0,
+                  "skippedCount": 0,
+                  "failedCount": 0
+                },
+                {
+                  "category": "FUTURE_APPOINTMENT",
+                  "sourceSupported": true,
+                  "limitationCode": null,
+                  "limitationDetail": null,
+                  "sourceReportedCount": 42,
+                  "readCount": 42,
+                  "discoveredCount": 42,
+                  "pendingCount": 42,
+                  "needsReviewCount": 0,
+                  "importedCount": 0,
+                  "skippedCount": 0,
+                  "failedCount": 0
+                },
+                {
+                  "category": "PAST_APPOINTMENT",
+                  "sourceSupported": true,
+                  "limitationCode": null,
+                  "limitationDetail": null,
+                  "sourceReportedCount": 1400,
+                  "readCount": 1400,
+                  "discoveredCount": 1400,
+                  "pendingCount": 1400,
+                  "needsReviewCount": 0,
+                  "importedCount": 0,
+                  "skippedCount": 0,
+                  "failedCount": 0
+                },
+                {
+                  "category": "AVAILABILITY",
+                  "sourceSupported": true,
+                  "limitationCode": null,
+                  "limitationDetail": null,
+                  "sourceReportedCount": 6,
+                  "readCount": 6,
+                  "discoveredCount": 6,
+                  "pendingCount": 6,
+                  "needsReviewCount": 0,
+                  "importedCount": 0,
+                  "skippedCount": 0,
+                  "failedCount": 0
+                }
+              ]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports/visual-compare-import-conflicts/categories/SERVICE/items",
+          "json": {
+            "data": {
+              "sessionId": "visual-compare-import-conflicts",
+              "category": "SERVICE",
+              "total": 2,
+              "limit": 20,
+              "offset": 0,
+              "items": [
+                {
+                  "id": "2301",
+                  "category": "SERVICE",
+                  "externalId": "2301",
+                  "label": "Corte feminino",
+                  "status": "NEEDS_REVIEW",
+                  "reasonCode": "SERVICE_MATCH_DIVERGENT",
+                  "reasonDetail": "Esse serviço já existe na Avenly com outra duração ou outro preço.",
+                  "entityType": null,
+                  "internalId": null,
+                  "attemptCount": 0,
+                  "lastAttemptAt": null,
+                  "processedAt": null,
+                  "disappearedAt": null,
+                  "candidates": [
+                    {
+                      "internalId": "visual-compare-service-corte",
+                      "name": "Corte feminino",
+                      "durationMinutes": 45,
+                      "priceType": "FIXED",
+                      "price": 90,
+                      "active": true
+                    }
+                  ],
+                  "proposedService": {
+                    "durationMinutes": 50,
+                    "priceType": "FIXED",
+                    "price": 95
+                  }
+                },
+                {
+                  "id": "2302",
+                  "category": "SERVICE",
+                  "externalId": "2302",
+                  "label": "Escova",
+                  "status": "NEEDS_REVIEW",
+                  "reasonCode": "SERVICE_MATCH_DIVERGENT",
+                  "reasonDetail": "Esse serviço já existe na Avenly com outra duração ou outro preço.",
+                  "entityType": null,
+                  "internalId": null,
+                  "attemptCount": 0,
+                  "lastAttemptAt": null,
+                  "processedAt": null,
+                  "disappearedAt": null,
+                  "candidates": [
+                    {
+                      "internalId": "visual-compare-service-escova",
+                      "name": "Escova",
+                      "durationMinutes": 40,
+                      "priceType": "FIXED",
+                      "price": 70,
+                      "active": true
+                    }
+                  ],
+                  "proposedService": {
+                    "durationMinutes": 50,
+                    "priceType": "FIXED",
+                    "price": 70
+                  }
+                }
+              ]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports/visual-compare-import-conflicts/categories/CUSTOMER/items",
+          "json": {
+            "data": {
+              "sessionId": "visual-compare-import-conflicts",
+              "category": "CUSTOMER",
+              "total": 1,
+              "limit": 20,
+              "offset": 0,
+              "items": [
+                {
+                  "id": "1051",
+                  "category": "CUSTOMER",
+                  "externalId": "1051",
+                  "label": "Ana Paula",
+                  "status": "NEEDS_REVIEW",
+                  "reasonCode": "CUSTOMER_MATCH_SIMILAR",
+                  "reasonDetail": "Já existe um cliente com nome parecido.",
+                  "entityType": null,
+                  "internalId": null,
+                  "attemptCount": 0,
+                  "lastAttemptAt": null,
+                  "processedAt": null,
+                  "disappearedAt": null,
+                  "candidates": [
+                    {
+                      "internalId": "visual-compare-customer-ana",
+                      "name": "Ana P. Souza"
+                    }
+                  ]
+                }
+              ]
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
+    },
+    {
       "code": "2.I7",
       "file": "Onboarding-2-Importacao.dc.html",
       "label": "Importando",

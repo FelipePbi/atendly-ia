@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { schedulingRefusalCode } from "@/data/http/schedulingRefusal";
+import {
+  formatServiceDuration,
+  formatServicePrice,
+} from "@/features/services/serviceFormatting";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Badge } from "@/shared/ui/Badge";
 import { StatePanel } from "@/shared/ui/States";
@@ -10,13 +14,21 @@ import { StatePanel } from "@/shared/ui/States";
 import { newIdempotencyKey } from "./idempotency";
 import { ImportsPage } from "./ImportsLayout";
 import {
-  CATEGORY_LABELS,
+  CATEGORY_ORDER,
   conflictReasonLabel,
-  DECISION_LABELS,
-  decisionRequiresTarget,
-  decisionsForCategory,
+  conflictResultLabel,
+  CONFLICTS_FOOTER_NOTE,
+  conflictsDescription,
+  conflictShortReason,
+  conflictsTitle,
+  customerQuestionLabel,
   groupAvailabilityByDay,
+  type ImportItemCandidate,
+  type ImportProposedService,
+  type ImportServiceCandidate,
+  isServiceCandidate,
   type ItemDecisionKind,
+  SUGGESTED_RECORD_GONE,
 } from "./labels";
 import type {
   ImportAvailabilityGridRule,
@@ -38,315 +50,605 @@ export type ConflictCategorySummary = Pick<
   "category" | "needsReviewCount"
 >;
 
+/** O que o cartão registra de uma decisão tomada, para a linha de resultado. */
+type DecisionRecord =
+  | {
+      kind: "decided";
+      decision: ItemDecisionKind;
+      targetInternalId?: string;
+      targetName?: string;
+    }
+  | { kind: "already" };
+
+/** O que já foi lido de uma categoria (2.I6: uma leitura por categoria). */
+interface CategoryRead {
+  items: ImportItem[];
+  /** `total` da última leitura: itens em revisão que a rota tinha então. */
+  total: number;
+  /** Decisões tomadas depois da última leitura; elas já saíram da fila. */
+  decidedSince: number;
+}
+
+type CategoryReads = Partial<Record<ImportCategory, CategoryRead>>;
+
 /**
- * Conflitos resolvidos por item (Goal020/WU-07): entra a partir do preview,
- * nunca bloqueia o resto da importação — o botão de importar continua
- * disponível em paralelo (regra do vault: poucos conflitos não podem
- * bloquear milhares de registros válidos).
+ * Conflitos resolvidos por item (Goal020/WU-07, 2.I6 no Goal137): uma lista de
+ * cartões, um aberto por vez, que decide sobre o cadastro que a análise
+ * sugeriu — nunca sobre um identificador digitado. Entra a partir do preview
+ * ou da tela parada e nunca bloqueia o resto da importação (regra do vault:
+ * poucos conflitos não podem bloquear milhares de registros válidos).
  */
 export function ImportConflictsScreen({
   categories,
   initialCategory,
   onBack,
+  readyCount,
   sessionId,
 }: {
   categories: ConflictCategorySummary[];
   /**
-   * Abre direto numa categoria (a ação de um item do 2.I8). Voltar dessa
-   * categoria sai da tela, em vez de cair numa lista que quem chamou não viu.
+   * Mostra só os itens de uma categoria (a ação de um item do 2.I8). Continuar
+   * sai da tela, como voltar fazia.
    */
   initialCategory?: ImportCategory;
   onBack: () => void;
+  /** Registros que já estão prontos: a segunda frase da descrição. */
+  readyCount?: number;
   sessionId: string;
 }) {
-  const [activeCategory, setActiveCategory] = useState<ImportCategory | null>(
-    initialCategory ?? null,
+  // A lista e o título são os da abertura: o número do título não muda
+  // enquanto a tela está aberta, e o cartão decidido continua contado.
+  const [shown] = useState(() =>
+    CATEGORY_ORDER.flatMap((category) => {
+      if (initialCategory && category !== initialCategory) return [];
+      const entry = categories.find((candidate) => candidate.category === category);
+      return entry ? [entry] : [];
+    }),
   );
-
-  if (activeCategory) {
-    return (
-      <ConflictCategoryScreen
-        category={activeCategory}
-        key={activeCategory}
-        onBack={() =>
-          initialCategory === activeCategory ? onBack() : setActiveCategory(null)
-        }
-        sessionId={sessionId}
-      />
-    );
-  }
-
-  return (
-    <ImportsPage
-      description="Nada muda até você confirmar cada decisão. O restante da importação não espera por eles."
-      title="Itens que precisam da sua decisão"
-    >
-      <div className="imports-panel">
-        <ul className="imports-rows">
-          {categories.map((category) => (
-            <li key={category.category}>
-              <button
-                className="imports-conflict-row"
-                type="button"
-                onClick={() => setActiveCategory(category.category)}
-              >
-                <strong>{CATEGORY_LABELS[category.category]}</strong>
-                <Badge label={`${category.needsReviewCount}`} tone="warning" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="imports-actions">
-        <button className="btn btn-secondary" type="button" onClick={onBack}>
-          Voltar
-        </button>
-      </div>
-    </ImportsPage>
+  const [reviewCount] = useState(() =>
+    shown.reduce((total, entry) => total + entry.needsReviewCount, 0),
   );
-}
+  const readable = shown.filter((entry) => entry.needsReviewCount > 0);
 
-function ConflictCategoryScreen({
-  category,
-  onBack,
-  sessionId,
-}: {
-  category: ImportCategory;
-  onBack: () => void;
-  sessionId: string;
-}) {
-  const [items, setItems] = useState<ImportItem[] | null>(null);
-  const [total, setTotal] = useState(0);
-  const [listError, setListError] = useState(false);
+  const [reads, setReads] = useState<CategoryReads | null>(() =>
+    readable.length === 0 ? {} : null,
+  );
+  const [readFailed, setReadFailed] = useState(false);
+  const [allFailed, setAllFailed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [resolvedElsewhere, setResolvedElsewhere] = useState<Set<string>>(
-    new Set(),
-  );
-  const [decidingId, setDecidingId] = useState<string | null>(null);
+  const [records, setRecords] = useState<Record<string, DecisionRecord>>({});
+  const [picked, setPicked] = useState<string | null>(null);
+  const controllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    getProductServices()
-      .migration.listImportItems(
-        sessionId,
-        category,
-        { status: "NEEDS_REVIEW", limit: PAGE_SIZE, offset: 0 },
-        controller.signal,
-      )
-      .then((page) => {
-        setItems(page.items);
-        setTotal(page.total);
-      })
-      .catch(() => {
-        if (controller.signal.aborted) return;
-        setListError(true);
+    controllerRef.current = controller;
+    if (readable.length === 0) return () => controller.abort();
+    void Promise.allSettled(
+      readable.map((entry) =>
+        Promise.resolve(
+          getProductServices().migration.listImportItems(
+            sessionId,
+            entry.category,
+            { status: "NEEDS_REVIEW", limit: PAGE_SIZE, offset: 0 },
+            controller.signal,
+          ),
+        ).then((page) => {
+          if (!page || !Array.isArray(page.items)) throw new Error("invalid page");
+          return page;
+        }),
+      ),
+    ).then((results) => {
+      if (controller.signal.aborted) return;
+      const next: CategoryReads = {};
+      let failures = 0;
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          next[readable[index].category] = {
+            decidedSince: 0,
+            items: result.value.items,
+            total: result.value.total,
+          };
+        } else {
+          failures += 1;
+        }
       });
+      setReads(next);
+      setReadFailed(failures > 0);
+      setAllFailed(failures === results.length);
+    });
     return () => controller.abort();
-    // `key={category}` no chamador remonta o componente a cada categoria: o
-    // efeito roda uma vez por instância, nunca precisa resetar estado aqui.
+    // `shown` e `readable` vêm da abertura da tela: o efeito roda uma vez.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function loadMore() {
-    if (!items) return;
+  const loading = reads === null;
+  const orderedItems = shown.flatMap((entry) => reads?.[entry.category]?.items ?? []);
+  const firstUndecided = orderedItems.find((item) => !records[item.id]);
+  const openId =
+    picked &&
+    !records[picked] &&
+    orderedItems.some((item) => item.id === picked)
+      ? picked
+      : (firstUndecided?.id ?? null);
+
+  const undecidedLoaded = (category: ImportCategory) =>
+    (reads?.[category]?.items ?? []).filter((item) => !records[item.id]).length;
+  const hasMore = (category: ImportCategory) => {
+    const read = reads?.[category];
+    return !!read && undecidedLoaded(category) < read.total - read.decidedSince;
+  };
+  const moreCategory = shown.find((entry) => hasMore(entry.category))?.category;
+
+  async function loadMore(category: ImportCategory) {
     setLoadingMore(true);
     try {
+      // Uma decisão tira o item da fila: o deslocamento conta só o que ainda
+      // está nela, nunca o cartão decidido que fica na lista.
       const page = await getProductServices().migration.listImportItems(
         sessionId,
         category,
-        { status: "NEEDS_REVIEW", limit: PAGE_SIZE, offset: items.length },
+        { status: "NEEDS_REVIEW", limit: PAGE_SIZE, offset: undecidedLoaded(category) },
+        controllerRef.current?.signal,
       );
-      setItems((current) => [...(current ?? []), ...page.items]);
-      setTotal(page.total);
+      if (controllerRef.current?.signal.aborted) return;
+      setReads((current) => {
+        const read = current?.[category];
+        if (!current || !read) return current;
+        const known = new Set(read.items.map((item) => item.id));
+        return {
+          ...current,
+          [category]: {
+            decidedSince: 0,
+            items: [...read.items, ...page.items.filter((item) => !known.has(item.id))],
+            total: page.total,
+          },
+        };
+      });
     } catch {
-      setListError(true);
+      if (controllerRef.current?.signal.aborted) return;
+      setReadFailed(true);
     } finally {
       setLoadingMore(false);
     }
   }
 
-  function handleDecided(itemId: string) {
-    setItems((current) => current?.filter((item) => item.id !== itemId) ?? current);
-    setTotal((current) => Math.max(0, current - 1));
-    setDecidingId(null);
-  }
-
-  function handleAlreadyDecided(itemId: string) {
-    setResolvedElsewhere((current) => new Set(current).add(itemId));
-    setDecidingId(null);
+  function settle(item: ImportItem, record: DecisionRecord) {
+    const nextRecords = { ...records, [item.id]: record };
+    setRecords(nextRecords);
+    if (record.kind === "decided") {
+      setReads((current) => {
+        const read = current?.[item.category];
+        if (!current || !read) return current;
+        return {
+          ...current,
+          [item.category]: { ...read, decidedSince: read.decidedSince + 1 },
+        };
+      });
+    }
+    // O próximo cartão sem decisão, na ordem, abre sozinho; no fim da lista,
+    // o primeiro que sobrou.
+    const index = orderedItems.findIndex((candidate) => candidate.id === item.id);
+    const following =
+      orderedItems.slice(index + 1).find((candidate) => !nextRecords[candidate.id]) ??
+      orderedItems.find((candidate) => !nextRecords[candidate.id]);
+    setPicked(following?.id ?? null);
   }
 
   return (
     <ImportsPage
-      description="Cada decisão vale só para este item. O restante da importação segue normalmente."
-      title={CATEGORY_LABELS[category]}
+      description={conflictsDescription(readyCount)}
+      eyebrow={false}
+      title={conflictsTitle(reviewCount)}
     >
-      <div className="imports-panel">
-        {items === null && !listError && (
-          <p aria-busy="true" className="imports-note">
-            Carregando itens…
-          </p>
-        )}
-        {listError && (
-          <StatePanel
-            description="Não foi possível carregar os itens desta categoria agora."
-            icon="alert"
-            title="Itens indisponíveis"
-            tone="error"
-          />
-        )}
-        {items && items.length === 0 && !listError && (
-          <p className="imports-note">
-            Não há mais itens para revisar nesta categoria.
-          </p>
-        )}
-        {items && items.length > 0 && (
-          <ul className="imports-conflict-items">
-            {items.map((item) => (
-              <ConflictItemRow
-                category={category}
-                expanded={decidingId === item.id}
-                item={item}
-                key={item.id}
-                onAlreadyDecided={() => handleAlreadyDecided(item.id)}
-                onCollapse={() => setDecidingId(null)}
-                onDecided={() => handleDecided(item.id)}
-                onExpand={() => setDecidingId(item.id)}
-                resolvedElsewhere={resolvedElsewhere.has(item.id)}
-                sessionId={sessionId}
-              />
-            ))}
-          </ul>
-        )}
-        {items && items.length < total && (
-          <button
-            className="btn btn-tertiary"
-            disabled={loadingMore}
-            type="button"
-            onClick={() => void loadMore()}
-          >
-            {loadingMore ? "Carregando..." : "Carregar mais"}
+      <div className="imports-conflicts">
+        <div className="imports-conflicts-body">
+          {readFailed && !allFailed && (
+            <p className="field-help" role="alert">
+              Não foi possível carregar todos os itens agora.
+            </p>
+          )}
+          {loading && (
+            <p aria-busy="true" className="imports-note">
+              Carregando itens…
+            </p>
+          )}
+          {allFailed && (
+            <StatePanel
+              description="Não foi possível carregar os itens desta categoria agora."
+              icon="alert"
+              title="Itens indisponíveis"
+              tone="error"
+            />
+          )}
+          {!loading && !allFailed && orderedItems.length === 0 && (
+            <p className="imports-note">Não há itens para revisar agora.</p>
+          )}
+          {orderedItems.length > 0 && (
+            <ul className="imports-conflicts-list">
+              {orderedItems.map((item) => (
+                <ConflictCard
+                  item={item}
+                  key={item.id}
+                  open={openId === item.id}
+                  onAlreadyDecided={() => settle(item, { kind: "already" })}
+                  onDecided={(record) => settle(item, record)}
+                  onOpen={() => setPicked(item.id)}
+                  record={records[item.id]}
+                  sessionId={sessionId}
+                />
+              ))}
+            </ul>
+          )}
+          {moreCategory && (
+            <button
+              className="imports-text-action imports-conflicts-more"
+              disabled={loadingMore}
+              type="button"
+              onClick={() => void loadMore(moreCategory)}
+            >
+              {loadingMore ? "Carregando..." : "Carregar mais"}
+            </button>
+          )}
+        </div>
+        <div className="imports-conflicts-footer">
+          <button className="btn btn-primary" type="button" onClick={onBack}>
+            Continuar
           </button>
-        )}
-      </div>
-      <div className="imports-actions is-split">
-        <button className="btn btn-secondary" type="button" onClick={onBack}>
-          Voltar
-        </button>
+          <span>{CONFLICTS_FOOTER_NOTE}</span>
+        </div>
       </div>
     </ImportsPage>
   );
 }
 
-function ConflictItemRow({
-  category,
-  expanded,
+const DECISION_ERROR =
+  "Não foi possível registrar essa decisão agora. Tente novamente.";
+
+function CheckMark() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="14"
+      stroke="#2E7D4F"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="3"
+      viewBox="0 0 24 24"
+      width="14"
+    >
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
+  );
+}
+
+function ChevronDown() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      stroke="#716859"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+      width="20"
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+function itemTitle(item: ImportItem): string {
+  const label = item.label ?? item.externalId;
+  if (item.category === "CUSTOMER" && item.candidates?.length === 1) {
+    return `${label} · ${item.candidates[0].name}`;
+  }
+  return label;
+}
+
+function serviceValues(
+  values: Pick<ImportServiceCandidate, "durationMinutes" | "price" | "priceType">,
+): string {
+  return `${formatServiceDuration(values.durationMinutes)} · ${formatServicePrice(values)}`;
+}
+
+function proposedValues(proposed: ImportProposedService | null | undefined): string {
+  return proposed ? serviceValues(proposed) : "Valores não informados";
+}
+
+function ConflictCard({
   item,
   onAlreadyDecided,
-  onCollapse,
   onDecided,
-  onExpand,
-  resolvedElsewhere,
+  onOpen,
+  open,
+  record,
   sessionId,
 }: {
-  category: ImportCategory;
-  expanded: boolean;
   item: ImportItem;
   onAlreadyDecided: () => void;
-  onCollapse: () => void;
-  onDecided: () => void;
-  onExpand: () => void;
-  resolvedElsewhere: boolean;
+  onDecided: (record: DecisionRecord) => void;
+  onOpen: () => void;
+  open: boolean;
+  record: DecisionRecord | undefined;
   sessionId: string;
 }) {
-  const decisions = decisionsForCategory(category);
-  const [decision, setDecision] = useState<ItemDecisionKind | null>(null);
-  const [targetInternalId, setTargetInternalId] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [chosenId, setChosenId] = useState<string | null>(null);
+  const [submittingKey, setSubmittingKey] = useState<string | null>(null);
   const [decisionError, setDecisionError] = useState<string | null>(null);
 
-  if (resolvedElsewhere) {
+  const title = itemTitle(item);
+  const shortReason = conflictShortReason(item);
+  const candidates = item.candidates ?? [];
+  const serviceCandidates = candidates.filter(isServiceCandidate);
+
+  if (record?.kind === "already") {
     return (
-      <li className="imports-conflict-item">
-        <div>
-          <strong>{item.label ?? item.externalId}</strong>
-          <p className="imports-note">
+      <li>
+        <div className="imports-conflict-card">
+          <div className="imports-conflict-head">
+            <span className="imports-conflict-name">{title}</span>
+            <Badge label="Já decidido" tone="neutral" />
+          </div>
+          <p className="imports-conflict-question">
             Este item já foi decidido antes de você confirmar.
           </p>
         </div>
-        <Badge label="Já decidido" tone="neutral" />
       </li>
     );
   }
 
-  async function submitDecision(
-    decisionValue: ItemDecisionKind,
-    targetInternalIdValue?: string,
-  ) {
-    setSubmitting(true);
-    setDecisionError(null);
-    try {
-      await getProductServices().migration.decideImportItem(
-        sessionId,
-        item.id,
-        { decision: decisionValue, targetInternalId: targetInternalIdValue },
-        newIdempotencyKey(),
-      );
-      onDecided();
-    } catch (caught: unknown) {
-      if (schedulingRefusalCode(caught) === "IMPORT_ITEM_ALREADY_DECIDED") {
-        onAlreadyDecided();
-        return;
-      }
-      setDecisionError("Não foi possível registrar essa decisão agora. Tente novamente.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function submit() {
-    if (!decision) return;
-    const needsTarget = decisionRequiresTarget(decision);
-    if (needsTarget && !targetInternalId.trim()) {
-      setDecisionError("Informe o identificador do cadastro existente.");
-      return;
-    }
-    await submitDecision(
-      decision,
-      needsTarget ? targetInternalId.trim() : undefined,
+  if (record?.kind === "decided") {
+    return (
+      <li>
+        <div className="imports-conflict-card is-decided">
+          <div className="imports-conflict-head">
+            <span className="imports-conflict-name">{title}</span>
+            <span className="imports-conflict-reason">{shortReason}</span>
+          </div>
+          {item.category === "SERVICE" && serviceCandidates.length > 0 && (
+            <div
+              className={
+                serviceCandidates.length > 1
+                  ? "imports-conflict-pieces is-stacked"
+                  : "imports-conflict-pieces"
+              }
+            >
+              {serviceCandidates.map((candidate) => (
+                <ServicePiece
+                  key={candidate.internalId}
+                  label={serviceCandidates.length > 1 ? undefined : "Avenly"}
+                  name={pieceName(candidate, item, serviceCandidates.length)}
+                  selected={
+                    record.decision === "KEEP_EXISTING" &&
+                    record.targetInternalId === candidate.internalId
+                  }
+                  value={serviceValues(candidate)}
+                />
+              ))}
+              <ServicePiece
+                label="Minha Agenda"
+                selected={record.decision === "CREATE_NEW"}
+                source
+                value={proposedValues(item.proposedService)}
+              />
+            </div>
+          )}
+          <span className="imports-conflict-result" role="status">
+            <CheckMark />
+            {conflictResultLabel(item.category, record.decision, record.targetName)}
+          </span>
+        </div>
+      </li>
     );
   }
 
-  if (!expanded) {
+  if (!open) {
     return (
-      <li className="imports-conflict-item">
-        <div>
-          <strong>{item.label ?? item.externalId}</strong>
-          <p className="imports-note">{conflictReasonLabel(item.reasonCode)}</p>
-        </div>
+      <li>
         <button
-          className="btn btn-secondary"
+          aria-expanded="false"
+          className="imports-conflict-closed"
           type="button"
-          onClick={() => {
-            setDecision(null);
-            setTargetInternalId("");
-            setDecisionError(null);
-            onExpand();
-          }}
+          onClick={onOpen}
         >
-          Resolver
+          <span className="imports-conflict-closed-text">
+            <span className="imports-conflict-name">{title}</span>{" "}
+            <span className="imports-conflict-reason is-closed">{shortReason}</span>
+          </span>
+          <ChevronDown />
         </button>
       </li>
     );
   }
 
-  if (category === "AVAILABILITY") {
-    return (
-      <li className="imports-conflict-item is-expanded">
-        <div>
-          <strong>{item.label ?? item.externalId}</strong>
-          <p className="imports-note">{conflictReasonLabel(item.reasonCode)}</p>
+  async function submit(
+    key: string,
+    decision: ItemDecisionKind,
+    target?: ImportItemCandidate,
+  ) {
+    if (submittingKey !== null) return;
+    setSubmittingKey(key);
+    setDecisionError(null);
+    try {
+      await getProductServices().migration.decideImportItem(
+        sessionId,
+        item.id,
+        target
+          ? { decision, targetInternalId: target.internalId }
+          : { decision },
+        newIdempotencyKey(),
+      );
+      onDecided({
+        decision,
+        kind: "decided",
+        targetInternalId: target?.internalId,
+        targetName: target?.name,
+      });
+    } catch (caught: unknown) {
+      if (schedulingRefusalCode(caught) === "IMPORT_ITEM_ALREADY_DECIDED") {
+        onAlreadyDecided();
+        return;
+      }
+      setDecisionError(DECISION_ERROR);
+    } finally {
+      setSubmittingKey(null);
+    }
+  }
+
+  const busy = submittingKey !== null;
+  const groupName = `conflict-${item.id}`;
+
+  const decisionButton = (
+    id: string,
+    decision: ItemDecisionKind,
+    label: string,
+    options: { disabled?: boolean; target?: ImportItemCandidate } = {},
+  ) => (
+    <button
+      className="imports-conflict-button"
+      disabled={busy || options.disabled}
+      key={id}
+      type="button"
+      onClick={() => void submit(id, decision, options.target)}
+    >
+      {submittingKey === id ? "Enviando..." : label}
+    </button>
+  );
+  const excludeAction = () => (
+    <button
+      className="imports-conflict-text-action"
+      disabled={busy}
+      type="button"
+      onClick={() => void submit("exclude-text", "EXCLUDE")}
+    >
+      {submittingKey === "exclude-text" ? "Enviando..." : "Não importar este item"}
+    </button>
+  );
+  const choiceRow = (candidate: ImportItemCandidate, value?: string) => (
+    <label
+      className={
+        chosenId === candidate.internalId
+          ? "imports-conflict-piece is-choice is-selected"
+          : "imports-conflict-piece is-choice"
+      }
+      key={candidate.internalId}
+    >
+      <input
+        checked={chosenId === candidate.internalId}
+        className="imports-conflict-radio"
+        disabled={busy}
+        name={groupName}
+        type="radio"
+        value={candidate.internalId}
+        onChange={() => setChosenId(candidate.internalId)}
+      />
+      <span className="imports-conflict-piece-name">{candidate.name}</span>
+      {value && <span className="imports-conflict-piece-value">{value}</span>}
+    </label>
+  );
+
+  let body: ReactNode;
+  if (item.category === "SERVICE" && serviceCandidates.length > 0) {
+    const single = serviceCandidates.length === 1;
+    const chosen = serviceCandidates.find(
+      (candidate) => candidate.internalId === chosenId,
+    );
+    body = (
+      <>
+        {single ? (
+          <div className="imports-conflict-pieces">
+            <ServicePiece
+              label="Avenly"
+              name={pieceName(serviceCandidates[0], item, 1)}
+              value={serviceValues(serviceCandidates[0])}
+            />
+            <ServicePiece
+              label="Minha Agenda"
+              source
+              value={proposedValues(item.proposedService)}
+            />
+          </div>
+        ) : (
+          <>
+            <p className="imports-conflict-question" id={`${groupName}-legend`}>
+              Qual serviço da Avenly é este?
+            </p>
+            <div
+              aria-labelledby={`${groupName}-legend`}
+              className="imports-conflict-pieces is-stacked"
+              role="radiogroup"
+            >
+              {serviceCandidates.map((candidate) =>
+                choiceRow(candidate, serviceValues(candidate)),
+              )}
+            </div>
+            <div className="imports-conflict-pieces is-stacked">
+              <ServicePiece
+                label="Minha Agenda"
+                source
+                value={proposedValues(item.proposedService)}
+              />
+            </div>
+          </>
+        )}
+        <div className="imports-conflict-actions">
+          {single
+            ? decisionButton("keep", "KEEP_EXISTING", "Manter o da Avenly", {
+                target: serviceCandidates[0],
+              })
+            : decisionButton("keep", "KEEP_EXISTING", "Manter o escolhido", {
+                disabled: !chosen,
+                target: chosen,
+              })}
+          {decisionButton("new", "CREATE_NEW", "Criar outro serviço")}
         </div>
+        {excludeAction()}
+      </>
+    );
+  } else if (item.category === "CUSTOMER" && candidates.length > 0) {
+    const single = candidates.length === 1;
+    const chosen = single
+      ? candidates[0]
+      : candidates.find((candidate) => candidate.internalId === chosenId);
+    body = (
+      <>
+        <p className="imports-conflict-question">
+          {customerQuestionLabel(item.reasonCode)}
+        </p>
+        {!single && (
+          <>
+            <p className="imports-conflict-question" id={`${groupName}-legend`}>
+              Qual cliente da Avenly é esta pessoa?
+            </p>
+            <div
+              aria-labelledby={`${groupName}-legend`}
+              className="imports-conflict-pieces is-stacked"
+              role="radiogroup"
+            >
+              {candidates.map((candidate) => choiceRow(candidate))}
+            </div>
+          </>
+        )}
+        <div className="imports-conflict-actions">
+          {decisionButton("merge", "MERGE_WITH_EXISTING", "Sim, juntar", {
+            disabled: !chosen,
+            target: chosen,
+          })}
+          {decisionButton("new", "CREATE_NEW", "Não, manter separadas")}
+        </div>
+        {excludeAction()}
+      </>
+    );
+  } else if (item.category === "AVAILABILITY") {
+    body = (
+      <>
+        <p className="imports-conflict-question">
+          {conflictReasonLabel(item.reasonCode)}
+        </p>
         <div className="imports-availability-comparison">
           <AvailabilityGridPreview
             rules={item.currentAvailability}
@@ -357,104 +659,94 @@ function ConflictItemRow({
             title="Horários do Minha Agenda"
           />
         </div>
+        <div className="imports-conflict-actions">
+          {decisionButton("exclude", "EXCLUDE", "Manter meus horários")}
+          {decisionButton("include", "INCLUDE", "Usar os horários da Minha Agenda")}
+        </div>
+      </>
+    );
+  } else {
+    // Sem cadastro sugerido (lista vazia, ou item de antes da migration): num
+    // conflito de correspondência a primeira saída é seguir como cadastro novo.
+    const matchGone =
+      (item.category === "SERVICE" || item.category === "CUSTOMER") &&
+      /^(SERVICE|CUSTOMER)_MATCH_/.test(item.reasonCode ?? "");
+    body = (
+      <>
+        <p className="imports-conflict-question">
+          {matchGone ? SUGGESTED_RECORD_GONE : conflictReasonLabel(item.reasonCode)}
+        </p>
+        <div className="imports-conflict-actions">
+          {matchGone
+            ? decisionButton(
+                "new",
+                "CREATE_NEW",
+                item.category === "SERVICE" ? "Criar outro serviço" : "Manter separadas",
+              )
+            : decisionButton("include", "INCLUDE", "Importar mesmo assim")}
+          {decisionButton("exclude", "EXCLUDE", "Não importar")}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <li>
+      <div className="imports-conflict-card is-open">
+        <div className="imports-conflict-head">
+          <span className="imports-conflict-name">{title}</span>
+          <span className="imports-conflict-reason">{shortReason}</span>
+        </div>
+        {body}
         {decisionError && (
           <p className="field-help" role="alert">
             {decisionError}
           </p>
         )}
-        <div className="imports-actions is-split">
-          <button
-            className="btn btn-secondary"
-            disabled={submitting}
-            type="button"
-            onClick={onCollapse}
-          >
-            Cancelar
-          </button>
-          <button
-            className="btn btn-secondary"
-            disabled={submitting}
-            type="button"
-            onClick={() => void submitDecision("EXCLUDE")}
-          >
-            Manter meus horários
-          </button>
-          <button
-            className="btn btn-primary"
-            disabled={submitting}
-            type="button"
-            onClick={() => void submitDecision("INCLUDE")}
-          >
-            Usar os horários da Minha Agenda
-          </button>
-        </div>
-      </li>
-    );
-  }
-
-  const groupName = `decision-${item.id}`;
-
-  return (
-    <li className="imports-conflict-item is-expanded">
-      <div>
-        <strong>{item.label ?? item.externalId}</strong>
-        <p className="imports-note">{conflictReasonLabel(item.reasonCode)}</p>
-      </div>
-      <fieldset className="imports-decision-options">
-        <legend>O que fazer com este item?</legend>
-        {decisions.map((option) => (
-          <label className="imports-decision-option" key={option}>
-            <input
-              checked={decision === option}
-              name={groupName}
-              type="radio"
-              value={option}
-              onChange={() => setDecision(option)}
-            />
-            {DECISION_LABELS[option]}
-          </label>
-        ))}
-      </fieldset>
-      {decision && decisionRequiresTarget(decision) && (
-        <div className="field">
-          <label className="label" htmlFor={`${groupName}-target`}>
-            Identificador do cadastro existente
-          </label>
-          <div className="input-wrap">
-            <input
-              className="input"
-              id={`${groupName}-target`}
-              type="text"
-              value={targetInternalId}
-              onChange={(event) => setTargetInternalId(event.target.value)}
-            />
-          </div>
-        </div>
-      )}
-      {decisionError && (
-        <p className="field-help" role="alert">
-          {decisionError}
-        </p>
-      )}
-      <div className="imports-actions is-split">
-        <button
-          className="btn btn-secondary"
-          disabled={submitting}
-          type="button"
-          onClick={onCollapse}
-        >
-          Cancelar
-        </button>
-        <button
-          className="btn btn-primary"
-          disabled={submitting || !decision}
-          type="button"
-          onClick={() => void submit()}
-        >
-          {submitting ? "Confirmando..." : "Confirmar decisão"}
-        </button>
       </div>
     </li>
+  );
+}
+
+/**
+ * O nome do cadastro sugerido só entra na peça quando difere do nome do item
+ * (nome parecido): com o mesmo nome o título do cartão já o diz, como no quadro.
+ */
+function pieceName(
+  candidate: ImportServiceCandidate,
+  item: ImportItem,
+  count: number,
+): string | undefined {
+  if (count > 1) return candidate.name;
+  const label = (item.label ?? item.externalId).trim().toLocaleLowerCase("pt-BR");
+  return candidate.name.trim().toLocaleLowerCase("pt-BR") === label
+    ? undefined
+    : candidate.name;
+}
+
+/** Uma peça do cartão de serviço: "Avenly" ou "Minha Agenda", com os valores. */
+function ServicePiece({
+  label,
+  name,
+  selected = false,
+  source = false,
+  value,
+}: {
+  label?: string;
+  name?: string;
+  selected?: boolean;
+  source?: boolean;
+  value: string;
+}) {
+  const classes = ["imports-conflict-piece"];
+  if (selected) classes.push("is-selected");
+  if (source) classes.push("is-source");
+  return (
+    <div className={classes.join(" ")}>
+      {label && <span className="imports-conflict-piece-label">{label}</span>}
+      {name && <span className="imports-conflict-piece-name">{name}</span>}
+      <span className="imports-conflict-piece-value">{value}</span>
+    </div>
   );
 }
 

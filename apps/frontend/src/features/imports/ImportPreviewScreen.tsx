@@ -563,11 +563,22 @@ export function ImportPreviewScreen({
     0,
   );
 
+  // O que já está pronto, nas categorias escolhidas: o que foi descoberto menos
+  // o que espera decisão (a segunda frase da descrição dos conflitos, 2.I6).
+  const readyCount = categories
+    .filter((category) => selected.has(category.category))
+    .reduce(
+      (total, category) =>
+        total + Math.max(0, category.discoveredCount - category.needsReviewCount),
+      0,
+    );
+
   if (mode === "conflicts") {
     return (
       <ImportConflictsScreen
         categories={conflictCategories}
         onBack={() => setMode("summary")}
+        readyCount={readyCount}
         sessionId={session.sessionId}
       />
     );

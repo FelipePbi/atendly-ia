@@ -491,12 +491,19 @@ describe("PARTIAL é estado legítimo", () => {
       await screen.findByRole("button", { name: "Revisar pendências" }),
     );
 
+    // A lista única dos itens em revisão (2.I6): o título conta os 2 clientes e
+    // a descrição traz os 42 que já entraram.
     expect(
       await screen.findByRole("heading", {
-        name: "Itens que precisam da sua decisão",
+        name: "2 registros precisam da sua decisão",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /clientes/ })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Encontramos dados parecidos aqui e no Minha Agenda. Os outros 42 já estão prontos.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeInTheDocument();
   });
 
   test("axe: execução com pendências sem violações", async () => {

@@ -4,10 +4,10 @@
  *
  * O que esta suíte prova:
  *
- * - as cinco decisões do contrato (`INCLUDE`, `MERGE_WITH_EXISTING`,
- *   `CREATE_NEW`, `KEEP_EXISTING`, `EXCLUDE`) são alcançáveis pela UI para uma
- *   categoria que aceita mesclagem, com `targetInternalId` exigido antes de
- *   confirmar `MERGE_WITH_EXISTING`/`KEEP_EXISTING`;
+ * - as decisões do contrato são alcançáveis pela UI para uma categoria que
+ *   aceita mesclagem: sobre o cadastro que a análise sugeriu, o
+ *   `targetInternalId` sai do candidato do próprio cartão (2.I6, Goal137) —
+ *   nenhuma pede um identificador digitado;
  * - o conflito é explicado em linguagem leiga (nunca o código bruto do
  *   classificador);
  * - conflito pendente não impede `Importar tudo`: o botão continua
@@ -219,13 +219,27 @@ describe("aviso de conflitos não bloqueia o restante", () => {
 });
 
 describe("conflitos resolvidos por item", () => {
-  test("explica o conflito em linguagem leiga e oferece as cinco decisões, exigindo o cadastro alvo em MERGE_WITH_EXISTING", async () => {
+  test("explica o conflito em linguagem leiga e decide sobre o cadastro sugerido, sem pedir identificador", async () => {
     const user = userEvent.setup();
     getImportState.mockResolvedValue(stateWithSession(sessionFixture()));
     getImportPreview.mockResolvedValue(previewFixture());
+    const suggested = conflictItemFixture({
+      candidates: [
+        {
+          active: true,
+          durationMinutes: 45,
+          internalId: "service-9",
+          name: "Corte de cabelo",
+          price: 90,
+          priceType: "FIXED",
+        },
+      ],
+      proposedService: { durationMinutes: 50, price: 95, priceType: "FIXED" },
+      reasonCode: "SERVICE_MATCH_DIVERGENT",
+    });
     listImportItems.mockResolvedValue({
       category: "SERVICE",
-      items: [conflictItemFixture()],
+      items: [suggested],
       limit: 20,
       offset: 0,
       sessionId: "session-1",
@@ -236,7 +250,7 @@ describe("conflitos resolvidos por item", () => {
         category: "SERVICE",
         decidedAt: "2026-09-15T10:10:00.000Z",
         decidedBy: "user-1",
-        decision: "MERGE_WITH_EXISTING",
+        decision: "KEEP_EXISTING",
         externalId: "ext-42",
         id: "decision-1",
         itemId: "item-42",
@@ -251,17 +265,12 @@ describe("conflitos resolvidos por item", () => {
     await user.click(
       await screen.findByRole("button", { name: "Revisar conflitos" }),
     );
-    await screen.findByRole("heading", { name: "Itens que precisam da sua decisão" });
-
-    await user.click(screen.getByRole("button", { name: /serviços/ }));
-    await screen.findByRole("heading", { name: "serviços" });
+    await screen.findByRole("heading", { name: "1 registro precisa da sua decisão" });
 
     expect(
-      await screen.findByText(
-        "Mais de um serviço já cadastrado tem esse mesmo nome. Escolha qual corresponde, ou crie um novo.",
-      ),
+      await screen.findByText("serviço · preço e duração diferentes"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("SERVICE_MATCH_AMBIGUOUS")).not.toBeInTheDocument();
+    expect(screen.queryByText("SERVICE_MATCH_DIVERGENT")).not.toBeInTheDocument();
     expect(
       listImportItems,
     ).toHaveBeenCalledWith(
@@ -271,51 +280,21 @@ describe("conflitos resolvidos por item", () => {
       expect.anything(),
     );
 
-    await user.click(screen.getByRole("button", { name: "Resolver" }));
+    // Nenhuma decisão pede um identificador digitado: o alvo é o candidato.
+    expect(
+      screen.queryByLabelText("Identificador do cadastro existente"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Criar outro serviço" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Não importar este item" })).toBeEnabled();
 
-    expect(
-      screen.getByRole("radio", { name: "Incluir mesmo assim" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("radio", { name: "Mesclar com um cadastro existente" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("radio", { name: "Criar um novo cadastro" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("radio", {
-        name: "Manter o cadastro existente (não importar este)",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("radio", { name: "Não importar este item" }),
-    ).toBeInTheDocument();
-
-    const confirmButton = screen.getByRole("button", { name: "Confirmar decisão" });
-    expect(confirmButton).toBeDisabled();
-
-    await user.click(
-      screen.getByRole("radio", { name: "Mesclar com um cadastro existente" }),
-    );
-    expect(confirmButton).toBeEnabled();
-
-    await user.click(confirmButton);
-    expect(
-      await screen.findByText("Informe o identificador do cadastro existente."),
-    ).toBeInTheDocument();
-    expect(decideImportItem).not.toHaveBeenCalled();
-
-    await user.type(
-      screen.getByLabelText("Identificador do cadastro existente"),
-      "service-9",
-    );
-    await user.click(confirmButton);
+    await user.click(screen.getByRole("button", { name: "Manter o da Avenly" }));
 
     await waitFor(() =>
       expect(decideImportItem).toHaveBeenCalledWith(
         "session-1",
         "item-42",
-        { decision: "MERGE_WITH_EXISTING", targetInternalId: "service-9" },
+        { decision: "KEEP_EXISTING", targetInternalId: "service-9" },
         expect.any(String),
       ),
     );
@@ -346,11 +325,7 @@ describe("conflitos resolvidos por item", () => {
     await user.click(
       await screen.findByRole("button", { name: "Revisar conflitos" }),
     );
-    await user.click(await screen.findByRole("button", { name: /serviços/ }));
-    await screen.findByRole("heading", { name: "serviços" });
-    await user.click(screen.getByRole("button", { name: "Resolver" }));
-    await user.click(screen.getByRole("radio", { name: "Não importar este item" }));
-    await user.click(screen.getByRole("button", { name: "Confirmar decisão" }));
+    await user.click(await screen.findByRole("button", { name: "Não importar" }));
 
     expect(
       await screen.findByText("Este item já foi decidido antes de você confirmar."),
@@ -360,7 +335,7 @@ describe("conflitos resolvidos por item", () => {
       screen.queryByText("Não foi possível registrar essa decisão agora. Tente novamente."),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("radio", { name: "Não importar este item" }),
+      screen.queryByRole("button", { name: "Não importar" }),
     ).not.toBeInTheDocument();
   });
 
@@ -381,8 +356,8 @@ describe("conflitos resolvidos por item", () => {
     await user.click(
       await screen.findByRole("button", { name: "Revisar conflitos" }),
     );
-    await user.click(await screen.findByRole("button", { name: /serviços/ }));
-    await screen.findByRole("heading", { name: "serviços" });
+    await screen.findByRole("heading", { name: "1 registro precisa da sua decisão" });
+    await screen.findByRole("button", { name: "Não importar" });
     await expectNoA11yViolations(container);
   });
 });

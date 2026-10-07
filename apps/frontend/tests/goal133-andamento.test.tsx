@@ -424,7 +424,7 @@ describe.each<ImportsFrame>(["onboarding", "platform"])(
       await user.click(action);
 
       expect(
-        await screen.findByRole("heading", { name: "Itens que precisam da sua decisão" }),
+        await screen.findByRole("heading", { name: "2 registros precisam da sua decisão" }),
       ).toBeInTheDocument();
     });
 

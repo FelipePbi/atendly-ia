@@ -116,71 +116,355 @@
   gap: 10px;
 }
 
-/* Conflitos resolvidos por item (Goal020, WU-07). */
-.imports-conflict-row {
-  width: 100%;
-  min-height: 56px;
-  padding: 12px 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+/*
+ * Conflitos da importação (2.I6, Goal137). Classes próprias: `.imports-panel`,
+ * `.imports-rows` e `.imports-actions` seguem servindo às outras telas do
+ * módulo. Os mesmos valores nos quatro devices; o que muda é o respiro do
+ * rodapé (46 px no celular, 32 px de 768 px em diante), como no protótipo.
+ * O quadro não põe `box-sizing` nas peças, nos botões do cartão e no botão do
+ * rodapé: a altura e a largura de cada um é a do conteúdo mais a borda.
+ */
+.imports-page:has(.imports-conflicts),
+.imports-pushed-body:has(.imports-conflicts) {
   gap: 16px;
-  border: none;
-  background: none;
-  font: inherit;
-  color: inherit;
+}
+.onboarding-content.is-frame:has(.imports-conflicts) {
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+.imports-page:has(.imports-conflicts):not(.is-pushed) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 46px;
+}
+.imports-page:has(.imports-conflicts) .imports-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* O `h2` da moldura da plataforma não herda a cor do `h1` do onboarding. */
+.imports-page:has(.imports-conflicts) .imports-header :is(h1, h2) {
+  color: #221e1a;
+}
+.imports-page:has(.imports-conflicts) .imports-header > p {
+  margin: 0;
+  color: #5f574e;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.imports-conflicts {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  line-height: normal;
+}
+.imports-conflicts-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.imports-conflicts-body > .field-help {
+  margin: 0;
+}
+.imports-conflicts-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.imports-conflicts-more {
+  align-self: center;
+}
+.imports-conflict-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid #e5ded4;
+  border-radius: 16px;
+  color: #221e1a;
+  background: #fffdfa;
+}
+.imports-conflict-card .field-help {
+  margin: 0;
+}
+.imports-conflict-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.imports-conflict-name {
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.imports-conflict-reason {
+  color: #716859;
+  font-size: 12px;
+  text-align: right;
+}
+.imports-conflict-reason.is-closed {
+  font-size: 13px;
+  text-align: left;
+}
+.imports-conflict-question {
+  margin: 0;
+  color: #5f574e;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.imports-conflict-pieces {
+  display: flex;
+  gap: 8px;
+}
+.imports-conflict-pieces.is-stacked {
+  flex-direction: column;
+}
+.imports-conflict-piece {
+  box-sizing: content-box;
+  min-width: 0;
+  padding: 10px 12px;
+  flex: 1;
+  display: block;
+  border: 1px solid #d6cec2;
+  border-radius: 12px;
+}
+.imports-conflict-pieces.is-stacked .imports-conflict-piece {
+  flex: none;
+}
+.imports-conflict-piece.is-selected {
+  border: 1.5px solid #0f5f63;
+  background: #edf4f3;
+}
+.imports-conflict-piece-label {
+  display: block;
+  color: #716859;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.imports-conflict-piece.is-selected .imports-conflict-piece-label {
+  color: #0f5f63;
+}
+.imports-conflict-piece-name,
+.imports-conflict-piece-value {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+}
+.imports-conflict-piece-label + .imports-conflict-piece-name,
+.imports-conflict-piece-label + .imports-conflict-piece-value,
+.imports-conflict-piece-name + .imports-conflict-piece-value {
+  margin-top: 4px;
+}
+.imports-conflict-piece.is-source .imports-conflict-piece-value {
+  color: #5f574e;
+}
+.imports-conflict-piece.is-choice {
+  position: relative;
+  cursor: pointer;
+}
+.imports-conflict-piece.is-choice:hover:not(.is-selected) {
+  border-color: #c9c0b3;
+}
+.imports-conflict-piece.is-choice:has(.imports-conflict-radio:focus-visible) {
+  outline: 2px solid #0f5f63;
+  outline-offset: 2px;
+}
+.imports-conflict-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+.imports-conflict-actions {
+  display: flex;
+  gap: 8px;
+}
+.imports-conflict-button {
+  box-sizing: content-box;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 6px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d6cec2;
+  border-radius: 12px;
+  color: #221e1a;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: normal;
+  text-align: center;
+  cursor: pointer;
+}
+.imports-conflict-button:not(:disabled):hover {
+  border-color: #c9c0b3;
+  background: #efeae2;
+}
+.imports-conflict-button:not(:disabled):active {
+  background: #e5ded4;
+}
+.imports-conflict-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.imports-conflict-button:focus-visible,
+.imports-conflict-text-action:focus-visible,
+.imports-conflict-closed:focus-visible {
+  outline: 2px solid #0f5f63;
+  outline-offset: 2px;
+}
+/* Alvo de toque de 40 px, com a mesma distância do texto às peças acima. */
+.imports-conflict-text-action {
+  margin: -12px 0;
+  padding: 12px 8px;
+  align-self: center;
+  border: 0;
+  border-radius: 6px;
+  color: #0f5f63;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: normal;
+  cursor: pointer;
+}
+.imports-conflict-text-action:not(:disabled):hover {
+  color: #0b484c;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.imports-conflict-text-action:disabled {
+  color: #716859;
+  cursor: default;
+}
+.imports-conflict-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #5f574e;
+  font-size: 13px;
+}
+.imports-conflict-closed {
+  width: 100%;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #e5ded4;
+  border-radius: 16px;
+  color: #221e1a;
+  background: #fffdfa;
+  font-family: inherit;
+  line-height: normal;
   text-align: left;
   cursor: pointer;
 }
-
-.imports-conflict-items {
+.imports-conflict-closed:hover {
+  border-color: #d6cec2;
+}
+.imports-conflict-closed svg {
+  flex: none;
+}
+.imports-conflict-closed-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.imports-conflicts-footer {
+  padding: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.imports-conflicts-footer .btn {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 14px;
+  color: #f7f4ef;
+  background: #0f5f63;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.imports-conflicts-footer .btn:hover,
+.imports-conflicts-footer .btn:active {
+  background: #0b484c;
+}
+.imports-conflicts-footer span {
+  color: #716859;
+  font-size: 12px;
+  text-align: center;
+}
+/* A comparação dos horários (Goal062) dentro do cartão. */
+.imports-availability-comparison {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+.imports-availability-grid {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid #d6cec2;
+  border-radius: 12px;
+  font-size: 13px;
+}
+.imports-availability-grid ul {
   margin: 0;
   padding: 0;
   list-style: none;
   display: grid;
-  gap: 16px;
+  gap: 2px;
 }
-.imports-conflict-item {
-  padding: 16px 0;
-  border-top: 1px solid var(--border);
-  display: grid;
+.imports-availability-grid li {
+  display: flex;
+  justify-content: space-between;
   gap: 12px;
 }
-.imports-conflict-item:first-child {
-  border-top: 0;
-  padding-top: 0;
-}
-.imports-conflict-item > div > strong {
-  display: block;
-  font-size: 15px;
-}
-.imports-conflict-item.is-expanded {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.imports-decision-options {
+.imports-availability-grid .imports-note {
   margin: 0;
-  padding: 0;
-  border: 0;
-  display: grid;
-  gap: 8px;
 }
-.imports-decision-options legend {
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 4px;
+@media (prefers-reduced-motion: no-preference) {
+  .imports-conflict-button,
+  .imports-conflict-text-action,
+  .imports-conflict-piece,
+  .imports-conflict-closed {
+    transition:
+      background-color 160ms cubic-bezier(0.2, 0.7, 0.2, 1),
+      border-color 160ms cubic-bezier(0.2, 0.7, 0.2, 1),
+      color 160ms cubic-bezier(0.2, 0.7, 0.2, 1),
+      transform 120ms ease;
+  }
+  .imports-conflict-button:not(:disabled):active {
+    transform: scale(0.98);
+  }
+  .imports-conflicts-footer .btn {
+    transition:
+      background-color 160ms cubic-bezier(0.2, 0.7, 0.2, 1),
+      transform 120ms ease;
+  }
 }
-.imports-decision-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  cursor: pointer;
-}
-.imports-decision-option input[type="radio"] {
-  width: 20px;
-  height: 20px;
-  accent-color: var(--accent);
+@media (min-width: 768px) {
+  .imports-page:has(.imports-conflicts):not(.is-pushed) {
+    padding-bottom: 32px;
+  }
 }
 
 /* Execução, progresso e conclusão (Goal020, WU-08). */

@@ -263,7 +263,7 @@ describe("ShellConfigProvider + análise e seleção não excede a profundidade 
       await user.click(firstCheckbox);
     }
     await user.click(screen.getByRole("button", { name: "Revisar conflitos" }));
-    await user.click(screen.getByRole("button", { name: "Voltar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     expect(
       screen.getByRole("heading", { name: "Encontramos isto no Minha Agenda" }),
@@ -272,16 +272,19 @@ describe("ShellConfigProvider + análise e seleção não excede a profundidade 
 });
 
 describe("ShellConfigProvider + conflitos por item não excede a profundidade de atualização", () => {
-  test("expande, alterna a decisão e recolhe repetidamente sem confirmar", async () => {
+  test("abre um cartão e o outro repetidamente, sem decidir", async () => {
     getImportState.mockResolvedValue(stateWithSession(sessionFixture()));
     getImportPreview.mockResolvedValue(previewWithConflicts());
     listImportItems.mockResolvedValue({
       category: "SERVICE",
-      items: [conflictItemFixture()],
+      items: [
+        conflictItemFixture(),
+        conflictItemFixture({ externalId: "ext-43", id: "item-43", label: "Escova" }),
+      ],
       limit: 20,
       offset: 0,
       sessionId: "session-1",
-      total: 1,
+      total: 2,
     });
     const user = userEvent.setup();
 
@@ -289,13 +292,11 @@ describe("ShellConfigProvider + conflitos por item não excede a profundidade de
 
     await screen.findByRole("heading", { name: "Encontramos isto no Minha Agenda" });
     await user.click(screen.getByRole("button", { name: "Revisar conflitos" }));
-    await user.click(await screen.findByRole("button", { name: /serviços/ }));
 
+    // Só um cartão fica aberto: tocar o fechado abre esse e fecha o outro.
     for (let i = 0; i < 4; i += 1) {
-      await user.click(await screen.findByRole("button", { name: "Resolver" }));
-      await user.click(screen.getByRole("radio", { name: "Incluir mesmo assim" }));
-      await user.click(screen.getByRole("radio", { name: "Não importar este item" }));
-      await user.click(screen.getByRole("button", { name: "Cancelar" }));
+      await user.click(await screen.findByRole("button", { name: /^Escova/ }));
+      await user.click(await screen.findByRole("button", { name: /^Corte de cabelo/ }));
     }
 
     expect(decideImportItem).not.toHaveBeenCalled();
@@ -367,7 +368,7 @@ describe("ShellConfigProvider + execução não excede a profundidade de atualiz
 
     for (let i = 0; i < 4; i += 1) {
       await user.click(await screen.findByRole("button", { name: "Revisar pendências" }));
-      await user.click(await screen.findByRole("button", { name: "Voltar" }));
+      await user.click(await screen.findByRole("button", { name: "Continuar" }));
     }
 
     expect(

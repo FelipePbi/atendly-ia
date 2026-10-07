@@ -358,11 +358,8 @@ describe("conflitos: IMPORT_ITEM_ALREADY_DECIDED no envelope real", () => {
     await user.click(
       await screen.findByRole("button", { name: "Revisar conflitos" }),
     );
-    await user.click(await screen.findByRole("button", { name: /serviços/ }));
-    await screen.findByRole("heading", { name: "serviços" });
-    await user.click(screen.getByRole("button", { name: "Resolver" }));
-    await user.click(screen.getByRole("radio", { name: "Não importar este item" }));
-    await user.click(screen.getByRole("button", { name: "Confirmar decisão" }));
+    // O primeiro cartão já abre aberto; "Não importar" é a mesma decisão EXCLUDE.
+    await user.click(await screen.findByRole("button", { name: "Não importar" }));
 
     expect(
       await screen.findByText("Este item já foi decidido antes de você confirmar."),
@@ -398,11 +395,8 @@ describe("conflitos: IMPORT_ITEM_ALREADY_DECIDED no envelope real", () => {
     await user.click(
       await screen.findByRole("button", { name: "Revisar conflitos" }),
     );
-    await user.click(await screen.findByRole("button", { name: /serviços/ }));
-    await screen.findByRole("heading", { name: "serviços" });
-    await user.click(screen.getByRole("button", { name: "Resolver" }));
-    await user.click(screen.getByRole("radio", { name: "Não importar este item" }));
-    await user.click(screen.getByRole("button", { name: "Confirmar decisão" }));
+    // O primeiro cartão já abre aberto; "Não importar" é a mesma decisão EXCLUDE.
+    await user.click(await screen.findByRole("button", { name: "Não importar" }));
 
     expect(
       await screen.findByText(

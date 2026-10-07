@@ -201,11 +201,11 @@ describe("alvo 2.I10 do visual:compare", () => {
 });
 
 describe("os outros alvos do arquivo", () => {
-  test("2.I3, 2.I4, 2.I5, 2.I7, 2.I8, 2.I9 e 2.I10 são os únicos donos de responses; o 2.I10 não tem passo", () => {
+  test("2.I3, 2.I4, 2.I5, 2.I6, 2.I7, 2.I8, 2.I9 e 2.I10 são os únicos donos de responses; o 2.I10 não tem passo", () => {
     const owners = targets
       .filter((item) => item.file === FILE && item.responses !== undefined)
       .map((item) => item.code);
-    expect(owners).toEqual(["2.I3", "2.I4", "2.I5", "2.I7", "2.I8", "2.I9", "2.I10"]);
+    expect(owners).toEqual(["2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "2.I10"]);
     expect(target("2.I10").steps).toBeUndefined();
   });
 });

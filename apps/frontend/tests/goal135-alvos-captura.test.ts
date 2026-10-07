@@ -174,7 +174,7 @@ describe.each(CODES)("alvo %s do visual:compare", (code) => {
       );
     }
     for (const path of PATHS.slice(1)) expect(path).toContain(SESSION_ID);
-    for (const other of ["2.I3", "2.I4", "2.I5", "2.I7", "2.I10"]) {
+    for (const other of ["2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I10"]) {
       expect(JSON.stringify(target(other).responses), other).not.toContain(
         SESSION_ID,
       );
@@ -342,7 +342,7 @@ describe("os dois alvos", () => {
     expect(notes).not.toContain("com o painel das pendências, como no quadro");
   });
 
-  test("2.I3, 2.I4, 2.I5, 2.I7, 2.I8, 2.I9 e 2.I10 são os únicos donos de responses no arquivo", () => {
+  test("2.I3, 2.I4, 2.I5, 2.I6, 2.I7, 2.I8, 2.I9 e 2.I10 são os únicos donos de responses no arquivo (o 2.I6 entrou no Goal137)", () => {
     const owners = targets
       .filter((item) => item.file === FILE && item.responses !== undefined)
       .map((item) => item.code);
@@ -350,6 +350,7 @@ describe("os dois alvos", () => {
       "2.I3",
       "2.I4",
       "2.I5",
+      "2.I6",
       "2.I7",
       "2.I8",
       "2.I9",

@@ -4,6 +4,7 @@ import type {
   ImportAvailabilityGridRule,
   ImportCategory,
   ImportDecisionKind,
+  ImportItem,
   ImportSessionStatus,
   ImportWorkErrorCode,
 } from "./types";
@@ -215,36 +216,6 @@ export type ItemDecisionKind = Extract<
   "INCLUDE" | "EXCLUDE" | "MERGE_WITH_EXISTING" | "CREATE_NEW" | "KEEP_EXISTING"
 >;
 
-export const DECISION_LABELS: Record<ItemDecisionKind, string> = {
-  INCLUDE: "Incluir mesmo assim",
-  MERGE_WITH_EXISTING: "Mesclar com um cadastro existente",
-  CREATE_NEW: "Criar um novo cadastro",
-  KEEP_EXISTING: "Manter o cadastro existente (não importar este)",
-  EXCLUDE: "Não importar este item",
-};
-
-/**
- * `MERGE_WITH_EXISTING`/`KEEP_EXISTING` só fazem sentido para uma entidade
- * que pode ter um cadastro já existente para apontar (serviço, cliente); o
- * próprio contrato recusa as duas para as demais categorias.
- */
-const MERGE_ELIGIBLE_CATEGORIES = new Set<ImportCategory>(["SERVICE", "CUSTOMER"]);
-
-export function decisionsForCategory(category: ImportCategory): ItemDecisionKind[] {
-  return MERGE_ELIGIBLE_CATEGORIES.has(category)
-    ? ["INCLUDE", "MERGE_WITH_EXISTING", "CREATE_NEW", "KEEP_EXISTING", "EXCLUDE"]
-    : ["INCLUDE", "EXCLUDE"];
-}
-
-const TARGET_REQUIRED_DECISIONS = new Set<ItemDecisionKind>([
-  "MERGE_WITH_EXISTING",
-  "KEEP_EXISTING",
-]);
-
-export function decisionRequiresTarget(decision: ItemDecisionKind): boolean {
-  return TARGET_REQUIRED_DECISIONS.has(decision);
-}
-
 /**
  * Linguagem de produto para cada conflito (Goal020/WU-07), pelo mesmo motivo
  * de `limitationLabel`: o texto do motor de importação é escrito para quem lê
@@ -253,6 +224,8 @@ export function decisionRequiresTarget(decision: ItemDecisionKind): boolean {
 const CONFLICT_REASON_LABELS: Record<string, string> = {
   SERVICE_MATCH_AMBIGUOUS:
     "Mais de um serviço já cadastrado tem esse mesmo nome. Escolha qual corresponde, ou crie um novo.",
+  SERVICE_MATCH_DIVERGENT:
+    "Esse serviço já existe na Avenly com outra duração ou outro preço. Compare e escolha qual fica.",
   SERVICE_MATCH_SIMILAR:
     "Já existe um serviço com nome parecido. Confirme se é o mesmo antes de importar.",
   SERVICE_DURATION_MISSING:
@@ -440,3 +413,135 @@ export function groupAvailabilityByDay(
       intervals,
     }));
 }
+
+/**
+ * Cadastro que a análise sugeriu para um item (D-150): no serviço traz os
+ * valores, no cliente só o nome. Tipo derivado do contrato, sem repeti-lo.
+ */
+export type ImportItemCandidate = NonNullable<ImportItem["candidates"]>[number];
+export type ImportServiceCandidate = Extract<
+  ImportItemCandidate,
+  { priceType: unknown }
+>;
+export type ImportProposedService = NonNullable<ImportItem["proposedService"]>;
+
+export function isServiceCandidate(
+  candidate: ImportItemCandidate,
+): candidate is ImportServiceCandidate {
+  return "priceType" in candidate;
+}
+
+/**
+ * Onde o serviço da origem difere do cadastro sugerido, pela regra de D-150
+ * (item 3): a duração só difere quando a origem a informa, e o preço só quando
+ * a origem traz um preço fixo. Valor desconhecido da origem nunca diverge.
+ */
+export function serviceDivergence(
+  candidate: ImportServiceCandidate,
+  proposed: ImportProposedService | null | undefined,
+): { duration: boolean; price: boolean } {
+  if (!proposed) return { duration: false, price: false };
+  const duration =
+    proposed.durationMinutes !== null &&
+    candidate.durationMinutes !== proposed.durationMinutes;
+  const price =
+    proposed.priceType === "FIXED" &&
+    (candidate.priceType !== "FIXED" ||
+      candidate.price === null ||
+      candidate.price !== proposed.price);
+  return { duration, price };
+}
+
+/**
+ * Motivo curto do cabeçalho do cartão de decisão (2.I6), em minúscula e com o
+ * tipo do registro na frente, como o quadro escreve.
+ */
+export function conflictShortReason(item: ImportItem): string {
+  if (item.category === "CUSTOMER") return "cliente";
+  switch (item.reasonCode) {
+    case "SERVICE_MATCH_DIVERGENT": {
+      const candidate = item.candidates?.find(isServiceCandidate);
+      if (!candidate) return "serviço · valores diferentes";
+      const { duration, price } = serviceDivergence(
+        candidate,
+        item.proposedService,
+      );
+      if (duration && price) return "serviço · preço e duração diferentes";
+      if (duration) return "serviço · duração diferente";
+      if (price) return "serviço · preço diferente";
+      return "serviço · valores diferentes";
+    }
+    case "SERVICE_MATCH_SIMILAR":
+      return "serviço · nome parecido";
+    case "SERVICE_MATCH_AMBIGUOUS":
+      return "serviço · mais de um com esse nome";
+    case "SERVICE_DURATION_MISSING":
+      return "serviço · sem duração";
+    default:
+      return CATEGORY_SINGULAR_LABELS[item.category];
+  }
+}
+
+/** A pergunta do cartão de cliente com cadastro sugerido, por motivo. */
+export function customerQuestionLabel(reasonCode: string | null): string {
+  switch (reasonCode) {
+    case "CUSTOMER_MATCH_SIMILAR":
+      return "Nomes parecidos. São a mesma pessoa?";
+    case "CUSTOMER_MATCH_AMBIGUOUS":
+      return "Mais de um cliente com o mesmo nome e telefone. Qual é a mesma pessoa?";
+    case "CUSTOMER_PHONE_SHARED":
+      return "Mesmo telefone, nomes diferentes. São a mesma pessoa?";
+    default:
+      return "Parece alguém que já está na Avenly. São a mesma pessoa?";
+  }
+}
+
+/** O cadastro sugerido sumiu entre a análise e a decisão. */
+export const SUGGESTED_RECORD_GONE =
+  "O cadastro sugerido não está mais na Avenly.";
+
+/** O que a decisão tomada faz, na linha de resultado do cartão decidido. */
+export function conflictResultLabel(
+  category: ImportCategory,
+  decision: ItemDecisionKind,
+  targetName?: string,
+): string {
+  if (category === "AVAILABILITY") {
+    return decision === "INCLUDE"
+      ? "Vai usar os horários da Minha Agenda"
+      : "Vai manter seus horários";
+  }
+  switch (decision) {
+    case "KEEP_EXISTING":
+      return "Vai manter o da Avenly";
+    case "CREATE_NEW":
+      return category === "CUSTOMER"
+        ? "Vão ficar separadas"
+        : "Vai entrar como outro serviço";
+    case "MERGE_WITH_EXISTING":
+      return targetName ? `Vai juntar com ${targetName}` : "Vai juntar";
+    case "INCLUDE":
+      return "Vai ser importado";
+    case "EXCLUDE":
+      return "Não vai ser importado";
+  }
+}
+
+/** "3 registros precisam da sua decisão" e, no singular, "1 registro precisa da sua decisão". */
+export function conflictsTitle(count: number): string {
+  return count === 1
+    ? "1 registro precisa da sua decisão"
+    : `${importCountFormatter.format(count)} registros precisam da sua decisão`;
+}
+
+/** A descrição da tela de conflitos; `readyCount` é opcional (2.I6). */
+export function conflictsDescription(readyCount?: number): string {
+  const lead = "Encontramos dados parecidos aqui e no Minha Agenda.";
+  if (!readyCount || readyCount <= 0) return lead;
+  return readyCount === 1
+    ? `${lead} O outro já está pronto.`
+    : `${lead} Os outros ${importCountFormatter.format(readyCount)} já estão prontos.`;
+}
+
+export const CONFLICTS_FOOTER_NOTE =
+  "Itens sem decisão ficam de fora até você resolver.";

@@ -322,12 +322,11 @@ describe("/importacao monta a jornada real pela própria rota", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Itens que precisam da sua decisão",
+        name: "1 registro precisa da sua decisão",
       }),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: /serviços/ })).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: "Voltar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
     expect(
       await screen.findByRole("heading", {
         name: "Encontramos isto no Minha Agenda",
@@ -357,7 +356,7 @@ describe("/importacao monta a jornada real pela própria rota", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Itens que precisam da sua decisão",
+        name: "2 registros precisam da sua decisão",
       }),
     ).toBeVisible();
   });

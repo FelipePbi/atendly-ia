@@ -51,7 +51,31 @@ function fakePrisma(options: { activeChannel: boolean }) {
         };
       },
     },
+    // Goal139: "Remover" le o contato antes de gravar e procura as sessoes
+    // abertas dele; esta suite nao tem sessao.
+    conversationSession: { findMany: async () => [] },
     contact: {
+      findUnique: async ({
+        where,
+      }: {
+        where: {
+          tenantId_channelId_externalContactId: {
+            tenantId: string;
+            channelId: string;
+            externalContactId: string;
+          };
+        };
+      }) => {
+        const key = where.tenantId_channelId_externalContactId;
+        return (
+          contacts.find(
+            (row) =>
+              row.tenantId === key.tenantId &&
+              row.channelId === key.channelId &&
+              row.externalContactId === key.externalContactId,
+          ) ?? null
+        );
+      },
       upsert: async ({
         where,
         update,

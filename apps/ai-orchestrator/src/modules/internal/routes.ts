@@ -74,7 +74,11 @@ import {
 } from "../retention/inbox-retention.js";
 import { SchedulingClient } from "../scheduling-service/client.js";
 import { resolveCategoryScope } from "../session/session-policy.js";
-import { SessionService } from "../session/SessionService.js";
+import {
+  IGNORED_ORIGINS,
+  ignoredSourceFromOrigin,
+  SessionService,
+} from "../session/SessionService.js";
 import {
   AI_CONVERSATION_STYLES,
   aiConversationStyleSchema,
@@ -142,7 +146,15 @@ const categoryOverrideSchema = z.object({
   scope: z.enum(["CONVERSATION", "CONTACT"]).optional(),
 });
 
-const ignoreContactSchema = z.object({ ignored: z.boolean() });
+// Goal139: onde a marcacao foi feita. Opcional: quem nao manda grava o mesmo
+// de antes (`panel` na conversa, `onboarding` por telefone). Com
+// `ignored: false` e aceito e nao grava nada.
+const ignoredOriginSchema = z.enum(IGNORED_ORIGINS);
+
+const ignoreContactSchema = z.object({
+  ignored: z.boolean(),
+  origin: ignoredOriginSchema.optional(),
+});
 
 // Purga de conteudo (Goal023/WU-02). Os cutoffs chegam **calculados** pelo
 // BFF, que e quem conhece o prazo do negocio; esta rota nao le configuracao,
@@ -177,6 +189,13 @@ const tenantPurgeSchema = z
 const ignoreContactByPhoneSchema = z.object({
   phone: z.string().trim().min(8).max(20),
   ignored: z.boolean(),
+  origin: ignoredOriginSchema.optional(),
+});
+
+// Goal139: leitura dos contatos ignorados do canal ativo.
+const ignoredContactsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 
 const sendOwnerMessageSchema = z.object({
@@ -281,6 +300,7 @@ export interface InternalRoutesOptions {
     | "setCategoryOverride"
     | "setIgnored"
     | "setIgnoredByExternalContact"
+    | "listIgnoredContacts"
     | "releaseToAi"
     | "assumeHumanControl"
   >;
@@ -950,7 +970,7 @@ export async function registerInternalRoutes(
       conversationId: id,
       ignored: body.ignored,
       actor: userId,
-      source: "panel",
+      source: ignoredSourceFromOrigin(body.origin ?? "CONVERSATION"),
     });
     return internalData(
       request,
@@ -983,13 +1003,43 @@ export async function registerInternalRoutes(
       externalContactId,
       ignored: body.ignored,
       actor: userId,
-      source: "onboarding",
+      source: ignoredSourceFromOrigin(body.origin ?? "ONBOARDING"),
     });
     return internalData(request, {
       contactId: contact.contactId,
       externalContactId: contact.externalContactId,
       ignored: contact.ignored,
       ignoredAt: contact.ignoredAt?.toISOString() ?? null,
+    });
+  });
+
+  /**
+   * Contatos ignorados do canal ativo (Goal139): o mesmo canal em que a
+   * marcacao por telefone grava, com a mesma recusa sem vinculo ativo.
+   */
+  app.get("/internal/contacts/ignored", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const query = parseOrThrow(ignoredContactsQuerySchema, request.query);
+    const channel = await channelConnections.resolveTenantEvolutionChannel(
+      tenantId,
+    );
+    const { items, total } = await sessions.listIgnoredContacts({
+      tenantId,
+      channelId: channel.id,
+      limit: query.limit,
+      offset: query.offset,
+    });
+    return internalData(request, {
+      items: items.map((item) => ({
+        contactId: item.contactId,
+        externalContactId: item.externalContactId,
+        displayName: item.displayName,
+        ignoredAt: item.ignoredAt?.toISOString() ?? null,
+        origin: item.origin,
+      })),
+      total,
+      limit: query.limit,
+      offset: query.offset,
     });
   });
 
@@ -1961,6 +2011,10 @@ export function requiredScope(request: FastifyRequest): InternalScope {
   // conversa, so que sem conversa aberta ainda: mesmo escopo de escrita.
   if (path === "/internal/contacts/ignore" && method === "PUT") {
     return "conversations:write";
+  }
+  // Ler quem a IA nunca responde (Goal139) e leitura de conversas.
+  if (path === "/internal/contacts/ignored" && method === "GET") {
+    return "conversations:read";
   }
   // Purga (Goal023) tem escopo proprio: apagar conteudo de cliente nao e
   // consequencia de poder escrever na conversa, e nenhuma credencial existente

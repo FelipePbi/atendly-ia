@@ -6,11 +6,21 @@ import {
   type ConversationEvent,
   type ConversationSuggestions,
   type IgnoredContact,
+  type IgnoredContactList,
   type Message,
   type SessionCategory,
 } from "../mappers/publicApiSchemas";
 
 export type CategoryScope = "CONVERSATION" | "CONTACT";
+
+/** Onde a marcação foi feita (Goal139); cada rota de escrita aceita duas. */
+export type IgnoreConversationOrigin = "CONVERSATION" | "ONBOARDING";
+export type IgnorePhoneOrigin = "ONBOARDING" | "SETTINGS";
+
+export interface IgnoredContactsQuery {
+  limit?: number;
+  offset?: number;
+}
 
 export interface ConversationQuery {
   category?: SessionCategory;
@@ -133,9 +143,18 @@ export class BffConversationService {
     });
   }
 
-  setIgnored(id: string, ignored: boolean, signal?: AbortSignal) {
+  /**
+   * `origin` diz onde a marcação foi feita (Goal139) e só vai no corpo quando
+   * informado: sem ele, a IA grava o padrão de sempre.
+   */
+  setIgnored(
+    id: string,
+    ignored: boolean,
+    origin?: IgnoreConversationOrigin,
+    signal?: AbortSignal,
+  ) {
     return this.http.request({
-      body: { ignored },
+      body: origin ? { ignored, origin } : { ignored },
       method: "PUT",
       path: `/v1/conversations/${encodeURIComponent(id)}/ignore`,
       schema: routeSchema<Conversation>("PUT", "/v1/conversations/:id/ignore"),
@@ -147,13 +166,34 @@ export class BffConversationService {
    * Contato ignorado por telefone informado manualmente, sem conversa ainda
    * (Goal019/WU-07). Cria o contato quando ele não existe.
    */
-  ignoreByPhone(phone: string, ignored: boolean, signal?: AbortSignal) {
+  ignoreByPhone(
+    phone: string,
+    ignored: boolean,
+    origin?: IgnorePhoneOrigin,
+    signal?: AbortSignal,
+  ) {
     return this.http.request({
-      body: { phone, ignored },
+      body: origin ? { phone, ignored, origin } : { phone, ignored },
       method: "PUT",
       path: "/v1/conversations/ignored-contacts",
       schema: routeSchema<IgnoredContact>(
         "PUT",
+        "/v1/conversations/ignored-contacts",
+      ),
+      signal,
+    });
+  }
+
+  /**
+   * Contatos que a IA nunca responde, do canal ativo, com a origem de cada
+   * marcação (Goal139): leitura pelo contrato, sem tela que a use ainda.
+   */
+  listIgnoredContacts(query: IgnoredContactsQuery = {}, signal?: AbortSignal) {
+    return this.http.request({
+      path: "/v1/conversations/ignored-contacts",
+      query: { limit: query.limit, offset: query.offset },
+      schema: routeSchema<IgnoredContactList>(
+        "GET",
         "/v1/conversations/ignored-contacts",
       ),
       signal,

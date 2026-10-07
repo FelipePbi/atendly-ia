@@ -639,7 +639,7 @@ describe("Goal106 prova 3: contatos ignorados em Configurações", () => {
     await user.click(within(sheet).getByRole("button", { name: "Adicionar" }));
 
     expect(ignoreByPhone).toHaveBeenCalledTimes(1);
-    expect(ignoreByPhone).toHaveBeenCalledWith("+55 11 97777-0000", true);
+    expect(ignoreByPhone).toHaveBeenCalledWith("+55 11 97777-0000", true, "SETTINGS");
     expect(await within(sheet).findByText("5511977770000 ignorado")).toBeVisible();
     expect(setIgnored).not.toHaveBeenCalled();
   });
@@ -656,7 +656,7 @@ describe("Goal106 prova 3: contatos ignorados em Configurações", () => {
     await user.click(await within(sheet).findByRole("button", { name: "Ignorar" }));
 
     expect(setIgnored).toHaveBeenCalledTimes(1);
-    expect(setIgnored).toHaveBeenCalledWith("conv-1", true);
+    expect(setIgnored).toHaveBeenCalledWith("conv-1", true, "CONVERSATION");
     expect(await within(sheet).findByRole("button", { name: "Ignorado" })).toBeDisabled();
     expect(ignoreByPhone).not.toHaveBeenCalled();
   });
@@ -736,7 +736,7 @@ describe("Goal106 prova 4: onboarding intacto", () => {
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
     expect(ignoreByPhone).toHaveBeenCalledTimes(1);
-    expect(ignoreByPhone).toHaveBeenCalledWith("+55 11 97777-0000", true);
+    expect(ignoreByPhone).toHaveBeenCalledWith("+55 11 97777-0000", true, "ONBOARDING");
     expect(
       await screen.findByRole("checkbox", { name: "+55 11 97777-0000" }),
     ).toBeChecked();
@@ -753,7 +753,7 @@ describe("Goal106 prova 4: onboarding intacto", () => {
     await user.click(await screen.findByRole("checkbox", { name: "Maria" }));
 
     expect(setIgnored).toHaveBeenCalledTimes(1);
-    expect(setIgnored).toHaveBeenCalledWith("conv-1", true);
+    expect(setIgnored).toHaveBeenCalledWith("conv-1", true, "ONBOARDING");
     await waitFor(() =>
       expect(screen.getByRole("checkbox", { name: "Maria" })).toBeChecked(),
     );

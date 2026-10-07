@@ -39,13 +39,24 @@ const categorySchema = z.object({
   // Goal115: ausente vale `CONTACT`, decidido pela IA; so repassado se vier.
   scope: z.enum(["CONVERSATION", "CONTACT"]).optional(),
 });
-const ignoreSchema = z.object({ ignored: z.boolean() });
+// Goal139: `origin` e opcional nas duas escritas e so e repassado quando vem;
+// cada rota aceita as duas origens que fazem sentido nela.
+const ignoreSchema = z.object({
+  ignored: z.boolean(),
+  origin: z.enum(["ONBOARDING", "CONVERSATION"]).optional(),
+});
 // Goal019/WU-07: mesmo limite de `tenantPhone` do teste real — validar aqui
 // falha rápido, sem depender de uma viagem à IA para um corpo obviamente
 // inválido.
 const ignoreByPhoneSchema = z.object({
   phone: z.string().trim().min(8).max(20),
   ignored: z.boolean(),
+  origin: z.enum(["ONBOARDING", "SETTINGS"]).optional(),
+});
+// Goal139: leitura dos contatos ignorados do canal ativo.
+const ignoredContactsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
 });
 
 export async function registerV1ConversationRoutes(
@@ -61,6 +72,20 @@ export async function registerV1ConversationRoutes(
       return dataResponse(
         request,
         await ai.listConversations(internalContext(request), query),
+      );
+    },
+  );
+
+  // Rota estatica (Goal139): o router do Fastify a prefere a `:id`, e
+  // `GET /v1/conversations/<id>` continua lendo a conversa.
+  app.get(
+    "/v1/conversations/ignored-contacts",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const query = parseQuery(ignoredContactsQuerySchema, request.query);
+      return dataResponse(
+        request,
+        await ai.listIgnoredContacts(internalContext(request), query),
       );
     },
   );

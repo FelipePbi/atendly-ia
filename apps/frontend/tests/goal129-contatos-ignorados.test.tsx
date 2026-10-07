@@ -328,7 +328,7 @@ describe("4.5: marcar grava na hora e a caixa só muda depois da resposta", () =
     await user.click(tia);
 
     expect(setIgnored).toHaveBeenCalledTimes(1);
-    expect(setIgnored).toHaveBeenCalledWith("conv-tia", true);
+    expect(setIgnored).toHaveBeenCalledWith("conv-tia", true, "ONBOARDING");
     expect(tia).not.toBeChecked();
     expect(await screen.findByRole("button", { name: "Continuar · 2 pessoas" })).toBeVisible();
 
@@ -346,7 +346,7 @@ describe("4.5: marcar grava na hora e a caixa só muda depois da resposta", () =
     const mae = await screen.findByRole("checkbox", { name: "Mãe" });
     await user.click(mae);
 
-    expect(setIgnored).toHaveBeenCalledWith("conv-mae", false);
+    expect(setIgnored).toHaveBeenCalledWith("conv-mae", false, "ONBOARDING");
     expect(mae).toBeChecked();
 
     put.resolve({});
@@ -378,7 +378,7 @@ describe("4.5: marcar grava na hora e a caixa só muda depois da resposta", () =
     expect(tia).toHaveFocus();
     await user.keyboard(" ");
 
-    expect(setIgnored).toHaveBeenCalledWith("conv-tia", true);
+    expect(setIgnored).toHaveBeenCalledWith("conv-tia", true, "ONBOARDING");
     await waitFor(() => expect(tia).toBeChecked());
   });
 });
@@ -452,7 +452,7 @@ describe("4.5: busca e telefone", () => {
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
     expect(ignoreByPhone).toHaveBeenCalledTimes(1);
-    expect(ignoreByPhone).toHaveBeenCalledWith("+55 11 97777-0000", true);
+    expect(ignoreByPhone).toHaveBeenCalledWith("+55 11 97777-0000", true, "ONBOARDING");
     expect(
       await screen.findByRole("checkbox", { name: "+55 11 97777-0000" }),
     ).toBeChecked();
@@ -591,7 +591,7 @@ describe("4.5: o rodapé", () => {
     ).toBeVisible();
 
     await user.click(tia);
-    expect(setIgnored).toHaveBeenLastCalledWith("conv-tia", false);
+    expect(setIgnored).toHaveBeenLastCalledWith("conv-tia", false, "ONBOARDING");
     await waitFor(() => expect(tia).not.toBeChecked());
     expect(
       await screen.findByRole("button", { name: "Continuar" }),
@@ -736,7 +736,7 @@ describe("a folha de Configurações segue com a forma e os pedidos de hoje", ()
 
     await user.click(await within(sheet).findByRole("button", { name: "Ignorar" }));
     expect(setIgnored).toHaveBeenCalledTimes(1);
-    expect(setIgnored).toHaveBeenCalledWith("conv-1", true);
+    expect(setIgnored).toHaveBeenCalledWith("conv-1", true, "CONVERSATION");
     expect(
       await within(sheet).findByRole("button", { name: "Ignorado" }),
     ).toBeDisabled();
@@ -746,7 +746,7 @@ describe("a folha de Configurações segue com a forma e os pedidos de hoje", ()
       "+55 11 97777-0000",
     );
     await user.click(within(sheet).getByRole("button", { name: "Adicionar" }));
-    expect(ignoreByPhone).toHaveBeenCalledWith("+55 11 97777-0000", true);
+    expect(ignoreByPhone).toHaveBeenCalledWith("+55 11 97777-0000", true, "SETTINGS");
     expect(
       await within(sheet).findByText("5511977770000 ignorado"),
     ).toBeVisible();

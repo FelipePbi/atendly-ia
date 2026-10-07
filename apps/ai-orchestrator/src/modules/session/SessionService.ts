@@ -104,6 +104,41 @@ export interface CategorySuggestionPort {
   }): Promise<void>;
 }
 
+/**
+ * Onde a marcacao de "ignorado" foi feita (Goal139). O banco guarda texto livre
+ * em `ignoredSource`; a leitura volta ao enum e qualquer outro valor vira
+ * `null`, sem migration nem reescrita do que ja foi gravado.
+ */
+export const IGNORED_ORIGINS = ["ONBOARDING", "CONVERSATION", "SETTINGS"] as const;
+export type IgnoredOrigin = (typeof IGNORED_ORIGINS)[number];
+
+const IGNORED_SOURCE_BY_ORIGIN: Record<IgnoredOrigin, string> = {
+  ONBOARDING: "onboarding",
+  CONVERSATION: "panel",
+  SETTINGS: "settings",
+};
+
+export function ignoredSourceFromOrigin(origin: IgnoredOrigin): string {
+  return IGNORED_SOURCE_BY_ORIGIN[origin];
+}
+
+export function ignoredOriginFromSource(
+  source: string | null | undefined,
+): IgnoredOrigin | null {
+  const entry = IGNORED_ORIGINS.find(
+    (origin) => IGNORED_SOURCE_BY_ORIGIN[origin] === source,
+  );
+  return entry ?? null;
+}
+
+export interface IgnoredContactEntry {
+  contactId: string;
+  externalContactId: string;
+  displayName: string | null;
+  ignoredAt: Date | null;
+  origin: IgnoredOrigin | null;
+}
+
 export class SessionService implements GraphSessionPort, CategorySuggestionPort {
   constructor(
     private readonly prisma: PrismaClient,
@@ -482,6 +517,17 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
     ignoredAt: Date | null;
   }> {
     const now = input.now ?? new Date();
+    const key = {
+      tenantId_channelId_externalContactId: {
+        tenantId: input.tenantId,
+        channelId: input.channelId,
+        externalContactId: input.externalContactId,
+      },
+    };
+    const wasIgnored = input.ignored
+      ? false
+      : ((await this.prisma.contact.findUnique({ where: key }))?.ignored ??
+        false);
     const ignoredFields = {
       ignored: input.ignored,
       ignoredAt: input.ignored ? now : null,
@@ -489,13 +535,7 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
       ignoredSource: input.ignored ? (input.source ?? "onboarding") : null,
     };
     const contact = await this.prisma.contact.upsert({
-      where: {
-        tenantId_channelId_externalContactId: {
-          tenantId: input.tenantId,
-          channelId: input.channelId,
-          externalContactId: input.externalContactId,
-        },
-      },
+      where: key,
       update: ignoredFields,
       create: {
         tenantId: input.tenantId,
@@ -504,12 +544,94 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
         ...ignoredFields,
       },
     });
+    if (wasIgnored) {
+      await this.keepOpenSessionsOutOfAi({
+        tenantId: input.tenantId,
+        contactId: contact.id,
+        actor: input.actor ?? null,
+        now,
+      });
+    }
     return {
       contactId: contact.id,
       externalContactId: contact.externalContactId,
       ignored: contact.ignored,
       ignoredAt: contact.ignoredAt,
     };
+  }
+
+  /**
+   * Contatos ignorados do canal (Goal139), do mais antigo ao mais novo.
+   *
+   * `ignoredAt` crescente com nulos por ultimo e `id` como desempate: a ordem
+   * nao muda entre duas paginas. Tenant e canal sao parte do filtro — o canal
+   * e o ativo, o mesmo em que "Remover" por telefone grava.
+   */
+  async listIgnoredContacts(input: {
+    tenantId: string;
+    channelId: string;
+    limit: number;
+    offset: number;
+  }): Promise<{ items: IgnoredContactEntry[]; total: number }> {
+    const where = {
+      tenantId: input.tenantId,
+      channelId: input.channelId,
+      ignored: true,
+    };
+    const [rows, total] = await Promise.all([
+      this.prisma.contact.findMany({
+        where,
+        orderBy: [
+          { ignoredAt: { sort: "asc", nulls: "last" } },
+          { id: "asc" },
+        ],
+        take: input.limit,
+        skip: input.offset,
+      }),
+      this.prisma.contact.count({ where }),
+    ]);
+    return {
+      items: rows.map((row) => ({
+        contactId: row.id,
+        externalContactId: row.externalContactId,
+        displayName: row.displayName ?? null,
+        ignoredAt: row.ignoredAt,
+        origin: ignoredOriginFromSource(row.ignoredSource),
+      })),
+      total,
+    };
+  }
+
+  /**
+   * "Remover" por telefone nao devolve a conversa aberta a IA: cada sessao
+   * aberta e nao expirada do contato fica `PERSONAL` so nesta conversa. A
+   * sessao nova, depois da inatividade, nasce sem a decisao.
+   */
+  private async keepOpenSessionsOutOfAi(input: {
+    tenantId: string;
+    contactId: string;
+    actor: string | null;
+    now: Date;
+  }): Promise<void> {
+    const open = await this.prisma.conversationSession.findMany({
+      where: {
+        tenantId: input.tenantId,
+        contactId: input.contactId,
+        endedAt: null,
+        expiresAt: { gte: input.now },
+      },
+      select: { conversationId: true },
+    });
+    for (const session of open) {
+      await this.setCategoryOverride({
+        tenantId: input.tenantId,
+        conversationId: session.conversationId,
+        category: "PERSONAL",
+        scope: "CONVERSATION",
+        actor: input.actor,
+        now: input.now,
+      });
+    }
   }
 
   /**

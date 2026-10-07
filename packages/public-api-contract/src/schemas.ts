@@ -791,6 +791,29 @@ export const ignoredContactSchema = z.object({
   ignoredAt: isoDateTimeSchema.nullable(),
 });
 
+// Onde a marcacao do contato foi feita (Goal139). `null` na leitura quando o
+// valor gravado antes deste Goal nao e um dos tres conhecidos.
+export const ignoredOriginSchema = z.enum([
+  "ONBOARDING",
+  "CONVERSATION",
+  "SETTINGS",
+]);
+
+// Contatos que a IA nunca responde, do canal ativo (Goal139). Espelha
+// `GET /v1/conversations/ignored-contacts` em `apps/bff/PUBLIC_API_V1.md`.
+export const ignoredContactEntrySchema = z.object({
+  contactId: z.string().min(1),
+  externalContactId: z.string().min(1),
+  displayName: z.string().nullable(),
+  ignoredAt: isoDateTimeSchema.nullable(),
+  origin: ignoredOriginSchema.nullable(),
+});
+
+export const ignoredContactListSchema = z.object({
+  items: z.array(ignoredContactEntrySchema),
+  total: z.number().int().nonnegative(),
+});
+
 // Execucao do teste real da ativacao (Goal019). Espelha `GET/POST
 // /v1/activation-test` em `apps/bff/PUBLIC_API_V1.md`. Nada aqui e derivado
 // de tempo: os seis marcos so ficam `reached` quando ha fato gravado atras
@@ -1627,6 +1650,9 @@ export type ImportCategorySelectionResult = z.infer<
   typeof importCategorySelectionResultSchema
 >;
 export type IgnoredContact = z.infer<typeof ignoredContactSchema>;
+export type IgnoredContactEntry = z.infer<typeof ignoredContactEntrySchema>;
+export type IgnoredContactList = z.infer<typeof ignoredContactListSchema>;
+export type IgnoredOrigin = z.infer<typeof ignoredOriginSchema>;
 export type OnboardingState = z.infer<typeof onboardingStateSchema>;
 export type Service = z.infer<typeof serviceSchema>;
 export type ServiceList = z.infer<typeof serviceListSchema>;

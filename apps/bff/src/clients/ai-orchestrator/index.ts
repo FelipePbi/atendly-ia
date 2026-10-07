@@ -184,6 +184,28 @@ const ignoredContactSchema = z.object({
   ignoredAt: z.string().nullable(),
 });
 
+// Goal139: onde a marcacao foi feita, e a lista dos contatos ignorados do
+// canal ativo. A IA tambem devolve `limit` e `offset`; o BFF so repassa o que
+// o contrato publico declara.
+const ignoredOriginSchema = z.enum([
+  "ONBOARDING",
+  "CONVERSATION",
+  "SETTINGS",
+]);
+
+const ignoredContactListSchema = z.object({
+  items: z.array(
+    z.object({
+      contactId: z.string(),
+      externalContactId: z.string(),
+      displayName: z.string().nullable(),
+      ignoredAt: z.string().nullable(),
+      origin: ignoredOriginSchema.nullable(),
+    }),
+  ),
+  total: z.number().int().nonnegative(),
+});
+
 // Goal012/WU-01: tipos do documento de conhecimento (`KnowledgeDocument`).
 const knowledgeDocumentTypeSchema = z.enum([
   "FAQ",
@@ -499,7 +521,7 @@ export class AiOrchestratorClient {
   async setIgnored(
     context: InternalRequestContext,
     id: string,
-    input: { ignored: boolean },
+    input: { ignored: boolean; origin?: "ONBOARDING" | "CONVERSATION" },
   ) {
     return (
       await this.http.request({
@@ -519,7 +541,11 @@ export class AiOrchestratorClient {
    */
   async ignoreContactByPhone(
     context: InternalRequestContext,
-    input: { phone: string; ignored: boolean },
+    input: {
+      phone: string;
+      ignored: boolean;
+      origin?: "ONBOARDING" | "SETTINGS";
+    },
   ) {
     return (
       await this.http.request({
@@ -528,6 +554,26 @@ export class AiOrchestratorClient {
         context,
         body: input,
         schema: envelope(ignoredContactSchema),
+      })
+    ).data;
+  }
+
+  /**
+   * Contatos ignorados do canal ativo, com a origem de cada marcacao
+   * (Goal139). Sem vinculo de WhatsApp ativo a IA recusa, e a recusa chega
+   * como `UPSTREAM_ERROR`.
+   */
+  async listIgnoredContacts(
+    context: InternalRequestContext,
+    query: { limit?: number; offset?: number },
+  ) {
+    return (
+      await this.http.request({
+        method: "GET",
+        path: "/internal/contacts/ignored",
+        context,
+        query,
+        schema: envelope(ignoredContactListSchema),
       })
     ).data;
   }

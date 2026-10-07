@@ -8877,3 +8877,116 @@ Goal138 aceito na rodada 1 ([review138](reviews/138-review.md)), sem blocker. Co
 | Integração do Scheduling | **não reexecutada** pelo Tech Lead: o banco `ia_scheduling_test` do ambiente dele não tem a tabela `AppointmentEvent`, e o `goal136`, já aceito, falha igual. Vale o `test:scheduling-integration` com saída 0 dentro do `validate:integration` (WU-13), que provisiona o próprio banco, e a contagem do Developer (22 arquivos e 165 testes, 4 de 4 do `goal138`) |
 
 Os sete controles negativos são os do Developer (WU-01 e WU-02); o Tech Lead não os refez.
+
+## A lista dos contatos ignorados, com a origem de cada marcação, no contrato, do Goal139
+
+Rodada 1, 2026-10-07, na worktree `goal-139`. Baseline `2eec1fc`. **Rodada 1:** a leitura, a origem e "Remover" na IA, os testes `goal139` de unidade e de integração e os controles (a), (b), (c), (e), (f) e (g) (WU-01); o contrato, o BFF, `PUBLIC_API_V1.md`, o teste `goal139` do BFF e o controle (d) (WU-02); os consumidores do frontend, o teste `goal139` do frontend e o controle (h) (WU-03); os gates do IA Loop (WU-04 a WU-17); o pino de contagem de `this.http.` do BFF (DIAG-001, depois da primeira execução de `validate:core`); e estes registros (WU-18). Os gates do IA Loop rodaram sobre três estados da árvore, todos na rodada 1 e todos com `attemptId` `a1`: `code-v1:002b4e0e…19c4ee84` (WU-04 a WU-06, a IA, antes do BFF e do frontend), `code-v1:a8c13f06…1ba55a2c` (WU-07 a WU-15, a primeira execução de `validate:core`) e `code-v1:d093135d…a05abc83` (a segunda execução de `validate:core`, `validate:ui` e `validate:integration`: a árvore final, com a DIAG-001, que só trocou o pino 45 → 46 em `assistant.service.test.ts`). Nenhum gate está pendente: todos os números abaixo são da rodada 1. O Goal foi aceito na rodada 1 ([review139](reviews/139-review.md)), sem blocker.
+
+### Contagens
+
+Contagens de partida (a baseline `2eec1fc`, **antes de editar**) e da execução final, por serviço:
+
+| Suíte | Partida (baseline) | Final | Diferença | Quem obteve |
+| --- | --- | --- | --- | --- |
+| Unidade da IA (`npx vitest run` em `apps/ai-orchestrator`, sem banco) | 97 arquivos passando e 14 pulados; **1238** testes passando e 101 pulados (1339) | 98 arquivos passando e 15 pulados; **1262** testes passando e 108 pulados (1370), saída 0, 23,4 s | +1 arquivo e +24 testes passando (`goal139-ignored-contacts-list.routes.test.ts`); +1 arquivo e +7 testes pulados (`goal139-ignored-contacts.test.ts`, de integração, que o gate sem banco pula) | Developer, WU-01 (partida e final); de novo o final na WU-18, sobre a árvore final |
+| Unidade do BFF (`npx vitest run` em `apps/bff`, sem banco) | **sem partida medida** (a WU-02 só rodou a suíte depois de editar); por conta: 23 arquivos e 177 testes passando, o que dá 193 menos os 16 do arquivo novo, com o mesmo número de arquivos e testes pulados | 24 arquivos passando e 50 pulados; **193** testes passando e 374 pulados (567), saída 0, 9,7 s | +1 arquivo e +16 testes passando (`goal139-ignored-contacts.test.ts`) | Developer, WU-02 (193 passando, 0 falhas); de novo na WU-18 |
+| Unidade do frontend (`npm test`) | 201 arquivos e **2906** testes passando (Goal138) | **202** arquivos e **2915** testes passando, 0 falhas, 51,3 s | +1 arquivo e +9 testes (`goal139-contatos-ignorados.test.tsx`) | IA Loop, WU-13 |
+
+A contagem de partida do BFF é a conta acima, **não** uma medida: a suíte do BFF só rodou na árvore já editada, e o número de partida sai de tirar os 16 testes do arquivo novo, que é o único arquivo de teste do BFF criado ou alterado no Goal.
+
+Gates do IA Loop e do Developer:
+
+| Gate | Comando | Resultado (rodada 1) | Quem obteve |
+| --- | --- | --- | --- |
+| Typecheck da IA | `npx tsc --noEmit` (em `apps/ai-orchestrator`) | saída 0, 3,1 s, sem erro | IA Loop, WU-04 |
+| Lint da IA | `npm run lint` (`eslint src --max-warnings=0`) | saída 0, 4,0 s, 0 avisos | IA Loop, WU-05 |
+| Testes `goal139` da IA | `npx vitest run goal139` | saída 0, 1 arquivo passando com **24** testes (unidade) e 1 arquivo **pulado** com 7 testes (integração, sem `AI_TEST_DATABASE_URL`); 31 no total, 24 passando e 7 pulados, 1,3 s | IA Loop, WU-06 |
+| Typecheck do BFF | `npx tsc --noEmit` (em `apps/bff`) | saída 0, 2,3 s, sem erro | IA Loop, WU-07 |
+| Lint do BFF | `npm run lint` (`eslint src --max-warnings=0`) | saída 0, 3,5 s, 0 avisos | IA Loop, WU-08 |
+| Testes `goal139` do BFF | `npx vitest run goal139` | saída 0, 1 arquivo e **16** testes passando, 0,8 s | IA Loop, WU-09 |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0, 1,5 s, sem erro | IA Loop, WU-10 |
+| Lint do frontend | `npm run lint` (`eslint src tests --max-warnings=0`) | saída 0, 17,0 s, 0 avisos | IA Loop, WU-11 |
+| Testes `goal139` do frontend | `npx vitest run goal139` | saída 0, 1 arquivo e **9** testes passando, 2,5 s | IA Loop, WU-12 |
+| Testes do frontend | `npm test` | saída 0, **202** arquivos e **2915** testes passando, 0 falhas, 51,3 s (a baseline aceita é 201 e 2906: +1 arquivo e +9 testes, os de `goal139`) | IA Loop, WU-13 |
+| `test:gate` | `npm run test:gate` | saída 0, **296** testes, 296 passando, 0 falhas, 0 pulados, 1,0 s (igual à baseline) | IA Loop, WU-14 |
+| `validate:core`, primeira execução | `npm run validate:core` | **saída 1**, 41,0 s: o passo `test:ai-orchestrator` reprovou **1** teste, `tests/assistant/assistant.service.test.ts > Goal047 / WU-04 (§6) … as 45 ocorrências de this.http. … estão todas na forma direta`, com `AssertionError: expected 46 to be 45 // Object.is equality` (linha 11924). Causa: a WU-02 acrescentou `AiOrchestratorClient.listIgnoredContacts` em `apps/bff/src/clients/ai-orchestrator/index.ts`, com mais uma chamada `this.http.request`, e o teste fixava o total em 45; o pino era de contagem exata, desatualizado por mudança legítima do Goal. A DIAG-001 trocou 45 por 46 (`toBe(46)` duas vezes, o título do `describe` e do `it` e um comentário), sem tocar o gate nem afrouxar a asserção, e `npx vitest run tests/assistant/assistant.service.test.ts` passou com 299 de 299 | IA Loop, WU-15 (primeira execução) e DIAG-001 |
+| `validate:core`, segunda execução | `npm run validate:core` | saída 0, 101,2 s, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, que só tem a suíte de integração, rodada no `validate:integration`; `test:health-worker`, pacote sem suíte, só a checagem de sintaxe). A auditoria estática teve 33 checagens passando e 1 pulada (`production_health`, que pede `PRODUCTION_HEALTH_TARGETS`) | IA Loop, WU-15 (segunda execução, `attemptId` `139-r1-unit-wu-15-g2-a1`; é a que vale) |
+| `validate:ui` | `npm run validate:ui` | saída 0, 44,7 s, **169 passed**, 21 skipped, retentativas **0** ("every test passed on its first attempt"); igual à baseline | IA Loop, WU-16 |
+| `validate:integration` | `npm run validate:integration` | saída 0, 750,1 s, 36 passos, **36 passaram**, 0 falharam, 0 pulados, contra `127.0.0.1:55500/ia_bff_test`. O gate autenticado (`rehearse:goal033-authenticated-ui`) deu **305 passed** em 10,5 min e retentativas **0** ("every test passed on its first attempt"); igual à baseline. Dentro dele, `test:bff-integration` e `test:scheduling-integration` com saída 0 e `test:ai-orchestrator-transport-durability` (que roda `vitest run tests/integration` em `apps/ai-orchestrator`, o arquivo `goal139` incluído) com saída 0 | IA Loop, WU-17 |
+| `git diff --check` | `git diff --check` | saída 0, sem erro, sobre a árvore com a implementação (WU-18, antes destes registros) e de novo depois deles (WU-18); só os avisos de fim de linha do Git (`LF will be replaced by CRLF`) em arquivos de teste, que não são erro. A WU-19 do IA Loop o rodou de novo depois destes registros, na árvore final (`code-v1:d093135d…a05abc83`): saída 0, sem saída, 89 ms | Developer, WU-18; IA Loop, WU-19 |
+
+**O que não foi contado.** O relatório que o IA Loop guarda de `validate:core` e de `validate:integration` omite o meio da saída, então **não há contagem de testes por passo** dos gates (quantos testes tem `test:ai-orchestrator`, `test:frontend` ou `test:ai-orchestrator-transport-durability` dentro deles); o que vale deles é a saída 0 e os passos passando. Por isso a contagem de testes da IA e do BFF acima é a do `vitest run` direto, não a do gate. Os gates WU-07 a WU-14 rodaram **antes** da DIAG-001; a árvore deles difere da final só pelo pino de contagem de `assistant.service.test.ts` (nenhum arquivo de `src` nem teste de BFF ou frontend mudou), e a IA, o BFF e o frontend foram cobertos de novo depois dela por `validate:core` (segunda execução), pela suíte da IA e do BFF da WU-18 e por `validate:ui` e `validate:integration`.
+
+### Testes de integração contra banco
+
+- **Os 7 testes de `tests/integration/goal139-ignored-contacts.test.ts` (IA) rodaram contra PostgreSQL**, e todos passaram. (1) Developer, WU-01: contêiner descartável `pgvector/pgvector:0.8.6-pg15-bookworm` (`goal139-ia-test`, porta 55439, removido ao final), com `prisma migrate deploy`, banco `ai_test_goal139`: **7 de 7**, rodado 3 vezes. O banco chamado `t` fez `goal109-avenly-human-control-source` falhar por regra do próprio teste (`"t" is not recognised as a disposable database`), então a suíte inteira usou o banco com nome próprio. (2) IA Loop, WU-17: dentro do `validate:integration`, o passo `test:ai-orchestrator-transport-durability` roda `vitest run tests/integration` e saiu 0, na árvore final; **sem contagem de testes retida**.
+- **Suíte inteira da IA com banco (WU-01):** 110 arquivos passando e 2 falhando, 1366 testes passando. As 2 falhas foram `tests/integration/session-durability.test.ts > inbox lease heartbeat … a long batch keeps its lease` (`expected { …(4) } to be null`) e `tests/integration/transport-durability.test.ts > keeps the legacy replay fixture readable` (`expected 0 to be greater than 0`, que exige o fixture `tenant-legacy` semeado pelo ensaio da migration). A WU-01 **não** rodou a baseline com banco e não afirmou que fossem pré-existentes; o `validate:integration` da WU-17, que roda a mesma pasta `tests/integration` num banco que ele provisiona, saiu 0 na árvore final.
+- **BFF:** o teste `goal139` do BFF não usa banco (dublê de tenant e de `fetch`, com a verificação de resposta contra o contrato ligada); os arquivos de integração do BFF existentes ficaram pulados na unidade sem banco (50 arquivos) e rodaram dentro do `validate:integration` (`test:bff-integration`, saída 0).
+- **Limite:** o banco admite um único canal por tenant e provedor (`ChannelConnection_tenantId_provider_key`, só existe `EVOLUTION_GO`), então "contato de outro canal do mesmo tenant" é provado só na unidade; a integração prova o tenant distinto.
+
+### O contrato novo e o pacote
+
+O pacote foi reconstruído depois da mudança do contrato: `npm run build` em `packages/public-api-contract` (saída 0, WU-02), com o `dist` e o `src` copiados para `apps/bff/node_modules/@avenly-ia/public-api-contract` e `apps/frontend/node_modules/@avenly-ia/public-api-contract`. Isso não entra no diff. Antes de rodar a IA e o BFF na worktree, a WU-01 rodou `npx prisma generate` em `apps/ai-orchestrator` e em `apps/bff` (o client gerado não existia na worktree; sem ele a baseline da IA tinha 2 falhas de contagem de arquivos do AST em `assistant.service.test.ts`, que sumiram ao gerar). O `validate:core` roda `build:public-api-contract` e `repro:a03-contract-drift`, que passaram.
+
+### Gate autenticado
+
+O gate autenticado deu **305 passed** e 0 retentativas na árvore final (WU-17), igual à baseline. O Goal não tocou `authenticated-matrix.spec.ts`, `ONBOARDING_ROUTES` nem a semente do gate, nenhuma tela mudou de aparência, e o W3 continua fora de `targets.json`.
+
+### Controles negativos
+
+Todos depois da última edição de código da respectiva WU (a DIAG-001 só mudou depois um pino de contagem num teste), cada um editando o arquivo, rodando o teste, reprovando e revertendo por cópia do backup, com `cmp` igual ao backup. As mensagens são as da saída bruta do `vitest` que a WU-01, a WU-02 e a WU-03 registraram; a WU-18 não os refez. Comando base da IA (WU-01): `npx vitest run tests/internal/goal139-ignored-contacts-list.routes.test.ts tests/integration/goal139-ignored-contacts.test.ts` em `apps/ai-orchestrator`, com `AI_TEST_DATABASE_URL`.
+
+| Controle | Edição | Arquivo e teste que reprovou | Mensagem de asserção |
+| --- | --- | --- | --- |
+| (a) a leitura sem o filtro de canal | `SessionService.ts`: `listIgnoredContacts` sem o filtro de canal | `tests/internal/goal139-ignored-contacts-list.routes.test.ts` e `tests/integration/goal139-ignored-contacts.test.ts`, **3** reprovaram, entre eles `GET /internal/contacts/ignored > devolve so os ignorados do canal ativo do tenant, na ordem da escolha 1, com total` | `AssertionError: expected [ 'c-first', 'c-other-channel', …(4) ] to deeply equal [ 'c-first', 'c-tie-a', …(3) ]` |
+| (b) a leitura sem o filtro de tenant | `SessionService.ts`: `listIgnoredContacts` sem o filtro de tenant | os mesmos arquivos, **3** reprovaram, o mesmo teste. A fixture não discriminava no primeiro ensaio (passou 31 de 31): a WU-01 acrescentou o contato `c-other-tenant-same-channel` e refez o controle | `AssertionError: expected [ 'c-first', …(5) ] to deeply equal [ 'c-first', 'c-tie-a', …(3) ]` |
+| (c) `"panel"` lido como `ONBOARDING` | `SessionService.ts`: `"panel"` lido como `ONBOARDING` na leitura da origem | os mesmos arquivos, **2** reprovaram: `mapeia ignoredSource para a origem nos tres sentidos e valor desconhecido vira null` (unidade) e `reads the three origins with their dates, only for the active channel and tenant` (integração) | `AssertionError: expected { 'c-first': 'ONBOARDING', …(4) } to deeply equal { 'c-first': 'ONBOARDING', …(4) }` e `AssertionError: expected [ 'ONBOARDING', 'ONBOARDING', …(1) ] to deeply equal [ 'ONBOARDING', 'CONVERSATION', …(1) ]` |
+| (d) o padrão de `origin` do `PUT` por telefone trocado para `SETTINGS` | (d1) BFF, `routes.ts`: `origin` com `.default("SETTINGS")`; (d2) IA, `internal/routes.ts`: `body.origin ?? "ONBOARDING"` trocado por `"SETTINGS"` (o padrão que de fato é gravado; arquivo da WU-01, mutação temporária e restaurada byte a byte) | (d1) `apps/bff/tests/goal139-ignored-contacts.test.ts`, **1** reprovou: `PUT /ignored-contacts sem origin manda o mesmo corpo de antes`. (d2) `apps/ai-orchestrator`, **2** reprovaram: `goal139-ignored-contacts-list.routes.test.ts > sem origin, os dois PUT gravam o mesmo de hoje` e `ignored-contacts.routes.test.ts > cria o contato ignorado quando ele ainda nao existe, com telefone normalizado` | (d1) `AssertionError: expected { phone: '11999990001', …(2) } to deeply equal { Object (phone, ignored) }`; (d2) `AssertionError: expected 'settings' to be 'onboarding' // Object.is equality` |
+| (e) "Remover" sem gravar a decisão da sessão | `SessionService.ts`: "Remover" por telefone sem gravar a decisão da sessão | os mesmos arquivos da IA, **3** reprovaram, entre eles `deixa a sessao aberta e nao expirada em PERSONAL so nesta conversa, com o autor do pedido` (unidade) e `keeps the open session out of the AI and the next session does not inherit the decision` (integração) | integração: `AssertionError: expected { …(27) } to match object { category: 'PERSONAL', …(3) }`; unidade: `AssertionError: expected { tenantId: 'tenant-a', …(17) } to match object { category: 'PERSONAL', …(3) }` |
+| (f) a regra de "Remover" também na rota da conversa | `SessionService.ts`: a regra de "Remover" aplicada também em `setIgnored` (a rota da conversa) | os mesmos arquivos da IA, **2** reprovaram: `gives the AI back at once when the chat route clears the mark (D-130 6)` (integração) e `desmarcar pela rota da conversa (D-130 6) nao grava categoria` (unidade) | integração: `AssertionError: expected { …(27) } to match object { category: 'UNCLASSIFIED', …(1) }`; unidade: `AssertionError: expected { tenantId: 'tenant-a', …(17) } to match object { category: 'COMMERCIAL', …(1) }` |
+| (g) a linha de `requiredScope` removida | `internal/routes.ts`: a linha de `requiredScope` de `GET /internal/contacts/ignored` removida | `tests/internal/goal139-ignored-contacts-list.routes.test.ts`, **13** reprovaram, entre eles `a rota nova exige conversations:read` e as rotas de leitura, que respondiam 403 | `AssertionError: expected 'internal:unmapped' to be 'conversations:read' // Object.is equality` e `AssertionError: expected 403 to be 200 // Object.is equality` |
+| (h) `OnboardingIgnoredContacts` sem `origin` na marcação da conversa | `IgnoredContactsPanel.tsx`: o argumento `"ONBOARDING"` removido de `setIgnored` em `toggleConversation`, dentro de `OnboardingIgnoredContacts` | `apps/frontend/tests/goal139-contatos-ignorados.test.tsx`, **1** reprovou e 8 passaram: `Goal139 onboarding > marcar uma conversa manda origin ONBOARDING` (comando: `npx vitest run tests/goal139-contatos-ignorados.test.tsx` em `apps/frontend`) | `AssertionError: expected "vi.fn()" to be called with arguments: [ 'conv-1', true, 'ONBOARDING' ]` |
+
+Depois de cada controle, a WU-01 conferiu `SessionService.ts` e `routes.ts` contra o backup (`cmp` igual) e rodou a suíte limpa de novo (31 de 31). A WU-02 deu `REVERT_OK` nos dois lados do (d) e a WU-03 `REVERTED_CMP_OK` no (h), com o `goal139` do frontend de volta a 9 de 9.
+
+### Testes ajustados
+
+Só a forma mudou; nenhuma expectativa de comportamento, texto, papel, estado ou fluxo mudou.
+
+1. `apps/frontend/tests/goal018-onboarding-reachability.test.tsx` (2 asserções), `goal106-whatsapp.test.tsx` (4) e `goal129-contatos-ignorados.test.tsx` (7) (WU-03): comparavam a lista exata de argumentos de `setIgnored` e `ignoreByPhone`, e o Goal exige que os dois consumidores passem a mandar `origin`. O terceiro argumento entrou nas expectativas, com o `origin` do componente que cada asserção exercita (`ONBOARDING` no onboarding; `CONVERSATION` na conversa e `SETTINGS` no telefone da folha). `goal129-contatos-ignorados.test.tsx` não estava na lista de arquivos esperados da WU, mas é a suíte do mesmo componente e foi o único arquivo que quebrou na suíte completa do frontend (1 arquivo e 6 testes na primeira passada, depois do ajuste 202 arquivos e 2915 testes). `goal017` (o chat) e `goal065` passam sem mudança.
+2. `apps/ai-orchestrator/tests/internal/ignored-contacts.routes.test.ts` (WU-01): o fake de Prisma ganhou `contact.findUnique` e `conversationSession.findMany` (devolve `[]`), porque "Remover" agora lê o contato antes de gravar e procura as sessões abertas; as asserções não mudaram.
+3. `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` (WU-01 e DIAG-001): o pino da linha de `modules/internal/routes.ts` passou de 779 a 799 (as linhas novas ficam antes do sítio `person_typed_text`), e a contagem de `this.http.` em `apps/bff/src/clients/` passou de 45 a 46 (duas asserções `toBe`, o título do `describe` e do `it` e um comentário), por causa de `listIgnoredContacts` no cliente do BFF. A contagem continua exata, sem faixa nem `skip`, e o `scripts/validate-core.mjs` não foi tocado.
+
+`goal139-ignored-contacts-list.routes.test.ts` e `goal139-ignored-contacts.test.ts` da IA, `goal139-ignored-contacts.test.ts` do BFF e `goal139-contatos-ignorados.test.tsx` do frontend são arquivos **novos** deste Goal.
+
+### Escopo
+
+Os arquivos mudados são os do §1, do §2 e do §3 do Goal, os testes e os registros: `apps/ai-orchestrator/src/modules/internal/routes.ts` e `src/modules/session/SessionService.ts`; `packages/public-api-contract/src/schemas.ts` e `routes.ts`; `apps/bff/src/modules/conversations/routes.ts`, `apps/bff/src/clients/ai-orchestrator/index.ts` e `apps/bff/PUBLIC_API_V1.md`; `apps/frontend/src/data/services/BffConversationService.ts` e `apps/frontend/src/features/whatsapp/IgnoredContactsPanel.tsx`; os testes de `apps/ai-orchestrator/tests/`, `apps/bff/tests/` e `apps/frontend/tests/`; e `DECISIONS.md`, `CURRENT_STATE.md` e este arquivo, todos por acréscimo. O banco, `schema.prisma`, `goals/`, `reviews/`, `MIGRATION_STATUS.md` e `MASTER_PLAN.md` não foram tocados.
+
+### Desvios do texto do Goal, para o review
+
+- **Contagem de partida do BFF.** O Goal pede a contagem de partida do BFF medida antes de editar; ela **não foi medida** (a WU-02 rodou a suíte só na árvore editada). O número de partida acima é por conta (193 menos os 16 do arquivo novo) e está marcado assim.
+- **Teste de integração no gate dirigido.** O `vitest run goal139` do IA Loop (WU-06) roda sem banco e pula os 7 de integração; eles rodaram contra PostgreSQL no Developer (WU-01, 7 de 7) e dentro do `validate:integration` (WU-17, passo `test:ai-orchestrator-transport-durability`, sem contagem retida).
+- **Controle (d) em dois lados.** O padrão de `origin` do `PUT` por telefone é gravado na IA (`ONBOARDING`); o BFF não tem padrão. A WU-02 fez o controle nos dois lados (d1 no BFF, com um `.default("SETTINGS")` posto só para o controle, e d2 na IA); só o d2 mexe em arquivo de outra WU (a WU-01), com mutação temporária e reversão por `cmp`.
+- **Pino de `this.http.`.** `validate:core` deu saída 1 na primeira execução por um teste que fixava 45 chamadas; a DIAG-001 o corrigiu para 46 e a segunda execução saiu 0 (acima).
+- **`prettier --check`.** A WU-02 viu `prettier --check` acusar também arquivos não tocados (`src/lib/http.ts`, `goal074…`), por CRLF do checkout do Windows; não é gate do plano e a formatação não foi alterada.
+
+### Não executado
+
+- A contagem de testes por passo de `validate:core` e de `validate:integration` (ver "O que não foi contado").
+- A suíte da IA e do BFF com banco inteira na baseline `2eec1fc` (a WU-01 não a rodou, então as duas falhas ad hoc da suíte inteira da IA com banco não têm baseline).
+- Os controles negativos não foram refeitos na WU-18; valem os da WU-01, da WU-02 e da WU-03, sem edição de código de `src` depois.
+- A marcação e a remoção ponta a ponta num WhatsApp real, e a tela num aparelho real (nenhuma tela mudou).
+
+### Aceite
+
+Goal139 aceito na rodada 1 ([review139](reviews/139-review.md)), sem blocker. Conferência do Tech Lead na árvore aceita, sem edição de código no meio:
+
+| Verificação | Resultado |
+| --- | --- |
+| `goal139-ignored-contacts-list.routes.test.ts` e `ignored-contacts.routes.test.ts` da IA | 29 de 29 passando |
+| `goal139-ignored-contacts.test.ts` do BFF | 16 de 16 passando |
+| Integração `goal139` da IA | **não reexecutada** pelo Tech Lead. Valem a execução do Developer contra PostgreSQL descartável (WU-01, 7 de 7, três vezes) e o passo `test:ai-orchestrator-transport-durability` com saída 0 dentro do `validate:integration` (WU-17), sem contagem retida |
+| Gates do IA Loop | todos com `attemptId` `a1`; o único com saída diferente de 0 é a primeira execução de `validate:core` (WU-15), corrigida pela DIAG-001 e refeita com saída 0 (WU-15-g2) na árvore final `code-v1:d093135d903b7dbf7f8a0a035f1f8ca986177b3cbe5756da2dfde499a05abc83`, a mesma de `validate:ui` (WU-16), `validate:integration` (WU-17) e `git diff --check` (WU-19) |
+
+Os oito controles negativos são os do Developer (WU-01, WU-02 e WU-03); o Tech Lead não os refez. A contagem de partida do BFF continua por conta, não medida, como desvio declarado.

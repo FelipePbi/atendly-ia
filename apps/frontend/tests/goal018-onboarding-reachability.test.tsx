@@ -731,7 +731,7 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
 
     await user.click(await screen.findByRole("checkbox", { name: "Maria" }));
 
-    expect(setIgnoredConversation).toHaveBeenCalledWith("conv-1", true);
+    expect(setIgnoredConversation).toHaveBeenCalledWith("conv-1", true, "ONBOARDING");
     await waitFor(() =>
       expect(screen.getByRole("checkbox", { name: "Maria" })).toBeChecked(),
     );
@@ -766,7 +766,7 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
     );
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
-    expect(ignoreByPhone).toHaveBeenCalledWith("+55 11 97777-0000", true);
+    expect(ignoreByPhone).toHaveBeenCalledWith("+55 11 97777-0000", true, "ONBOARDING");
     expect(
       await screen.findByRole("checkbox", { name: "+55 11 97777-0000" }),
     ).toBeChecked();

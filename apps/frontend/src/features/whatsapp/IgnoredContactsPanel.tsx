@@ -52,7 +52,11 @@ export function IgnoredContactsPanel() {
     setPendingConversationId(id);
     setListError(null);
     try {
-      await getProductServices().conversations.setIgnored(id, true);
+      await getProductServices().conversations.setIgnored(
+        id,
+        true,
+        "CONVERSATION",
+      );
       setMarkedConversationIds((current) => new Set(current).add(id));
     } catch {
       setListError("Não foi possível marcar este contato. Tente novamente.");
@@ -73,6 +77,7 @@ export function IgnoredContactsPanel() {
       const contact = await getProductServices().conversations.ignoreByPhone(
         trimmed,
         true,
+        "SETTINGS",
       );
       setMarkedPhones((current) => [...current, contact.externalContactId]);
       setPhone("");
@@ -311,7 +316,11 @@ export function OnboardingIgnoredContacts({
     setPendingId(conversation.id);
     setMarkError(null);
     try {
-      await getProductServices().conversations.setIgnored(conversation.id, next);
+      await getProductServices().conversations.setIgnored(
+        conversation.id,
+        next,
+        "ONBOARDING",
+      );
       setKnown((current) => ({
         ...current,
         [conversation.id]: {
@@ -345,6 +354,7 @@ export function OnboardingIgnoredContacts({
       const contact = await getProductServices().conversations.ignoreByPhone(
         trimmed,
         true,
+        "ONBOARDING",
       );
       setMarkedPhones((current) =>
         current.includes(contact.externalContactId)

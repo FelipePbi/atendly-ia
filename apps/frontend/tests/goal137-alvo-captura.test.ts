@@ -345,7 +345,6 @@ describe("alvo 2.I6 do visual:compare", () => {
       "D-147",
       "formatServicePrice",
       "color: var(--fg)",
-      "ReplaceAccountZone",
       "D-145",
       "D-104",
       "chapterFraction",

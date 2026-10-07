@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { Prisma } from "../../src/generated/prisma/client.js";
 import { ImportPreviewService } from "../../src/modules/migrations/import-preview-service.js";
 import {
-  knownPositiveDuration,
+  knownServiceDuration,
   proposedServiceFrom,
   resolvePrice,
 } from "../../src/modules/migrations/import-source-values.js";
@@ -419,7 +419,7 @@ describe("proposedService sai das mesmas funções da execução", () => {
     {},
   ])("o proposedService de %j é duração e preço da execução", async (source) => {
     expect(proposedServiceFrom(source)).toEqual({
-      durationMinutes: knownPositiveDuration(source.duration),
+      durationMinutes: knownServiceDuration(source.duration),
       ...resolvePrice(source.price),
     });
     const { analyze, rows } = await setup([]);

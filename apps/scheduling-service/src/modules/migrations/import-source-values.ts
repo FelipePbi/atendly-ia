@@ -15,16 +15,28 @@ export function knownPositiveDuration(value: unknown): number | null {
 }
 
 /**
- * Preco ausente e preco zero da origem sao a mesma pendencia de negocio
- * (Goal062, WU-01): nenhum dos dois e um preco de verdade, e ambos viram
- * `NOT_INFORMED`/`null`, nunca `FIXED` com zero fabricado.
+ * Duracao de servico da origem na importacao (Goal138): so o inteiro positivo
+ * de minutos e conhecido. Fracao, zero, negativo, nao finito, texto e ausente
+ * sao duracao desconhecida, nunca arredondada para um valor que a origem nao
+ * mandou. O intervalo de um atendimento continua em `knownPositiveDuration`,
+ * que aceita fracao de minuto.
+ */
+export function knownServiceDuration(value: unknown): number | null {
+  const known = knownPositiveDuration(value);
+  return known !== null && Number.isInteger(known) ? known : null;
+}
+
+/**
+ * Preco ausente, zero e negativo da origem sao a mesma pendencia de negocio
+ * (Goal062, WU-01; Goal138): nenhum deles e um preco de verdade, e todos viram
+ * `NOT_INFORMED`/`null`, nunca `FIXED` com zero ou valor negativo fabricado.
  */
 export function resolvePrice(value: unknown): {
   priceType: "FIXED" | "NOT_INFORMED";
   price: number | null;
 } {
   const known = knownNumber(value);
-  if (known === null || known === 0) {
+  if (known === null || known <= 0) {
     return { priceType: "NOT_INFORMED", price: null };
   }
   return { priceType: "FIXED", price: known };
@@ -42,7 +54,7 @@ export function proposedServiceFrom(source: {
   price?: unknown;
 }): ProposedService {
   return {
-    durationMinutes: knownPositiveDuration(source.duration),
+    durationMinutes: knownServiceDuration(source.duration),
     ...resolvePrice(source.price),
   };
 }

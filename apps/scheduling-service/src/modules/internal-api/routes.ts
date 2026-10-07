@@ -2519,15 +2519,26 @@ function proposedServiceDto(value: unknown): {
     return null;
   }
   const stored = value as Record<string, unknown>;
-  const priceType = stored.priceType === "FIXED" ? "FIXED" : "NOT_INFORMED";
+  // Mesma regra de `importProposedServiceSchema` (contrato): duracao inteira
+  // positiva e preco finito nao negativo, senao desconhecidos. Cobre o que uma
+  // analise anterior ao Goal138 gravou, sem migration nem reanalise.
+  const durationMinutes =
+    typeof stored.durationMinutes === "number" &&
+    Number.isInteger(stored.durationMinutes) &&
+    stored.durationMinutes > 0
+      ? stored.durationMinutes
+      : null;
+  const fixedPrice =
+    stored.priceType === "FIXED" &&
+    typeof stored.price === "number" &&
+    Number.isFinite(stored.price) &&
+    stored.price >= 0
+      ? stored.price
+      : null;
   return {
-    durationMinutes:
-      typeof stored.durationMinutes === "number" ? stored.durationMinutes : null,
-    priceType,
-    price:
-      priceType === "FIXED" && typeof stored.price === "number"
-        ? stored.price
-        : null,
+    durationMinutes,
+    priceType: fixedPrice === null ? "NOT_INFORMED" : "FIXED",
+    price: fixedPrice,
   };
 }
 

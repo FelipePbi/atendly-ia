@@ -342,6 +342,7 @@ test("targets.json: o 2.I6 só declara os quatro GET da sessão de conflitos e s
   );
   for (const entry of t26.responses) assert.equal(typeof entry.json.requestId, "string");
   assert.deepEqual(t26.steps, [{ clickRole: { role: "button", name: "Revisar conflitos" } }], "2.I6: só o clique em Revisar conflitos");
+  assert.ok(!t26.notes.includes("ReplaceAccountZone"), "2.I6: a ReplaceAccountZone não aparece no modo de conflitos, então as notes não a declaram");
   for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
     for (const route of ["/v1/calendar/imports", `/v1/calendar/imports/${sessionId}/preview`, `/v1/calendar/imports/${sessionId}/items/1/decision`, `/v1/calendar/imports/${sessionId}/complete`]) {
       assert.equal(pickFixedResponse(t26, method, route), null, `2.I6: ${method} ${route} não deveria casar`);

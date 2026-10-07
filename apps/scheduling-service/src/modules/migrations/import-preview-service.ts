@@ -36,7 +36,7 @@ import {
   newImportLeaseOwner,
 } from "./import-lease.js";
 import {
-  knownPositiveDuration,
+  knownServiceDuration,
   proposedServiceFrom,
   resolvePrice,
 } from "./import-source-values.js";
@@ -1061,7 +1061,7 @@ function classifyService(
     | { name?: unknown; duration?: unknown; price?: unknown }
     | null;
   const name = asString(raw?.name) ?? `Serviço ${record.externalId}`;
-  const duration = asPositiveNumber(raw?.duration);
+  const duration = knownServiceDuration(raw?.duration);
   const price = typeof raw?.price === "number" ? raw.price : null;
 
   const exactMatches = existingServices.filter(
@@ -1139,7 +1139,7 @@ function serviceValuesDiverge(
   existing: MatchableService,
   raw: { duration?: unknown; price?: unknown } | null,
 ): boolean {
-  const duration = knownPositiveDuration(raw?.duration);
+  const duration = knownServiceDuration(raw?.duration);
   if (duration !== null && existing.durationMinutes !== duration) return true;
   const { priceType, price } = resolvePrice(raw?.price);
   if (priceType === "FIXED") {
@@ -1404,10 +1404,4 @@ function hashString(value: string): string {
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function asPositiveNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) && value > 0
-    ? value
-    : null;
 }

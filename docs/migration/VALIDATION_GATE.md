@@ -8768,3 +8768,112 @@ Os arquivos mudados são os do §1 e do §2 do Goal, os testes e os registros: `
 - A altura renderizada, em px, da ação de texto "Não importar este item": vem da regra de CSS (`padding: 12px 8px` e `margin: -12px 0`), o jsdom não faz layout e o gate autenticado não alcança a tela.
 - A contagem de testes por passo de `validate:core` e de `validate:integration` (ver "O que não foi contado").
 - Os controles negativos não foram refeitos na WU-12; valem os da WU-03, sem edição de código depois.
+
+## Os valores malformados da origem não derrubam a revisão da importação, do Goal138
+
+Rodada 1, 2026-10-07, na worktree `goal-138`. Baseline `a32c52b`. **Rodada 1:** `knownServiceDuration`, `resolvePrice`, a análise, a execução, `proposedServiceDto`, os testes `goal138` de unidade e de integração e os controles (a) a (e) (WU-01); `settle`, as `notes` do 2.I6, os testes `goal138` do frontend, as três capturas da baseline, o `visual:compare` do 2.I6 e os controles (f) e (g) (WU-02); os gates do IA Loop sobre a árvore final (WU-03 a WU-13, todos com o mesmo `codeFingerprint` `code-v1:8a672d13aad3d1eb39d8bb030354291526fb01657e1a1ebb0d10cd479895cb50` e `attemptId` `a1`, ou seja, uma execução de cada, sem retentativa do harness); estes registros (WU-14); e `git diff --check` depois deles (WU-15, mesmo `codeFingerprint`, `attemptId` `a1`). Nenhum gate está pendente: todos os números abaixo são da rodada 1. O Goal foi aceito na rodada 1 ([review138](reviews/138-review.md)), sem blocker.
+
+### Contagens
+
+| Gate | Comando | Resultado (rodada 1) | Quem obteve |
+| --- | --- | --- | --- |
+| Typecheck do Scheduling | `npx tsc --noEmit` (em `apps/scheduling-service`) | saída 0, 1,9 s, sem erro | IA Loop, WU-03 |
+| Lint do Scheduling | `npm run lint` (`prisma generate && eslint src --max-warnings=0`) | saída 0, 3,9 s, 0 avisos | IA Loop, WU-04 |
+| Testes `goal138` do Scheduling | `npx vitest run goal138` | saída 0, 1 arquivo passando com **16** testes (unidade); o arquivo de integração (**4** testes) foi **pulado** (4 skipped), porque o gate roda sem `SCHEDULING_TEST_DATABASE_URL`; 20 testes `goal138` no total, 16 passando e 4 pulados | IA Loop, WU-05 |
+| Testes de unidade do Scheduling | `npx vitest run --dir tests/unit` | **42** arquivos e **587** testes passando, 0 falhas (a baseline aceita é 41 e 571: +1 arquivo e +16 testes, exatamente os de `goal138-import-source-values.test.ts`) | Developer, WU-01; de novo, mesma contagem, na WU-14 |
+| Testes de integração do Scheduling | `SCHEDULING_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5555/g138_sched_test npx vitest run --dir tests/integration` | **22** arquivos e **165** testes passando, 0 falhas, **contra PostgreSQL** (a baseline é 21 e 161: +1 arquivo e +4 testes, os de `goal138-import-source-values.test.ts`, **4 de 4 rodaram contra o banco**) | Developer, WU-01; de novo, mesma contagem, na WU-14 |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0, 1,4 s, sem erro | IA Loop, WU-06 |
+| Lint do frontend | `npm run lint` (`eslint src tests --max-warnings=0`) | saída 0, 17,1 s, 0 avisos | IA Loop, WU-07 |
+| Testes `goal138` do frontend | `npx vitest run goal138` | saída 0, 1 arquivo e **9** testes passando (`goal138-conflitos.test.tsx`) | IA Loop, WU-08 |
+| Testes do frontend | `npm test` | saída 0, **201** arquivos e **2906** testes passando, 0 falhas, 51,7 s (a baseline aceita é 200 e 2897: +1 arquivo e +9 testes, os de `goal138`) | IA Loop, WU-09 |
+| Testes da captura | `node --test scripts/tests/visual-responses.test.mjs` | **63** testes passando, 0 falhas, 0 pulados (a baseline é 63: a asserção nova está dentro do teste do 2.I6, que já existia); de novo 63 de 63 depois dos controles (WU-02) e na WU-14 | Developer, WU-02 e WU-14; dentro do `test:gate` da WU-10 |
+| `test:gate` | `npm run test:gate` | saída 0, **296** testes, 296 passando, 0 falhas, 0 pulados, 1,1 s (igual à baseline) | IA Loop, WU-10 |
+| `validate:core` | `npm run validate:core` | saída 0, 112,6 s, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, que só tem a suíte de integração, rodada no `validate:integration`; `test:health-worker`, pacote sem suíte, só a checagem de sintaxe). A auditoria estática teve 33 checagens passando, 0 falhando e 1 pulada (`production_health`, que pede `PRODUCTION_HEALTH_TARGETS`) | IA Loop, WU-11 |
+| `validate:ui` | `npm run validate:ui` | saída 0, 45,1 s, **169 passed**, 21 skipped, retentativas **0** ("every test passed on its first attempt"); igual à baseline | IA Loop, WU-12 |
+| `validate:integration` | `npm run validate:integration` | saída 0, 756,2 s, 36 passos, **36 passaram**, 0 falharam, 0 pulados, contra `127.0.0.1:55500/ia_bff_test`. O gate autenticado (`rehearse:goal033-authenticated-ui`) deu **305 passed** em 10,7 min e retentativas **0** ("every test passed on its first attempt"); igual à baseline. Dentro dele, `provision:scheduling-test-database` e `test:scheduling-integration` com saída 0 | IA Loop, WU-13 |
+| `git diff --check` | `git diff --check` | saída 0, sem saída, sobre a árvore antes destes registros (WU-14) e de novo depois deles (WU-14). A WU-15 do IA Loop o rodou de novo depois destes registros: saída 0, sem saída, 85 ms | Developer, WU-01 e WU-14; IA Loop, WU-15 |
+
+**O que não foi contado.** O relatório que o IA Loop guarda de `validate:core` e de `validate:integration` omite o meio da saída, então **não há contagem de testes por passo** do gate (quantos testes tem `test:scheduling-service`, `test:frontend` ou `test:scheduling-integration` dentro dele); o que vale deles é a saída 0 e os passos passando. As contagens do Scheduling acima são as do Developer, rodadas na árvore final com o banco descartável `g138_sched_test` (criado no container `avenly_postgres_dev`, porta 5555, com `prisma migrate deploy`; as outras bases do container não foram tocadas), e a WU-14 as repetiu sem edição de código no meio.
+
+### Gate autenticado
+
+O gate autenticado deu **305 passed** e 0 retentativas na árvore final (WU-13), igual à baseline, com `/onboarding/importacao` passando nas cinco larguras. O Goal não tocou `authenticated-matrix.spec.ts`, `ONBOARDING_ROUTES` nem a semente do gate: a conta do gate não tem sessão de importação, e a tela de conflitos não é alcançada por ele (D-151 item 12).
+
+### Controles negativos
+
+Todos depois da última edição de código da respectiva WU, cada um editando o arquivo, rodando o teste, reprovando e revertendo por cópia do backup, com `cmp` igual ao backup. As mensagens são as da saída bruta do `vitest` e do `node --test` que a WU-01 e a WU-02 registraram; a WU-14 não os refez. Comandos base: `npx vitest run goal138` e, nos de integração, `SCHEDULING_TEST_DATABASE_URL=... npx vitest run --dir tests/integration goal138` (em `apps/scheduling-service`); `npx vitest run tests/goal138-conflitos.test.tsx` (em `apps/frontend`); `node --test scripts/tests/visual-responses.test.mjs` (na raiz).
+
+| Controle | Edição | Arquivo e teste que reprovou | Mensagem de asserção |
+| --- | --- | --- | --- |
+| (a) fração volta | `import-source-values.ts`: `knownServiceDuration` devolvendo `known` (aceita fração) | `tests/unit/goal138-import-source-values.test.ts`, **6** reprovaram, entre eles `knownServiceDuration > fração, zero, negativo… dão null, sem arredondar`, a `proposedServiceFrom`, a análise e as duas execuções | `AssertionError: expected 47.5 to be null`; na análise, `expected 'SERVICE_MATCH_DIVERGENT' to be 'SERVICE_DURATION_MISSING'` |
+| (b) negativo volta a `FIXED` | `import-source-values.ts`: `resolvePrice` com `known === 0` no lugar de `known <= 0` | `tests/unit/goal138-import-source-values.test.ts`, **6** reprovaram, entre eles `resolvePrice > preço negativo é NOT_INFORMED/null` e `preço negativo com cadastro de mesmo nome… não vira SERVICE_MATCH_DIVERGENT` | `AssertionError: expected { priceType: 'FIXED', price: -10 } to deeply equal { priceType: 'NOT_INFORMED', …(1) }` e `AssertionError: expected 'SERVICE_MATCH_DIVERGENT' not to be 'SERVICE_MATCH_DIVERGENT' // Object.is equality` |
+| (c) `asPositiveNumber` volta | `import-preview-service.ts`: `classifyService` lendo a duração por `asPositiveNumber` (função recriada só para o controle) | `tests/unit/goal138-import-source-values.test.ts`, **1** reprovou: `a análise com valor malformado da origem > duração fracionária sai SERVICE_DURATION_MISSING NEEDS_REVIEW com os candidatos preservados` | `AssertionError: expected 'SERVICE_MATCH_EXACT' to be 'SERVICE_DURATION_MISSING' // Object.is equality` |
+| (d) a rota copia qualquer número | `internal-api/routes.ts`: `proposedServiceDto` copiando `durationMinutes` e `price` se forem `number` | `tests/integration/goal138-import-source-values.test.ts`, **2** reprovaram: `a rota devolve null/NOT_INFORMED/null para um proposedService gravado à força como {47.5, FIXED, -10}` e `cada campo é lido por si…` | `AssertionError: expected { durationMinutes: 47.5, …(2) } to deeply equal { durationMinutes: null, …(2) }` e `AssertionError: expected { durationMinutes: 30, …(2) } to deeply equal { durationMinutes: 30, …(2) }` |
+| (e) intervalo com a função nova | `import-execution-service.ts`: `resolveInterval` usando `knownServiceDuration` | `tests/unit/goal138-import-source-values.test.ts`, **1** reprovou: `resolveInterval com appointment.duration fracionária continua usando a duração` | `AssertionError: expected '2026-10-01T13:00:00.000Z' to be '2026-10-01T12:47:30.000Z' // Object.is equality` |
+| (f) `settle` só em `decided` | `ImportConflictsScreen.tsx`: `settle` voltando a incrementar `decidedSince` só com `record.kind === "decided"` | `tests/goal138-conflitos.test.tsx`, **2** reprovaram (as duas molduras): `o último item que faltava sai da fila: não sobra nada a carregar` (linha 147) | `AssertionError: expected <button …(2)></button> to be null` (o botão "Carregar mais") |
+| (g) a frase de volta às `notes` | `targets.json`: o trecho da `ReplaceAccountZone` de volta às `notes` do 2.I6 (o arquivo do backup original) | **os dois testes da captura.** (1) `tests/goal138-conflitos.test.tsx`, **1** reprovou: `não citam a ReplaceAccountZone, e as demais divergências do Goal137 continuam` (linha 315). (2) `node --test scripts/tests/visual-responses.test.mjs`, 62 passaram e **1** falhou: `2.I6: a ReplaceAccountZone não aparece no modo de conflitos, então as notes não a declaram` | (1) `AssertionError: expected 'O quadro mostra a revisão dos conflit…' not to contain 'ReplaceAccountZone'`; (2) `AssertionError [ERR_ASSERTION]: 2.I6: a ReplaceAccountZone não aparece no modo de conflitos, então as notes não a declaram` |
+
+**Ressalva sobre o controle (g).** O Goal pede que o controle reprove pelos dois testes da captura (lição 3), mas `goal137-alvo-captura.test.ts` **não reprova** com a frase de volta: este Goal tirou dele a exigência da palavra `ReplaceAccountZone`, então ele aceita as `notes` com ou sem ela. Para que o segundo teste da captura reprove, a WU-02 pôs uma asserção a mais no teste do 2.I6 de `scripts/tests/visual-responses.test.mjs` (a única mudança desse arquivo; ele já constava como possível no critério 9 do Goal "só se um controle exigir"). Os dois testes que reprovam são `goal138-conflitos.test.tsx` e `visual-responses.test.mjs`. **Ressalva sobre o controle (c).** `asPositiveNumber` já tinha saído do código (ficou sem consumidor); o Developer a recriou só para o controle e a reversão voltou o arquivo ao backup, então a árvore final não a tem.
+
+### `visual:compare` do 2.I6
+
+Comando: `npm run visual:compare -- --target 2.I6` (WU-02, saída 0, sobre a árvore final, depois da última edição de código da tela e das `notes`). Percentual de pixels diferentes por device, **igual** ao da baseline:
+
+| Alvo | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| 2.I6 | 4,5% | 1,5% | 1,8% | 1,9% |
+
+Os **quatro** `side-by-side.png` (protótipo × app) foram abertos pela WU-02, em `apps/frontend/e2e-results/visual/onboarding-2-importacao-2.I6-{mobile,tablet-portrait,tablet-landscape,desktop}/side-by-side.png`. As diferenças que restam são exatamente as declaradas em D-151 e nas `notes` do alvo: o cartão do serviço aberto e sem decisão (os botões "Manter o da Avenly" e "Criar outro serviço", "Não importar este item" e as peças neutras) no lugar do decidido do quadro; a ordem dos cartões e o cliente fechado; "1.843" no lugar de "1.837"; o chevron e o "Sair" do topo, o preenchimento dos segmentos da barra, o estado de "Sua agenda" e a barra de status do iPhone (D-104, D-145). Nenhuma divergência nova, e **nenhuma `ReplaceAccountZone`**, que nunca apareceu.
+
+**Ruído da baseline, medido antes de editar.** `npm run visual:compare -- --target 2.I6` rodado **três vezes** na baseline `a32c52b` (as três com saída 0), com os `app.png` copiados para uma pasta fora do repositório. Entre as três capturas: mobile, tablet retrato e tablet paisagem **idênticas por `cmp`**; desktop, a captura 1 difere das capturas 2 e 3 em **21 px, delta máximo 1** por canal, e as capturas 2 e 3 são idênticas.
+
+**Tabela por imagem (depois das edições × as três capturas da baseline;** pixels diferentes e delta máximo por canal, por comparação pixel a pixel):
+
+| Alvo | Device (px) | Ruído entre as três capturas | Final × cap1 | Final × cap2 | Final × cap3 | Resultado |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2.I6 | mobile (402 × 812) | 0 | 0 px, Δ0 | 0 px, Δ0 | 0 px, Δ0 | igual por `cmp` às três |
+| 2.I6 | tablet retrato (768 × 1024) | 0 | 0 px, Δ0 | 0 px, Δ0 | 0 px, Δ0 | igual por `cmp` às três |
+| 2.I6 | tablet paisagem (1024 × 768) | 0 | 0 px, Δ0 | 0 px, Δ0 | 0 px, Δ0 | igual por `cmp` às três |
+| 2.I6 | desktop (1366 × 768) | 21 px, Δ1 (cap1 × cap2 e cap1 × cap3) | 21 px, Δ1 | 0 px, Δ0 | 0 px, Δ0 | igual por `cmp` a `cap2` e `cap3`; os 21 px de Δ1 contra `cap1` são o ruído medido |
+
+**Veredito.** Os quatro `app.png` são iguais por `cmp` a pelo menos uma das três capturas da baseline, e a única diferença (desktop contra `cap1`, 21 px e Δ1) é a que a própria baseline mostra entre `cap1` e as outras. A tela de conflitos **não mudou** nos quatro devices.
+
+### Testes ajustados
+
+1. `apps/scheduling-service/tests/unit/goal136-import-match.test.ts` (WU-01), **só a forma**: o `it.each` "proposedService sai das mesmas funções da execução" comparava com `knownPositiveDuration(source.duration)`, e o caso `{ duration: 45.5 }` esperava `45.5`. Agora compara com `knownServiceDuration`, a nova única leitura de duração de serviço, e esse caso espera `null`. Nenhuma outra expectativa de teste existente do Scheduling mudou; os testes de execução do `goal138` põem o item `SERVICE_DURATION_MISSING` em `PENDING` (a decisão `INCLUDE`) antes de executar, porque o item em revisão não é executado por "Importar tudo".
+2. `apps/frontend/tests/goal137-alvo-captura.test.ts` (WU-02): `"ReplaceAccountZone"` saiu da lista de divergências exigidas nas `notes` do 2.I6, que é a mudança que o Goal pede. As outras divergências exigidas continuam.
+3. `scripts/tests/visual-responses.test.mjs` (WU-02): uma asserção a mais no teste do 2.I6 (as `notes` não citam `ReplaceAccountZone`), pelo motivo da ressalva do controle (g).
+
+`tests/unit/goal138-import-source-values.test.ts`, `tests/integration/goal138-import-source-values.test.ts` e `apps/frontend/tests/goal138-conflitos.test.tsx` são arquivos **novos** deste Goal.
+
+### Escopo
+
+Os arquivos mudados são os do §1 e do §2 do Goal, os testes e os registros: `apps/scheduling-service/src/modules/migrations/import-source-values.ts`, `import-preview-service.ts` e `import-execution-service.ts`, `apps/scheduling-service/src/modules/internal-api/routes.ts`, `apps/frontend/src/features/imports/ImportConflictsScreen.tsx` (só `settle`), `apps/frontend/e2e/visual/targets.json` (só a linha das `notes` do 2.I6), os testes de `apps/scheduling-service/tests/`, `apps/frontend/tests/` e `scripts/tests/visual-responses.test.mjs`, e `DECISIONS.md`, `CURRENT_STATE.md`, `DATA_MIGRATION.md` e este arquivo, todos por acréscimo. O contrato, o BFF, `PUBLIC_API_V1.md`, o banco e o leitor do calendário não foram tocados.
+
+### Desvios do texto do Goal, para o review
+
+- **Controle (g) pelos dois testes da captura.** `goal137-alvo-captura.test.ts` não reprova com a frase de volta (a exigência da palavra saiu dele, como o Goal manda); o segundo teste é `visual-responses.test.mjs`, que ganhou uma asserção (acima).
+- **Testes de integração no gate.** O `vitest run goal138` do IA Loop (WU-05) roda sem banco e pula os 4 de integração; os 4 rodaram contra PostgreSQL no Developer (WU-01 e WU-14) e dentro do `validate:integration` (WU-13, `test:scheduling-integration` com saída 0, sem contagem retida).
+- **`prettier --check`.** A WU-01 viu `prettier --check` acusar os 8 arquivos de `src/modules/migrations` e o `routes.ts`, inclusive os que não tocou; não é gate do plano e a formatação não foi alterada.
+- **Lint do Scheduling por `rtk proxy`.** O wrapper `rtk` de `npx eslint` imprimiu "Lint: 2 errors" com saída 1 depois do ajuste; a execução crua (`rtk proxy npx eslint src --max-warnings=0`) saiu 0 e sem saída, e o `npm run lint` do IA Loop (WU-04) também saiu 0.
+
+### Não executado
+
+- O valor malformado vindo de uma instalação real do Minha Agenda, e a tela de Serviços exibindo "Precisa de revisão" para o cadastro criado sem duração (a regra de `reviewOrigin: "IMPORT"` já existia; a prova é com a origem simulada e, na integração, com o item gravado à força).
+- A contagem de testes por passo de `validate:core` e de `validate:integration` (ver "O que não foi contado").
+- Os controles negativos não foram refeitos na WU-14; valem os da WU-01 e da WU-02, sem edição de código depois.
+
+### Aceite
+
+Goal138 aceito na rodada 1 ([review138](reviews/138-review.md)), sem blocker. Conferência do Tech Lead na árvore aceita, sem edição de código no meio:
+
+| Verificação | Resultado |
+| --- | --- |
+| Unidade do Scheduling (`npx vitest run --dir tests/unit`) | 42 arquivos e 587 testes passando, igual ao Developer |
+| `goal138` e `goal137` do frontend | 3 arquivos e 87 testes passando (9 do `goal138` e 78 do `goal137`) |
+| `node --test scripts/tests/visual-responses.test.mjs` | 63 de 63 |
+| `git diff --check` | limpo |
+| `npm run visual:compare -- --target 2.I6` | saída 0; 4,5 / 1,5 / 1,8 / 1,9 %; os quatro `side-by-side.png` abertos, só as divergências de D-151, sem `ReplaceAccountZone` |
+| Integração do Scheduling | **não reexecutada** pelo Tech Lead: o banco `ia_scheduling_test` do ambiente dele não tem a tabela `AppointmentEvent`, e o `goal136`, já aceito, falha igual. Vale o `test:scheduling-integration` com saída 0 dentro do `validate:integration` (WU-13), que provisiona o próprio banco, e a contagem do Developer (22 arquivos e 165 testes, 4 de 4 do `goal138`) |
+
+Os sete controles negativos são os do Developer (WU-01 e WU-02); o Tech Lead não os refez.

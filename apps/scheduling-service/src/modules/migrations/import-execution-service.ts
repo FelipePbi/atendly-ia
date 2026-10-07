@@ -57,7 +57,11 @@ import {
   type ImportSourceInput,
   resolveImportSource,
 } from "./import-preview-service.js";
-import { knownPositiveDuration, resolvePrice } from "./import-source-values.js";
+import {
+  knownPositiveDuration,
+  knownServiceDuration,
+  resolvePrice,
+} from "./import-source-values.js";
 
 /** O motor lê a origem pela mesma superfície mínima do preview (WU-02/WU-03). */
 export type ImportExecutionSourceReader = ImportPreviewSourceReader;
@@ -877,7 +881,7 @@ export class ImportExecutionService {
       "SERVICE",
     );
     const { priceType, price } = resolvePrice(source.price);
-    const durationMinutes = knownPositiveDuration(source.duration);
+    const durationMinutes = knownServiceDuration(source.duration);
 
     const internalId = await this.prisma.$transaction(async (transaction) => {
       const created = await new AvenlyServiceService(
@@ -1571,7 +1575,7 @@ function appointmentServices(
     return appointment.services.map((service) => ({
       externalId: String(service.id),
       name: service.name,
-      durationMinutes: knownPositiveDuration(service.duration),
+      durationMinutes: knownServiceDuration(service.duration),
       ...resolvePrice(service.price),
     }));
   }
@@ -1579,7 +1583,7 @@ function appointmentServices(
     return appointment.appHasServices.map((entry) => ({
       externalId: String(entry.serviceId),
       name: entry.service?.name ?? `Serviço ${entry.serviceId}`,
-      durationMinutes: knownPositiveDuration(entry.service?.duration),
+      durationMinutes: knownServiceDuration(entry.service?.duration),
       ...resolvePrice(entry.price ?? entry.service?.price),
     }));
   }
@@ -1591,7 +1595,7 @@ function appointmentServices(
           appointment.serviceName ??
           appointment.service?.name ??
           `Serviço ${appointment.serviceId}`,
-        durationMinutes: knownPositiveDuration(appointment.service?.duration),
+        durationMinutes: knownServiceDuration(appointment.service?.duration),
         ...resolvePrice(appointment.service?.price ?? appointment.price),
       },
     ];

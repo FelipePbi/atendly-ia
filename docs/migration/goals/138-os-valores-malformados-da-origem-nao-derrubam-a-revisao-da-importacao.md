@@ -1,6 +1,6 @@
 # Goal 138 — Os valores malformados da origem não derrubam a revisão da importação
 
-**Status: READY.** Preparado em 2026-10-07 pelo Tech Lead Agent após [Goal137 ACCEPTED](../reviews/137-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED.** Preparado em 2026-10-07 pelo Tech Lead Agent após [Goal137 ACCEPTED](../reviews/137-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: SONNET_HIGH
 

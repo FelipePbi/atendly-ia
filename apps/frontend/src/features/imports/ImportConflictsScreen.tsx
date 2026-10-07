@@ -216,7 +216,8 @@ export function ImportConflictsScreen({
   function settle(item: ImportItem, record: DecisionRecord) {
     const nextRecords = { ...records, [item.id]: record };
     setRecords(nextRecords);
-    if (record.kind === "decided") {
+    // Decidido agora ou já decidido por outro caminho: o item saiu da fila.
+    if (record.kind === "decided" || record.kind === "already") {
       setReads((current) => {
         const read = current?.[item.category];
         if (!current || !read) return current;

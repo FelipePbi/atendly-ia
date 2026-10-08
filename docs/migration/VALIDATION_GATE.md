@@ -10097,3 +10097,184 @@ Goal147 aceito na rodada 2 ([review147](reviews/147-review.md)). A rodada 1 term
 - Os JSON de `results/work_unit` da rodada 2 (WU-06 a WU-14 e WU-16) têm todos o `codeFingerprint` `code-v1:c4c51f65fed1f9afdf08702113e0e211dea3e70f1c0617651b09a5ee97b05895` e saída 0 (WU-10 pulada), e batem com a tabela de gates.
 
 Os sete controles negativos são os da WU-05; o Tech Lead não os refez. Uma conversa de responsável de ponta a ponta numa conta real, o overflow com rótulo longo em 360 px, o hover e o active por captura, os 35 px do CL3 em desktop e a contagem de testes por passo de `validate:core` e de `validate:integration` continuam sem prova.
+
+## A lista de clientes carregando igual ao protótipo, do Goal148
+
+Rodada 1, 2026-10-07, na worktree `goal-148`. Baseline `60b239d` (o `HEAD` da worktree, `45a5444`, só difere dela em `docs/`). **Rodada 1:** as partidas e as três capturas da baseline, a resposta retida e a espera da captura (WU-01); a lista carregando (WU-02); o alvo CL9 e o ajuste da asserção da lista de alvos (WU-03); a fidelidade visual, as medidas e a correção do tablet em retrato (WU-04); os controles negativos (a) a (f) (WU-05); a verificação determinística (WU-06 a WU-13); e estes registros (WU-14). Só o frontend e a captura: sem BFF, IA, Scheduling, contrato público, `PUBLIC_API_V1.md`, semente da captura e do gate e banco.
+
+**Duas árvores nos gates do IA Loop na rodada 1.** Typecheck, lint e `goal148` (WU-06 a WU-08) e a primeira tentativa do `npm test` (WU-09) rodaram na árvore `codeFingerprint` `code-v1:5390741df73a46261f01afd5e1c7a8e4a06396c267fa6caf4e39afcb7fe88d0d`. A primeira tentativa do `npm test` reprovou 2 testes de `goal144-alvos-captura.test.ts`, e o DIAG-001 atualizou só os valores esperados desse teste (o total de alvos e a lista dos donos de `responses`). Depois disso, o `npm test` de novo (WU-09, segunda tentativa), `test:gate`, `validate:core`, `validate:ui` e `validate:integration` (WU-10 a WU-13) rodaram na **árvore da rodada 1**, `code-v1:514a1c4a33970619c45e8cda2a61572c83659031922980ea0ee31a443afc1f5d`. O typecheck e o lint do frontend foram refeitos pela WU-14 nessa árvore (ver a tabela). **A rodada 2 mudou `CustomerList.tsx`, `avenly-customers.css` e `targets.json`, então a árvore final é `code-v1:b11fb1b8f172677d87d7dd8d7755d43c827552b0d25d9ec929615b41edaa4603`, e a execução final é a da rodada 2** (ver "Rodada 2"). As tabelas abaixo registram a execução da rodada 1.
+
+### Contagens
+
+Contagens de partida (a baseline, **antes da primeira edição**, medidas pela WU-01) e da execução final:
+
+| Suíte | Partida (baseline) | Final | Diferença | Quem obteve |
+| --- | --- | --- | --- | --- |
+| Frontend (`npx vitest run` em `apps/frontend`) | **208** arquivos e **3046** testes passando, saída 0, de 19:37:11 a 19:39:09 (-0300) | **210** arquivos e **3066** testes passando, saída 0 (90,3 s do vitest; na primeira tentativa, 209 de 210 arquivos e 3064 de 3066 testes, 2 falhas em `goal144-alvos-captura`) | +2 arquivos e +20 testes (`goal148-lista-carregando.test.tsx` 13 e `goal148-alvo-captura.test.ts` 7) | Developer, WU-01 (partida); IA Loop, WU-09 (segunda tentativa, final); DIAG-001 (a mesma contagem, 210 e 3066) |
+| `goal148` do frontend | arquivos novos: sem partida | **20** de 20 passando (2 arquivos) | +2 arquivos e +20 testes | IA Loop, WU-08 |
+| `scripts/tests/visual-responses.test.mjs` | **65** passando, 0 falhas, às 19:37 (-0300) | **78** passando, 0 falhas | +13 (12 da WU-01 e 1 da WU-03) | Developer, WU-01 (partida), WU-03 e WU-05; IA Loop, WU-10 (dentro do `test:gate`) |
+| `test:gate` (`node --test` dos scripts) | **298** (última contagem aceita, Goal147) | **311** testes, 311 passando, 0 falhas, 0 cancelados, 0 pulados | +13 (as mesmas do `visual-responses.test.mjs`) | IA Loop, WU-10 |
+
+**Como a partida foi medida.** Na worktree limpa, `HEAD` `45a5444` (a árvore igual à baseline `60b239d`, salvo `docs/`), antes da primeira edição de código: `node --test scripts/tests/visual-responses.test.mjs` às 19:37 e `cd apps/frontend && npx vitest run` de 19:37:11 a 19:39:09 (-0300), log em `E:\Projetos\goal148-baseline\frontend-suite.log`. As três capturas da baseline começaram às 19:40:41. A partida bate com a última contagem aceita (Goal147: 208 arquivos e 3046 testes; `visual-responses` 65). Isso cumpre a lição 2 do Goal.
+
+Gates do IA Loop e do Developer:
+
+| Gate | Comando | Execução da rodada 1 | Quem obteve |
+| --- | --- | --- | --- |
+| Typecheck do frontend | `npx tsc --noEmit` (em `apps/frontend`) | saída 0, 2,5 s, sem erro (árvore `5390741d…`); refeito pela WU-14 na árvore da rodada 1: saída 0, sem erro | IA Loop, WU-06; Developer, WU-14 |
+| Lint do frontend | `npm run lint` (`eslint src tests --max-warnings=0`) | saída 0, 34,6 s, 0 avisos (árvore `5390741d…`); refeito pela WU-14 na árvore da rodada 1: saída 0 | IA Loop, WU-07; Developer, WU-14 |
+| Testes `goal148` | `npx vitest run goal148` | saída 0, 2 arquivos passando com **20** testes (7 e 13), 2,8 s | IA Loop, WU-08 |
+| Testes do frontend | `npm test` | **primeira tentativa:** saída 1, 92,5 s, **2 falhas** e 3064 passando em 3066 (`goal144-alvos-captura.test.ts`, linhas 76 e 211: `expected [ { code: 'L1', …(4) }, …(102) ] to have a length of 102 but got 103` e `expected [ 'CL2', 'CL3', 'CL9', 'CL10', 'CL8' ] to deeply equal [ 'CL2', 'CL3', 'CL10', 'CL8' ]`). **Segunda tentativa, depois do DIAG-001 (final):** saída 0, 90,9 s, **210** arquivos e **3066** testes passando | IA Loop, WU-09 (as duas tentativas) |
+| `test:gate` | `npm run test:gate` | saída 0, **311** testes, 311 passando, 0 falhas, 0 cancelados, 0 pulados, 1,9 s | IA Loop, WU-10 |
+| `validate:core` | `npm run validate:core` | saída 0, 155,4 s, 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff`, que só tem a suíte de integração, rodada no `validate:integration`; `test:health-worker`, pacote sem suíte, só a checagem de sintaxe). A auditoria estática: 34 checagens, 33 passando e 1 pulada (`production_health`, que pede `PRODUCTION_HEALTH_TARGETS`) | IA Loop, WU-11 |
+| `validate:ui` | `npm run validate:ui` | saída 0, 52,9 s (51,8 s de Playwright), **169 passed**, 21 pulados, retentativas **0** ("every test passed on its first attempt"); igual ao Goal147 | IA Loop, WU-12 |
+| `validate:integration` | `npm run validate:integration` | saída 0, 809,4 s, 36 passos, **36 passaram**, 0 falharam, 0 pulados, contra `127.0.0.1:55500/ia_bff_test`. O gate autenticado (`rehearse:goal033-authenticated-ui`) deu **310 passed** em 11,0 min de Playwright e **0** retentativas ("every test passed on its first attempt"), a mesma contagem do Goal147 | IA Loop, WU-13 |
+| `test:ia-loop` | — | **não existe**: o `package.json` da worktree não declara o script; o harness vive fora do repositório | — |
+| `git diff --check` | `git diff --check` | saída 0, limpo, rodado pela WU-14 depois de escrever os três registros (ver "Verificação final do Developer") | Developer, WU-14 |
+
+Também rodados pelos Developers das WU anteriores: na WU-01, `node --test scripts/tests/visual-responses.test.mjs` (77 passando) e a sonda com Chromium real da espera da rede; na WU-02, `npx vitest run tests/goal148-lista-carregando.test.tsx` (13), os oito arquivos de clientes existentes (138 passando), `tsc --noEmit` e `eslint` nos arquivos alterados (sem erro); na WU-03, os dois arquivos `goal148` (20) e `visual-responses.test.mjs` (78); na WU-04, `node --test` (78) e os dois `goal148` (20) de novo, depois de mexer em `targets.json` e no CSS; no DIAG-001, `npx vitest run` na suíte inteira (210 e 3066). A WU-14 não refez nenhum outro gate: os números acima são os dos resultados do IA Loop em `results/work_unit`, salvo o typecheck e o lint, que ela refez.
+
+**O que não foi contado.** O relatório que o IA Loop guarda de `validate:core` e de `validate:integration` omite o meio da saída, então **não há contagem de testes por passo**; o que vale deles é a saída 0 e os passos passando. A contagem do frontend é a do `npm test` direto (WU-09), não a do gate. A IA e o Scheduling não mudaram, então as contagens deles (IA: 104 arquivos e 1338 testes, Goal146; Scheduling: 43 arquivos e 594 testes, Goal142) **não** foram refeitas por este Goal.
+
+### Gate autenticado
+
+**Rodada 1 (WU-13, árvore da rodada 1 `code-v1:514a1c4a…afc1f5d`):** o gate autenticado deu **310 passed** e **0** retentativas, 11,0 min de Playwright ("every test passed on its first attempt"), igual ao Goal147. O `validate:ui` deu **169 passed**, 21 pulados e 0 retentativas. O flaky de `mobile-390 › servicos > measured, logged in`, da rodada 1 do Goal147, **não reapareceu**. O Goal não tocou `e2e/routes.ts`, `authenticated-matrix.spec.ts` nem a semente do gate, e nenhuma rota é nova.
+
+**Rodada 2 (árvore final `code-v1:b11fb1b8…a4603`):** o gate autenticado **não rodou**. O `validate:integration` (WU-13) ficou `SKIPPED`, porque o IA Loop não provisionou `BFF_TEST_DATABASE_URL`, `AI_TEST_DATABASE_URL`, `EVOLUTION_TEST_DATABASE_URL` e `SCHEDULING_TEST_DATABASE_URL`. O `validate:ui` (WU-12) rodou na árvore final: **169 passed**, saída 0. O último gate autenticado com saída 0 (310 passed, 0 retentativas) é o da rodada 1, numa árvore anterior à correção do painel carregando; o Tech Lead aceitou sem essa prova na árvore final.
+
+### Fidelidade visual
+
+Comando: `npm run visual:compare -- --target CL9,CL1,CL10` (12 pares) e, para a regressão, `--target CL2,CL3,CL8`, numa pilha descartável própria (PostgreSQL 18 criado com `initdb` em `E:\Projetos\goal148-baseline\pg`, porta 55148; Scheduling em 3113, IA em 3110 e BFF em 3112), fora do repositório. Os `side-by-side.png` estão em `apps/frontend/e2e-results/visual/<página>-<quadro>-<device>/`.
+
+**A baseline `60b239d`, capturada três vezes antes de editar** (`npm run visual:compare -- --target CL1,CL2,CL3,CL8,CL10`, às 19:40:41, 19:41:46 e 19:42:46; 20 pares cada; cópias em `cap1`, `cap2` e `cap3`): 17 das 20 `app.png` iguais byte a byte nas três. **Ruído medido** (`sharp`, pixels diferentes e delta máximo por canal): CL1 desktop 26 px e delta 8 (pares 1×3 e 2×3), CL1 tablet em paisagem 26 px e delta 8 (1×2 e 1×3), CL8 desktop 26 px e delta 8 (1×2 e 1×3); as outras 17 imagens, 0 px. Teto: **26 px, delta máximo 8**.
+
+**Diff do `visual:compare`** (tendência, não critério), na execução final da WU-04: CL9 celular **2,4 %**, tablet em retrato **0,8 %**, tablet em paisagem **0,9 %**, desktop **0,7 %**; CL1 8,8 / 3,6 / 3,0 / 2,7 %; CL10 6,5 / 3,5 / 2,6 / 2,1 %. Os diffs de CL1 e CL10 são os da baseline: as diferenças contra os quadros são o aviso de WhatsApp desconectado e 8 clientes contra 386 (CL1), a linha "Referência: visual-compare-fixed-response" (CL10, declarada no Goal121), os 20 px do celular e a busca de 46 contra 48 px; este Goal não as introduziu.
+
+**Tabela por imagem** (lição 1). "Ruído da baseline" é o pior par das três capturas de `60b239d`; "Depois × baseline" é o pior das 9 combinações das três capturas feitas depois das edições (`after1` a `after3`) contra as três da baseline; "Entre as três de depois" é o pior par das capturas de depois entre si. Cada célula é pixels diferentes / delta máximo por canal. Recalculada pela WU-14 com o mesmo script da WU-04 (`after-table.cjs`).
+
+| Imagem | Ruído da baseline | Depois × baseline | Entre as três de depois | Veredito |
+| --- | --- | --- | --- | --- |
+| CL1 celular | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+| CL1 tablet em retrato | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+| CL1 tablet em paisagem | 26 / 8 | 26 / 8 | 0 / 0 | dentro do ruído |
+| CL1 desktop | 26 / 8 | 26 / 8 | 0 / 0 | dentro do ruído |
+| CL2 celular | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+| CL2 tablet em retrato | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+| CL2 tablet em paisagem | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+| **CL2 desktop** | 0 / 0 | **35 / 5** | 35 / 5 | **fora do ruído medido** (ver abaixo) |
+| CL3 celular | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+| CL3 tablet em retrato | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+| CL3 tablet em paisagem | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+| CL3 desktop | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+| CL8 celular | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+| CL8 tablet em retrato | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+| CL8 tablet em paisagem | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+| **CL8 desktop** | 26 / 8 | **61 / 8** | 0 / 0 | **fora do ruído medido** (ver abaixo) |
+| CL10 celular | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+| CL10 tablet em retrato | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+| CL10 tablet em paisagem | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+| CL10 desktop | 0 / 0 | 0 / 0 | 0 / 0 | byte a byte igual |
+
+Resumo: **18 das 20** imagens dentro do ruído (16 byte a byte iguais e 2 dentro do ruído de 26 px); **2 fora**, ambas em desktop.
+
+**As duas imagens fora do ruído, declaradas.** CL2 desktop: só a captura `after2` difere da baseline, em 35 px e delta 5, na região x 28 a 40, y 660 a 751 (as bordas dos círculos do anel "IA ativa" e do avatar "CR" no rodapé da barra lateral, fora do painel de Clientes); `after1` e `after3` são byte a byte iguais à baseline. CL8 desktop: as três capturas de depois são iguais entre si e diferem das três da baseline em 35 px a mais (delta 5), na mesma região da barra lateral, além dos 26 px do "+" (x 551 a 590, y 35 a 115) que já são ruído. **A causa não foi provada.** O CSS alterado só usa classes `.customer-skeleton*`, que o CL2 (lista vazia) nem renderiza, e a região não pertence ao componente alterado. Um controle da WU-04, com `CustomerList.tsx` e `avenly-customers.css` restaurados ao `HEAD` e a mesma pilha, deu 197 px (CL2 desktop) e 395 px (CL8 desktop) de diferença contra a baseline, em regiões largas: a variação entre rodadas e pilhas é maior que o ruído das três capturas da baseline. É ponto para o review, não prova de ausência de efeito; o Tech Lead decidiu na revisão da rodada 2 (ver "Desvios do texto do Goal", item 3).
+
+**O CL9, estável nas três capturas.** `cmp` de `after1` × `after2` × `after3` do `app.png` do CL9: byte a byte iguais nos quatro devices (WU-04, cópias em `E:\Projetos\goal148-baseline\after1` a `after3`).
+
+**Os `side-by-side.png` abertos.** O relatório da WU-04 diz que abriu as doze imagens (CL9, CL1 e CL10, cada um em celular, tablet em retrato, tablet em paisagem e desktop), na pasta `apps/frontend/e2e-results/visual/` e na cópia `after3`. O registro de leituras do harness lista 8 das 12: **CL9 nos quatro devices; CL1 em celular e desktop; CL10 em celular e desktop**. **Não consta abertura** do CL1 e do CL10 em tablet (retrato e paisagem); para esses quatro vale o `cmp` contra a baseline (CL10: 0 px nos quatro devices; CL1: 0 px em retrato e 26 px, o ruído, em paisagem) e a ausência de mudança. As diferenças que se leem nas imagens abertas: CL9, as divergências 1 a 5 de D-162, item 7; CL1 e CL10, as da baseline (acima).
+
+**Medidas** (WU-04), em cada um dos quatro devices, no app e no quadro, por DOM (`getBoundingClientRect` e `getComputedStyle`) numa cópia temporária do `visual-compare` com um gancho de medição, apagada no fim (`scripts/_wu04-*.mjs` não consta no `git status`):
+
+| Medida | Celular | Tablet em retrato | Tablet em paisagem | Desktop |
+| --- | --- | --- | --- | --- |
+| Esqueleto: linhas, círculo, barras, raios, `gap` entre linhas (22 px) e entre barras (8 px) | iguais, 0,0 px | iguais, 0,0 px | iguais, 0,0 px | iguais, 0,0 px |
+| Círculo | 40 × 40, raio 50 % | 40 × 40, raio 50 % | 40 × 40, raio 50 % | 40 × 40, raio 50 % |
+| Barras (altura e raio) | 12 px / 6 px e 10 px / 5 px | 12 px / 6 px e 10 px / 5 px | 12 px / 6 px e 10 px / 5 px | 12 px / 6 px e 10 px / 5 px |
+| Larguras das barras (45/60, 55/50, 40/62, 50/56 %) | 0,0 px | 0,0 px (depois da correção dos 28 px) | -0,4 a -0,6 px (painel de 339 contra 340 px) | -0,4 a -0,6 px (idem) |
+| Topo do título (app menos quadro) | +19,9 | +0,4 | +5,5 | +5,5 |
+| Topo da busca (app menos quadro) | +19,9 | +0,4 | -29,5 | -29,5 |
+| Altura externa da busca (app menos quadro) | -2,0 (46 contra 48) | -2,0 | -2,0 | -2,0 |
+| Raio e borda da busca | 14 px e 1 px `rgb(214, 206, 194)`, iguais | iguais | iguais | iguais |
+| Topo da primeira linha do esqueleto (app menos quadro) | +17,9 | -1,6 | -31,5 | -31,5 |
+| Botão "+" (40 × 40) | nenhum nos dois | nenhum nos dois | app à direita do título; quadro embaixo, à esquerda | idem |
+| Fonte do título | Literata 26 px, peso 500, `rgb(34, 30, 26)`, igual | igual | igual | igual |
+| Texto do `placeholder` | `rgb(113, 104, 89)`, 15 px, 2 px à direita (65 contra 63) | igual, 2 px | igual, 2 px | igual, 2 px (297 contra 295) |
+| Cores do esqueleto em repouso | `linear-gradient(90deg, rgb(239, 234, 226) 25%, rgb(247, 244, 239) 50%, rgb(239, 234, 226) 75%)`, `200% 100%`, iguais; amostras de pixel iguais (`239,234,226` no avatar, `247,244,239` no fundo) | igual | igual | igual |
+
+As diferenças acima de 1 px que restam são as divergências declaradas em D-162, item 7 (1: celular 20 px; 2: a busca de 46 contra 48 px e o texto 2 px à direita, que também move o esqueleto 1,6 px; 3: o "+" de paisagem e desktop; 4: o painel de 339 contra 340 px), e as `notes` do CL9 as citam. A correção que a medida provocou: o respiro lateral do esqueleto no tablet em retrato (20 px no app contra 28 px do quadro, com o círculo e as barras 8 px à esquerda e as barras 7 a 10 px mais largas), corrigido com `.customer-skeleton { padding-inline: 28px }` entre 768 e 1023 px; depois, a 0,0 px. **A divergência 3 foi decidida pelo Tech Lead** na revisão da rodada 1: aceita como divergência declarada (a WU-04 a manteve para a lista não pular quando chega). Uma quinta rodada de medição esbarrou num 429 de login do BFF e não foi feita; a única mudança de CSS depois das medições é a do tablet em retrato, medida depois da correção.
+
+### Controles negativos
+
+Todos feitos pela WU-05 depois da última edição de código, cada um aplicando uma só mutação, rodando o comando, reprovando e revertendo por cópia do backup (fora do repositório, feito às 20:11:54 -0300, com `CustomerList.tsx` e `targets.json`), com `cmp` igual ao backup nos seis e o mesmo SHA-256 de partida e de chegada (`CustomerList.tsx` `9ab2a193…815a`, `targets.json` `fd94bad9…bc9d`). Antes dos controles: `cd apps/frontend && npx vitest run tests/goal148` com 2 arquivos e 20 testes passando e `node --test scripts/tests/visual-responses.test.mjs` com 78 passando e 0 falhas. As mensagens abaixo foram conferidas pela WU-14 contra a saída bruta guardada (`/tmp/wu05_*.txt`). Comandos: `cd apps/frontend && npx vitest run tests/goal148` e, a partir da raiz, `node --test scripts/tests/visual-responses.test.mjs`.
+
+| Controle | Edição | Teste que reprovou | Mensagem de asserção |
+| --- | --- | --- | --- |
+| (a) a busca escondida de novo carregando | `CustomerList.tsx`: o `<div className="customer-panel-searchbar">` dentro de `{!loading && (...)}`. **3 reprovados**, 17 passando | `goal148-lista-carregando.test.tsx` > "CL9 — Clientes · carregando > título, busca e esqueleto aparecem; contagem e 'Nenhum resultado' não"; também "… > o texto digitado durante o carregamento filtra a lista quando ela chega" e "… > CustomerListPanel mostra o mesmo carregamento" | `TestingLibraryElementError: Unable to find an accessible element with the role "searchbox" and name "Buscar cliente"` (nos três) |
+| (b) o esqueleto com três linhas | `CustomerList.tsx`: `[0, 1, 2, 3].map` virou `[0, 1, 2].map` em `CustomerListSkeleton`. **2 reprovados**, 18 passando | `goal148-lista-carregando.test.tsx` > "CL9 — Clientes · carregando > título, busca e esqueleto aparecem; contagem e 'Nenhum resultado' não" e "… > CustomerListPanel mostra o mesmo carregamento" | `AssertionError: expected <div …(1)>…(2)</div>…(2) to have a length of 4 but got 3`, com `- Expected` `4` e `+ Received` `3` |
+| (c) o CL9 com `{ "method": "GET", "path": "/v1/customers", "hold": true, "json": {} }` | `targets.json`: `json` acrescentado à entrada retida | `visual-responses.test.mjs`: **41 reprovados** e 37 passando, entre eles "targets.json: CL9 é o único alvo com entrada retida, retém só GET /v1/customers, tem o GET /v1/status conectado, só GET e o passo waitFor" (todo teste que carrega os alvos cai pela validação); e, no vitest, `goal148-alvo-captura.test.ts` > "alvo CL9 do visual:compare (lista de clientes carregando) > só GET /v1/customers fica retido, sem json nem status" | `Error: targets.json: alvo CL9 (Clientes.dc.html): responses[1] tem "hold" e "json"; a resposta retida não responde, então não leva "json" nem "status"`; no vitest, `AssertionError: expected [ { method: 'GET', …(3) } ] to deeply equal [ { method: 'GET', …(2) } ]` |
+| (d) o CL9 sem o passo `waitFor` | `targets.json`: `"steps": []` | **os dois testes:** `visual-responses.test.mjs` (**41 reprovados**, incluindo o do CL9 da linha 1505) e `goal148-alvo-captura.test.ts` > "alvo CL9 do visual:compare (lista de clientes carregando) > tem o passo waitFor obrigatório com um texto que o estado de carregamento mostra" | `Error: targets.json: alvo CL9 (Clientes.dc.html): responses[1] é retida ("hold": true), e o alvo não tem um passo "waitFor" obrigatório; sem ele a captura não sabe esperar o texto do estado fotografado`; no vitest, `AssertionError: expected [] to have a length of 1 but got +0` |
+| (e) a entrada retida do CL9 com `"method": "POST"` | `targets.json`: `"method": "POST"` na entrada retida | **os dois testes:** `visual-responses.test.mjs` (**41 reprovados**, incluindo o do CL9) e `goal148-alvo-captura.test.ts` > "… > só GET /v1/customers fica retido, sem json nem status" e "… > só declara GET" (2 reprovados) | `Error: targets.json: alvo CL9 (Clientes.dc.html): responses[1].method "POST" não é aceito em uma entrada com "hold"; só "GET"`; no vitest, `AssertionError: expected [ { method: 'POST', …(2) } ] to deeply equal [ { method: 'GET', …(2) } ]` e `AssertionError: expected [ { method: 'POST', …(2) } ] to deeply equal []` |
+| (f) o CL9 retendo `GET /v1/status` em vez de `GET /v1/customers` | `targets.json`: o `path` da entrada retida trocado por `/v1/status` | **os dois testes:** `visual-responses.test.mjs` (**1 reprovado**, 77 passando, o teste do CL9 da linha 1505) e `goal148-alvo-captura.test.ts` > "… > só GET /v1/customers fica retido, sem json nem status" | `AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:` com `+ actual - expected`, `+   'GET /v1/status (retida)'` e `-   'GET /v1/customers (retida)'`; no vitest, `AssertionError: expected [ { method: 'GET', …(2) } ] to deeply equal [ { method: 'GET', …(2) } ]`, com o diff `- "path": "/v1/customers"` e `+ "path": "/v1/status"` |
+
+Os seis controles reprovaram os testes que o Goal nomeia: (a) a busca escondida e (b) as três linhas, no `goal148` da lista; (c) o `json` junto de `hold`, no `visual-responses.test.mjs`; (d), (e) e (f), pelos **dois** testes (lição 5). Depois de todos, `cmp` igual ao backup nos dois arquivos, `git status --short` idêntico ao de antes dos controles, `goal148` com 20 de 20 e `visual-responses.test.mjs` com 78 de 78.
+
+**Limite do registro dos controles.** O controle (c) reprova 41 testes do `visual-responses.test.mjs` pela mesma causa (a validação dos alvos falha ao carregar o arquivo); o teste do CL9 está entre eles, mas o controle prova a recusa da validação, não só o teste do CL9. A mensagem do `testing-library` aparece cortada antes do despejo do DOM, como a saída bruta a traz. A WU-14 não refez os controles: conferiu as mensagens contra as saídas brutas da WU-05.
+
+### Testes ajustados
+
+Só o que o Goal muda e o que o CL9 forçou.
+
+| Arquivo | Antes | Depois | O que a asserção provava e onde a prova continua |
+| --- | --- | --- | --- |
+| `scripts/tests/visual-responses.test.mjs` (a linha 205 do Goal; o título e o `deepEqual` da lista de alvos que declaram `responses`) | a lista exata sem o CL9 | a lista com `"CL9"` entre `"CL8"` e `"CL10"`, e o título com "CL9" | Que só os alvos conhecidos declaram `responses`. Continua no mesmo teste, com o CL9 incluído, e o teste novo do CL9 prova que ele é o único com `hold` |
+| `scripts/tests/visual-responses.test.mjs` (no mesmo teste, a asserção do `requestId`) | `assert.equal(typeof entry.json.requestId, "string")` para toda entrada | a mesma asserção, depois de `if (entry.hold === true) continue;` | Que toda entrada fixa leva o `requestId` do envelope do BFF. Continua para toda entrada com `json` de todos os alvos; a entrada retida não tem corpo e é coberta pelos testes novos de `hold` e pelo do CL9. A asserção do método (`GET` salvo o `POST` de L2 e L7) continua valendo para a retida |
+| `scripts/tests/visual-responses.test.mjs` (o teste dos donos de `Clientes.dc.html`) | `["CL10", "CL2", "CL3", "CL8"]` e o título sem o CL9 | `["CL10", "CL2", "CL3", "CL8", "CL9"]` e o título com "CL9" | Que o CL8 é o único dono a mais sem passo, só com `GET`. Continua no mesmo teste |
+| `apps/frontend/tests/goal144-alvos-captura.test.ts` (linha 76) | `expect(targets).toHaveLength(102)` | `toHaveLength(103)` | O número de alvos do `targets.json`. **Fora da lista do Goal**: o CL9 é o alvo 103. Achada pelo `npm test` (WU-09, primeira tentativa) e corrigida pelo DIAG-001 |
+| `apps/frontend/tests/goal144-alvos-captura.test.ts` (linha 211 e o título) | `["CL2", "CL3", "CL10", "CL8"]`; "CL5, CL6 e CL7 seguem sem responses, e CL2, CL3 e CL10 seguem donos delas" | `["CL2", "CL3", "CL9", "CL10", "CL8"]`; "… CL2, CL3, CL9 e CL10 seguem donos delas" | Que CL5, CL6 e CL7 seguem sem `responses` e que a lista dos donos é a conhecida. Continua no mesmo teste, com o CL9; nada foi afrouxado |
+
+Nenhuma outra asserção existente foi tocada. Os testes novos são os arquivos `goal148` (20) e os 13 de `visual-responses.test.mjs`.
+
+### Escopo
+
+Os arquivos mudados são os do §1, do §2 e da "Documentação" do Goal. Captura: `scripts/lib/visual-responses.mjs`, `scripts/visual-compare.mjs` e `apps/frontend/e2e/visual/targets.json` (só o bloco do CL9, 42 linhas acrescentadas e nenhuma removida). Frontend (`apps/frontend/src/`): `features/customers/CustomerList.tsx` e `shared/styles/avenly-customers.css`. Testes: `scripts/tests/visual-responses.test.mjs`, os dois arquivos novos `goal148` e `goal144-alvos-captura.test.ts` (o ajuste do DIAG-001, **fora da lista do Goal**). E `DECISIONS.md`, `CURRENT_STATE.md` e este arquivo, todos por acréscimo. `CustomerProfile`, `CustomerForm`, `data/services/`, `shared/ui/`, `avenly.css`, `useShellConfig`, o contrato, o BFF, a IA, o Scheduling, o banco, `visual-seed.mjs`, a semente do gate, `e2e/routes.ts` e `e2e/authenticated-matrix.spec.ts` **não** foram tocados. Nenhum arquivo de `docs/migration/goals/`, `docs/migration/reviews/`, `MIGRATION_STATUS.md` nem `MASTER_PLAN.md` foi editado.
+
+### Desvios do texto do Goal, para o review
+
+1. **A busca de 46 contra 48 px e o "+" empilhado** (D-162, item 7.2 e 7.3): a WU-04 não portou nenhum dos dois, para não mexer nas imagens de CL1, CL2, CL3 e CL10 (a busca) e para a lista não pular quando chega (o "+"). A regra do Goal diz que uma diferença acima de 1 px que não seja divergência declarada é corrigida; estas estão declaradas nas `notes` e em D-162, e a do "+" foi **decidida pelo Tech Lead** (revisão da rodada 1): aceita como divergência declarada, porque o cabeçalho do CL9 sem a linha flex conflita com o do CL1 no mesmo arquivo aprovado e o do CL1 evita um salto de cerca de 30 px quando a lista chega; medidas mantidas: título +5,5 px, busca -29,5 px, esqueleto -31,5 px.
+2. **As cores do esqueleto em valores literais** (D-162, item 5.4): a escolha 5 diz "se houver token equivalente, usa o token". `tokens.css` tem `--at-color-surface-active` (`#efeae2`) e `--at-color-canvas` (`#f7f4ef`), e o CSS usa os valores literais. O computado é o mesmo. **Decidido pelo Tech Lead (revisão da rodada 2):** aceito como divergência declarada do texto da escolha 5; o computado é igual ao dos tokens `--at-color-surface-active` e `--at-color-canvas`, e os valores são os do brilho do quadro.
+3. **As duas imagens fora do ruído** (CL2 e CL8 em desktop, 35 px de delta 5 na barra lateral): a causa não foi provada; o critério do Goal diz "sem diferença fora do ruído". A WU-04 marcou o critério como cumprido pelo controle (197 e 395 px com o `HEAD`) e deixou o julgamento ao Tech Lead. **Decidido pelo Tech Lead (revisão da rodada 2):** aceito como variação entre rodadas da captura, fora do componente alterado. Prova do review: `npm run visual:compare -- --target CL2,CL3,CL8` e `--target CL9,CL1,CL10` na árvore da rodada 2, comparados por pixel com `E:\Projetos\goal148-baseline\cap1..cap3`: 53 de 60 pares com 0 px; CL2 desktop agora 0 px nas três; CL8 desktop 43 px / delta 5 (cap2 e cap3) e 69 px / delta 8 (cap1); CL1 desktop 8 px / delta 5 (cap1 e cap2) e 34 px / delta 8 (cap3); CL1 tablet em paisagem 26 px / delta 8 (cap1); todas as diferenças na barra lateral (x 20 a 40) ou no "+" já medido como ruído, regiões que o Goal não alterou, e o CL1 desktop, que o Goal não toca, também varia.
+4. **`goal144-alvos-captura.test.ts`**: ajustado fora da lista do Goal (§3.4 diz que a única asserção existente que pode mudar é a da linha 205 de `visual-responses.test.mjs`), porque o CL9 muda o total de alvos e a lista dos donos de `Clientes.dc.html`. Só os valores esperados mudaram. **Decidido pelo Tech Lead (revisão da rodada 2):** aceito (102→103 alvos e o CL9 na lista de donos), consequência direta do alvo novo, só valores esperados.
+5. **A espera da rede pelo `trackNetworkIdle`** usa o limite de 30 s e 500 ms de silêncio, valores escolhidos pela WU-01; o Goal pede "500 ms, com limite de tempo", sem fixar o limite.
+
+### Rodada 2 (correção dos 3 blockers)
+
+1. **A linha de 2 px abaixo do esqueleto (celular e tablet em retrato).** Cor `#0F5F63` (`rgb(15, 95, 99)`), largura total e recuo de 2 px do `:focus-visible` global (`--at-focus-ring-*`). A causa provável, inferida pelo antes e depois e não medida no DOM, é o contorno do `#main-content` focado pelo `AppShell` a cada troca de rota, desenhado na borda de baixo de um `main` mais curto que a coluna. Correção: `.customer-panel.is-loading` (carregando e sem erro) usa as regras de altura de `.has-state` e `.customer-skeleton` tem `flex: 1`. `npm run visual:compare -- --target CL9`: a linha não aparece mais nos `side-by-side.png` do celular e do tablet em retrato; diff 2,1 % (celular, antes 2,4 %), 0,6 % (tablet em retrato, antes 0,8 %), 0,9 % (paisagem) e 0,7 % (desktop). Conferência do Tech Lead (rodada 2): nos `app.png` do CL9 nos quatro devices nenhuma linha de `rgb(15,95,99)` ocupa mais de 50 % da largura; no celular e no tablet em retrato o app tem 55 e 54 pixels dessa cor, todos no ícone da aba Clientes, como o quadro (55).
+2. **A barra de abas do celular** entrou nas `notes` do CL9: cerca de 97 px no quadro (indicador de início do iPhone, D-107) contra cerca de 64 px no app, abas cerca de 33 px mais abaixo.
+3. **O "+" empilhado** (D-162, item 7.3): decisão do Tech Lead registrada em D-162, aqui e em `CURRENT_STATE.md`.
+
+**Execução final (rodada 2, árvore `code-v1:b11fb1b8…a4603`):** typecheck saída 0 (WU-06); lint saída 0 (WU-07); `goal148` 20 de 20 em 2 arquivos (WU-08); `npm test` 210 arquivos e 3066 testes passando (WU-09); `test:gate` 311 de 311, 0 falhas (WU-10, inclui `visual-responses.test.mjs` 78); `validate:core` saída 0 (WU-11); `validate:ui` 169 passed, saída 0 (WU-12); `git diff --check` saída 0 (WU-15). `validate:integration` (WU-13) **NÃO rodou na rodada 2**: o IA Loop não provisionou `BFF_TEST_DATABASE_URL`, `AI_TEST_DATABASE_URL`, `EVOLUTION_TEST_DATABASE_URL` e `SCHEDULING_TEST_DATABASE_URL`. O último `validate:integration` com saída 0 (36 de 36 passos, gate autenticado 310 passed, 0 retentativas) é o da rodada 1, na árvore `514a1c4a…`, anterior à correção do painel carregando; o Tech Lead aceitou sem essa prova na árvore final. Todos os resultados da rodada 2 têm `attemptId` `a1` e o mesmo `codeFingerprint`.
+
+### Não executado
+
+- A contagem de testes por passo de `validate:core` e de `validate:integration` (ver "O que não foi contado").
+- A unidade da IA e a do Scheduling, à parte do `validate:core` (não mudaram), e a suíte de integração da IA e do Scheduling com banco, à parte do `validate:integration`.
+- A abertura dos `side-by-side.png` de CL1 e CL10 em tablet (retrato e paisagem) não consta no registro de leituras do harness (ver "Fidelidade visual"); a WU-04 relata que abriu todos.
+- Uma leitura de clientes lenta de verdade, de ponta a ponta, num app em produção: o estado retido só existe no navegador da captura, e os testes do componente usam a leitura pendente.
+- O brilho em movimento por captura (o `FREEZE_CSS` da captura o para) e o movimento reduzido por captura (provado pelo teste de CSS e pelo `validate:ui`).
+- A investigação da causa dos 35 px de CL2 e CL8 em desktop.
+- `validate:integration` e o gate autenticado na árvore final da rodada 2 (WU-13 `SKIPPED`, bancos de teste não provisionados pelo IA Loop); o último verde é o da rodada 1.
+- A medida no DOM da causa da linha de 2 px corrigida na rodada 2: a causa é inferida pelo antes e depois.
+- Uma quinta rodada de medição visual (429 de login do BFF na WU-04).
+- `prettier --check` nos arquivos editados: o `CustomerList.tsx` e o CSS já reprovavam o `prettier --check` no `HEAD` (a diferença é de fim de linha, CRLF do checkout), e a WU-02 não reformatou.
+
+### Verificação final do Developer
+
+`git diff --check`, rodado pela WU-14 depois de escrever os três registros: saída 0, sem erro de espaço em branco (só o aviso de LF e CRLF do checkout). Os arquivos novos e não rastreados (`goal148-alvo-captura.test.ts` e `goal148-lista-carregando.test.tsx`) ainda não entram nesse `git diff`. A WU-15 da rodada 1 o rodou de novo na árvore da rodada 1, e a WU-15 da rodada 2, na árvore final `code-v1:b11fb1b8…a4603`: saída 0.
+
+### Aceite
+
+Goal148 aceito na rodada 2 ([review148](reviews/148-review.md)). A rodada 1 terminou em `CHANGES_REQUIRED` com 3 blockers: a linha de 2 px abaixo do esqueleto no celular e no tablet em retrato, a barra de abas do celular fora das `notes` do CL9 e o "+" empilhado deixado "para o Tech Lead decidir". A FIX-001 da rodada 2 os corrigiu (ver "Rodada 2"). O review da rodada 2 pediu só a correção destes registros (a árvore final, a causa da linha afirmada como fato e as decisões pendentes do Tech Lead); a correção foi feita no fechamento, sem nova execução de gate, com os números dos resultados da rodada 2 do IA Loop. Conferência do Tech Lead na árvore aceita, sem edição de código no meio:
+
+- `visual:compare --target CL9,CL1,CL10` e `--target CL2,CL3,CL8` refeitos no review da rodada 2; abertos os 12 `side-by-side.png` de CL9, CL1 e CL10. A linha de 2 px não aparece mais; os 60 `app.png` contra as três capturas da baseline estão em "Desvios do texto do Goal", item 3.
+- No fechamento, a partir de `apps/frontend`: `npx vitest run tests/goal148-lista-carregando.test.tsx tests/goal148-alvo-captura.test.ts tests/goal144-alvos-captura.test.ts` deu 3 arquivos e **30** testes passando; na raiz, `node --test scripts/tests/visual-responses.test.mjs` deu **78** passando e 0 falhas.
+- Aceito sem prova na árvore final: `validate:integration` e o gate autenticado (WU-13 `SKIPPED` na rodada 2). O último verde é o da rodada 1, numa árvore anterior à correção, que só mexe em CSS e numa classe do frontend.

@@ -17,7 +17,6 @@ import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Field } from "@/shared/ui/Field";
-import { Skeleton } from "@/shared/ui/States";
 
 import { CustomerEmptyState, CustomerErrorState } from "./CustomerStates";
 
@@ -115,7 +114,7 @@ export function CustomerList() {
       <ListDetailLayout
         detail={
           <ListDetailEmpty>
-            Selecione um cliente para ver o perfil
+            {loading ? null : "Selecione um cliente para ver o perfil"}
           </ListDetailEmpty>
         }
         list={<CustomerListPanelView data={data} />}
@@ -157,7 +156,13 @@ function CustomerListPanelView({
   const searchText = data.query.trim();
   const searching = !showingState && !loading && searchText !== "";
   return (
-    <div className={clsx("customer-panel", showingState && "has-state")}>
+    <div
+      className={clsx(
+        "customer-panel",
+        showingState && "has-state",
+        loading && !error && "is-loading",
+      )}
+    >
       {!searching && (
         <div className="customer-panel-header">
           <Heading>Clientes</Heading>
@@ -170,7 +175,7 @@ function CustomerListPanelView({
                 </span>
               </span>
             )}
-            {canCreate && showAdd && customers.length > 0 && (
+            {showAdd && (loading || (canCreate && customers.length > 0)) && (
               <Link
                 aria-label="Novo cliente"
                 className="customer-panel-add"
@@ -185,9 +190,7 @@ function CustomerListPanelView({
 
       {error ? (
         <CustomerErrorState onRetry={data.retry} reference={error.reference} />
-      ) : loading ? (
-        <CustomerListSkeleton />
-      ) : customers.length === 0 ? (
+      ) : !loading && customers.length === 0 ? (
         <CustomerEmptyState canCreate={canCreate} />
       ) : (
         <>
@@ -216,7 +219,9 @@ function CustomerListPanelView({
               </button>
             )}
           </div>
-          {searching ? (
+          {loading ? (
+            <CustomerListSkeleton />
+          ) : searching ? (
             <CustomerSearchResults
               canCreate={canCreate}
               customers={filtered}
@@ -418,14 +423,14 @@ function CustomerListSkeleton() {
       <p className="sr-only" role="status">
         Carregando clientes
       </p>
-      <div aria-hidden="true" className="list">
+      <div aria-hidden="true" className="customer-skeleton">
         {[0, 1, 2, 3].map((item) => (
-          <div className="list-item" key={item}>
-            <Skeleton className="avatar" />
-            <div className="list-item-main customer-list-loading-copy">
-              <Skeleton className="skeleton-title" />
-              <Skeleton className="skeleton-line" />
-            </div>
+          <div className="customer-skeleton-row" key={item}>
+            <span className="customer-skeleton-avatar" />
+            <span className="customer-skeleton-copy">
+              <span className="customer-skeleton-name" />
+              <span className="customer-skeleton-meta" />
+            </span>
           </div>
         ))}
       </div>

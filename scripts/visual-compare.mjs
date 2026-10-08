@@ -42,7 +42,7 @@ import net from "node:net";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { bffPathname, pickFixedResponse, resolveRelativeDays, validateTargetResponses } from "./lib/visual-responses.mjs";
+import { bffPathname, hasHeldResponse, isHeldRequest, pickFixedResponse, resolveRelativeDays, validateTargetResponses } from "./lib/visual-responses.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FRONTEND_DIR = path.join(ROOT, "apps", "frontend");
@@ -498,12 +498,55 @@ async function capturePrototype(browser, prototypeUrl, target, device, file) {
   }
 }
 
+const HELD_QUIET_MS = 500;
+const HELD_IDLE_TIMEOUT_MS = 30_000;
+
+/**
+ * Espera da rede para o alvo com entrada retida (`responses` com `hold`). O
+ * `networkidle` do Playwright nunca chega com um pedido que não termina, então
+ * a rede é contada à mão: os pedidos em andamento, menos os que casam com uma
+ * entrada retida. `idle()` resolve quando nenhum pedido não retido está em
+ * andamento há `quietMs` (o mesmo critério do `networkidle`), ou lança, com o
+ * alvo e os pedidos que seguiam abertos, se passar de `timeoutMs`. Os ouvintes
+ * precisam ser ligados antes da navegação.
+ */
+export function trackNetworkIdle(page, target, { quietMs = HELD_QUIET_MS, timeoutMs = HELD_IDLE_TIMEOUT_MS, pollMs = 50 } = {}) {
+  const pending = new Set();
+  let lastEvent = Date.now();
+  const held = (request) => isHeldRequest(target, request.method(), bffPathname(request.url()));
+  const started = (request) => {
+    if (held(request)) return;
+    pending.add(request);
+    lastEvent = Date.now();
+  };
+  const ended = (request) => {
+    if (pending.delete(request)) lastEvent = Date.now();
+  };
+  page.on("request", started);
+  page.on("requestfinished", ended);
+  page.on("requestfailed", ended);
+  return {
+    async idle() {
+      const deadline = Date.now() + timeoutMs;
+      for (;;) {
+        if (pending.size === 0 && Date.now() - lastEvent >= quietMs) return;
+        if (Date.now() >= deadline) {
+          const open = [...pending].slice(0, 5).map((request) => `${request.method()} ${request.url()}`).join(", ");
+          throw new Error(`alvo ${target.code} (${target.file}): a rede não ficou ociosa em ${timeoutMs} ms, sem contar os pedidos retidos; ${pending.size} pedido(s) em andamento: ${open}`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+      }
+    },
+  };
+}
+
 /**
  * Leva a tela ao estado do quadro. Um passo `optional` que não encontra o
  * elemento é registrado e pulado: a captura sai mesmo assim, e o aviso diz
- * que o estado pode não ser o do quadro.
+ * que o estado pode não ser o do quadro. `settleNetwork` é a espera depois de
+ * cada passo; o padrão é o `networkidle` de sempre.
  */
-async function runSteps(page, steps = []) {
+async function runSteps(page, steps = [], settleNetwork = () => page.waitForLoadState("networkidle").catch(() => {})) {
   const skipped = [];
   for (const step of steps) {
     const timeout = step.timeout ?? 8_000;
@@ -519,7 +562,7 @@ async function runSteps(page, steps = []) {
       if (!step.optional) throw error;
       skipped.push(JSON.stringify(step));
     }
-    await page.waitForLoadState("networkidle").catch(() => {});
+    await settleNetwork();
   }
   return skipped;
 }
@@ -552,12 +595,18 @@ async function captureApp(browser, appUrl, session, target, device, file) {
   if (target.responses?.length) {
     await context.route("**/api/bff/**", (route) => {
       const request = route.request();
+      // Retido: nem fulfill, nem continue, nem fallback. O pedido fica pendente
+      // até o contexto fechar e não chega ao BFF.
+      if (isHeldRequest(target, request.method(), bffPathname(request.url()))) return undefined;
       const fixed = pickFixedResponse(target, request.method(), bffPathname(request.url()));
       if (!fixed) return route.fallback();
       return route.fulfill({ status: fixed.status ?? 200, contentType: "application/json", body: JSON.stringify(resolveRelativeDays(fixed.json, session.today)) });
     });
   }
   const page = await context.newPage();
+  // Alvo com entrada retida: `load` na abertura e a rede ociosa contada sem os
+  // pedidos retidos. Sem entrada retida, a captura é a de sempre (`networkidle`).
+  const network = hasHeldResponse(target) ? trackNetworkIdle(page, target) : null;
   if (target.clock && session.today) {
     // Hora do quadro (ex.: a linha de "agora" da Agenda às 13:45), no dia semeado.
     await page.clock.setFixedTime(new Date(`${session.today}T${target.clock}:00-03:00`));
@@ -570,12 +619,13 @@ async function captureApp(browser, appUrl, session, target, device, file) {
         return session.ids[key];
       });
     }
-    await page.goto(`${appUrl}${route}`, { waitUntil: "networkidle", timeout: 120_000 });
+    await page.goto(`${appUrl}${route}`, { waitUntil: network ? "load" : "networkidle", timeout: 120_000 });
+    if (network) await network.idle();
     if (target.session !== false && new URL(page.url()).pathname.startsWith("/login") && !route.startsWith("/login")) {
       throw new Error(`app redirecionou ${route} para /login: a sessão da conta visual não foi aceita`);
     }
     await page.addStyleTag({ content: FREEZE_CSS });
-    const skipped = await runSteps(page, target.steps);
+    const skipped = await runSteps(page, target.steps, network ? () => network.idle() : undefined);
     await settle(page);
     await page.screenshot({ path: file, animations: "disabled" });
     return { url: page.url().replace(appUrl, ""), skipped };

@@ -7,13 +7,17 @@
 // roda no navegador e é medido pela execução 2 do visual:compare.
 
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { trackNetworkIdle } from "../visual-compare.mjs";
 import {
   bffPathname,
+  hasHeldResponse,
+  isHeldRequest,
   pickFixedResponse,
   resolveRelativeDays,
   validateResponses,
@@ -83,6 +87,170 @@ test("responses recusa status com método que não é GET", () => {
   assert.throws(
     () => validateResponses([{ ...OK, method: "POST", status: 503 }], TARGET),
     (error) => /alvo W1/.test(error.message) && /responses\[0\]\.method/.test(error.message),
+  );
+});
+
+// Resposta retida (Goal148): o pedido fica pendente até o fim da captura.
+const HELD_TARGET = {
+  code: "CL9",
+  file: "Clientes.dc.html",
+  steps: [{ waitFor: "Carregando clientes" }],
+};
+const HELD = { method: "GET", path: "/v1/customers", hold: true };
+
+test("responses aceita { method: GET, path, hold: true } em alvo com passo waitFor, sem json nem status", () => {
+  const [entry] = validateResponses([HELD], HELD_TARGET);
+  assert.deepEqual(entry, HELD);
+  assert.equal("json" in entry, false);
+  assert.equal("status" in entry, false);
+  assert.deepEqual(validateResponses([OK, HELD], HELD_TARGET), [OK, HELD]);
+});
+
+test("responses recusa hold que não seja true, com erro que nomeia o alvo e o item", () => {
+  for (const hold of [false, "true", 1, null, undefined, {}, []]) {
+    assert.throws(
+      () => validateResponses([OK, { ...HELD, hold }], HELD_TARGET),
+      (error) => /alvo CL9/.test(error.message) && /responses\[1\]\.hold/.test(error.message),
+      `hold ${String(hold)} deveria ser recusado`,
+    );
+  }
+});
+
+test("responses recusa hold com json ou com status, com erro que nomeia o alvo e o item", () => {
+  for (const extra of [{ json: {} }, { json: { data: [] } }, { status: 503 }, { json: {}, status: 503 }]) {
+    assert.throws(
+      () => validateResponses([{ ...HELD, ...extra }], HELD_TARGET),
+      (error) => /alvo CL9/.test(error.message) && /responses\[0\]/.test(error.message) && /"hold" e "(json|status)"/.test(error.message),
+      `hold com ${Object.keys(extra).join("+")} deveria ser recusado`,
+    );
+  }
+});
+
+test("responses recusa hold com método que não é GET, também em alvo público", () => {
+  for (const method of ["POST", "PUT", "PATCH", "DELETE", "get", undefined]) {
+    assert.throws(
+      () => validateResponses([{ ...HELD, method }], HELD_TARGET),
+      (error) => /alvo CL9/.test(error.message) && /responses\[0\]\.method/.test(error.message) && /"hold"/.test(error.message),
+      `hold com método ${String(method)} deveria ser recusado`,
+    );
+  }
+  assert.throws(
+    () => validateResponses([{ method: "POST", path: "/v1/auth/login", hold: true }], { ...HELD_TARGET, session: false }),
+    (error) => /alvo CL9/.test(error.message) && /responses\[0\]\.method/.test(error.message) && /"hold"/.test(error.message),
+  );
+});
+
+test("responses recusa entrada sem json e sem hold, e mantém as regras de caminho e de campo na entrada retida", () => {
+  assert.throws(() => validateResponses([{ method: "GET", path: "/v1/customers" }], HELD_TARGET), /alvo CL9.*responses\[0\] não tem "json"/);
+  assert.throws(() => validateResponses([{ ...HELD, path: "/v1/customers?x=1" }], HELD_TARGET), /responses\[0\]\.path/);
+  assert.throws(() => validateResponses([{ ...HELD, path: "/customers" }], HELD_TARGET), /responses\[0\]\.path/);
+  assert.throws(() => validateResponses([{ ...HELD, retry: 1 }], HELD_TARGET), /campo desconhecido "retry"/);
+});
+
+test("responses recusa o alvo com entrada retida e sem passo waitFor obrigatório", () => {
+  const refused = (target) => assert.throws(
+    () => validateResponses([OK, HELD], target),
+    (error) => /alvo CL9/.test(error.message) && /responses\[1\]/.test(error.message) && /waitFor/.test(error.message),
+  );
+  refused({ code: "CL9", file: "Clientes.dc.html" });
+  refused({ code: "CL9", file: "Clientes.dc.html", steps: [] });
+  refused({ code: "CL9", file: "Clientes.dc.html", steps: [{ wait: 500 }, { click: "Carregando clientes" }] });
+  refused({ code: "CL9", file: "Clientes.dc.html", steps: [{ waitFor: "Carregando clientes", optional: true }] });
+  refused({ code: "CL9", file: "Clientes.dc.html", steps: [{ waitFor: "" }] });
+  assert.throws(() => validateTargetResponses([{ code: "CL9", file: "Clientes.dc.html", responses: [HELD] }]), /alvo CL9.*waitFor/);
+  assert.equal(validateResponses([HELD], { ...HELD_TARGET, steps: [{ click: "Mais" }, { waitFor: "Carregando clientes" }] }).length, 1);
+  // Sem entrada retida, o alvo não precisa de passo algum.
+  assert.equal(validateResponses([OK], TARGET).length, 1);
+});
+
+test("isHeldRequest casa a entrada retida pelo método e pelo caminho exato, sem a query, e não casa entrada com json", () => {
+  const target = { ...HELD_TARGET, responses: validateResponses([OK, HELD], HELD_TARGET) };
+  assert.equal(isHeldRequest(target, "GET", "/v1/customers"), true);
+  assert.equal(isHeldRequest(target, "GET", bffPathname("http://localhost:3100/api/bff/v1/customers?search=ana")), true);
+  for (const other of ["/v1/customers/", "/v1/customers/abc", "/v1/customer", "/V1/customers", "/v1/status"]) {
+    assert.equal(isHeldRequest(target, "GET", other), false, `${other} não deveria casar`);
+  }
+  for (const method of ["POST", "PATCH", "DELETE", "get"]) {
+    assert.equal(isHeldRequest(target, method, "/v1/customers"), false, `${method} não deveria casar`);
+  }
+  assert.equal(isHeldRequest(target, "GET", "/v1/whatsapp"), false, "entrada com json não é retida");
+  assert.equal(isHeldRequest(target, "GET", null), false);
+  assert.equal(isHeldRequest(target, "GET", undefined), false);
+  assert.equal(isHeldRequest({ ...HELD_TARGET }, "GET", "/v1/customers"), false);
+  assert.equal(isHeldRequest({ ...HELD_TARGET, responses: [] }, "GET", "/v1/customers"), false);
+});
+
+test("hasHeldResponse só vale para o alvo com ao menos uma entrada retida; pickFixedResponse nunca serve a retida", () => {
+  const held = { ...HELD_TARGET, responses: validateResponses([OK, HELD], HELD_TARGET) };
+  assert.equal(hasHeldResponse(held), true);
+  assert.equal(hasHeldResponse({ ...TARGET, responses: validateResponses([OK], TARGET) }), false);
+  assert.equal(hasHeldResponse({ ...TARGET, responses: [] }), false);
+  assert.equal(hasHeldResponse(TARGET), false);
+  assert.equal(hasHeldResponse(undefined), false);
+  assert.equal(pickFixedResponse(held, "GET", "/v1/customers"), null);
+  assert.equal(pickFixedResponse(held, "GET", "/v1/whatsapp"), held.responses[0]);
+});
+
+function fakePage() {
+  const page = new EventEmitter();
+  page.on = page.addListener.bind(page);
+  return page;
+}
+
+function fakeRequest(method, url) {
+  return { method: () => method, url: () => url };
+}
+
+const BASE = "http://localhost:3100/api/bff";
+
+test("trackNetworkIdle: o pedido retido fica pendente e não segura a espera da rede", async () => {
+  const target = { ...HELD_TARGET, responses: validateResponses([OK, HELD], HELD_TARGET) };
+  const page = fakePage();
+  const network = trackNetworkIdle(page, target, { quietMs: 40, timeoutMs: 1000, pollMs: 5 });
+  page.emit("request", fakeRequest("GET", `${BASE}/v1/customers?limit=50`));
+  const started = Date.now();
+  await network.idle();
+  assert.ok(Date.now() - started >= 35, "a espera respeita o tempo sem pedido pendente");
+  // O pedido retido nunca termina (sem finished nem failed): a espera segue válida.
+  await network.idle();
+});
+
+test("trackNetworkIdle: pedido não retido em andamento segura a espera até terminar, e o silêncio conta a partir daí", async () => {
+  const target = { ...HELD_TARGET, responses: validateResponses([HELD], HELD_TARGET) };
+  const page = fakePage();
+  const network = trackNetworkIdle(page, target, { quietMs: 40, timeoutMs: 1000, pollMs: 5 });
+  const status = fakeRequest("GET", `${BASE}/v1/status`);
+  page.emit("request", fakeRequest("GET", `${BASE}/v1/customers`));
+  page.emit("request", status);
+  let done = false;
+  const waiting = network.idle().then(() => { done = true; });
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  assert.equal(done, false, "o GET /v1/status segue em andamento");
+  const finishedAt = Date.now();
+  page.emit("requestfinished", status);
+  await waiting;
+  assert.ok(Date.now() - finishedAt >= 35, "o silêncio conta a partir do fim do último pedido");
+});
+
+test("trackNetworkIdle: outro método no mesmo caminho não é retido; pedido que falha libera a espera", async () => {
+  const target = { ...HELD_TARGET, responses: validateResponses([HELD], HELD_TARGET) };
+  const page = fakePage();
+  const network = trackNetworkIdle(page, target, { quietMs: 20, timeoutMs: 400, pollMs: 5 });
+  const post = fakeRequest("POST", `${BASE}/v1/customers`);
+  page.emit("request", post);
+  await assert.rejects(() => network.idle(), /alvo CL9 \(Clientes\.dc\.html\).*POST .*\/v1\/customers/);
+  page.emit("requestfailed", post);
+  await network.idle();
+});
+
+test("trackNetworkIdle: sem a rede ociosa no prazo, o erro nomeia o alvo e os pedidos abertos", async () => {
+  const target = { ...HELD_TARGET, responses: validateResponses([HELD], HELD_TARGET) };
+  const page = fakePage();
+  const network = trackNetworkIdle(page, target, { quietMs: 20, timeoutMs: 80, pollMs: 5 });
+  page.emit("request", fakeRequest("GET", `${BASE}/v1/status`));
+  await assert.rejects(
+    () => network.idle(),
+    (error) => /alvo CL9 \(Clientes\.dc\.html\)/.test(error.message) && /80 ms/.test(error.message) && /1 pedido\(s\) em andamento: GET .*\/v1\/status/.test(error.message),
   );
 });
 
@@ -202,9 +370,9 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1 a W3, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 2.I6, 2.I7, 2.I8, 2.I9, 2.I10, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL8, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1 a W3, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 2.I6, 2.I7, 2.I8, 2.I9, 2.I10, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL8, CL9, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I10", "2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "CL8", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2", "W3"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I10", "2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "CL8", "CL9", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2", "W3"]);
   for (const target of declaring) {
     const owner = ["2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "2.I10"].includes(target.code)
       ? "Onboarding-2-Importacao.dc.html"
@@ -233,6 +401,7 @@ test("targets.json: só W1 a W3, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 2.I6, 
     const postOwners = ["L2", "L7"];
     for (const entry of target.responses) {
       assert.equal(entry.method, postOwners.includes(target.code) ? "POST" : "GET");
+      if (entry.hold === true) continue;
       assert.equal(typeof entry.json.requestId, "string");
     }
   }
@@ -544,9 +713,9 @@ test("targets.json: NT2 é o único dono de responses em Notificacoes.dc.html, s
   }
 });
 
-test("targets.json: CL8 é o único alvo com responses em Clientes.dc.html além de CL2, CL3 e CL10, só declara GET e não tem passo", () => {
+test("targets.json: CL8 é o único alvo com responses em Clientes.dc.html além de CL2, CL3, CL9 e CL10, só declara GET e não tem passo", () => {
   const owners = declaringTargets().filter((target) => target.file === "Clientes.dc.html");
-  assert.deepEqual(owners.map((target) => target.code).sort(), ["CL10", "CL2", "CL3", "CL8"]);
+  assert.deepEqual(owners.map((target) => target.code).sort(), ["CL10", "CL2", "CL3", "CL8", "CL9"]);
   const cl8 = owners.find((target) => target.code === "CL8");
   assert.equal(cl8.label, "Cliente · responsável");
   assert.equal(cl8.route, "/clientes/detalhes?id=visual-compare-cl8-pedro");
@@ -1331,4 +1500,35 @@ test("targets.json: 2.I3, 2.I4, 2.I5, 2.I6, 2.I7, 2.I8, 2.I9 e 2.I10 são os ún
   assert.ok(origem, "2.I1 precisa continuar em targets.json");
   assert.equal(origem.responses, undefined, "2.I1 continua sem responses");
   assert.equal(origem.steps, undefined, "2.I1 continua sem passos");
+});
+
+test("targets.json: CL9 é o único alvo com entrada retida, retém só GET /v1/customers, tem o GET /v1/status conectado, só GET e o passo waitFor", () => {
+  const all = declaringTargets();
+  const holders = all.filter((target) => hasHeldResponse(target));
+  assert.deepEqual(holders.map((target) => target.code), ["CL9"]);
+  const cl9 = holders[0];
+  assert.equal(cl9.file, "Clientes.dc.html");
+  assert.equal(cl9.label, "Clientes · carregando");
+  assert.equal(cl9.route, "/clientes");
+  assert.deepEqual(
+    cl9.responses.map((entry) => `${entry.method} ${entry.path}${entry.hold ? " (retida)" : ""}`),
+    ["GET /v1/status", "GET /v1/customers (retida)"],
+  );
+  for (const entry of cl9.responses) assert.equal(entry.method, "GET");
+  const held = cl9.responses.filter((entry) => entry.hold === true);
+  assert.equal(held.length, 1);
+  assert.equal(held[0].json, undefined);
+  assert.equal(held[0].status, undefined);
+  const status = cl9.responses.find((entry) => entry.path === "/v1/status");
+  assert.equal(status.json.data.whatsapp.status, "CONNECTED");
+  assert.equal(typeof status.json.requestId, "string");
+  const cl10 = all.find((target) => target.code === "CL10");
+  assert.deepEqual(status, cl10.responses.find((entry) => entry.path === "/v1/status"), "CL9 usa o mesmo GET /v1/status do CL10");
+  assert.equal(isHeldRequest(cl9, "GET", "/v1/customers"), true);
+  assert.equal(isHeldRequest(cl9, "GET", "/v1/status"), false);
+  assert.equal(isHeldRequest(cl9, "POST", "/v1/customers"), false);
+  assert.equal(pickFixedResponse(cl9, "GET", "/v1/customers"), null);
+  assert.deepEqual(cl9.steps, [{ waitFor: "Carregando clientes" }]);
+  assert.match(cl9.notes, /retido/);
+  assert.match(cl9.notes, /FREEZE_CSS/);
 });

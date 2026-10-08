@@ -3895,6 +3895,48 @@
       ]
     },
     {
+      "code": "CL9",
+      "file": "Clientes.dc.html",
+      "label": "Clientes · carregando",
+      "route": "/clientes",
+      "notes": "GET /v1/status conectado fixo tira o aviso de WhatsApp desconectado da casca (estado da conta de teste), só no navegador da captura. GET /v1/customers fica retido: o pedido não recebe resposta nem segue para o BFF até o fim da captura, só no navegador da captura, e o app fica no estado de carregamento. Só GET; nada grava. O passo espera o texto “Carregando clientes”, que o app mostra só para leitores de tela (sr-only, role=status), e a captura espera a rede ociosa ignorando o pedido retido. O brilho do esqueleto é parado pelo FREEZE_CSS da captura, que pode deixar o app e o quadro em pontos diferentes da animação: é divergência da captura, não do CSS. Divergências declaradas do Goal148 (medidas no app e no quadro, nos quatro devices; o esqueleto tem as mesmas quatro linhas, círculo de 40 px, barras de 12 px e 10 px, raios, larguras em porcentagem, gap de 22 px, fontes e cores do quadro): (1) No celular o título, a busca e o esqueleto ficam 20 px abaixo do quadro: o app dá 24 px de respiro acima do título e o quadro deixa 4 px depois de a captura recortar 62 dos 66 px da barra de status do iPhone, igual ao CL1, CL2, CL3 e CL10; as distâncias entre os blocos são as do quadro. (2) O campo de busca é o mesmo da lista carregada (CL1 e CL3): 46 px de altura contra 48 px do quadro (o quadro tem height:46px mais a borda, sem border-box) e o texto de “Buscar por nome ou telefone” 2 px mais à direita (65 contra 63 px no celular); não muda aqui para não mexer na imagem de CL1, CL2, CL3 e CL10, e por isso, com o gap de 22 px intacto, o esqueleto começa 2 px mais acima do que a busca do quadro (1,6 px no tablet em pé). (3) No tablet deitado e no desktop o quadro deixa o botão “+” embaixo do título, à esquerda, porque o cabeçalho do CL9 não tem a linha flex que o CL1 tem no mesmo arquivo; o app mantém o “+” à direita do título, na linha do cabeçalho de CL1, para a lista não pular quando chega (cerca de 30 px): divergência declarada, decisão do Tech Lead, porque o cabeçalho do CL9 sem a linha flex conflita com o do CL1 no mesmo arquivo aprovado. Por isso o título fica 5,5 px mais abaixo (centrado na linha de 40 px) e a busca e o esqueleto ficam cerca de 30 px mais acima do que no quadro. (4) A largura do painel de lista é 339 px no app contra 340 px do quadro (dentro de 1 px). Divergências da casca, fora desta lista: a barra lateral do app tem “Notificações” e o quadro não (o protótipo desta tela não desenha esse item); no celular a barra de abas do quadro tem cerca de 97 px de altura (inclui o indicador de início do iPhone) e a do app cerca de 64 px, então as abas ficam cerca de 33 px mais abaixo no app (D-107). No celular e no tablet em retrato o painel carregando ocupa a altura da coluna, como o esqueleto flex:1 do quadro, e nenhuma linha de foco aparece abaixo do esqueleto.",
+      "steps": [
+        { "waitFor": "Carregando clientes" }
+      ],
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/customers",
+          "hold": true
+        }
+      ]
+    },
+    {
       "code": "CL10",
       "file": "Clientes.dc.html",
       "label": "Clientes · erro",

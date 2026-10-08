@@ -73,7 +73,7 @@ describe("alvo CL8 do visual:compare (perfil com responsável)", () => {
     expect(cl8.file).toBe(FILE);
     expect(cl8.steps).toBeUndefined();
     expect(targets.filter((item) => item.code === "CL8")).toHaveLength(1);
-    expect(targets).toHaveLength(102);
+    expect(targets).toHaveLength(103);
   });
 
   test("o CL8 declara só GET, com requestId, e os GET que o perfil faz", () => {
@@ -197,7 +197,7 @@ describe("alvo CL8 do visual:compare (perfil com responsável)", () => {
     }
   });
 
-  test("CL5, CL6 e CL7 seguem sem responses, e CL2, CL3 e CL10 seguem donos delas", () => {
+  test("CL5, CL6 e CL7 seguem sem responses, e CL2, CL3, CL9 e CL10 seguem donos delas", () => {
     for (const code of ["CL5", "CL6", "CL7"]) {
       const target = targets.find(
         (item) => item.code === code && item.file === FILE,
@@ -208,6 +208,6 @@ describe("alvo CL8 do visual:compare (perfil com responsável)", () => {
     const owners = targets
       .filter((item) => item.file === FILE && item.responses !== undefined)
       .map((item) => item.code);
-    expect(owners).toEqual(["CL2", "CL3", "CL10", "CL8"]);
+    expect(owners).toEqual(["CL2", "CL3", "CL9", "CL10", "CL8"]);
   });
 });

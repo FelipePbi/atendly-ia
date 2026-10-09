@@ -2083,6 +2083,8 @@ function customerDto(customer: {
   updatedAt: Date;
   nextAppointment?: AppointmentSummary | null;
   lastAppointment?: AppointmentSummary | null;
+  guardian?: { id: string; name: string | null } | null;
+  dependents?: Array<{ id: string; name: string | null }>;
 }) {
   return {
     id: customer.id,
@@ -2095,6 +2097,10 @@ function customerDto(customer: {
       : {}),
     ...(customer.lastAppointment !== undefined
       ? { lastAppointment: customer.lastAppointment }
+      : {}),
+    ...(customer.guardian !== undefined ? { guardian: customer.guardian } : {}),
+    ...(customer.dependents !== undefined
+      ? { dependents: customer.dependents }
       : {}),
   };
 }

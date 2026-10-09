@@ -194,6 +194,15 @@ O cliente é uma **pessoa**, identificada pelo ID dentro do negócio. O telefone
 
 `POST /v1/appointments` aceita `customerId` para uma pessoa já resolvida ou `customerName`/`customerPhone` para criar o cadastro **na confirmação** — a criação acontece dentro da transação do agendamento, depois de o horário ser validado. Consultar preço ou disponibilidade não cria ninguém, e uma confirmação que falha no horário também não. `GET /v1/appointments` aceita `customerId` (a pessoa) e `customerPhone` (todos os candidatos do número).
 
+### Quem agenda por quem na lista (Goal149)
+
+`GET /v1/customers`, com ou sem `?phone=`, traz por item `guardian` e `dependents`, para a lista e a busca mostrarem quem agenda por quem sem uma chamada por cliente:
+
+- `guardian` é `{ id, name }` do responsável principal **`CONFIRMED`** do cliente, ou `null` sem vínculo confirmado. Uma relação apenas `PROPOSED` não aparece, como não é afirmada para a IA.
+- `dependents` é a lista de `{ id, name }` dos clientes dos quais o cliente é responsável principal `CONFIRMED`; vazia quando não é responsável por ninguém.
+
+Os dois campos existem só na lista. `GET /v1/customers/:id` segue trazendo `primaryGuardian` completo, e a criação e a edição não mudam. Campos opcionais: resposta anterior a este Goal continua válida sem eles.
+
 ### Responsável principal
 
 `PUT /v1/customers/:id/primary-guardian` grava a relação com proveniência (`proposedBy`) e estado (`status`). A relação nasce `PROPOSED` e só vira `CONFIRMED` com confirmação explícita — no corpo do `PUT` ou por `POST .../primary-guardian/confirm`. Uma relação apenas proposta não é afirmada para a IA. No MVP existe no máximo um responsável principal por cliente.

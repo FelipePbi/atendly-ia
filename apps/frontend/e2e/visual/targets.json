@@ -3751,7 +3751,131 @@
       "file": "Clientes.dc.html",
       "label": "Clientes · lista",
       "route": "/clientes",
-      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+      "notes": "GET /v1/status conectado fixo tira o aviso de WhatsApp desconectado da casca (estado da conta de teste), só no navegador da captura. GET /v1/customers é fixo e traz as oito linhas do quadro: Ana Paula (próximo daqui a 2 dias, 15:30), Aline Santos (último há 3 sem), Bia Castro (último hoje), Carla Nunes (faltou hoje), Fernanda Lima (sem atendimentos), Juliana Mendes (próximo hoje, 15:00), Pedro Souza (sem telefone, com o responsável Maria Souza e próximo daqui a 3 dias, 10:00) e o cadastro sem nome 5511976543210. A lista é fixa só no navegador da captura; só GET, nada grava. Divergências declaradas do Goal149, medidas no app e no quadro nos quatro devices: (1) o quadro diz “Maria Souza agenda por ele”; o contrato não tem gênero, então o app diz “Maria Souza agenda por esta pessoa” (D-158); a fonte (13 px), a cor (#716859), o ícone de 12 px e o espaço de 5 px da segunda linha são os do quadro. (2) O quadro mostra a contagem “386” ao lado do título; o app conta as linhas que tem (8). (3) O quadro mostra “sex 15:30” e “sáb 10:00”; o app mostra o dia da semana de hoje + 2 e hoje + 3, que depende do dia da captura (a hora é a do quadro). (4) O quadro lista Ana Paula antes de Aline Santos; o app ordena por nome em pt-BR (Goal075), então Aline vem primeiro. (5) O avatar de Ana Paula tem fundo #DCECEB no quadro; o app só tinge o avatar da linha aberta, e aqui nenhuma está aberta. (6) As linhas do app têm 4 px a mais que as do quadro (64 contra 60 px no celular; 72 contra 68 px no tablet e no desktop) e a segunda linha tem 19,5 contra 17 px de altura, porque a linha da lista herda o line-height de 1,5 da casca e o quadro usa o normal (a lista de busca do CL3 já usa o normal e bate com o quadro); a letra de cada grupo também fica 2 px mais alta (34 contra 32 px). O texto, a fonte, o tamanho e a cor das linhas são iguais; o acúmulo faz o Pedro Souza ficar cerca de 36 px (tablet em retrato) e 34 px (paisagem e desktop) abaixo do quadro, e a distância das linhas ao título não muda. Não corrigido aqui porque a mesma linha aparece na lista ao lado do perfil do CL8 e na do CL2, CL9 e CL10, que são só regressão deste Goal e não podem mudar (D-162, item 7.2, seguiu a mesma regra). (7) Celular: título, busca e linhas ficam 20 px abaixo do quadro (o app dá 24 px de respiro acima do título; o quadro deixa 4 px depois do recorte da barra de status); a barra de abas do app tem cerca de 64 px e a do quadro cerca de 97 px, com o indicador de início do iPhone. (8) A busca tem 46 px de altura no app e 48 px no quadro (D-162, item 7.2, não mudada para não mexer em CL2, CL8, CL9 e CL10), e a letra “A” do primeiro grupo fica 4 px (paisagem e desktop) a 6 px (celular e tablet em retrato) abaixo do quadro; a causa dos 4 a 6 px não foi isolada por medida no DOM. (9) A casca do app tem “Notificações” na barra lateral, e o quadro não.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/status",
+          "json": {
+            "data": {
+              "whatsapp": {
+                "status": "CONNECTED",
+                "phoneNumber": "5511987654321",
+                "checkedAt": "{today}T10:30:00-03:00"
+              },
+              "ai": {
+                "desiredEnabled": true,
+                "effectiveEnabled": true,
+                "state": "ACTIVE",
+                "reconciled": "NOOP"
+              },
+              "accountDeletion": {
+                "status": "NONE",
+                "dueAt": null
+              },
+              "degraded": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/customers",
+          "json": {
+            "data": {
+              "items": [
+                {
+                  "id": "visual-compare-cl1-ana",
+                  "name": "Ana Paula",
+                  "phone": "5511991234567",
+                  "nextAppointment": {
+                    "date": "{today+2}",
+                    "startTime": "15:30",
+                    "status": "CONFIRMED"
+                  },
+                  "lastAppointment": null
+                },
+                {
+                  "id": "visual-compare-cl1-aline",
+                  "name": "Aline Santos",
+                  "phone": "5511988112233",
+                  "nextAppointment": null,
+                  "lastAppointment": {
+                    "date": "{today-21}",
+                    "startTime": "10:00",
+                    "status": "COMPLETED"
+                  }
+                },
+                {
+                  "id": "visual-compare-cl1-bia",
+                  "name": "Bia Castro",
+                  "phone": "5511977770102",
+                  "nextAppointment": null,
+                  "lastAppointment": {
+                    "date": "{today}",
+                    "startTime": "09:00",
+                    "status": "COMPLETED"
+                  }
+                },
+                {
+                  "id": "visual-compare-cl1-carla",
+                  "name": "Carla Nunes",
+                  "phone": "5511965438790",
+                  "nextAppointment": null,
+                  "lastAppointment": {
+                    "date": "{today}",
+                    "startTime": "08:00",
+                    "status": "NO_SHOW"
+                  }
+                },
+                {
+                  "id": "visual-compare-cl1-fernanda",
+                  "name": "Fernanda Lima",
+                  "phone": "5511955554321",
+                  "nextAppointment": null,
+                  "lastAppointment": null
+                },
+                {
+                  "id": "visual-compare-cl1-juliana",
+                  "name": "Juliana Mendes",
+                  "phone": "5511981239988",
+                  "nextAppointment": {
+                    "date": "{today}",
+                    "startTime": "15:00",
+                    "status": "CONFIRMED"
+                  },
+                  "lastAppointment": null
+                },
+                {
+                  "id": "visual-compare-cl1-pedro",
+                  "name": "Pedro Souza",
+                  "phone": null,
+                  "nextAppointment": {
+                    "date": "{today+3}",
+                    "startTime": "10:00",
+                    "status": "CONFIRMED"
+                  },
+                  "lastAppointment": null,
+                  "guardian": {
+                    "id": "visual-compare-cl1-maria",
+                    "name": "Maria Souza"
+                  }
+                },
+                {
+                  "id": "visual-compare-cl1-sem-nome",
+                  "name": null,
+                  "phone": "5511976543210",
+                  "nextAppointment": null,
+                  "lastAppointment": null
+                }
+              ],
+              "source": "AVENLY",
+              "managedExternally": false
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
     },
     {
       "code": "CL2",
@@ -3812,7 +3936,7 @@
           }
         }
       ],
-      "notes": "GET /v1/status conectado fixo tira o aviso de WhatsApp desconectado da casca (estado da conta de teste), só no navegador da captura. GET /v1/customers fixo traz Marina Costa, Marcos Vieira e Maria Souza (último atendimento hoje, há 14 e há 5 dias) e Beatriz Lima, que não casa com “mar”; o fill de “mar” leva a lista ao modo de busca do quadro. Divergência declarada do Goal121: o quadro mostra “agenda para Pedro Souza” sob Maria Souza, e a lista não traz de quem o cliente é responsável (só o detalhe traz primaryGuardian), então o app mostra o telefone, como nas outras linhas.",
+      "notes": "GET /v1/status conectado fixo tira o aviso de WhatsApp desconectado da casca (estado da conta de teste), só no navegador da captura. GET /v1/customers fixo traz Marina Costa, Marcos Vieira e Maria Souza (último atendimento hoje, há 14 e há 5 dias) e Beatriz Lima, que não casa com “mar”; o fill de “mar” leva a lista ao modo de busca do quadro. Maria Souza traz dependents com Pedro Souza (visual-compare-cl3-pedro, sem telefone e com guardian Maria Souza), que não casa com “mar”; a segunda linha da Maria é “agenda para Pedro Souza”, como o quadro (Goal149, que fechou a divergência do Goal121). O Pedro está na resposta para provar que o filtro da busca continua pelo nome e pelo telefone: “mar” não casa com ele, e a relação não entra na busca. Só GET; nada grava. Divergências declaradas do Goal149, medidas no app e no quadro nos quatro devices: (1) a segunda linha “agenda para Pedro Souza”, o nome, o trecho marcado, a meta “há 5 dias” e a altura das linhas (61 px no celular) são os do quadro, com 0 px de diferença; no tablet em retrato as linhas ficam 1 px abaixo (dentro da tolerância). (2) O quadro mostra o teclado do iPhone no celular; o app não desenha teclado (a captura não tem teclado do sistema). (3) O cursor de texto do campo aparece no quadro e não aparece no app na captura (o `FREEZE_CSS` para a animação do cursor). (4) A largura do campo e da lista fica 1 px menor em paisagem e desktop (painel de 379 contra 380 px, dentro da tolerância). (5) A casca do app tem “Notificações” na barra lateral, e o quadro não.",
       "responses": [
         {
           "method": "GET",
@@ -3876,7 +4000,13 @@
                     "date": "{today-5}",
                     "startTime": "11:00",
                     "status": "COMPLETED"
-                  }
+                  },
+                  "dependents": [
+                    {
+                      "id": "visual-compare-cl3-pedro",
+                      "name": "Pedro Souza"
+                    }
+                  ]
                 },
                 {
                   "id": "visual-compare-cl3-beatriz",
@@ -3884,6 +4014,17 @@
                   "phone": "5511955554444",
                   "nextAppointment": null,
                   "lastAppointment": null
+                },
+                {
+                  "id": "visual-compare-cl3-pedro",
+                  "name": "Pedro Souza",
+                  "phone": null,
+                  "nextAppointment": null,
+                  "lastAppointment": null,
+                  "guardian": {
+                    "id": "visual-compare-cl3-maria",
+                    "name": "Maria Souza"
+                  }
                 }
               ],
               "source": "AVENLY",

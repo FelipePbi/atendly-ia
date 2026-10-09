@@ -124,20 +124,21 @@ export function isHeldRequest(target, method, pathname) {
   return target.responses.some((entry) => entry.hold === true && entry.method === method && entry.path === pathname);
 }
 
-const DAY_TOKEN = /\{today(?:-(\d+))?\}/g;
+const DAY_TOKEN = /\{today(?:([-+])(\d+))?\}/g;
 
 /**
- * Troca `{today}` e `{today-N}` nas strings do `json` pela data (AAAA-MM-DD) do
- * dia semeado, menos N dias. É o que mantém "há 12 min", "13:42" e "ontem" do
+ * Troca `{today}`, `{today-N}` e `{today+N}` nas strings do `json` pela data
+ * (AAAA-MM-DD) do dia semeado, menos ou mais N dias (`{today+N}` é o horário
+ * futuro do Goal149). É o que mantém "há 12 min", "13:42" e "ontem" do
  * quadro iguais em qualquer dia: o `clock` do alvo fixa a hora no mesmo dia.
  * Devolve uma cópia; `json` sem token sai igual.
  */
 export function resolveRelativeDays(json, today) {
   if (typeof json === "string") {
-    return json.replace(DAY_TOKEN, (_, back) => {
+    return json.replace(DAY_TOKEN, (_, sign, offset) => {
       if (!today) throw new Error(`resposta fixa usa {today}, mas a semeadura não informou o dia`);
       const day = new Date(`${today}T12:00:00Z`);
-      day.setUTCDate(day.getUTCDate() - Number(back ?? 0));
+      day.setUTCDate(day.getUTCDate() + (sign === "+" ? 1 : -1) * Number(offset ?? 0));
       return day.toISOString().slice(0, 10);
     });
   }

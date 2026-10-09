@@ -229,6 +229,7 @@ describe("list com timezone (Goal075, WU-01)", () => {
           },
         ],
       },
+      customerRelation: { findMany: async () => [] },
       $queryRaw: async (query: { strings?: string[] }) => {
         const text = query.strings?.join("") ?? "";
         if (text.includes("<=")) {
@@ -279,6 +280,7 @@ describe("list com timezone (Goal075, WU-01)", () => {
           },
         ],
       },
+      customerRelation: { findMany: async () => [] },
       $queryRaw: async () => [],
     };
     const service = new AvenlyCustomerService(fakeDatabase as never, tenantId);

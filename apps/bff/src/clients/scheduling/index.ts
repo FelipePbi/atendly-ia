@@ -58,6 +58,18 @@ const customerSchema = z.object({
   nextAppointment: customerAppointmentSummarySchema.nullable().optional(),
   lastAppointment: customerAppointmentSummarySchema.nullable().optional(),
 });
+// Quem agenda por quem, só na lista (Goal149). O zod sem `.strict()` descarta
+// o campo que o schema não declara, então ficam fora de `customerSchema`: o
+// detalhe, a criação, a edição e o atendimento não os trazem. Ausentes na
+// resposta anterior a este Goal.
+const customerListPersonSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+});
+const customerListItemSchema = customerSchema.extend({
+  guardian: customerListPersonSchema.nullable().optional(),
+  dependents: z.array(customerListPersonSchema).optional(),
+});
 // Números do histórico inteiro do cliente, no fuso do calendário do negócio
 // (Goal075). Ausente na resposta anterior a este Goal.
 const customerAppointmentStatsSchema = z.object({
@@ -1078,7 +1090,7 @@ export class SchedulingClient {
       context,
       "/internal/customers",
       z.object({
-        items: z.array(customerSchema),
+        items: z.array(customerListItemSchema),
         source: sourceSchema,
         managedExternally: z.boolean(),
         filteredByPhone: z.boolean().optional(),

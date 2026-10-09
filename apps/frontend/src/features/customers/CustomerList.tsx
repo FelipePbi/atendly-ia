@@ -6,9 +6,9 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import {
   BffHttpError,
-  type Customer,
   type CustomerAppointmentSummary,
   type CustomerList as CustomerListResult,
+  type CustomerListItem,
 } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { ListDetailEmpty, ListDetailLayout } from "@/shared/layout/ListDetail";
@@ -24,9 +24,9 @@ type CustomerListError = { reference: string | null };
 
 type CustomerListData = {
   canCreate: boolean;
-  customers: Customer[];
+  customers: CustomerListItem[];
   error: CustomerListError | null;
-  filtered: Customer[];
+  filtered: CustomerListItem[];
   groups: CustomerGroup[];
   loading: boolean;
   query: string;
@@ -266,7 +266,7 @@ function CustomerSearchResults({
   today,
 }: {
   canCreate: boolean;
-  customers: Customer[];
+  customers: CustomerListItem[];
   open?: string;
   query: string;
   today: Date;
@@ -342,7 +342,7 @@ function CustomerRow({
   open,
   today,
 }: {
-  customer: Customer;
+  customer: CustomerListItem;
   highlight?: string;
   open: boolean;
   today: Date;
@@ -352,6 +352,7 @@ function CustomerRow({
   const phone = customer.phone
     ? (formatBrazilianPhone(customer.phone, "plus") ?? customer.phone)
     : null;
+  const relation = relationLine(customer);
   return (
     <div className="customer-panel-row" role="listitem">
       <Link
@@ -374,9 +375,18 @@ function CustomerRow({
                   ? highlightName(customer.name ?? "", highlight)
                   : customer.name}
               </span>
-              <span className="customer-panel-phone">
-                {phone ?? "Telefone não informado"}
-              </span>
+              {relation ? (
+                <span className="customer-panel-phone customer-panel-relation">
+                  {relation.guardian && <RelationIcon />}
+                  <span className="customer-panel-relation-text">
+                    {relation.text}
+                  </span>
+                </span>
+              ) : (
+                <span className="customer-panel-phone">
+                  {phone ?? "Telefone não informado"}
+                </span>
+              )}
             </span>
             <span className="customer-panel-meta">
               {meta.eyebrow && !highlight && (
@@ -414,6 +424,52 @@ function CustomerRow({
         )}
       </Link>
     </div>
+  );
+}
+
+type RelationLine = { guardian: boolean; text: string };
+
+/**
+ * Segunda linha de quem agenda por quem (Goal149, CL1/CL3): o responsável diz
+ * para quem agenda; quem não tem telefone próprio diz quem agenda por ele. Sem
+ * gênero (D-158). `null` deixa a linha como sempre foi (telefone).
+ */
+function relationLine(customer: CustomerListItem): RelationLine | null {
+  const dependents = customer.dependents ?? [];
+  const [first] = dependents;
+  if (first) {
+    const name = first.name?.trim() || "cliente sem nome";
+    const rest = dependents.length - 1;
+    return {
+      guardian: false,
+      text:
+        rest > 0 ? `agenda para ${name} e mais ${rest}` : `agenda para ${name}`,
+    };
+  }
+  if (customer.guardian && !customer.phone?.trim()) {
+    const name = customer.guardian.name?.trim() || "Responsável sem nome";
+    return { guardian: true, text: `${name} agenda por esta pessoa` };
+  }
+  return null;
+}
+
+function RelationIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="customer-panel-relation-icon"
+      fill="none"
+      height="12"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="12"
+    >
+      <circle cx="12" cy="8.5" r="3.5" />
+      <path d="M5 20a7 7 0 0 1 14 0" />
+    </svg>
   );
 }
 
@@ -473,7 +529,7 @@ function initials(name: string | null): string {
     .join("");
 }
 
-type CustomerGroup = { letter: string; customers: Customer[] };
+type CustomerGroup = { letter: string; customers: CustomerListItem[] };
 
 const NO_NAME_LABEL = "Sem nome";
 
@@ -492,7 +548,7 @@ function groupLetter(name: string): string {
  * Ordem alfabética pt-BR por `localeCompare`, sem acento distinguindo letra;
  * cadastro sem nome vai para um separador próprio no fim (Goal075 CL-01).
  */
-function groupAlphabetically(customers: Customer[]): CustomerGroup[] {
+function groupAlphabetically(customers: CustomerListItem[]): CustomerGroup[] {
   const named = customers
     .filter((customer) => customer.name?.trim())
     .sort((a, b) =>
@@ -594,7 +650,10 @@ type AppointmentParts = {
 };
 
 /** Informação à direita da linha (Goal075 CL-01): próximo, último ou "sem atendimentos", em rótulo e valor. */
-function appointmentParts(customer: Customer, today: Date): AppointmentParts {
+function appointmentParts(
+  customer: CustomerListItem,
+  today: Date,
+): AppointmentParts {
   if (customer.nextAppointment) {
     return {
       eyebrow: "próximo",

@@ -197,7 +197,7 @@ describe("alvo CL8 do visual:compare (perfil com responsável)", () => {
     }
   });
 
-  test("CL5, CL6 e CL7 seguem sem responses, e CL2, CL3, CL9 e CL10 seguem donos delas", () => {
+  test("CL5, CL6 e CL7 seguem sem responses, e CL1, CL2, CL3, CL9 e CL10 são donos delas", () => {
     for (const code of ["CL5", "CL6", "CL7"]) {
       const target = targets.find(
         (item) => item.code === code && item.file === FILE,
@@ -208,6 +208,8 @@ describe("alvo CL8 do visual:compare (perfil com responsável)", () => {
     const owners = targets
       .filter((item) => item.file === FILE && item.responses !== undefined)
       .map((item) => item.code);
-    expect(owners).toEqual(["CL2", "CL3", "CL9", "CL10", "CL8"]);
+    // Goal149: o CL1 passou a declarar responses (a lista com o responsável do
+    // quadro); só o valor esperado mudou, as demais asserções são as mesmas.
+    expect(owners).toEqual(["CL1", "CL2", "CL3", "CL9", "CL10", "CL8"]);
   });
 });

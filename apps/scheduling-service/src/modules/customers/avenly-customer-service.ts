@@ -67,6 +67,25 @@ export interface CustomerDependent {
   guardian: { id: string; name: string | null };
 }
 
+/** Pessoa da relação de responsável na lista de clientes (Goal149). */
+interface CustomerListPerson {
+  id: string;
+  name: string | null;
+}
+
+/** Ordem de nome, sem nome por último, depois `id` (Goal149). */
+function compareListPeople(
+  left: CustomerListPerson,
+  right: CustomerListPerson,
+): number {
+  if (left.name === null && right.name !== null) return 1;
+  if (left.name !== null && right.name === null) return -1;
+  return (
+    (left.name ?? "").localeCompare(right.name ?? "") ||
+    left.id.localeCompare(right.id)
+  );
+}
+
 /** Ativo o suficiente para contar como próximo atendimento (Goal075). */
 const NEXT_APPOINTMENT_STATUSES = ["CONFIRMED", "SCHEDULED"] as const;
 
@@ -94,7 +113,9 @@ export class AvenlyCustomerService {
    * `options.timezone` liga o próximo e o último atendimento (Goal075),
    * calculados num único par de consultas para todo o negócio — nunca uma
    * por cliente. Omitido, a lista sai como antes: quem não precisa dos
-   * campos novos não paga a consulta extra.
+   * campos novos não paga a consulta extra. No mesmo ramo entram o
+   * responsável confirmado e os dependentes confirmados de cada cliente
+   * (Goal149), numa terceira consulta para a lista inteira.
    */
   async list(
     filter: { phone?: string | null } = {},
@@ -114,17 +135,60 @@ export class AvenlyCustomerService {
     const timezone = options.timezone;
     const now = options.now ?? new Date();
     const customerIds = customers.map((customer) => customer.id);
-    const [nextRows, lastRows] = await Promise.all([
+    const [nextRows, lastRows, relations] = await Promise.all([
       this.nextAppointmentsByCustomer(customerIds, now),
       this.lastAppointmentsByCustomer(customerIds, now),
+      this.confirmedGuardianRelations(customerIds),
     ]);
     const nextById = new Map(nextRows.map((row) => [row.customerId, row]));
     const lastById = new Map(lastRows.map((row) => [row.customerId, row]));
+    const guardianById = new Map<string, CustomerListPerson>();
+    const dependentsById = new Map<string, CustomerListPerson[]>();
+    for (const relation of relations) {
+      guardianById.set(relation.customerId, {
+        id: relation.relatedCustomer.id,
+        name: relation.relatedCustomer.name,
+      });
+      const dependents = dependentsById.get(relation.relatedCustomerId) ?? [];
+      dependents.push({
+        id: relation.customer.id,
+        name: relation.customer.name,
+      });
+      dependentsById.set(relation.relatedCustomerId, dependents);
+    }
     return customers.map((customer) => ({
       ...customer,
       nextAppointment: appointmentSummary(nextById.get(customer.id), timezone),
       lastAppointment: appointmentSummary(lastById.get(customer.id), timezone),
+      guardian: guardianById.get(customer.id) ?? null,
+      dependents: (dependentsById.get(customer.id) ?? []).sort(
+        compareListPeople,
+      ),
     }));
+  }
+
+  /**
+   * Responsáveis principais `CONFIRMED` que tocam a lista, de qualquer dos
+   * dois lados da relação, numa única consulta — nunca uma por cliente
+   * (Goal149). `PROPOSED` nunca entra, e a leitura é sempre por pedido:
+   * relação removida some na hora.
+   */
+  private async confirmedGuardianRelations(customerIds: string[]) {
+    return this.database.customerRelation.findMany({
+      where: {
+        tenantId: this.tenantId,
+        type: "PRIMARY_GUARDIAN",
+        status: "CONFIRMED",
+        OR: [
+          { customerId: { in: customerIds } },
+          { relatedCustomerId: { in: customerIds } },
+        ],
+      },
+      include: {
+        customer: { select: { id: true, name: true } },
+        relatedCustomer: { select: { id: true, name: true } },
+      },
+    });
   }
 
   /**

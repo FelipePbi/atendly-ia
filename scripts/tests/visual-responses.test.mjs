@@ -357,7 +357,7 @@ function declaringTargets() {
   return targets.filter((target) => target.responses !== undefined);
 }
 
-test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o resto igual", () => {
+test("resolveRelativeDays troca {today}, {today-N} e {today+N} pelo dia semeado e deixa o resto igual", () => {
   const json = { data: [{ at: "{today}T13:42:00-03:00", before: "{today-1}T19:20:00-03:00", month: "{today-5}T08:00:00-03:00" }], n: 3, flag: null };
   assert.deepEqual(resolveRelativeDays(json, "2026-10-04"), {
     data: [{ at: "2026-10-04T13:42:00-03:00", before: "2026-10-03T19:20:00-03:00", month: "2026-09-29T08:00:00-03:00" }],
@@ -365,14 +365,20 @@ test("resolveRelativeDays troca {today} e {today-N} pelo dia semeado e deixa o r
     flag: null,
   });
   assert.equal(resolveRelativeDays("{today-4}", "2026-03-02"), "2026-02-26");
+  assert.equal(resolveRelativeDays("{today+3}", "2026-02-27"), "2026-03-02");
+  assert.equal(resolveRelativeDays("{today+0}", "2026-10-04"), "2026-10-04");
+  assert.deepEqual(resolveRelativeDays({ at: "{today+2}T15:30:00-03:00", back: "{today-2}", now: "{today}" }, "2026-10-04"), { at: "2026-10-06T15:30:00-03:00", back: "2026-10-02", now: "2026-10-04" });
+  for (const malformed of ["{today+}", "{today+x}", "{today+-1}", "{today*2}", "{today++1}", "{Today+1}"]) {
+    assert.equal(resolveRelativeDays(malformed, "2026-10-04"), malformed, `${malformed} não é token e fica como veio`);
+  }
   assert.deepEqual(resolveRelativeDays({ a: "2026-09-18T13:42:00.000Z" }, undefined), { a: "2026-09-18T13:42:00.000Z" });
   assert.throws(() => resolveRelativeDays({ a: "{today}" }, undefined), /não informou o dia/);
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1 a W3, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 2.I6, 2.I7, 2.I8, 2.I9, 2.I10, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL2, CL3, CL8, CL9, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1 a W3, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 2.I6, 2.I7, 2.I8, 2.I9, 2.I10, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL1, CL2, CL3, CL8, CL9, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I10", "2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL10", "CL2", "CL3", "CL8", "CL9", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2", "W3"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I10", "2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL1", "CL10", "CL2", "CL3", "CL8", "CL9", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2", "W3"]);
   for (const target of declaring) {
     const owner = ["2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "2.I10"].includes(target.code)
       ? "Onboarding-2-Importacao.dc.html"
@@ -713,9 +719,9 @@ test("targets.json: NT2 é o único dono de responses em Notificacoes.dc.html, s
   }
 });
 
-test("targets.json: CL8 é o único alvo com responses em Clientes.dc.html além de CL2, CL3, CL9 e CL10, só declara GET e não tem passo", () => {
+test("targets.json: CL8 é o único alvo com responses em Clientes.dc.html além de CL1, CL2, CL3, CL9 e CL10, só declara GET e não tem passo", () => {
   const owners = declaringTargets().filter((target) => target.file === "Clientes.dc.html");
-  assert.deepEqual(owners.map((target) => target.code).sort(), ["CL10", "CL2", "CL3", "CL8", "CL9"]);
+  assert.deepEqual(owners.map((target) => target.code).sort(), ["CL1", "CL10", "CL2", "CL3", "CL8", "CL9"]);
   const cl8 = owners.find((target) => target.code === "CL8");
   assert.equal(cl8.label, "Cliente · responsável");
   assert.equal(cl8.route, "/clientes/detalhes?id=visual-compare-cl8-pedro");
@@ -745,6 +751,27 @@ test("targets.json: CL8 é o único alvo com responses em Clientes.dc.html além
   }
   assert.match(cl8.notes, /Goal144/);
   assert.match(cl8.notes, /Nenhum passo grava/);
+});
+
+test("targets.json: CL3 dá dependents Pedro Souza à Maria e guardian Maria ao Pedro; CL1 dá guardian Maria Souza ao Pedro sem telefone, só GET", () => {
+  const owners = declaringTargets().filter((target) => target.file === "Clientes.dc.html");
+  const list = (code) => {
+    const target = owners.find((entry) => entry.code === code);
+    for (const entry of target.responses) assert.equal(entry.method, "GET", `${code}: só GET`);
+    return target.responses.find((entry) => entry.path === "/v1/customers").json.data.items;
+  };
+  const cl3 = list("CL3");
+  const maria = cl3.find((item) => item.name === "Maria Souza");
+  const pedro3 = cl3.find((item) => item.name === "Pedro Souza");
+  assert.deepEqual(maria.dependents, [{ id: pedro3.id, name: "Pedro Souza" }], "CL3: a Maria agenda para Pedro Souza");
+  assert.equal(pedro3.phone, null);
+  assert.deepEqual(pedro3.guardian, { id: maria.id, name: "Maria Souza" });
+  const cl1 = list("CL1");
+  const pedro1 = cl1.find((item) => item.name === "Pedro Souza");
+  assert.equal(pedro1.phone, null, "CL1: o Pedro não tem telefone");
+  assert.equal(pedro1.guardian.name, "Maria Souza", "CL1: Maria Souza agenda por ele");
+  assert.equal(cl1.length, 8);
+  assert.equal(cl1[cl1.length - 1].name, null, "CL1: o cadastro sem nome fecha a lista");
 });
 
 test("targets.json: NT1 continua sem responses, com a lista da conta visual", () => {

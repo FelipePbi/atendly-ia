@@ -613,8 +613,22 @@ export const deletedSchema = z.object({ deleted: z.literal(true) });
  */
 export const deletedIdempotentSchema = z.object({ deleted: z.boolean() });
 
+// Quem agenda por quem na lista e na busca (Goal149): `guardian` é o
+// responsável principal CONFIRMED do cliente; `dependents`, os clientes de
+// quem ele é responsável principal CONFIRMED. Só a lista os traz, e ambos são
+// opcionais: a resposta anterior a este Goal continua decodável.
+export const customerListPersonSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().nullable(),
+});
+
+export const customerListItemSchema = customerSchema.extend({
+  guardian: customerListPersonSchema.nullable().optional(),
+  dependents: z.array(customerListPersonSchema).optional(),
+});
+
 export const customerListSchema = z.object({
-  items: z.array(customerSchema),
+  items: z.array(customerListItemSchema),
   source: calendarSourceSchema,
   managedExternally: z.boolean(),
   filteredByPhone: z.boolean().optional(),
@@ -1280,6 +1294,8 @@ export type CustomerAppointmentStats = z.infer<
 >;
 export type CustomerNote = z.infer<typeof customerNoteSchema>;
 export type CustomerTag = z.infer<typeof customerTagSchema>;
+export type CustomerListPerson = z.infer<typeof customerListPersonSchema>;
+export type CustomerListItem = z.infer<typeof customerListItemSchema>;
 export type CustomerList = z.infer<typeof customerListSchema>;
 export type Dashboard = z.infer<typeof dashboardSchema>;
 export type Message = z.infer<typeof messageSchema>;

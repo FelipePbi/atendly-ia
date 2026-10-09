@@ -411,6 +411,23 @@
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
+/* Quem agenda por quem (Goal149, CL1/CL3): uma linha só, com reticências. */
+.customer-panel-relation {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-variant-numeric: normal;
+}
+.customer-panel-relation-icon {
+  flex: none;
+}
+.customer-panel-relation-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .customer-panel-meta {
   flex: none;
   display: grid;
@@ -1201,12 +1218,16 @@
   background: var(--surface-interactive);
   color: var(--fg-soft);
 }
-.customer-profile .directory-detail-identity.is-dependent .directory-detail-phone {
+.customer-profile
+  .directory-detail-identity.is-dependent
+  .directory-detail-phone {
   margin-top: 3px;
   line-height: normal;
 }
 @media (min-width: 768px) {
-  .customer-profile .directory-detail-identity.is-dependent .directory-detail-phone {
+  .customer-profile
+    .directory-detail-identity.is-dependent
+    .directory-detail-phone {
     margin-top: 0;
   }
 }
@@ -1871,7 +1892,9 @@
   font-size: 14px;
 }
 @media (min-width: 1024px) and (max-width: 1099px) {
-  .directory-shell:has(> nav) .list-detail:has(.customer-panel) .list-detail-empty {
+  .directory-shell:has(> nav)
+    .list-detail:has(.customer-panel)
+    .list-detail-empty {
     min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
     box-sizing: border-box;
     padding-top: calc(105px + env(safe-area-inset-bottom));

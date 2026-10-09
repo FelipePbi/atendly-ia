@@ -310,6 +310,7 @@
 }
 .customer-panel-count {
   color: var(--muted);
+  line-height: normal;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
@@ -339,7 +340,8 @@
   white-space: nowrap;
 }
 .customer-panel-search .input {
-  min-height: 46px;
+  min-height: 48px;
+  padding-left: 42px;
   border-radius: 14px;
   font-size: 15px;
 }
@@ -354,6 +356,7 @@
   margin: 0;
   padding: 20px 20px 8px;
   color: var(--muted);
+  line-height: normal;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -368,6 +371,7 @@
   align-items: center;
   gap: 14px;
   color: var(--fg);
+  line-height: normal;
   text-decoration: none;
 }
 .customer-panel-item:hover {
@@ -431,6 +435,7 @@
 .customer-panel-meta {
   flex: none;
   display: grid;
+  gap: 2px;
   justify-items: end;
   font-size: 13px;
   white-space: nowrap;
@@ -542,9 +547,6 @@
 }
 .customer-search-results {
   padding-top: 8px;
-}
-.customer-search-results .customer-panel-item {
-  line-height: normal;
 }
 .customer-search-mark {
   border-radius: 3px;

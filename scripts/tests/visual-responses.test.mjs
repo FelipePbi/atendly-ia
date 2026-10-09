@@ -753,6 +753,21 @@ test("targets.json: CL8 é o único alvo com responses em Clientes.dc.html além
   assert.match(cl8.notes, /Nenhum passo grava/);
 });
 
+test("targets.json: CL8 dá dependents Pedro Souza à Maria e guardian Maria Souza ao Pedro na lista, sem a divergência 5 nas notes", () => {
+  const cl8 = declaringTargets().find((target) => target.file === "Clientes.dc.html" && target.code === "CL8");
+  const items = cl8.responses.find((entry) => entry.path === "/v1/customers").json.data.items;
+  const maria = items.find((item) => item.name === "Maria Souza");
+  const pedro = items.find((item) => item.name === "Pedro Souza");
+  assert.deepEqual(maria.dependents, [{ id: pedro.id, name: "Pedro Souza" }], "CL8: a Maria agenda para Pedro Souza");
+  assert.equal(maria.guardian, undefined);
+  assert.equal(pedro.phone, null);
+  assert.deepEqual(pedro.guardian, { id: maria.id, name: "Maria Souza" });
+  assert.equal(pedro.dependents, undefined);
+  assert.doesNotMatch(cl8.notes, /a lista não traz de quem o cliente é responsável/);
+  assert.doesNotMatch(cl8.notes, /\(Goal121\)/);
+  assert.match(cl8.notes, /Goal150/);
+});
+
 test("targets.json: CL3 dá dependents Pedro Souza à Maria e guardian Maria ao Pedro; CL1 dá guardian Maria Souza ao Pedro sem telefone, só GET", () => {
   const owners = declaringTargets().filter((target) => target.file === "Clientes.dc.html");
   const list = (code) => {

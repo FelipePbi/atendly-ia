@@ -10365,3 +10365,145 @@ Goal149 aceito na rodada 2 de 2 ([review149](reviews/149-review.md)), em review 
 - No review da rodada 2, o Tech Lead refez `npm run visual:compare -- --target CL1,CL3` (saída 0, os mesmos percentuais da tabela) e abriu os oito `side-by-side.png`.
 - No fechamento, sobre a mesma árvore: a partir de `apps/frontend`, `npx vitest run goal149 goal144-alvos-captura` deu 3 arquivos e **40** testes passando; em `apps/scheduling-service`, `npx vitest run --dir tests/unit goal149` deu **14**; em `apps/bff`, `npx vitest run goal149` deu **5**; na raiz, `node --test scripts/tests/visual-responses.test.mjs` deu **79** passando e 0 falhas.
 - Aceito sem prova completa: a regressão de CL2, CL8, CL9 e CL10 contra a baseline `d3093fe` (vale a rodada de controle no mesmo ambiente, 0 px nas 16 imagens); a largura da segunda linha em 360 px por captura (o `validate:ui` cobre o overflow); a contagem de testes por passo de `validate:core` e de `validate:integration`; e os oito controles negativos, que são os da FIX-001, não refeitos pelo Tech Lead.
+
+## A lista de Clientes na medida do protótipo, do Goal150
+
+Rodada 1, 2026-10-09, na worktree `goal-150`. Baseline `8d4f63e` (`HEAD` `5c34711`, que só difere dela em `docs/`). WU-01: as partidas, as três capturas da baseline e o CSS da lista; WU-02: o CL8 e as `notes`; WU-03: a fidelidade visual, as medidas e as correções; WU-04: os controles negativos; WU-05 a WU-11: a verificação determinística (WU-08 em duas tentativas, ver abaixo); DIAG-001: o ajuste de uma `notes` numerada no teste do Goal147; WU-12: estes registros. Todas as unidades terminaram `COMPLETED`, exceto a primeira tentativa de WU-08 (`BLOCKED`, corrigida por DIAG-001). Duas árvores de código aparecem nos números: **árvore A** `code-v1:18b47b88…06d0619` (até a correção de DIAG-001) e **árvore B** `code-v1:fca9b804…8edf662f` (depois dela; é a árvore final, a que o review recebe). A diferença entre as duas é só `apps/frontend/tests/goal147-alvo-captura.test.ts`.
+
+### Contagens
+
+| Suíte | Partida (baseline, antes da primeira edição, WU-01, 2026-10-09 18:51:38 a 18:52:37 -0300) | Final (rodada 1, árvore B) | Diferença |
+| --- | --- | --- | --- |
+| Frontend (`npm test` em `apps/frontend`) | **212** arquivos e **3096** testes, saída 0 | **214** arquivos e **3113** testes passando | +2 arquivos e +17 (`goal150-lista-medida.test.tsx` 12 e `goal150-alvo-captura.test.ts` 5) |
+| `goal150` do frontend (`npx vitest run goal150`) | arquivos novos | **17** em 2 arquivos | — |
+| `scripts/tests/visual-responses.test.mjs` | **79** passando, 0 falhas | **80** passando, 0 falhas | +1 (o teste de conteúdo do CL8) |
+| `test:gate` | **312** (Goal149) | **313** testes, 313 passando, 0 falhas, 0 pulados | +1 |
+
+**Como a partida foi medida.** Na worktree limpa em `5c34711`, antes da primeira edição: `cd apps/frontend && npm test` (18:51:38 a 18:52:33) e `node --test scripts/tests/visual-responses.test.mjs` (18:52:37). Bate com a última contagem aceita (Goal149: 212 arquivos e 3096 testes; `visual-responses` 79).
+
+Gates da execução final, rodados pelo IA Loop (todos com `attemptId` `a1`):
+
+| Gate | Unidade | Comando | Árvore | Resultado |
+| --- | --- | --- | --- | --- |
+| Typecheck | WU-05 | `npx tsc --noEmit` em `apps/frontend` | A | saída 0 (1862 ms) |
+| Lint | WU-06 | `npm run lint` em `apps/frontend` | A | saída 0 (20,7 s) |
+| Testes `goal150` | WU-07 | `npx vitest run goal150` em `apps/frontend` | A | saída 0, 2 arquivos e **17** testes |
+| Testes do frontend, 1ª tentativa | WU-08 | `npm test` em `apps/frontend` | A | `BLOCKED`, saída 1: 213 arquivos passaram e 1 falhou; **3112** testes passaram e 1 falhou, `tests/goal147-alvo-captura.test.ts` "as notes trocam a divergência (8): a conversa é da responsável, casa sem a query e nada grava" |
+| Testes do frontend, 2ª tentativa | WU-08 (g2) | `npm test` em `apps/frontend` | B | saída 0 (55 s), **214** arquivos e **3113** testes passando |
+| `test:gate` | WU-09 | `npm run test:gate` | B | saída 0, **313** testes, 313 passando, 0 falhas, 0 pulados |
+| `validate:core` | WU-10 | `npm run validate:core` | B | saída 0 (123,5 s), 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff` e `test:health-worker`) |
+| `validate:ui` | WU-11 | `npm run validate:ui` | B | saída 0 (46,6 s), **169 passed**, 21 pulados, retentativas **0** ("every test passed on its first attempt") |
+
+Conferência do Developer (WU-12) na árvore B, depois de DIAG-001 e antes de escrever os registros, porque o typecheck, o lint e os `goal150` do IA Loop rodaram na árvore A e DIAG-001 mexeu num arquivo de teste depois deles:
+
+| Conferência | Comando | Resultado |
+| --- | --- | --- |
+| Typecheck | `npx tsc --noEmit` em `apps/frontend` | saída 0, "No errors found" |
+| Lint dos três arquivos de teste que mudaram ou nasceram | `rtk proxy npx eslint tests/goal147-alvo-captura.test.ts tests/goal150-alvo-captura.test.ts tests/goal150-lista-medida.test.tsx --max-warnings=0` | saída 0, sem aviso |
+| `goal150` | `npx vitest run goal150` | 2 arquivos e **17** testes passando (12 e 5) |
+| `visual-responses` | `node --test scripts/tests/visual-responses.test.mjs` | **80** passando, 0 falhas |
+
+**O que não foi contado.** O relatório de `validate:core` não traz contagem de testes por passo, só a saída 0 e os passos. `validate:integration` e os typechecks do BFF e do Scheduling não fazem parte do plano deste Goal (nada muda no BFF, no Scheduling, no contrato nem no banco) e não foram rodados.
+
+### As três capturas e o ruído da baseline (WU-01)
+
+`npm run visual:compare -- --target CL1,CL8,CL2,CL3,CL4,CL5,CL6,CL7,CL9,CL10` rodado três vezes antes da primeira edição (saída 0 às 18:52:44, 18:54:24 e 18:55:56), na pilha que o harness deixou pronta (`VISUAL_BFF_URL`; o Developer não subiu nem derrubou serviço). Cada `visual/` foi copiado para fora do repositório e as três foram comparadas `app.png` a `app.png`, por pixel (pixels diferentes / delta máximo por canal): **mobile, tablet em retrato e tablet em paisagem não diferem em nenhum dos dez alvos**; só o desktop varia, e 32 a 34 das 40 imagens ficam idênticas por par.
+
+| Par | Imagens que diferem (desktop), pixels / delta |
+| --- | --- |
+| captura 1 contra 2 | CL1, CL2 e CL3: 269 / 204; CL8: 312 / 204; CL4, CL6 e CL7: 8 / 5; CL9: 15 / 32 |
+| captura 1 contra 3 | CL1, CL2 e CL3: 269 / 204; CL8: 277 / 204; CL5 e CL7: 8 / 5 |
+| captura 2 contra 3 | CL2 e CL9: 15 / 32; CL4, CL5 e CL6: 8 / 5; CL8: 35 / 5 |
+
+Teto de ruído da baseline: **312 px** e delta **204**, no desktop do CL8 e, com 269 px, no de CL1, CL2 e CL3. Depois das edições, os dez alvos foram capturados três vezes (WU-03): mobile e tablet em retrato com **0 px** de diferença entre as três, e desktop e tablet em paisagem com no máximo **48 px** e delta **32** em CL1, CL3, CL4, CL5, CL6, CL7, CL8 e CL9 (dentro do ruído da baseline). Os dez alvos ficaram estáveis.
+
+### Fidelidade visual
+
+Depois das edições (CSS da lista em WU-01, `padding-left` da busca em WU-03), as capturas finais foram feitas por uma cópia de `scripts/visual-compare.mjs` fora do repositório, que também grava as medidas do DOM em `app.measure.json` e `prototype.measure.json` ao lado de cada captura; a comparação é a mesma. Os `side-by-side.png` dos dez alvos nos quatro devices (40 imagens) foram **abertos um a um** por WU-03; CL1, CL4, CL8 e CL9 antes e depois do `padding-left`, CL1 de novo no resultado final; CL2 e CL3 só antes do `padding-left`, porque não têm a busca parada e ficaram no ruído na captura final.
+
+**Tabela por imagem: baseline `8d4f63e` (captura 1) contra a final (captura 1), pixels diferentes / delta máximo por canal.**
+
+| Alvo | celular | tablet em retrato | tablet em paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| CL1 | 33598 / 232 | 41546 / 232 | 21288 / 232 | 26681 / 232 |
+| CL8 | 0 / 0 | 0 / 0 | 15059 / 232 | 15371 / 232 |
+| CL2 | 0 / 0 | 0 / 0 | 0 / 0 | 269 / 204 (ruído) |
+| CL3 | 0 / 0 | 0 / 0 | 0 / 0 | 269 / 204 (ruído) |
+| CL4 | 0 / 0 | 0 / 0 | 16043 / 214 | 20818 / 214 |
+| CL5, CL6 e CL7 | 0 / 0 | 0 / 0 | 20215 / 232 | 24990 / 232 |
+| CL9 | 8924 / 161 | 15721 / 161 | 8482 / 161 | 8516 / 161 |
+| CL10 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+
+A leitura: o CL3 não difere fora do ruído (só a lista de busca e o campo em andamento aparecem nele, e nenhum mudou); CL2 e CL10 não têm lista e não mudaram. CL4 a CL7 e CL8 só mudam onde a lista aparece, de 1024 px em diante (celular e tablet em retrato com 0 px); o CL8 também ganha a segunda linha da relação. O CL9 muda só a busca (de 46 para 48 px), o texto da busca e a posição do esqueleto, que desce com ela. O CL1 é o alvo da mudança: celular, retrato, paisagem e desktop diferem porque as linhas, as letras e a busca ganharam a altura do quadro.
+
+**Medidas finais, em px, app contra quadro (DOM, topo/altura).**
+
+| Alvo e device | Medida | App | Quadro | Diferença |
+| --- | --- | --- | --- | --- |
+| CL1, retrato | título, busca, seis letras, oito linhas até o Pedro Souza | busca 72/48, letras de 44, linhas de 68, Pedro Souza 799/68 | os mesmos | **0,0** (a ordem Aline antes de Ana é declarada; a linha de 69 px do quadro em Aline e no cadastro sem nome é a borda de 1 px) |
+| CL1, paisagem e desktop | idem | título 29,05/29,89, busca 78/48, letras de 44 (a primeira em 132), linhas de 68, Pedro Souza 805/68, segunda linha de 17 | os mesmos | **0,0** (1,0 em Ana Paula e no cadastro sem nome: 69 contra 68, a borda) |
+| CL1, celular | título, busca, letras e linhas | título a 24, busca a 68, letra "A" a 122, Pedro Souza a 675; busca 48, letra 32, linha 60, segunda linha 17 | título a 4, busca a 48, "A" a 102, Pedro Souza a 655; mesmas alturas | **20,0** uniformes (o respiro da casca, declarado); alturas **0,0** |
+| CL1, celular, barra de abas | o Pedro Souza contra a barra de abas | termina em 735, a barra começa em 747 | inteiro acima da barra | a linha fica **inteira acima da barra**, como no quadro |
+| CL1, texto da busca | coluna do texto | 44 (antes 46) | 44 | **0,0** (o ícone fica 1 px à esquerda) |
+| CL8, 1024 px em diante | título, busca, letra "A", primeira linha | 29,05/29,89, 78/48, 132/44, 176/68 | os mesmos | **0,0** |
+| CL8, 1024 px em diante | linha da Maria e do Pedro | 68 px e segunda linha de 17 px; "agenda para Pedro Souza" e "Maria Souza agenda por esta pessoa" | 8 linhas do CL1, sem Maria | o topo do Pedro (288) difere pela composição (2 linhas contra 8), não pela medida |
+| CL9 | busca e esqueleto | busca 48; esqueleto a 22 da busca (celular) e 142 (retrato) | busca 48; 22 e 141 | **0,0** e **1,0** (dentro da tolerância) |
+
+**Antes (baseline `8d4f63e`), medido por WU-01:** linha de 64 contra 60 px no celular e de 72 contra 68 px nos demais; segunda linha de 19,5 contra 17 px; letra de 34 contra 32 px (celular) e de 46 contra 44; busca de 46 contra 48 px; Pedro Souza a 711 contra 655 (celular, 56 px), 835 contra 799 (retrato, 36 px) e 839 contra 805 (paisagem e desktop, 34 px). Na baseline, no tablet em retrato, a busca do app ficava em 74 contra 72 px por causa do `line-height: 1.5` de `.customer-panel-count` no cabeçalho `baseline`; em paisagem e desktop a letra ficava 2 px acima pela busca de 46 px.
+
+**A letra "A", registrada como provável.** Os 4 a 6 px declarados no Goal149 não se reproduzem mais: depois das mudanças a caixa fica a 0 px, e na baseline o app estava 2 px acima em paisagem e desktop. A causa dos 4 a 6 px não foi isolada; o que a sustenta é que o `line-height: 1.5` da contagem e da letra e a busca de 46 px, juntos, explicam as medidas da baseline e que a diferença sumiu quando os três foram portados (D-164, item 4).
+
+**Diferenças que restam, com a causa.** CL1: dados da conta (contagem 8 contra 386, dia da semana, ordem Aline antes de Ana, "agenda por esta pessoa" contra "por ele", avatar de Ana) e casca (Notificações, respiro de 20 px, barra de abas do celular). CL4 a CL7: o aviso de WhatsApp desconectado (94 px abaixo) e, no CL4, o formulário vazio contra o preenchido; no CL5 a CL7, o conteúdo da conta (resumo da IA, contagens, observação, tags), que já era assim. CL8: reticências no texto do Pedro, a meta "20/09 10:00" e a lista de 2 linhas contra 8. CL9: o "+" abaixo do título no quadro, de 1024 px em diante (Goal148). CL10: a linha "Referência: …" do app. CL2: sem mudança. Todas nas `notes` dos alvos e em D-164, item 9.
+
+### Controles negativos (depois da última edição de código de produto e de captura, WU-04, árvore A)
+
+Método: antes de mutar, `sha256sum` dos cinco arquivos do Goal150 (`avenly-customers.css`, `targets.json`, `visual-responses.test.mjs`, `goal150-alvo-captura.test.ts`, `goal150-lista-medida.test.tsx`) e cópia de `avenly-customers.css` e de `targets.json` fora do repositório; a mutação é aplicada, o teste roda, o arquivo é restaurado e `sha256sum -c` confere (todos `OK` no fim; o primeiro `-c` do controle (a) falhou porque a restauração foi escrita com LF e o arquivo é CRLF, e o segundo, com CRLF, deu `OK`); `git status --short` ficou igual ao de antes. Comandos: `npx vitest run tests/goal150-lista-medida.test.tsx tests/goal150-alvo-captura.test.ts` em `apps/frontend` e `node --test scripts/tests/visual-responses.test.mjs` na raiz. A única mudança da árvore A para a B (DIAG-001) é num teste do Goal147, que nenhum controle toca; a árvore final tem os dois testes `goal150` passando (17) e `visual-responses` passando (80).
+
+| Controle | Mutação | Arquivo e teste que reprovou | Mensagem exata |
+| --- | --- | --- | --- |
+| (a) sem `line-height` na linha | tirar `line-height: normal;` de `.customer-panel-item` em `avenly-customers.css` | `tests/goal150-lista-medida.test.tsx` > "Goal150 — regras da lista de Clientes" > ".customer-panel-item usa line-height: normal, como o quadro" (saída 1; 1 reprovado e 16 aprovados) | `AssertionError: expected '\r\n  padding: 14px 20px;\r\n  displa…' to match /line-height: normal;/` |
+| (b) busca de volta a 46 px | `.customer-panel-search .input` com `min-height: 46px` | `tests/goal150-lista-medida.test.tsx`: "a busca parada tem a altura desenhada do quadro, 48 px; a busca em andamento segue em 48 px" (saída 1; 1 reprovado e 16 aprovados) | `AssertionError: expected '\r\n  min-height: 46px;\r\n  padding-…' to match /min-height: 48px;/` |
+| (c) Maria do CL8 sem `dependents` | tirar `dependents` da Maria na resposta fixa de `GET /v1/customers` do CL8 em `targets.json` | `tests/goal150-alvo-captura.test.ts` > "alvo CL8 do visual:compare (lista com quem agenda por quem)" > "a Maria tem dependents Pedro Souza e o Pedro, sem telefone, tem guardian Maria Souza" (saída 1; 1 reprovado e 16 aprovados) **e** `visual-responses.test.mjs` > "targets.json: CL8 dá dependents Pedro Souza à Maria e guardian Maria Souza ao Pedro na lista, sem a divergência 5 nas notes" (saída 1; pass 79 e fail 1) | `AssertionError: expected undefined to deeply equal [ { …(2) } ]` e `AssertionError [ERR_ASSERTION]: CL8: a Maria agenda para Pedro Souza` (`+ undefined`, `- [ { id: 'visual-compare-cl8-pedro', name: 'Pedro Souza' } ]`, linha 761 do script) |
+| (d) Pedro do CL8 sem `guardian` | tirar `guardian` do Pedro na mesma resposta | `tests/goal150-alvo-captura.test.ts`: "a Maria tem dependents Pedro Souza e o Pedro, sem telefone, tem guardian Maria Souza" e "o guardian da lista é o responsável do perfil" (saída 1; 2 reprovados e 15 aprovados) **e** `visual-responses.test.mjs`, o mesmo teste de (c) (saída 1; pass 79 e fail 1) | `AssertionError: expected undefined to deeply equal { Object (id, name) }` (nos dois do frontend) e `AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:` (`+ undefined`, `- { id: 'visual-compare-cl8-maria', name: 'Maria Souza' }`, linha 764 do script) |
+
+As mensagens foram copiadas da saída bruta guardada fora do repositório; nos controles (a) e (b) o vitest corta o corpo da regra com `…`, e o texto acima é o literal dele. WU-01 fez, além disso, uma sanidade rápida de (a) logo depois de escrever o teste (mesma mensagem, CSS restaurado e `sha256sum -c` `OK`); ela não substitui o controle formal.
+
+### Testes ajustados
+
+- `apps/frontend/tests/goal147-alvo-captura.test.ts` (DIAG-001): o teste "as notes trocam a divergência (8): a conversa é da responsável, casa sem a query e nada grava" procurava a string "(8) A conversa de “Conversa com Maria” é da responsável". Quando WU-02 tirou a divergência 5 das `notes` do CL8 (e a (10)) e renumerou as seguintes, essa divergência passou a ser a **(7)**, e o teste passou a procurar "(7) A conversa de …", com o título e o docblock atualizados. A prova do teste (a `notes` do CL8 declara que a conversa é da responsável, com o `customerId` `visual-compare-cl8-maria`, "sem a query" e "Nenhum passo grava", e não diz "o app mostra só “Agendar”") continua a mesma, no mesmo arquivo; só o número mudou. O `goal150-alvo-captura.test.ts` exige que as `notes` não tenham "(10)" nem "(Goal121)", então a numeração antiga não podia ficar.
+- `scripts/tests/visual-responses.test.mjs`: um teste novo, o de conteúdo do CL8 (79 para 80). Nenhum valor esperado existente mudou.
+- Nenhuma asserção existente foi afrouxada, pulada ou desabilitada. Nenhum teste existente lia o `min-height: 46px` nem a regra removida (conferido por busca em `tests`, `e2e` e `src`).
+
+### Escopo
+
+Mudaram: `apps/frontend/src/shared/styles/avenly-customers.css` (+6 −4), `apps/frontend/e2e/visual/targets.json` (o CL8 e as `notes` de CL1, CL4, CL8 e CL9), `scripts/tests/visual-responses.test.mjs`, `apps/frontend/tests/goal147-alvo-captura.test.ts`, os dois testes novos `goal150-*` e os três registros. Não mudaram: `CustomerList.tsx`, a casca e `avenly.css`, `CustomerProfile`, `CustomerForm`, o esqueleto do CL9, o BFF, a IA, o Scheduling, o contrato, o banco, `e2e/routes.ts` e `e2e/authenticated-matrix.spec.ts`.
+
+### Desvios do texto do Goal, para o review
+
+- O Goal pede o `visual:compare` "numa pilha descartável própria, com o banco num cluster PostgreSQL criado com `initdb`"; a captura usou a pilha que o harness deixou pronta (`VISUAL_BFF_URL`), e o Developer não subiu nem derrubou serviço. A baseline e a final foram capturadas no mesmo ambiente, que é o que a lição 1 exige.
+- As capturas finais usam uma cópia de `scripts/visual-compare.mjs` fora do repositório, que grava também as medidas do DOM; as capturas da baseline usaram `npm run visual:compare`. O script do repositório não mudou.
+- Os controles (a) a (d) rodaram na árvore A; DIAG-001 (árvore B) mexeu só num teste do Goal147 que nenhum controle toca.
+- O typecheck, o lint e os `goal150` do IA Loop rodaram na árvore A; por isso a conferência do Developer na árvore B (tabela acima).
+
+### Não executado
+
+- `validate:integration`, e o typecheck do BFF e do Scheduling: nada muda nesses serviços, no contrato nem no banco, e o plano do Goal não os pede.
+- A contagem de testes por passo de `validate:core`.
+- A largura da segunda linha em 360 px por captura (só os quatro devices do `visual:compare`); o `validate:ui` cobre o overflow de 360 a 1440 px.
+- `prettier --check` nos arquivos editados (o checkout em CRLF já os reprovava no `HEAD`).
+
+### Verificação final do Developer
+
+`git diff --check` depois de escrever os três registros: saída 0, sem erro de espaço em branco (só os avisos de LF e CRLF do checkout).
+
+### Aceite
+
+Goal150 aceito na rodada 1 de 1 ([review150](reviews/150-review.md)), em review DEEP do diff inteiro (9 arquivos: 7 rastreados e 2 novos não rastreados, hash do diff `a7767417d384d126103b58f321d95502078290ae6779f43750a1dbb55e3ba9be`, sobre `5c34711`).
+
+- Gates do IA Loop (rodada 1, todos com `attemptId` `a1`), como na tabela acima: na árvore B, `code-v1:fca9b8044185b3681497301e5779298d69243ef205e21205f49a58148edf662f`, a suíte do frontend 214 arquivos e 3113 testes (WU-08, 2ª tentativa), `test:gate` 313 (WU-09), `validate:core` saída 0 (WU-10), `validate:ui` 169 passed e 0 retentativas (WU-11) e `git diff --check` saída 0 (WU-13, rodado depois dos registros); na árvore A, `code-v1:18b47b88138d11a7722fa62f929e9a423b7c84f4ced561e61557e551706d0619`, typecheck (WU-05), lint (WU-06) e `goal150` 17 (WU-07).
+- No review, o Tech Lead refez `npm run visual:compare -- --target CL1,CL8,CL2,CL3,CL4,CL5,CL6,CL7,CL9,CL10` (saída 0) e abriu os 40 `side-by-side.png`, com a leitura registrada em D-164 (nota de fechamento) e no review150; reexecutou `goal150`, `goal147`, `goal148`, `goal149` e `goal144` do frontend (8 arquivos e 82 testes, no filtro usado no review) e `visual-responses.test.mjs` (80), todos passando.
+- No fechamento, sobre a mesma árvore (19:48 -0300): a partir de `apps/frontend`, `npx vitest run goal150 goal147-alvo-captura` deu 3 arquivos e **22** testes passando, e `npx vitest run goal150 goal147 goal148 goal149 goal144` deu 10 arquivos e **149**; na raiz, `node --test scripts/tests/visual-responses.test.mjs` deu **80** passando e 0 falhas.
+- Aceitos como desvios declarados: a captura na pilha que o harness deixou pronta, no lugar de uma pilha própria com `initdb`, e as capturas finais por uma cópia de `scripts/visual-compare.mjs` fora do repositório.
+- Aceito sem prova completa: o typecheck, o lint e os `goal150` do IA Loop na árvore A (repetidos pelo Developer na B); os quatro controles negativos, na árvore A e não refeitos pelo Tech Lead; a causa dos 4 a 6 px da letra "A" do Goal149, registrada como provável; a largura da linha em 360 px por captura (o `validate:ui` cobre o overflow); e a contagem de testes por passo de `validate:core`.
+
+Esta seção traz os números da rodada 1, na árvore B (`code-v1:fca9b804…8edf662f`) para a suíte, `test:gate`, `validate:core` e `validate:ui`, e na árvore A para o typecheck, o lint e os `goal150` do IA Loop (repetidos na B pelo Developer).

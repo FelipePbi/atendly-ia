@@ -4,7 +4,7 @@
  * contrato, traz uma única conversa cujo `customerId` é o da Maria
  * (`primaryGuardian.guardian.id` do perfil do Pedro), nenhuma resposta tem
  * método diferente de `GET`, o alvo continua sem passo e as `notes` explicam a
- * divergência (8) trocada.
+ * divergência (7) trocada (era a (8) antes do Goal150 tirar a (5)). Fonte da numeração: targets.json.
  */
 
 import { readFileSync } from "node:fs";
@@ -93,11 +93,11 @@ describe("alvo CL8 do visual:compare (conversa da responsável)", () => {
     ).toEqual([]);
   });
 
-  test("as notes trocam a divergência (8): a conversa é da responsável, casa sem a query e nada grava", () => {
+  test("as notes trocam a divergência (7): a conversa é da responsável, casa sem a query e nada grava", () => {
     const notes = cl8.notes ?? "";
     for (const part of [
       "Goal147",
-      "(8) A conversa de “Conversa com Maria” é da responsável",
+      "(7) A conversa de “Conversa com Maria” é da responsável",
       "visual-compare-cl8-maria",
       "sem a query",
       "Nenhum passo grava",

@@ -72,11 +72,7 @@ export function CustomerErrorState({
           <p className="customer-state-reference">Referência: {reference}</p>
         )}
       </div>
-      <Button
-        className="customer-state-action"
-        onClick={onRetry}
-        type="button"
-      >
+      <Button className="customer-state-action" onClick={onRetry} type="button">
         Tentar novamente
       </Button>
     </div>

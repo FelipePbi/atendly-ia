@@ -77,7 +77,9 @@ function orderedCategories(
   preview: ImportPreviewSnapshot,
   order: ImportCategory[] = CATEGORY_ORDER,
 ): ImportPreviewCategory[] {
-  const byCategory = new Map(preview.categories.map((entry) => [entry.category, entry]));
+  const byCategory = new Map(
+    preview.categories.map((entry) => [entry.category, entry]),
+  );
   return order
     .map((category) => byCategory.get(category))
     .filter((entry): entry is ImportPreviewCategory => entry !== undefined);
@@ -199,7 +201,9 @@ export function ImportPreviewScreen({
   session: ImportLiveSession;
 }) {
   const [phase, setPhase] = useState<Phase>({ kind: "working" });
-  const [mode, setMode] = useState<"summary" | "select" | "conflicts">("summary");
+  const [mode, setMode] = useState<"summary" | "select" | "conflicts">(
+    "summary",
+  );
   const [selected, setSelected] = useState<Set<ImportCategory>>(new Set());
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
@@ -229,7 +233,11 @@ export function ImportPreviewScreen({
       // categoria que o negócio já tinha deixado de fora.
       setSelected(
         session.categories.length > 0
-          ? new Set(session.categories.filter((c) => c.selected).map((c) => c.category))
+          ? new Set(
+              session.categories
+                .filter((c) => c.selected)
+                .map((c) => c.category),
+            )
           : new Set(snapshot.categories.map((c) => c.category)),
       );
     }
@@ -272,14 +280,19 @@ export function ImportPreviewScreen({
         handOver(next);
         return;
       }
-      timer.current = setTimeout(() => void pollUntilSettled(), ANALYSIS_POLL_MS);
+      timer.current = setTimeout(
+        () => void pollUntilSettled(),
+        ANALYSIS_POLL_MS,
+      );
     }
 
     async function pollUntilSettled() {
       if (!active) return;
       let next: ImportState;
       try {
-        next = await getProductServices().migration.getImportState(controller.signal);
+        next = await getProductServices().migration.getImportState(
+          controller.signal,
+        );
       } catch {
         if (!active) return;
         setPhase({ kind: "error", message: GENERIC_ANALYSIS_ERROR });
@@ -303,7 +316,9 @@ export function ImportPreviewScreen({
         // erro só aparece quando o estado relido mostra que nada começou.
         let next: ImportState;
         try {
-          next = await getProductServices().migration.getImportState(controller.signal);
+          next = await getProductServices().migration.getImportState(
+            controller.signal,
+          );
         } catch {
           if (!active) return;
           setPhase({ kind: "error", message: GENERIC_ANALYSIS_ERROR });
@@ -373,10 +388,10 @@ export function ImportPreviewScreen({
   const derivedPhase: Phase | null = ownerRestarted
     ? null
     : session.lastError
-    ? { kind: "error", message: workErrorLabel(session.lastError.code) }
-    : session.interrupted
-      ? { kind: "interrupted" }
-      : null;
+      ? { kind: "error", message: workErrorLabel(session.lastError.code) }
+      : session.interrupted
+        ? { kind: "interrupted" }
+        : null;
   const effectivePhase = derivedPhase ?? phase;
 
   async function toggleCategory(category: ImportCategory, next: boolean) {
@@ -401,7 +416,9 @@ export function ImportPreviewScreen({
         else copy.add(category);
         return copy;
       });
-      setSelectionError("Não foi possível salvar essa escolha agora. Tente novamente.");
+      setSelectionError(
+        "Não foi possível salvar essa escolha agora. Tente novamente.",
+      );
     }
   }
 
@@ -536,7 +553,9 @@ export function ImportPreviewScreen({
               </li>
             ))}
           </ul>
-          <p className="imports-analysis-note">Isso pode levar alguns minutos.</p>
+          <p className="imports-analysis-note">
+            Isso pode levar alguns minutos.
+          </p>
         </div>
       </ImportsPage>
     );
@@ -569,7 +588,8 @@ export function ImportPreviewScreen({
     .filter((category) => selected.has(category.category))
     .reduce(
       (total, category) =>
-        total + Math.max(0, category.discoveredCount - category.needsReviewCount),
+        total +
+        Math.max(0, category.discoveredCount - category.needsReviewCount),
       0,
     );
 
@@ -607,18 +627,25 @@ export function ImportPreviewScreen({
                 <li key={category.category}>
                   <label
                     className={
-                      checked ? "imports-choice-row" : "imports-choice-row is-off"
+                      checked
+                        ? "imports-choice-row"
+                        : "imports-choice-row is-off"
                     }
                   >
                     <input
                       checked={checked}
                       type="checkbox"
                       onChange={(event) =>
-                        void toggleCategory(category.category, event.target.checked)
+                        void toggleCategory(
+                          category.category,
+                          event.target.checked,
+                        )
                       }
                     />
                     <span className="imports-choice-copy">
-                      <strong>{capitalized(CATEGORY_LABELS[category.category])}</strong>
+                      <strong>
+                        {capitalized(CATEGORY_LABELS[category.category])}
+                      </strong>
                       {legend && <small>{legend}</small>}
                     </span>
                     {category.category !== "AVAILABILITY" && (
@@ -666,7 +693,6 @@ export function ImportPreviewScreen({
           conflictCount={conflictCount}
           onReview={() => setMode("conflicts")}
         />
-        <ReplaceAccountZone onReplace={onReplaceAccount} />
       </ImportsPage>
     );
   }
@@ -685,9 +711,28 @@ export function ImportPreviewScreen({
               category.discoveredCount > 0;
             return (
               <li
-                className={found ? "imports-summary-row is-seal" : "imports-summary-row"}
+                className={
+                  found ? "imports-summary-row is-seal" : "imports-summary-row"
+                }
                 key={category.category}
               >
+                {/* Rótulo à esquerda e número à direita, como numa lista de
+                    totais ("Cancelamentos 0"). */}
+                <div className="imports-summary-copy">
+                  <strong>
+                    {found
+                      ? AVAILABILITY_FOUND_LABEL
+                      : capitalized(CATEGORY_LABELS[category.category])}
+                  </strong>
+                  {found && <span className="sr-only">, encontrados</span>}
+                  {!category.sourceSupported && (
+                    <small>{limitationLabel(category.limitationCode)}</small>
+                  )}
+                  {category.sourceSupported &&
+                    !selected.has(category.category) && (
+                      <small>Você deixou esta categoria de fora</small>
+                    )}
+                </div>
                 {found ? (
                   <span aria-hidden="true" className="imports-summary-seal">
                     <svg
@@ -708,21 +753,6 @@ export function ImportPreviewScreen({
                     {importCountFormatter.format(category.discoveredCount)}
                   </span>
                 )}
-                <div className="imports-summary-copy">
-                  <strong>
-                    {found
-                      ? AVAILABILITY_FOUND_LABEL
-                      : CATEGORY_LABELS[category.category]}
-                  </strong>
-                  {found && <span className="sr-only">, encontrados</span>}
-                  {!category.sourceSupported && (
-                    <small>{limitationLabel(category.limitationCode)}</small>
-                  )}
-                  {category.sourceSupported &&
-                    !selected.has(category.category) && (
-                      <small>Você deixou esta categoria de fora</small>
-                    )}
-                </div>
               </li>
             );
           })}
@@ -766,7 +796,6 @@ export function ImportPreviewScreen({
         conflictCount={conflictCount}
         onReview={() => setMode("conflicts")}
       />
-      <ReplaceAccountZone onReplace={onReplaceAccount} />
     </ImportsPage>
   );
 }

@@ -17,7 +17,7 @@
  *    introdução de Configurações › IA continua a da baseline.
  */
 
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -92,6 +92,8 @@ import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
 import type { OnboardingScenario } from "@/features/onboarding/scenarios";
 import { AiSettings } from "@/features/settings/AiSettings";
 import { WhatsAppSettings } from "@/features/settings/WhatsAppSettings";
+
+import { advanceDemo, demoItemTexts, runDemoToEnd } from "./support/onboarding-demo";
 
 const CONSENT_TEXT =
   "Entendo que as conversas deste número poderão ser processadas e armazenadas para oferecer os recursos da Avenly.";
@@ -431,13 +433,12 @@ describe("6. demonstracao-da-ia (3.1): frases do quadro", () => {
         <OnboardingScreen scenario="demonstracao-da-ia" />
       </OnboardingRuntimeProvider>,
     );
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
+    await advanceDemo(0);
     const chat = screen.getByRole("log");
-    const texts = [...chat.children].map(
-      (node) => node.textContent?.replace(/sua IA$/u, "") ?? "",
-    );
+    // A conversa entra item a item, também com movimento reduzido (o
+    // beforeEach deste arquivo liga o reduce): roda até o fim.
+    await runDemoToEnd();
+    const texts = demoItemTexts(chat);
     expect(texts).toHaveLength(11);
     expect(texts[0]).toBe("Oi! Quanto custa Corte feminino?");
     expect(texts[2]).toMatch(/custa R\$\s90,00\. Leva 45 min\./u);
@@ -460,7 +461,7 @@ describe("6. demonstracao-da-ia (3.1): frases do quadro", () => {
 });
 
 describe("7. teste-real (4.6): introdução do quadro", () => {
-  test("título, descrição, prévia sem serviço, três itens e Iniciar teste como está", async () => {
+  test("título, descrição, prévia com o serviço real, três itens e Iniciar teste como está", async () => {
     const user = userEvent.setup();
     getWhatsapp.mockResolvedValue({
       phoneNumber: "+5511999990000",
@@ -474,7 +475,7 @@ describe("7. teste-real (4.6): introdução do quadro", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "Um número da Avenly vai enviar uma mensagem no seu WhatsApp simulando um cliente. Você só observa — a IA faz o atendimento sozinha.",
+        "Um número da Avenly vai enviar uma mensagem no seu WhatsApp simulando um cliente. Você só observa: a IA faz o atendimento sozinha.",
       ),
     ).toBeVisible();
 
@@ -483,8 +484,10 @@ describe("7. teste-real (4.6): introdução do quadro", () => {
     const previewScope = within(preview as HTMLElement);
     expect(previewScope.getByText("Avenly · Teste")).toBeVisible();
     expect(previewScope.getByText(/Esta é uma conversa de teste da Avenly/)).toBeVisible();
-    expect(previewScope.getByText("Oi! Quanto custa o atendimento?")).toBeVisible();
-    expect(preview?.textContent).not.toMatch(/Corte feminino/iu);
+    // Validação de 2026-10-11: a prévia usa o serviço real do negócio, no
+    // jeito do segmento (aqui, Cabelo), a mesma pergunta que o cliente
+    // simulado faz no teste de verdade.
+    expect(previewScope.getByText("Oi! Quanto custa Corte feminino?")).toBeVisible();
 
     const items = [...container.querySelectorAll(".activation-test-checks li")].map(
       (node) => node.textContent,

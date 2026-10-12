@@ -192,7 +192,5 @@ export function waitingNoticeCopy(reason: string | null): string | null {
 }
 
 export function isImageReason(reason: string | null): boolean {
-  return Boolean(
-    reason?.toLocaleLowerCase("pt-BR").includes("image_received"),
-  );
+  return Boolean(reason?.toLocaleLowerCase("pt-BR").includes("image_received"));
 }

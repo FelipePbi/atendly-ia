@@ -96,6 +96,28 @@ Microanimações adequadas:
 
 Motion deve ser rápido, útil e respeitar redução de movimento quando aplicável.
 
+### Linguagem de movimento (transições de tela)
+
+Decidida na Agenda em 2026-10-12 ([[../../migration/DECISIONS#D-168|D-168]]) e válida para as demais telas: poucos tempos, duas curvas, deslocamentos pequenos. Entrar é mais lento que sair; o que muda de contexto se move, o que só muda de estado troca de cor. Nada acima de 320 ms, nada elástico, nunca `transition: all`.
+
+| Uso | Duração | Curva | Deslocamento |
+| --- | --- | --- | --- |
+| Pressionar botão, tocar linha, marcar chip | 120 ms | `ease` | scale .98 ou só cor |
+| Hover, foco, cor de texto, fundo de linha; **toda saída** | 160 ms | saída suave | — |
+| Componente que entra: lista, skeleton → conteúdo, aviso | 200 ms | saída suave | 8 px de subida + fade |
+| Troca de contexto: aba, dia/semana/mês, painel, tela | 240 ms (sai em 160) | saída suave | 16 px na direção do gesto, ou 8 px de subida sem direção |
+| Bottom sheet / diálogo | entra em 320 / 220 ms, sai em 160 | saída suave | 32 px de baixo / scale .96 |
+
+Curvas: **saída suave** `cubic-bezier(.2,.7,.2,1)` para tudo que entra, muda de cor ou se move; **entrada** `cubic-bezier(.4,0,1,1)` só para saídas, sempre mais curtas; linear apenas no shimmer do skeleton.
+
+Direção: ir mais fundo (lista → detalhe, formulário) empurra da direita; voltar é o espelho; a mesma profundidade só troca com fade. No desktop a tela não empurra: troca com fade e 8 px de subida, e a casca (sidebar, barras) fica sempre parada. Não anima: a lista inteira quando chega um dado, a posição dos eventos ao atualizar, a Home ao voltar de outra tela.
+
+`prefers-reduced-motion: reduce` desliga tudo por padrão: o conteúdo troca no mesmo quadro, sem fade. Nenhuma animação atrasa a interação: o clique responde na hora e o foco vai para o conteúdo novo como sem animação.
+
+Carregamento (D-168): nenhum esqueleto aparece em cima de conteúdo que já estava na tela — trocar de visão, de período ou de item mantém o conteúdo anterior visível, ocupado (`aria-busy`, com uma linha fina discreta quando a espera é da rede), e a troca é conteúdo → conteúdo quando o novo chega. O que já se sabe (memória da aba, semente da tela anterior, pré-leitura do que vem a seguir) entra na hora e é revalidado no lugar — inclusive ao voltar a uma tela que a pessoa acabou de ver. Linhas secundárias de um conteúdo já na tela (histórico, lembrete) reservam o lugar sem brilho. Esqueleto só na primeira carga absoluta sem splash antes, na forma exata do conteúdo, e só se a carga passar de ~150 ms.
+
+Primeiro carregamento (F5, URL digitada; D-168, revisão de 2026-10-12): o splash da marca cobre a verificação do acesso **e** a primeira leitura da tela — depois dele nunca há esqueleto. A tela monta por baixo e, quando o splash sai (160 ms), se apresenta: os blocos entram escalonados — cabeçalho/barra, depois a grade ou lista, depois o painel — com fade e 8 px de subida em 240 ms, 120 ms entre um e outro. Só nesse momento; trocar de dia ou de visão não repete. Com `prefers-reduced-motion` a tela aparece inteira no mesmo quadro.
+
 ## Componentes principais esperados
 
 - Button / IconButton
@@ -112,7 +134,7 @@ Motion deve ser rápido, útil e respeitar redução de movimento quando aplicá
 - List row
 - Empty state
 - Skeleton
-- Date selector
+- Date selector / Time selector — um só par de seletores para toda data e hora do produto, no lugar do campo nativo do navegador: o calendário que nasce como semana e abre o mês, e o tambor de horas e minutos (referência visual: `Seletores-de-Data-e-Hora.dc.html`). Dia passado não responde quando a tela pede data futura; fora do horário de atendimento é aviso, nunca bloqueio.
 - Calendar event
 - Chat bubble
 - Chat system event

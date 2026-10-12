@@ -1,22 +1,47 @@
 "use client";
 
-import Link from "next/link";
+import clsx from "clsx";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import {
+  type Appointment,
   type AvailabilitySlot,
   type CalendarState,
   type CreateAppointmentInput,
   type Customer,
   type CustomerList,
+  type SeriesOccurrencePreview,
   type Service,
   type ServiceList,
 } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
+import { prefersReducedMotion } from "@/shared/motion/reducedMotion";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
+import { DatePicker } from "@/shared/ui/pickers/DatePicker";
+import {
+  capitalize,
+  clockMinutes,
+  daysFromToday,
+  formatClock,
+  MONTHS,
+  parseClock,
+  parseIsoDate,
+  WEEKDAYS,
+} from "@/shared/ui/pickers/dateTime";
+import { TimePicker } from "@/shared/ui/pickers/TimePicker";
 
+import { appointmentHref } from "./agendaLinks";
+import {
+  forgetAgendaChanges,
+  recalledCalendar,
+  recalledCustomers,
+  recalledServiceCatalog,
+  rememberAppointment,
+  rememberCustomers,
+  rememberServiceCatalog,
+} from "./agendaMemory";
 import {
   AppointmentFlowShell,
   formatMoney,
@@ -30,10 +55,13 @@ import {
   newIdempotencyKey,
   useHoldSession,
 } from "./holdSession";
+import { MoreServicesSheet } from "./MoreServicesSheet";
 import {
   CustomerField,
-  DateStrip,
   durationLabel,
+  MOST_USED_SERVICES,
+  personLabel,
+  servicesByUsage,
   weekdayShort,
 } from "./NewAppointmentFields";
 import {
@@ -44,12 +72,27 @@ import {
   requestError,
   serviceColorMap,
 } from "./occupancy";
-import { ConflictGlyph, SlotConflictNotice } from "./SlotConflictNotice";
+import {
+  DEFAULT_REPEAT_INTERVAL,
+  releaseHolds,
+  REPEAT_COUNT_DEFAULT,
+  RepeatFields,
+  RepeatReviewSheet,
+} from "./RepeatReview";
+import {
+  type ConflictAvailability,
+  ConflictGlyph,
+  SlotConflictNotice,
+} from "./SlotConflictNotice";
 import { holdNotice } from "./SlotPicker";
 
 type AppointmentFormProps = {
   /** Pessoa escolhida de antemão (Goal075, vinda de `/clientes`). Continua trocável. */
   customerId?: string;
+  /** Dia vindo de uma hora vazia da Semana (`?date=AAAA-MM-DD`). Continua trocável. */
+  initialDate?: string;
+  /** "Repetir este atendimento" já ligado (o link antigo `/agenda/serie`, D-171). */
+  initialRepeat?: boolean;
 };
 
 /**
@@ -65,13 +108,32 @@ type AppointmentFormProps = {
  * "Outro, sem cadastro" é o atendimento manual excepcional do Goal008: sem
  * serviço, com título e duração, e sem hold — o hold exige serviço.
  */
-export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
+export function AppointmentForm({
+  customerId,
+  initialDate,
+  initialRepeat = false,
+}: AppointmentFormProps = {}) {
   const router = useRouter();
   const hold = useHoldSession();
-  const [calendar, setCalendar] = useState<CalendarState | null>(null);
-  const [services, setServices] = useState<ServiceList | null>(null);
-  const [customers, setCustomers] = useState<CustomerList | null>(null);
+  // Vindo da Agenda, o calendário e as listas já estão na memória da aba
+  // (D-167; a folha do "+ Novo" as pré-lê, D-168): a tela abre pronta, e a
+  // leitura abaixo revalida no lugar.
+  const [calendar, setCalendar] = useState<CalendarState | null>(
+    recalledCalendar,
+  );
+  const [services, setServices] = useState<ServiceList | null>(
+    recalledServiceCatalog,
+  );
+  const [customers, setCustomers] = useState<CustomerList | null>(
+    recalledCustomers,
+  );
   const [serviceIds, setServiceIds] = useState<string[]>([]);
+  // Serviços trazidos de "Ver outros serviços": ficam à vista dali em diante.
+  const [promotedIds, setPromotedIds] = useState<string[]>([]);
+  const [moreServicesOpen, setMoreServicesOpen] = useState(false);
+  const serviceChipsRef = useRef<HTMLDivElement>(null);
+  // Foco pedido por uma escolha, aplicado depois do commit que a mostra.
+  const pendingFocusRef = useRef<(() => void) | null>(null);
   const [other, setOther] = useState(false);
   const [otherTitle, setOtherTitle] = useState("");
   const [otherDuration, setOtherDuration] = useState("");
@@ -80,8 +142,26 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
   );
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [date, setDate] = useState(isoDate(new Date()));
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  // Nome digitado assumido como cliente novo (saiu do campo ou "Cadastrar").
+  const [nameCommitted, setNameCommitted] = useState(false);
+  // Recorrência no próprio agendamento (D-171, pedido de 2026-10-12): a
+  // revisão reserva um horário por ocorrência; as reservas vivas ficam fora
+  // do render para serem liberadas ao sair da tela.
+  const [repeat, setRepeat] = useState(initialRepeat);
+  const [repeatCount, setRepeatCount] = useState(REPEAT_COUNT_DEFAULT);
+  const [repeatInterval, setRepeatInterval] = useState<number | null>(null);
+  const [seriesPreview, setSeriesPreview] = useState<
+    SeriesOccurrencePreview[] | null
+  >(null);
+  const seriesHoldsRef = useRef<string[]>([]);
+  useEffect(() => () => releaseHolds(seriesHoldsRef.current), []);
+  // O horário não vem junto: ele é escolhido entre os livres do serviço, e
+  // escolher reserva (hold); só o dia é pré-preenchido.
+  const [date, setDate] = useState(() =>
+    initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate)
+      ? initialDate
+      : isoDate(new Date()),
+  );
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [startTime, setStartTime] = useState("");
@@ -89,7 +169,9 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
   const [showManual, setShowManual] = useState(false);
   const [comments, setComments] = useState("");
   const [showComments, setShowComments] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(
+    calendar === null || services === null || customers === null,
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<ConflictState | null>(null);
@@ -108,6 +190,16 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
     (first ?? timeLegendRef.current)?.focus();
   }, [focusTimeRequest]);
 
+  // Foco pedido por uma escolha (o serviço trazido da folha, a seção revelada
+  // pelo cliente escolhido) depois do commit que a mostra. A folha devolve o
+  // foco a quem a abriu na limpeza dela, e este efeito roda depois.
+  useEffect(() => {
+    const focus = pendingFocusRef.current;
+    if (!focus) return;
+    pendingFocusRef.current = null;
+    focus();
+  });
+
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([
@@ -119,6 +211,8 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
         setCalendar(calendarResult);
         setServices(serviceResult);
         setCustomers(customerResult);
+        rememberServiceCatalog(serviceResult);
+        rememberCustomers(customerResult);
       })
       .catch((caught: unknown) => {
         if (!controller.signal.aborted)
@@ -135,6 +229,9 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
   // Dias em que o negócio não atende ficam esmaecidos na faixa de datas (A6).
   // Sem leitura das regras, ou sem regra alguma, nenhum dia é esmaecido.
   const [openWeekdays, setOpenWeekdays] = useState<Set<number> | null>(null);
+  // O mesmo expediente diz ao aviso de recusa o motivo verdadeiro (2026-10-12).
+  const [availabilitySettings, setAvailabilitySettings] =
+    useState<ConflictAvailability | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     const settingsService = getProductServices().settings;
@@ -143,6 +240,7 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
       .get(controller.signal)
       .then((state) => {
         const rules = state.availability?.rules ?? [];
+        setAvailabilitySettings(state.availability ?? null);
         setOpenWeekdays(
           rules.length === 0
             ? null
@@ -199,6 +297,23 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
   const selectableServices = (services?.items ?? []).filter(
     (item) => item.active && item.durationMinutes !== null,
   );
+  // Os 5 mais usados à vista e os demais em "Ver outros serviços" (D-170).
+  // Quem foi escolhido na folha, ou está na seleção, fica entre os chips.
+  const rankedServices = servicesByUsage(selectableServices);
+  const mostUsed = rankedServices.slice(0, MOST_USED_SERVICES);
+  const visibleServices = [
+    ...mostUsed,
+    ...[...promotedIds, ...serviceIds]
+      .filter((id, index, ids) => ids.indexOf(id) === index)
+      .map((id) => rankedServices.find((item) => item.id === id))
+      .filter(
+        (item): item is Service =>
+          item !== undefined && !mostUsed.includes(item),
+      ),
+  ];
+  const otherServices = rankedServices.filter(
+    (item) => !visibleServices.includes(item),
+  );
   const selectedServices = selectableServices.filter((item) =>
     serviceIds.includes(item.id),
   );
@@ -245,9 +360,114 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
       : !startTime
         ? "Escolha um horário."
         : null;
+  // O intervalo do serviço (`recurrenceIntervalDays`) é a sugestão; sem
+  // ele, toda semana. Escolher outro vale até a tela fechar.
+  const suggestedInterval =
+    selectedServices
+      .map((item) => item.recurrenceIntervalDays)
+      .find(
+        (value): value is number => typeof value === "number" && value > 0,
+      ) ?? null;
+  const intervalDays =
+    repeatInterval ?? suggestedInterval ?? DEFAULT_REPEAT_INTERVAL;
+  // Quadro "Data e horário" (Seletores-de-Data-e-Hora.dc.html, 03 · Juntos):
+  // quem, o quê e quanto tempo, ao lado do resumo da escolha.
+  const whoName = selectedCustomer
+    ? personLabel(selectedCustomer)
+    : customerName.trim();
+  const whatLabel = other
+    ? otherTitle.trim()
+    : selectedServices.map((item) => item.name).join(", ");
+  const whoLabel = [
+    whoName,
+    whatLabel,
+    durationMinutes > 0 ? durationLabel(durationMinutes) : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  // Dias sem atendimento ficam em cinza no calendário, mas continuam
+  // clicáveis; sem regras lidas, nenhum dia é esmaecido.
+  const closedWeekdays = openWeekdays
+    ? [0, 1, 2, 3, 4, 5, 6].filter((day) => !openWeekdays.has(day))
+    : undefined;
+  // O expediente do dia escolhido: fora dele o tambor avisa, sem bloquear.
+  const dayRules = (availabilitySettings?.rules ?? []).filter(
+    (rule) => rule.active && rule.dayOfWeek === parseDate(date).getDay(),
+  );
+  const businessHours =
+    dayRules.length > 0
+      ? {
+          end:
+            dayRules
+              .map((rule) => rule.endTime)
+              .sort()
+              .at(-1) ?? "",
+          start: dayRules.map((rule) => rule.startTime).sort()[0] ?? "",
+        }
+      : null;
   const ctaLabel = startTime
     ? `Criar agendamento · ${weekdayShort(date)} ${parseDate(date).getDate()}, ${startTime}`
     : "Criar agendamento";
+
+  // Revelação progressiva (pedido de 2026-10-12, D-170): Cliente → Serviços
+  // → Data e Horário (com observação, série e o rodapé). Uma etapa revelada
+  // fica: trocar o cliente ou desmarcar o serviço não some com nada da ordem
+  // de foco. O que a tela já abre preenchido (cliente vindo do perfil ou da
+  // conversa) aparece de uma vez, sem animação; só o revelado depois anima.
+  // "Outro, sem cadastro" também é escolha: a Data e o horário digitado
+  // aparecem com ele.
+  const serviceChosen = other || serviceIds.length > 0;
+  const customerChosen = selectedCustomer
+    ? true
+    : nameCommitted && customerName.trim().length > 0;
+  // Com o horário escolhido, "Repetir este atendimento" (D-171); "Outro, sem
+  // cadastro" não repete, porque a série exige serviço cadastrado.
+  const readyStage = !customerChosen
+    ? 0
+    : !serviceChosen
+      ? 1
+      : !startTime || other
+        ? 2
+        : 3;
+  const [revealedStage, setRevealedStage] = useState(0);
+  const [openingStage, setOpeningStage] = useState<number | null>(null);
+  if (!loading && openingStage === null) setOpeningStage(readyStage);
+  if (readyStage > revealedStage) setRevealedStage(readyStage);
+  const shownStage = Math.max(revealedStage, readyStage);
+  const [reducedMotion] = useState(prefersReducedMotion);
+  const enterClass = (stage: number) =>
+    !reducedMotion && openingStage !== null && stage > openingStage
+      ? "motion-enter"
+      : undefined;
+  const servicesSectionRef = useRef<HTMLFieldSetElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const scheduleSectionRef = useRef<HTMLElement>(null);
+  const repeatSectionRef = useRef<HTMLDivElement>(null);
+  const repeating = repeat && !other && shownStage >= 3;
+  const submitLabel = repeating
+    ? `Revisar ${repeatCount} agendamentos`
+    : ctaLabel;
+  const announcedStage =
+    openingStage !== null && shownStage > openingStage ? shownStage : 0;
+
+  // A etapa nova entra na vista só se ficou fora dela ("nearest" não rola o
+  // que já aparece inteiro).
+  const lastShownRef = useRef(shownStage);
+  useEffect(() => {
+    if (shownStage <= lastShownRef.current) return;
+    lastShownRef.current = shownStage;
+    if (openingStage === null || shownStage <= openingStage) return;
+    const section =
+      shownStage === 1
+        ? servicesSectionRef.current
+        : shownStage === 2
+          ? scheduleSectionRef.current
+          : repeatSectionRef.current;
+    section?.scrollIntoView?.({
+      behavior: reducedMotion ? "auto" : "smooth",
+      block: "nearest",
+    });
+  }, [openingStage, reducedMotion, shownStage]);
 
   function resetSlotChoice() {
     hold.release();
@@ -260,6 +480,86 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
     setChosenCustomerId(customer.id);
     setCustomerName("");
     setCustomerPhone("");
+    // A sugestão clicada some: o foco vai para os Serviços quando eles nascem
+    // desta escolha e, se já estavam à vista, para o "Trocar" do cliente.
+    const revealsServices = shownStage < 1;
+    pendingFocusRef.current = () => {
+      const target = revealsServices
+        ? servicesSectionRef.current?.querySelector<HTMLElement>(
+            "input, button",
+          )
+        : formRef.current?.querySelector<HTMLElement>(".agenda-new-swap");
+      target?.focus();
+    };
+  }
+
+  function commitName(fromChoice: boolean) {
+    setNameCommitted(true);
+    if (!fromChoice || shownStage >= 1) return;
+    pendingFocusRef.current = () =>
+      servicesSectionRef.current
+        ?.querySelector<HTMLElement>("input, button")
+        ?.focus();
+  }
+
+  /**
+   * "Revisar N agendamentos": a prévia de série (Goal009) reserva cada
+   * ocorrência, inclusive a primeira, então a reserva do horário avulso é
+   * liberada antes — e a prévia espera a liberação assentar.
+   */
+  async function reviewSeries() {
+    if (busy || !startTime || other) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await hold.releaseSettled();
+      const result =
+        await getProductServices().calendar.previewAppointmentSeries({
+          customerId: selectedCustomer?.id,
+          firstDate: date,
+          firstStartTime: startTime,
+          intervalDays,
+          occurrenceCount: repeatCount,
+          serviceIds,
+        });
+      seriesHoldsRef.current = result
+        .map((item) => item.holdId)
+        .filter((value): value is string => Boolean(value));
+      setSeriesPreview(result);
+    } catch (caught) {
+      setError(
+        requestError(caught, "Não foi possível revisar os agendamentos."),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** "Voltar": nada é criado, as reservas da revisão voltam e o horário escolhido é reservado de novo. */
+  function closeReview() {
+    releaseHolds(seriesHoldsRef.current);
+    seriesHoldsRef.current = [];
+    setSeriesPreview(null);
+    if (startTime) void chooseTime(startTime);
+  }
+
+  async function retryReview() {
+    releaseHolds(seriesHoldsRef.current);
+    seriesHoldsRef.current = [];
+    setSeriesPreview(null);
+    await reviewSeries();
+  }
+
+  function finishSeries(created: Appointment[], leftover: string[]) {
+    // As reservas confirmadas viraram atendimento; só as das datas puladas
+    // ainda existem.
+    releaseHolds(leftover);
+    seriesHoldsRef.current = [];
+    forgetAgendaChanges();
+    const first = created[0];
+    if (!first) return;
+    rememberAppointment(first);
+    router.replace(appointmentHref(first.id));
   }
 
   function swapCustomer() {
@@ -277,6 +577,18 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
     setOther(false);
     setServiceIds(next);
     setSlotsLoading(next.length > 0);
+  }
+
+  function chooseOtherService(service: Service) {
+    setMoreServicesOpen(false);
+    setPromotedIds((current) =>
+      current.includes(service.id) ? current : [...current, service.id],
+    );
+    if (!serviceIds.includes(service.id)) toggleService(service);
+    pendingFocusRef.current = () =>
+      serviceChipsRef.current
+        ?.querySelector<HTMLInputElement>(`input[value="${service.id}"]`)
+        ?.focus();
   }
 
   function toggleOther() {
@@ -374,9 +686,10 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
         input,
         newIdempotencyKey(),
       );
-      router.replace(
-        `/agenda/agendamento?id=${encodeURIComponent(appointment.id)}`,
-      );
+      // O que a Agenda leu antes da criação deixou de valer (D-167).
+      forgetAgendaChanges();
+      rememberAppointment(appointment);
+      router.replace(appointmentHref(appointment.id));
     } catch (caught) {
       if (isHoldLostError(caught)) {
         hold.markLost();
@@ -422,6 +735,7 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
 
   return (
     <AppointmentFlowShell
+      agendaBar={false}
       appointmentRoute={{ date }}
       calendar={calendar}
       closeLabel="Fechar novo agendamento"
@@ -443,251 +757,388 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
             onSubmit={(event: FormEvent) => {
               event.preventDefault();
               if (conflict) submitOverride();
+              else if (canSubmit && repeating) void reviewSeries();
               else if (canSubmit) void create();
             }}
+            ref={formRef}
           >
+            {/* Anuncia a etapa revelada depois da abertura (D-170). */}
+            <p aria-live="polite" className="sr-only">
+              {announcedStage === 1
+                ? "Serviços"
+                : announcedStage === 2
+                  ? "Data e horário"
+                  : announcedStage === 3
+                    ? "Repetir este atendimento"
+                    : ""}
+            </p>
             <div className="agenda-new-columns">
               <div className="agenda-new-column">
                 <CustomerField
                   customers={customers}
                   name={customerName}
                   onChoose={chooseCustomer}
+                  onCommitName={commitName}
                   onName={setCustomerName}
                   onPhone={setCustomerPhone}
                   onSwap={swapCustomer}
                   phone={customerPhone}
                   selected={selectedCustomer}
                 />
-                <fieldset className="agenda-new-block">
-                  <legend className="label">Serviços</legend>
-                  {selectableServices.length === 0 ? (
-                    <p className="muted">
-                      Nenhum serviço disponível para agendamento.
-                    </p>
-                  ) : (
-                    <div className="agenda-new-chips">
-                      {selectableServices.map((item) => (
-                        <label className="agenda-new-chip" key={item.id}>
-                          <input
-                            checked={serviceIds.includes(item.id)}
-                            onChange={() => toggleService(item)}
-                            type="checkbox"
-                          />
-                          <span>
-                            <Icon name="check" />
-                            <span
-                              aria-hidden="true"
-                              className="agenda-appt-service-dot"
-                              data-color={colors.get(item.id) ?? undefined}
-                            />
-                            {item.name}
-                            <span className="sr-only"> · </span>
-                            <small>
-                              {durationLabel(item.durationMinutes ?? 0)}
-                            </small>
-                          </span>
-                        </label>
-                      ))}
-                      <button
-                        aria-pressed={other}
-                        className="agenda-new-chip-other"
-                        onClick={toggleOther}
-                        type="button"
-                      >
-                        Outro, sem cadastro
-                      </button>
-                    </div>
-                  )}
-                  {!other && (
-                    <p className="agenda-new-total">
-                      {selectedServices.length === 0 ? (
-                        <span>Nenhum serviço escolhido.</span>
-                      ) : (
-                        <>
-                          <span>
-                            {selectedServices.length}{" "}
-                            {selectedServices.length === 1
-                              ? "serviço"
-                              : "serviços"}
-                          </span>
-                          <span className="sr-only"> · </span>
-                          <strong>
-                            {durationLabel(servicesMinutes)} ·{" "}
-                            {totalLabel(total)}
-                          </strong>
-                        </>
-                      )}
-                    </p>
-                  )}
-                  {other && (
-                    <div className="agenda-new-other">
-                      <label className="field">
-                        <span className="label">Título do atendimento</span>
-                        <input
-                          className="input"
-                          maxLength={200}
-                          onChange={(event) => {
-                            resetSlotChoice();
-                            setOtherTitle(event.target.value);
-                          }}
-                          value={otherTitle}
-                        />
-                      </label>
-                      <label className="field">
-                        <span className="label">Duração em minutos</span>
-                        <input
-                          className="input"
-                          inputMode="numeric"
-                          max={1440}
-                          min={1}
-                          onChange={(event) => {
-                            setOtherDuration(event.target.value);
-                            setConflict(null);
-                          }}
-                          type="number"
-                          value={otherDuration}
-                        />
-                      </label>
-                    </div>
-                  )}
-                </fieldset>
               </div>
               <div className="agenda-new-column">
-                <DateStrip
-                  date={date}
-                  openWeekdays={openWeekdays}
-                  onChange={changeDate}
-                  onTogglePicker={() =>
-                    setShowDatePicker((current) => !current)
-                  }
-                  pickerOpen={showDatePicker}
-                />
-                <fieldset
-                  className="agenda-new-block agenda-new-time"
-                  disabled={!other && serviceIds.length === 0}
-                  ref={timeFieldsetRef}
-                >
-                  <legend className="label" ref={timeLegendRef} tabIndex={-1}>
-                    Horário
-                    {!other && durationMinutes > 0 && (
-                      <span className="agenda-new-legend-note">
-                        {" "}
-                        · livres para {durationLabel(durationMinutes)}
-                      </span>
-                    )}
-                  </legend>
-                  {other ? (
-                    <p className="muted">
-                      Sem serviço cadastrado não há horários sugeridos. Digite
-                      o horário abaixo.
-                    </p>
-                  ) : serviceIds.length === 0 ? (
-                    <p className="muted">
-                      Escolha um serviço para ver os horários livres.
-                    </p>
-                  ) : slotsLoading ? (
-                    <p>Consultando disponibilidade…</p>
-                  ) : slots.length === 0 ? (
-                    <p className="muted">
-                      Nenhum horário disponível para esta seleção.
-                    </p>
-                  ) : null}
-                  {(!other || conflict) && (
-                    <div className="agenda-new-chips">
-                      {!other &&
-                        !slotsLoading &&
-                        slots.map((slot) => {
-                          const refused = conflict?.startTime === slot.startTime;
-                          return (
-                            <label
-                              className={`agenda-new-chip agenda-new-slot${refused ? " is-conflict" : ""}`}
-                              key={`${slot.date}-${slot.startTime}`}
-                            >
-                              <input
-                                checked={startTime === slot.startTime}
-                                name="start-time"
-                                onChange={() => void chooseTime(slot.startTime)}
-                                type="radio"
-                              />
-                              <span>
-                                {refused && (
-                                  <ConflictGlyph size={14} strokeWidth={2.25} />
-                                )}
-                                {slot.startTime}
-                                {refused && (
-                                  <span className="sr-only"> · ocupado</span>
-                                )}
-                              </span>
-                            </label>
-                          );
-                        })}
-                      {conflict &&
-                        (other ||
-                          slotsLoading ||
-                          !slots.some(
-                            (slot) => slot.startTime === conflict.startTime,
-                          )) && (
-                          <label className="agenda-new-chip agenda-new-slot is-conflict">
+                {shownStage >= 1 && (
+                  <fieldset
+                    className={clsx("agenda-new-block", enterClass(1))}
+                    ref={servicesSectionRef}
+                  >
+                    <legend className="label">Serviços</legend>
+                    {selectableServices.length === 0 ? (
+                      <p className="muted">
+                        Nenhum serviço disponível para agendamento.
+                      </p>
+                    ) : (
+                      <div className="agenda-new-chips" ref={serviceChipsRef}>
+                        {visibleServices.map((item) => (
+                          <label className="agenda-new-chip" key={item.id}>
                             <input
-                              checked
-                              name="start-time"
-                              onChange={() => undefined}
-                              type="radio"
+                              checked={serviceIds.includes(item.id)}
+                              onChange={() => toggleService(item)}
+                              type="checkbox"
+                              value={item.id}
                             />
                             <span>
-                              <ConflictGlyph size={14} strokeWidth={2.25} />
-                              {conflict.startTime}
-                              <span className="sr-only"> · ocupado</span>
+                              <Icon name="check" />
+                              <span
+                                aria-hidden="true"
+                                className="agenda-appt-service-dot"
+                                data-color={colors.get(item.id) ?? undefined}
+                              />
+                              {item.name}
+                              <span className="sr-only"> · </span>
+                              <small>
+                                {durationLabel(item.durationMinutes ?? 0)}
+                              </small>
                             </span>
                           </label>
+                        ))}
+                        {otherServices.length > 0 && (
+                          <button
+                            aria-haspopup="dialog"
+                            className="agenda-new-chip-other agenda-new-chip-more"
+                            onClick={() => setMoreServicesOpen(true)}
+                            type="button"
+                          >
+                            Ver outros serviços
+                          </button>
                         )}
-                      {!other && (
                         <button
-                          aria-expanded={showManual}
+                          aria-pressed={other}
                           className="agenda-new-chip-other"
-                          disabled={serviceIds.length === 0}
-                          onClick={() => setShowManual((current) => !current)}
+                          onClick={toggleOther}
                           type="button"
                         >
-                          Outro horário
+                          Outro, sem cadastro
                         </button>
-                      )}
-                    </div>
-                  )}
-                  {(other || showManual) && !conflict && (
-                    <div className="agenda-new-manual">
-                      <label className="field">
-                        <span className="label">
-                          Outro horário, fora dos oferecidos
-                        </span>
-                        <input
-                          className="input"
-                          onChange={(event) => setManualTime(event.target.value)}
-                          type="time"
-                          value={manualTime}
-                        />
-                      </label>
-                      <button
-                        className="btn btn-secondary"
-                        disabled={!manualTime || (other && !otherReady)}
-                        onClick={() => void chooseTime(manualTime)}
-                        type="button"
-                      >
-                        Usar este horário
-                      </button>
-                      <p className="muted">
-                        Um horário fora dos oferecidos pode estar ocupado. Se
-                        estiver, a agenda mostra o que ocupa o intervalo e
-                        sobrepor exige motivo.
+                      </div>
+                    )}
+                    {moreServicesOpen && (
+                      <MoreServicesSheet
+                        colors={colors}
+                        onChoose={chooseOtherService}
+                        onClose={() => setMoreServicesOpen(false)}
+                        services={otherServices}
+                      />
+                    )}
+                    {!other && (
+                      <p className="agenda-new-total">
+                        {selectedServices.length === 0 ? (
+                          <span>Nenhum serviço escolhido.</span>
+                        ) : (
+                          <>
+                            <span>
+                              {selectedServices.length}{" "}
+                              {selectedServices.length === 1
+                                ? "serviço"
+                                : "serviços"}
+                            </span>
+                            <span className="sr-only"> · </span>
+                            <strong>
+                              {durationLabel(servicesMinutes)} ·{" "}
+                              {totalLabel(total)}
+                            </strong>
+                          </>
+                        )}
                       </p>
-                    </div>
-                  )}
-                </fieldset>
+                    )}
+                    {other && (
+                      <div className="agenda-new-other">
+                        <label className="field">
+                          <span className="label">Título do atendimento</span>
+                          <input
+                            className="input"
+                            maxLength={200}
+                            onChange={(event) => {
+                              resetSlotChoice();
+                              setOtherTitle(event.target.value);
+                            }}
+                            value={otherTitle}
+                          />
+                        </label>
+                        <label className="field">
+                          <span className="label">Duração em minutos</span>
+                          <input
+                            className="input"
+                            inputMode="numeric"
+                            max={1440}
+                            min={1}
+                            onChange={(event) => {
+                              setOtherDuration(event.target.value);
+                              setConflict(null);
+                            }}
+                            type="number"
+                            value={otherDuration}
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </fieldset>
+                )}
               </div>
             </div>
+            {shownStage >= 2 && (
+              <section
+                aria-labelledby="agenda-new-when-title"
+                className={clsx("agenda-new-when", enterClass(2))}
+                ref={scheduleSectionRef}
+              >
+                <div className="agenda-new-when-head">
+                  <div className="agenda-new-when-reading">
+                    <span
+                      className="agenda-new-when-eyebrow"
+                      id="agenda-new-when-title"
+                    >
+                      Data e horário
+                    </span>
+                    <span
+                      aria-live="polite"
+                      className="agenda-new-when-summary"
+                      key={`${date}-${startTime}`}
+                    >
+                      {whenDateLabel(date)}
+                      <span>
+                        {" · "}
+                        {startTime
+                          ? endTimeLabel(startTime, durationMinutes)
+                          : "escolha o horário"}
+                      </span>
+                    </span>
+                  </div>
+                  {whoLabel && (
+                    <span className="agenda-new-when-who">
+                      <span
+                        aria-hidden="true"
+                        className="agenda-appt-service-dot"
+                        data-color={
+                          (selectedServices[0] &&
+                            colors.get(selectedServices[0].id)) ??
+                          undefined
+                        }
+                      />
+                      {whoLabel}
+                    </span>
+                  )}
+                </div>
+                <div className="agenda-new-when-grid">
+                  <div
+                    aria-labelledby="agenda-new-date-label"
+                    className="agenda-new-block"
+                    role="group"
+                  >
+                    <span className="label" id="agenda-new-date-label">
+                      Data
+                    </span>
+                    <DatePicker
+                      closedWeekdays={closedWeekdays}
+                      label="Dias"
+                      min={isoDate(new Date())}
+                      onChange={changeDate}
+                      value={date}
+                    />
+                  </div>
+                  <fieldset
+                    className="agenda-new-block agenda-new-time"
+                    disabled={!other && serviceIds.length === 0}
+                    ref={timeFieldsetRef}
+                  >
+                    <legend className="label" ref={timeLegendRef} tabIndex={-1}>
+                      Horário
+                      {!other && durationMinutes > 0 && (
+                        <span className="agenda-new-legend-note">
+                          {" "}
+                          · livres para {durationLabel(durationMinutes)}
+                        </span>
+                      )}
+                    </legend>
+                    <div className="agenda-new-time-card">
+                      {other ? (
+                        <p className="muted">
+                          Sem serviço cadastrado não há horários sugeridos.
+                          Digite o horário abaixo.
+                        </p>
+                      ) : serviceIds.length === 0 ? (
+                        <p className="muted">
+                          Escolha um serviço para ver os horários livres.
+                        </p>
+                      ) : slotsLoading ? (
+                        <p>Consultando disponibilidade…</p>
+                      ) : slots.length === 0 ? (
+                        <p className="muted">
+                          Nenhum horário disponível para esta seleção.
+                        </p>
+                      ) : null}
+                      {(!other || conflict) && (
+                        <div className="agenda-new-chips">
+                          {!other &&
+                            !slotsLoading &&
+                            slots.map((slot) => {
+                              const refused =
+                                conflict?.startTime === slot.startTime;
+                              return (
+                                <label
+                                  className={`agenda-new-chip agenda-new-slot${refused ? " is-conflict" : ""}`}
+                                  key={`${slot.date}-${slot.startTime}`}
+                                >
+                                  <input
+                                    checked={startTime === slot.startTime}
+                                    name="start-time"
+                                    onChange={() =>
+                                      void chooseTime(slot.startTime)
+                                    }
+                                    type="radio"
+                                  />
+                                  <span>
+                                    {refused && (
+                                      <ConflictGlyph
+                                        size={14}
+                                        strokeWidth={2.25}
+                                      />
+                                    )}
+                                    {slot.startTime}
+                                    {refused && (
+                                      <span className="sr-only">
+                                        {" "}
+                                        · ocupado
+                                      </span>
+                                    )}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          {conflict &&
+                            (other ||
+                              slotsLoading ||
+                              !slots.some(
+                                (slot) => slot.startTime === conflict.startTime,
+                              )) && (
+                              <label className="agenda-new-chip agenda-new-slot is-conflict">
+                                <input
+                                  checked
+                                  name="start-time"
+                                  onChange={() => undefined}
+                                  type="radio"
+                                />
+                                <span>
+                                  <ConflictGlyph size={14} strokeWidth={2.25} />
+                                  {conflict.startTime}
+                                  <span className="sr-only"> · ocupado</span>
+                                </span>
+                              </label>
+                            )}
+                          {!other && (
+                            <button
+                              aria-expanded={showManual}
+                              className="agenda-new-chip-other"
+                              disabled={serviceIds.length === 0}
+                              onClick={() =>
+                                setShowManual((current) => !current)
+                              }
+                              type="button"
+                            >
+                              Outro horário
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {(other || showManual) && !conflict && (
+                        <div className="agenda-new-manual">
+                          <TimePicker
+                            businessHours={businessHours}
+                            duration={durationMinutes}
+                            label="Outro horário, fora dos oferecidos"
+                            onChange={setManualTime}
+                            value={manualTime}
+                          />
+                          <button
+                            className="btn btn-secondary"
+                            disabled={!manualTime || (other && !otherReady)}
+                            onClick={() => void chooseTime(manualTime)}
+                            type="button"
+                          >
+                            Usar este horário
+                          </button>
+                          <p className="muted">
+                            Um horário fora dos oferecidos pode estar ocupado.
+                            Se estiver, a agenda mostra o que ocupa o intervalo
+                            e sobrepor exige motivo.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </fieldset>
+                </div>
+              </section>
+            )}
+            {shownStage >= 3 && !other && (
+              <div
+                className={clsx("agenda-new-repeat", enterClass(3))}
+                ref={repeatSectionRef}
+              >
+                <div className="agenda-new-repeat-row">
+                  <span
+                    className="agenda-new-repeat-label"
+                    id="agenda-new-repeat-label"
+                  >
+                    Repetir este atendimento
+                  </span>
+                  <button
+                    aria-checked={repeat}
+                    aria-labelledby="agenda-new-repeat-label"
+                    className="agenda-days-switch"
+                    disabled={busy}
+                    onClick={() => setRepeat((current) => !current)}
+                    role="switch"
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="agenda-days-knob" />
+                  </button>
+                </div>
+                {repeat && (
+                  <RepeatFields
+                    count={repeatCount}
+                    intervalDays={intervalDays}
+                    onCount={setRepeatCount}
+                    onInterval={setRepeatInterval}
+                    suggestedDays={suggestedInterval}
+                  />
+                )}
+              </div>
+            )}
             {conflict && (
               <>
                 <SlotConflictNotice
+                  availability={availabilitySettings}
+                  date={date}
                   durationMinutes={durationMinutes}
                   entries={conflict.entries}
                   loading={conflict.loading}
@@ -699,7 +1150,9 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
                   </label>
                   <input
                     aria-describedby={
-                      conflict.reasonError ? "agenda-new-reason-error" : undefined
+                      conflict.reasonError
+                        ? "agenda-new-reason-error"
+                        : undefined
                     }
                     aria-invalid={conflict.reasonError ? true : undefined}
                     className="input"
@@ -728,36 +1181,34 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
                 </div>
               </>
             )}
-            <div className="agenda-new-note">
-              {showComments ? (
-                <label className="field">
-                  <span className="label">Observações</span>
-                  <textarea
-                    className="input agenda-new-textarea"
-                    onChange={(event) => setComments(event.target.value)}
-                    rows={3}
-                    value={comments}
-                  />
-                </label>
-              ) : (
-                <button
-                  aria-expanded={false}
-                  className="agenda-new-note-button"
-                  onClick={() => setShowComments(true)}
-                  type="button"
-                >
-                  <Icon name="plus" />
-                  Adicionar observação
-                </button>
-              )}
-            </div>
-            {/* Recorrência é oferecida ao agendar (Goal016, item 6): o fluxo
-                de série tem pré-visualização e confirmação atômica próprias,
-                que este formulário de ocorrência única não faz. */}
-            <Link className="agenda-new-series" href="/agenda/serie">
-              Agendar série
-            </Link>
-            {conflict ? (
+            {shownStage >= 2 && (
+              <>
+                <div className={clsx("agenda-new-note", enterClass(2))}>
+                  {showComments ? (
+                    <label className="field">
+                      <span className="label">Observações</span>
+                      <textarea
+                        className="input agenda-new-textarea"
+                        onChange={(event) => setComments(event.target.value)}
+                        rows={3}
+                        value={comments}
+                      />
+                    </label>
+                  ) : (
+                    <button
+                      aria-expanded={false}
+                      className="agenda-new-note-button"
+                      onClick={() => setShowComments(true)}
+                      type="button"
+                    >
+                      <Icon name="plus" />
+                      Adicionar observação
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+            {shownStage < 2 ? null : conflict ? (
               <div className="agenda-new-footer is-conflict">
                 <Button
                   className="agenda-new-cta"
@@ -779,7 +1230,7 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
                 </Button>
               </div>
             ) : (
-              <div className="agenda-new-footer">
+              <div className={clsx("agenda-new-footer", enterClass(2))}>
                 <p className="agenda-hold-status" role="status">
                   {!other && hold.phase !== "none"
                     ? holdNotice(hold, calendar?.timezone)
@@ -794,9 +1245,44 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
                   loading={busy}
                   type="submit"
                 >
-                  {ctaLabel}
+                  {submitLabel}
                 </Button>
               </div>
+            )}
+            {seriesPreview && (
+              <RepeatReviewSheet
+                comments={comments.trim() || undefined}
+                customer={
+                  selectedCustomer
+                    ? { customerId: selectedCustomer.id }
+                    : {
+                        customerName: customerName.trim(),
+                        customerPhone: customerPhone.trim() || undefined,
+                      }
+                }
+                customerLabel={
+                  selectedCustomer
+                    ? personLabel(selectedCustomer)
+                    : customerName.trim()
+                }
+                intervalDays={intervalDays}
+                occurrences={seriesPreview}
+                onBack={closeReview}
+                onConfirmed={finishSeries}
+                onRetry={() => void retryReview()}
+                serviceIds={serviceIds}
+                serviceLabel={selectedServices
+                  .map((item) => item.name)
+                  .join(" + ")}
+                unitPrice={
+                  total.type === "NONE" || total.amount === null
+                    ? null
+                    : {
+                        amount: total.amount,
+                        startingAt: total.type === "STARTING_AT",
+                      }
+                }
+              />
             )}
           </form>
         </div>
@@ -884,4 +1370,27 @@ export function totalLabel(total: AgreementTotal): string {
     return `A partir de ${formatMoney(total.amount)}`;
   }
   return formatMoney(total.amount);
+}
+
+/** "Hoje, 13 de outubro", "Amanhã, …", "Quinta, 16 de outubro". */
+function whenDateLabel(date: string): string {
+  // Meia-noite local: `parseDate` devolve meio-dia, e meio dia de diferença
+  // arredondava hoje para "Amanhã".
+  const parsed = parseIsoDate(date) ?? parseDate(date);
+  const diff = daysFromToday(parsed);
+  const weekday =
+    diff === 0
+      ? "Hoje"
+      : diff === 1
+        ? "Amanhã"
+        : capitalize(WEEKDAYS[parsed.getDay()].replace("-feira", ""));
+  return `${weekday}, ${parsed.getDate()} de ${MONTHS[parsed.getMonth()]}`;
+}
+
+/** "14:30 – 15:15"; sem duração, só o início. */
+function endTimeLabel(startTime: string, durationMinutes: number): string {
+  const start = parseClock(startTime);
+  if (!start || durationMinutes <= 0) return startTime;
+  const total = (clockMinutes(start) + durationMinutes) % 1440;
+  return `${startTime} – ${formatClock({ hour: Math.floor(total / 60), minute: total % 60 })}`;
 }

@@ -8,7 +8,6 @@ import { BlockForm } from "./BlockForm";
 import { BlockSeriesForm } from "./BlockSeriesForm";
 import { CancelFlow } from "./CancelFlow";
 import { RescheduleFlow } from "./RescheduleFlow";
-import { SeriesPreview } from "./SeriesPreview";
 
 /**
  * Despacho dos estados da Agenda (D-031): um branch mutuamente exclusivo por
@@ -20,7 +19,6 @@ import { SeriesPreview } from "./SeriesPreview";
  * não entrega.
  */
 type AgendaScenario =
-  | "appointment-series"
   | "block-series"
   | "block-time"
   | "cancel"
@@ -33,22 +31,42 @@ type AgendaScenario =
 export function ProductAgendaScreen({
   appointmentId,
   customerId,
+  initialDate,
+  repeat = false,
+  returnTo,
   scenario = "list",
 }: {
   appointmentId?: string;
   /** Pessoa escolhida de antemão para um agendamento novo (Goal075). */
   customerId?: string;
+  /**
+   * Dia escolhido numa hora vazia da Semana, para um agendamento novo; na
+   * Agenda, o `?dia=` em que ela abre (volta do detalhe, D-167).
+   */
+  initialDate?: string;
+  /** "Repetir este atendimento" já ligado no agendamento novo (D-171). */
+  repeat?: boolean;
+  /** `?voltar=` do detalhe, de Remarcar e de Cancelar: para onde o "voltar" leva (D-167). */
+  returnTo?: string;
   scenario?: AgendaScenario;
 }) {
-  if (scenario === "list") return <AgendaBoard />;
-  if (scenario === "new") return <AppointmentForm customerId={customerId} />;
-  if (scenario === "appointment-series") return <SeriesPreview />;
+  if (scenario === "list") return <AgendaBoard initialDate={initialDate} />;
+  if (scenario === "new")
+    return (
+      <AppointmentForm
+        customerId={customerId}
+        initialDate={initialDate}
+        initialRepeat={repeat}
+      />
+    );
   if (scenario === "block-time") return <BlockForm />;
   if (scenario === "block-series") return <BlockSeriesForm />;
   if (scenario === "exceptions") return <AvailabilityExceptions />;
   if (scenario === "detail")
-    return <AppointmentDetail appointmentId={appointmentId} />;
+    return (
+      <AppointmentDetail appointmentId={appointmentId} returnTo={returnTo} />
+    );
   if (scenario === "reschedule")
-    return <RescheduleFlow appointmentId={appointmentId} />;
-  return <CancelFlow appointmentId={appointmentId} />;
+    return <RescheduleFlow appointmentId={appointmentId} returnTo={returnTo} />;
+  return <CancelFlow appointmentId={appointmentId} returnTo={returnTo} />;
 }

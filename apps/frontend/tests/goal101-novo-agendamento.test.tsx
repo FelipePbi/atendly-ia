@@ -52,6 +52,8 @@ import type * as ShellConfigModule from "@/shared/layout/ShellConfig";
 import type { ShellConfig } from "@/shared/layout/ShellConfig";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
+import { chooseDate, chooseManualTime, queryDateCell } from "./support/pickers";
+
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 
 vi.mock("next/navigation", () => ({
@@ -72,9 +74,8 @@ vi.mock("@/shared/layout/ShellConfig", async (importOriginal) => {
   };
 });
 
-const createAppointment = vi.fn<
-  (input: CreateAppointmentInput, key: string) => Promise<Appointment>
->();
+const createAppointment =
+  vi.fn<(input: CreateAppointmentInput, key: string) => Promise<Appointment>>();
 const createHold = vi.fn();
 const customersList = vi.fn();
 const getAgendaViewPreference = vi.fn();
@@ -224,7 +225,9 @@ function appointmentFixture(overrides: Partial<Appointment> = {}): Appointment {
   };
 }
 
-function holdFixture(overrides: Partial<AppointmentHold> = {}): AppointmentHold {
+function holdFixture(
+  overrides: Partial<AppointmentHold> = {},
+): AppointmentHold {
   return {
     contactRef: null,
     customerId: "cus-ana",
@@ -394,15 +397,6 @@ async function waitForColumn(container: HTMLElement): Promise<HTMLElement> {
   });
 }
 
-function dateButton(offset: number): HTMLElement {
-  const label = new Intl.DateTimeFormat("pt-BR", {
-    day: "numeric",
-    month: "long",
-    weekday: "long",
-  }).format(addDays(new Date(), offset));
-  return screen.getByRole("button", { name: label });
-}
-
 function columnDay(column: HTMLElement): HTMLElement {
   return within(column).getByRole("region", { name: /^Agenda de / });
 }
@@ -449,9 +443,7 @@ describe("1. composição: coluna da Agenda de 1024 px em diante, tela empurrada
     expect(container.querySelector(".app-frame.is-pushed")).not.toBeNull();
     expect(bottomNavOf(container)).toBeNull();
     // A barra própria: "×" à esquerda e o título da tela.
-    expect(
-      screen.getByRole("link", { name: /^Fechar/ }),
-    ).toBeVisible();
+    expect(screen.getByRole("link", { name: /^Fechar/ })).toBeVisible();
     expect(
       screen.getByRole("heading", { level: 1, name: "Novo agendamento" }),
     ).toBeVisible();
@@ -486,11 +478,11 @@ describe("3. a coluna segue a data do formulário", () => {
     const user = userEvent.setup();
     const column = await waitForColumn(container);
     expect(await within(column).findByText("Ana Paula")).toBeVisible();
-    expect(
-      within(column).queryByText("Beatriz Lima"),
-    ).not.toBeInTheDocument();
+    expect(within(column).queryByText("Beatriz Lima")).not.toBeInTheDocument();
 
-    await user.click(dateButton(2));
+    // A Data aparece com o serviço (revelação progressiva, 2026-10-12, D-170).
+    await user.click(screen.getByRole("checkbox", { name: /Corte feminino/ }));
+    await chooseDate(user, addDays(new Date(), 2));
 
     await waitFor(() =>
       expect(columnDay(column)).toHaveAccessibleName(
@@ -499,10 +491,15 @@ describe("3. a coluna segue a data do formulário", () => {
     );
     expect(await within(column).findByText("Beatriz Lima")).toBeVisible();
     expect(within(column).queryByText("Ana Paula")).not.toBeInTheDocument();
-    expect(dateButton(2)).toHaveAttribute("aria-pressed", "true");
+    expect(queryDateCell(addDays(new Date(), 2))).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
-  test("‹ › da coluna mudam o dia dela e não mudam a data do formulário nem o CTA", async () => {
+  // Pedido de 2026-10-12 (D-170): a barra da Agenda, com ‹ ›, saiu do novo
+  // agendamento; a coluna troca de dia pela própria faixa da semana.
+  test("a faixa da coluna muda o dia dela e não muda a data do formulário nem o CTA", async () => {
     const { container } = await renderInLayout(WIDE, "cus-ana");
     const user = userEvent.setup();
     const column = await waitForColumn(container);
@@ -510,7 +507,7 @@ describe("3. a coluna segue a data do formulário", () => {
 
     await user.click(screen.getByRole("checkbox", { name: /Corte feminino/ }));
     await user.click(screen.getByRole("checkbox", { name: /Escova/ }));
-    await user.click(dateButton(2));
+    await chooseDate(user, addDays(new Date(), 2));
     await user.click(await screen.findByRole("radio", { name: "09:00" }));
     await waitFor(() => expect(createHold).toHaveBeenCalledTimes(1));
     expect((createHold.mock.calls[0][0] as { date: string }).date).toBe(
@@ -524,22 +521,31 @@ describe("3. a coluna segue a data do formulário", () => {
       ),
     );
 
-    await user.click(screen.getByRole("button", { name: "Próximo dia" }));
+    expect(
+      screen.queryByRole("button", { name: "Próximo dia" }),
+    ).not.toBeInTheDocument();
     await waitFor(() =>
       expect(columnDay(column)).toHaveAccessibleName(
-        `Agenda de ${formatDate(isoDate(addDays(new Date(), 3)))}`,
+        `Agenda de ${formatDate(IN_TWO_DAYS)}`,
       ),
     );
-    await user.click(screen.getByRole("button", { name: "Dia anterior" }));
-    await user.click(screen.getByRole("button", { name: "Dia anterior" }));
+    const strip = within(column).getByRole("group", { name: "Dias da semana" });
+    const otherDay = within(strip)
+      .getAllByRole("button")
+      .find((button) => !button.hasAttribute("aria-current"));
+    expect(otherDay).toBeDefined();
+    await user.click(otherDay as HTMLElement);
     await waitFor(() =>
-      expect(columnDay(column)).toHaveAccessibleName(
-        `Agenda de ${formatDate(isoDate(addDays(new Date(), 1)))}`,
+      expect(columnDay(column)).not.toHaveAccessibleName(
+        `Agenda de ${formatDate(IN_TWO_DAYS)}`,
       ),
     );
 
     // O formulário e o CTA ficaram onde estavam.
-    expect(dateButton(2)).toHaveAttribute("aria-pressed", "true");
+    expect(queryDateCell(addDays(new Date(), 2))).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(createButton().textContent).toBe(ctaBefore);
     expect(createButton()).toBeEnabled();
     expect(createHold).toHaveBeenCalledTimes(1);
@@ -588,10 +594,7 @@ describe("4. criação preservada", () => {
     );
     await user.type(screen.getByLabelText("Título do atendimento"), "Retoque");
     await user.type(screen.getByLabelText("Duração em minutos"), "25");
-    await user.type(
-      screen.getByLabelText("Outro horário, fora dos oferecidos"),
-      "11:30",
-    );
+    await chooseManualTime(user, "11:30");
     await user.click(screen.getByRole("button", { name: "Usar este horário" }));
     await user.click(createButton());
 
@@ -621,7 +624,9 @@ describe("5. ×", () => {
   test("leva a /agenda e tem nome acessível", async () => {
     await renderInLayout(NARROW);
 
-    const close = screen.getByRole("link", { name: /^Fechar( novo agendamento)?$/ });
+    const close = screen.getByRole("link", {
+      name: /^Fechar( novo agendamento)?$/,
+    });
     expect(close).toHaveAttribute("href", "/agenda");
     expect(close).toBeVisible();
   });
@@ -649,7 +654,7 @@ describe("5. ×", () => {
   });
 });
 
-describe("5b. dia sem atendimento esmaecido na faixa de datas (A6)", () => {
+describe("5b. dia sem atendimento esmaecido no calendário (A6)", () => {
   test("só o dia da semana sem regra ativa é marcado como fechado; sem regras nada é marcado", async () => {
     const closedWeekday = addDays(new Date(), 2).getDay();
     settingsGet.mockResolvedValue({
@@ -667,16 +672,18 @@ describe("5b. dia sem atendimento esmaecido na faixa de datas (A6)", () => {
     renderBare(<AppointmentForm customerId="cus-ana" />);
 
     await screen.findByRole("form", { name: "Novo agendamento" });
+    // A faixa de datas aparece com o serviço (revelação progressiva, D-170).
+    await userEvent.click(
+      await screen.findByRole("checkbox", { name: /Corte feminino/ }),
+    );
     await waitFor(() =>
       expect(document.querySelectorAll('[data-closed="true"]').length).toBe(1),
     );
+    // O calendário marca a coluna do dia da semana fechado (em cinza, mas
+    // clicável).
     const closed = document.querySelector('[data-closed="true"]');
-    expect(closed?.getAttribute("aria-label")).toBe(
-      new Intl.DateTimeFormat("pt-BR", {
-        day: "numeric",
-        month: "long",
-        weekday: "long",
-      }).format(addDays(new Date(), 2)),
+    expect(closed?.textContent).toBe(
+      ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"][closedWeekday],
     );
   });
 
@@ -684,7 +691,11 @@ describe("5b. dia sem atendimento esmaecido na faixa de datas (A6)", () => {
     renderBare(<AppointmentForm customerId="cus-ana" />);
 
     await screen.findByRole("form", { name: "Novo agendamento" });
+    await userEvent.click(
+      await screen.findByRole("checkbox", { name: /Corte feminino/ }),
+    );
     await waitFor(() => expect(settingsGet).toHaveBeenCalled());
+    expect(screen.getByRole("group", { name: "Data" })).toBeVisible();
     expect(document.querySelectorAll('[data-closed="true"]').length).toBe(0);
   });
 });

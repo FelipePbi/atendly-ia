@@ -212,7 +212,7 @@ export function mapEvolutionInbound(
   const kind = resolveKind(infoType, mediaType);
   const text = extractText(message);
   const media = extractMediaMetadata(message, kind);
-  const customerJid = fromMe ? chatId : stringValue(info.Sender) || chatId;
+  const customerJid = resolveContactJid(info, chatId, fromMe);
 
   return {
     provider: "evolution-go",
@@ -220,7 +220,10 @@ export function mapEvolutionInbound(
     messageId,
     chatId,
     customerPhone: normalizePhone(customerJid),
-    customerName: stringValue(info.PushName),
+    // Em mensagem enviada pelo proprio numero, PushName e o nome do dono, nao
+    // do contato (validacao de 2026-10-12: tres conversas "Camili Krauser",
+    // o nome da profissional, para contatos diferentes).
+    customerName: fromMe ? undefined : stringValue(info.PushName),
     fromMe,
     isGroup: isGroupJid(booleanValue(info.IsGroup), chatId),
     kind,
@@ -229,6 +232,26 @@ export function mapEvolutionInbound(
     timestamp: stringValue(info.Timestamp),
     raw: payload,
   };
+}
+
+/**
+ * JID do contato, preferindo o numero de telefone ao LID.
+ *
+ * O WhatsApp passou a identificar chats por LID (`...@lid`); o numero vem ao
+ * lado, em `RecipientAlt` (mensagem enviada pelo proprio numero) ou
+ * `SenderAlt` (mensagem recebida). Sem isso, a mensagem que a profissional
+ * manda pelo celular abria uma conversa nova, chaveada pelo LID, separada da
+ * conversa ja existente com o numero (validacao de 2026-10-12).
+ */
+function resolveContactJid(
+  info: Record<string, unknown>,
+  chatId: string,
+  fromMe: boolean,
+): string {
+  const primary = fromMe ? chatId : stringValue(info.Sender) || chatId;
+  if (!primary.endsWith("@lid")) return primary;
+  const alternate = stringValue(fromMe ? info.RecipientAlt : info.SenderAlt);
+  return alternate && alternate.endsWith("@s.whatsapp.net") ? alternate : primary;
 }
 
 export function inspectEvolutionInboundPayload(

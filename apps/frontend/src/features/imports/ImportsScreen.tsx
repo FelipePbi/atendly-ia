@@ -18,11 +18,7 @@ import { ImportHistoryCard } from "./ImportHistoryCard";
 import { ImportPreviewScreen } from "./ImportPreviewScreen";
 import { ImportRunScreen } from "./ImportRunScreen";
 import { ImportsLoading, ImportsPage, useImportsFrame } from "./ImportsLayout";
-import type {
-  ImportHistory,
-  ImportLiveSession,
-  ImportState,
-} from "./types";
+import type { ImportHistory, ImportLiveSession, ImportState } from "./types";
 
 /**
  * Etapa de análise/preview (WU-06): a sessão ainda não teve nenhuma passada de
@@ -172,7 +168,9 @@ export function ImportsFlow({
 
   if (state.history && frame === "onboarding") {
     return (
-      <ImportDoneScreen history={state.history}>{historyActions}</ImportDoneScreen>
+      <ImportDoneScreen history={state.history}>
+        {historyActions}
+      </ImportDoneScreen>
     );
   }
   if (state.history) {

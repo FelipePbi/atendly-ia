@@ -305,12 +305,12 @@ describe("Goal074/WU-04: Home conforme o protótipo", () => {
       .getByRole("heading", { level: 2, name: "Esta semana" })
       .closest("article") as HTMLElement;
     const values = within(week)
-      .getAllByText(/^(\d+|—)$/)
+      .getAllByText(/^(\d+|-)$/)
       .map((node) => node.textContent);
     expect(values).toEqual(["12", "8", "2"]);
   });
 
-  test("Esta semana cai para — quando a fonte falhou", async () => {
+  test("Esta semana cai para - quando a fonte falhou", async () => {
     dashboardGet.mockResolvedValue(
       dashboardFixture({
         ai: { code: "DEPENDENCY_UNAVAILABLE", data: null, status: "error" },
@@ -325,9 +325,9 @@ describe("Goal074/WU-04: Home conforme o protótipo", () => {
       .getByRole("heading", { level: 2, name: "Esta semana" })
       .closest("article") as HTMLElement;
     const values = within(week)
-      .getAllByText(/^(\d+|—)$/)
+      .getAllByText(/^(\d+|-)$/)
       .map((node) => node.textContent);
-    expect(values).toEqual(["—", "—", "—"]);
+    expect(values).toEqual(["-", "-", "-"]);
   });
 
   test("sino: nome acessível, link para /notificacoes, sem ponto quando não há não lidas", async () => {

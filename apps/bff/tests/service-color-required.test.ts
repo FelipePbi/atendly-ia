@@ -1,0 +1,55 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  patchSchema,
+  serviceSchema,
+} from "../src/modules/services/routes.js";
+
+/**
+ * Decisão de 2026-10-12: a criação manual de serviço pela API pública
+ * (`POST /v1/services`) exige `colorToken`; na edição a cor pode ser trocada,
+ * nunca removida. Onboarding e importação não passam por este corpo — o
+ * Scheduling sorteia a cor da paleta.
+ */
+const base = {
+  name: "Corte",
+  durationMinutes: 30,
+  priceType: "FIXED",
+  price: 50,
+};
+
+describe("POST /v1/services: cor obrigatória", () => {
+  it("recusa a criação sem cor", () => {
+    const result = serviceSchema.safeParse(base);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.path.join("."))).toContain(
+      "colorToken",
+    );
+  });
+
+  it("recusa a criação com cor nula ou fora da paleta", () => {
+    expect(serviceSchema.safeParse({ ...base, colorToken: null }).success).toBe(
+      false,
+    );
+    expect(
+      serviceSchema.safeParse({ ...base, colorToken: "#FF0000" }).success,
+    ).toBe(false);
+  });
+
+  it("aceita a criação com uma cor da paleta", () => {
+    const result = serviceSchema.safeParse({ ...base, colorToken: "SKY" });
+    expect(result.success).toBe(true);
+    expect(result.data?.colorToken).toBe("SKY");
+  });
+});
+
+describe("PATCH /v1/services/:id: cor editável, nunca removida", () => {
+  it("aceita trocar a cor e aceita corpo sem cor", () => {
+    expect(patchSchema.safeParse({ colorToken: "ROSE" }).success).toBe(true);
+    expect(patchSchema.safeParse({ name: "Corte curto" }).success).toBe(true);
+  });
+
+  it("recusa remover a cor", () => {
+    expect(patchSchema.safeParse({ colorToken: null }).success).toBe(false);
+  });
+});

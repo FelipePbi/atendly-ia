@@ -8,8 +8,16 @@ import { useEffect, useId, useRef, useState } from "react";
 import { type Appointment, type CalendarState } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { PushedBar } from "@/shared/layout/PushedBar";
+import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
+import { appointmentHref } from "./agendaLinks";
+import {
+  forgetAgendaChanges,
+  recalledAppointment,
+  recalledCalendar,
+  rememberAppointment,
+} from "./agendaMemory";
 import { longDayLabel } from "./AppointmentDetail";
 import { AppointmentFlowShell, ReadOnlyState } from "./AppointmentFlowShell";
 import { newIdempotencyKey } from "./holdSession";
@@ -30,25 +38,49 @@ const FOCUSABLE =
  * diálogo central do quadro de paisagem e desktop. O acordo comercial
  * gravado na criação (Goal007) é imutável e não é tocado aqui.
  */
-export function CancelFlow({ appointmentId }: { appointmentId?: string }) {
+export function CancelFlow({
+  appointmentId,
+  returnTo,
+}: {
+  appointmentId?: string;
+  /** Origem do detalhe (D-167): o retorno ao detalhe a leva adiante. */
+  returnTo?: string;
+}) {
   const router = useRouter();
   const titleId = useId();
   const sheetRef = useRef<HTMLElement>(null);
-  const [appointment, setAppointment] = useState<Appointment | null>(null);
-  const [calendar, setCalendar] = useState<CalendarState | null>(null);
+  // Vindo do detalhe, o agendamento e o calendário já estão na memória da
+  // aba (D-167): a folha abre preenchida e a leitura abaixo revalida (D-168).
+  const [seed] = useState(() => {
+    const remembered = appointmentId
+      ? recalledAppointment(appointmentId)
+      : null;
+    const rememberedCalendar = remembered ? recalledCalendar() : null;
+    return remembered && rememberedCalendar
+      ? { appointment: remembered, calendar: rememberedCalendar }
+      : null;
+  });
+  const [appointment, setAppointment] = useState<Appointment | null>(
+    seed?.appointment ?? null,
+  );
+  const [calendar, setCalendar] = useState<CalendarState | null>(
+    seed?.calendar ?? null,
+  );
   const [comments, setComments] = useState("");
   // Cancelar é sempre uma alteração relevante para o cliente (Goal021):
   // marcado por padrão, e a interface manda o campo sempre explicitamente —
   // nunca se apoia no default do contrato, que é o oposto.
   const [notifyCustomer, setNotifyCustomer] = useState(true);
-  const [loading, setLoading] = useState(Boolean(appointmentId));
+  const [loading, setLoading] = useState(Boolean(appointmentId) && !seed);
+  // Esqueleto só se a carga passar de ~150 ms, e nunca sob o splash (D-168).
+  const showSkeleton = useDeferredLoading(loading);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(() =>
     appointmentId ? null : "O agendamento não foi informado.",
   );
 
   const detailHref = appointmentId
-    ? `/agenda/agendamento?id=${encodeURIComponent(appointmentId)}`
+    ? appointmentHref(appointmentId, returnTo)
     : "/agenda";
 
   useEffect(() => {
@@ -64,6 +96,7 @@ export function CancelFlow({ appointmentId }: { appointmentId?: string }) {
       .then(([appointmentResult, calendarResult]) => {
         setAppointment(appointmentResult);
         setCalendar(calendarResult);
+        rememberAppointment(appointmentResult);
       })
       .catch((caught: unknown) => {
         if (!controller.signal.aborted)
@@ -130,18 +163,25 @@ export function CancelFlow({ appointmentId }: { appointmentId?: string }) {
         { comments: comments.trim() || undefined, notifyCustomer },
         newIdempotencyKey(),
       );
-      router.replace(`/agenda/agendamento?id=${encodeURIComponent(result.id)}`);
+      // O que a Agenda leu antes do cancelamento deixou de valer (D-167).
+      forgetAgendaChanges();
+      rememberAppointment(result);
+      router.replace(appointmentHref(result.id, returnTo));
     } catch (caught) {
-      setError(requestError(caught, "Não foi possível cancelar o agendamento."));
+      setError(
+        requestError(caught, "Não foi possível cancelar o agendamento."),
+      );
     } finally {
       setBusy(false);
     }
   }
 
-  const readOnly = !loading && calendar && !calendar.capabilities.createAppointments;
+  const readOnly =
+    !loading && calendar && !calendar.capabilities.createAppointments;
 
   return (
     <AppointmentFlowShell
+      agendaBar={false}
       appointmentRoute={{ date: appointment?.date ?? null, id: appointmentId }}
       bare
       calendar={calendar}
@@ -154,16 +194,15 @@ export function CancelFlow({ appointmentId }: { appointmentId?: string }) {
           className={clsx("agenda-cancel-behind", sheetOpen && "is-dimmed")}
           inert={sheetOpen}
         >
-          <PushedBar
-            backHref={detailHref}
-            backLabel="Voltar ao agendamento"
-          />
+          <PushedBar backHref={detailHref} backLabel="Voltar ao agendamento" />
           <div className="agenda-appt-body">
             {loading ? (
-              <>
-                <span className="skeleton skeleton-title" />
-                <span className="skeleton skeleton-line" />
-              </>
+              showSkeleton && (
+                <>
+                  <span className="skeleton skeleton-title" />
+                  <span className="skeleton skeleton-line" />
+                </>
+              )
             ) : (
               <>
                 {error && !sheetOpen && (
@@ -171,7 +210,9 @@ export function CancelFlow({ appointmentId }: { appointmentId?: string }) {
                     {error}
                   </p>
                 )}
-                {readOnly && <ReadOnlyState operation="cancelar agendamentos" />}
+                {readOnly && (
+                  <ReadOnlyState operation="cancelar agendamentos" />
+                )}
                 {appointment && (
                   <>
                     <div className="agenda-appt-when">
@@ -227,7 +268,10 @@ export function CancelFlow({ appointmentId }: { appointmentId?: string }) {
                         setNotifyCustomer(event.target.checked)
                       }
                     />
-                    <span aria-hidden="true" className="agenda-cancel-check-box">
+                    <span
+                      aria-hidden="true"
+                      className="agenda-cancel-check-box"
+                    >
                       <Icon name="check" />
                     </span>
                   </span>

@@ -222,7 +222,7 @@ describe("AssistantService conversational decisions", () => {
       businessContext: configuredBusinessContext(),
     });
 
-    expect(reply.text).toBe("Oii, tudo bem? Como posso te ajudar hoje?");
+    expect(reply.text).toBe("Oii, tudo bem? Como posso te ajudar?");
     expect(modelProvider.invoke).not.toHaveBeenCalled();
     expect(store.state.aiConversation).toMatchObject({
       stage: "QUALIFYING_CONTACT",
@@ -279,7 +279,7 @@ describe("AssistantService conversational decisions", () => {
       },
     });
 
-    expect(reply.text).toBe("Oii, tudo bem? Como posso te ajudar hoje?");
+    expect(reply.text).toBe("Oii, tudo bem? Como posso te ajudar?");
     expect(modelProvider.invoke).not.toHaveBeenCalled();
   });
 
@@ -303,7 +303,7 @@ describe("AssistantService conversational decisions", () => {
       },
     });
 
-    expect(reply.text).toBe("Olá, tudo bem? Como posso te ajudar hoje?");
+    expect(reply.text).toBe("Olá, tudo bem? Como posso te ajudar?");
     expect(modelProvider.invoke).not.toHaveBeenCalled();
   });
 
@@ -327,7 +327,7 @@ describe("AssistantService conversational decisions", () => {
       },
     });
 
-    expect(reply.text).toBe("Oii, tudo bem? Como posso te ajudar hoje? 😊");
+    expect(reply.text).toBe("Oii, tudo bem? Como posso te ajudar? 😊");
     expect(modelProvider.invoke).not.toHaveBeenCalled();
   });
 
@@ -392,9 +392,8 @@ describe("AssistantService conversational decisions", () => {
       businessContext: configuredBusinessContext(),
     });
 
-    expect(reply.text).toBe(
-      "Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, ta bom?",
-    );
+    // Contato que nao e cliente: a IA pausa sem mandar nada (2026-10-11).
+    expect(reply).toMatchObject({ text: "", silent: true });
     expect(modelProvider.invoke).not.toHaveBeenCalled();
     expect(store.conversation).toMatchObject({
       humanHandoff: true,
@@ -1168,29 +1167,29 @@ function extractDispatchedModuleConstantTexts(
 
 describe("conjunto fechado dos textos que o produto emite por conta própria (A-09 / Goal034)", () => {
   const baselineFixedTexts = [
-    "Vou chamar uma pessoa da equipe pra te responder com atencao por aqui, ta?",
+    "Vou chamar uma pessoa da equipe pra te responder com atenção por aqui, tá?",
     "Vou chamar a profissional para continuar seu atendimento.",
-    "Vou deixar essa conversa para a profissional responder, ta?",
-    "Sinto muito por isso. Vou chamar uma pessoa da equipe pra te atender com atencao por aqui, ta?",
-    "Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, ta bom?",
+    "Vou deixar essa conversa para a profissional responder, tá?",
+    "Sinto muito por isso. Vou chamar uma pessoa da equipe pra te atender com atenção por aqui, tá?",
+    "Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, tá bom?",
     "Vou deixar essa mensagem para ela responder pessoalmente.",
     "Certo, vou te ajudar por aqui.",
     // QA A-01 / Goal057: substitui a resposta que afirma efeito nao gravado.
-    "Ainda nao ficou registrado na agenda. Posso confirmar agora pra voce?",
+    "Ainda não ficou registrado na agenda. Posso confirmar agora pra você?",
   ];
   const baselineGreetings = [
-    "Olá, tudo bem? Como posso te ajudar hoje?",
-    "Oii, tudo bem? Como posso te ajudar hoje?",
-    "Oii, tudo bem? Como posso te ajudar hoje? 😊",
+    "Olá, tudo bem? Como posso te ajudar?",
+    "Oii, tudo bem? Como posso te ajudar?",
+    "Oii, tudo bem? Como posso te ajudar? 😊",
   ];
   /** Os seis textos de cliente que `message-graph.ts` emite por conta própria (Goal037 / WU-02). */
   const baselineMessageGraphTexts = [
     "Recebi sua mensagem, mas por enquanto consigo responder melhor por texto. Me envie sua pergunta em texto que continuo por aqui.",
     "Tive um problema para consultar o sistema agora. Vou chamar a profissional para continuar seu atendimento.",
-    "Recebi seu audio, mas nao consegui entender o conteudo dele agora. Pode me mandar em texto, por favor? Assim continuo seu atendimento por aqui.",
-    "Recebi sua imagem e ja chamei a profissional para dar uma olhada com voce. Ela continua seu atendimento por aqui.",
-    "Recebi seu documento e ele ja esta aqui na conversa. Por enquanto nao consigo abrir arquivos, entao me conta em texto o que voce precisa que eu ajudo.",
-    "Recebi seu video e ele ja esta aqui na conversa. Por enquanto nao consigo assistir por aqui, entao me conta em texto o que voce precisa que eu ajudo.",
+    "Recebi seu áudio, mas não consegui entender o conteúdo dele agora. Pode me mandar em texto, por favor? Assim continuo seu atendimento por aqui.",
+    "Recebi sua imagem e já chamei a profissional para dar uma olhada com você. Ela continua seu atendimento por aqui.",
+    "Recebi seu documento e ele já está aqui na conversa. Por enquanto não consigo abrir arquivos, então me conta em texto o que você precisa que eu ajudo.",
+    "Recebi seu vídeo e ele já está aqui na conversa. Por enquanto não consigo assistir por aqui, então me conta em texto o que você precisa que eu ajudo.",
   ];
 
   it("reúne exatamente os textos da baseline, sem alterar uma vírgula", () => {
@@ -1390,9 +1389,15 @@ describe("conjunto fechado dos textos que o produto emite por conta própria (A-
 });
 
 describe("conjunto de emissores de texto pelo canal do produto é computado, não escrito à mão (Goal039 / WU-01)", () => {
-  it("descobre os sete sítios de sendText de apps/ai-orchestrator/src, com resíduo zero", () => {
+  // 7 → 6 (2026-10-11): a resposta da IA passou a sair em várias mensagens
+  // curtas por `dispatchAiReply` (modules/outbox/ai-reply-dispatch.ts). O
+  // sítio do grafo (`state.response.text`) e o de ActivationTestReplySender
+  // (`input.text`) deixaram de chamar `sendText`; os dois agora entregam o
+  // texto ao despachante, cujo único sítio é uma parte de
+  // `splitAiReplyIntoParts(reply.text)` — texto em trânsito de `reply`.
+  it("descobre os seis sítios de sendText de apps/ai-orchestrator/src, com resíduo zero", () => {
     const sites = discoverSendTextSites(aiOrchestratorSrcPath);
-    expect(sites).toHaveLength(7);
+    expect(sites).toHaveLength(6);
     const counts = {
       port_declaration: sites.filter((s) => s.category === "port_declaration")
         .length,
@@ -1416,13 +1421,13 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
       port_declaration: 1,
       adapter_implementation: 1,
       composed_by_named_module: 1,
-      assistant_decision_text: 1,
+      assistant_decision_text: 0,
       text_in_transit_named_origin: 2,
       person_typed_text: 1,
     });
   });
 
-  it("classifica cada um dos sete sítios reais na categoria e origem esperadas", () => {
+  it("classifica cada um dos seis sítios reais na categoria e origem esperadas", () => {
     const sites = discoverSendTextSites(aiOrchestratorSrcPath).map((site) => ({
       file: site.filePath.replace(/\\/g, "/").split("/ai-orchestrator/src/")[1],
       line: site.line,
@@ -1433,7 +1438,7 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
       expect.arrayContaining([
         {
           file: "modules/channel/ports/WhatsAppProvider.ts",
-          line: 38,
+          line: 43,
           category: "port_declaration",
           origin: undefined,
         },
@@ -1444,22 +1449,16 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
           origin: undefined,
         },
         {
-          file: "modules/graph/message-graph.ts",
-          line: 1261,
-          category: "assistant_decision_text",
-          origin: undefined,
+          file: "modules/outbox/ai-reply-dispatch.ts",
+          line: 225,
+          category: "text_in_transit_named_origin",
+          origin: "reply",
         },
         {
           file: "modules/reminders/NotificationDeliveryService.ts",
           line: 318,
           category: "composed_by_composeNotificationText",
           origin: undefined,
-        },
-        {
-          file: "modules/activation-test/ActivationTestReplySender.ts",
-          line: 120,
-          category: "text_in_transit_named_origin",
-          origin: "input",
         },
         {
           file: "modules/channel/platform/PlatformWhatsAppSender.ts",
@@ -1797,30 +1796,43 @@ describe("a cadeia de trânsito é seguida até o chamador, elo a elo (Goal040 /
         })),
       }))
       .sort((a, b) => a.site.localeCompare(b.site));
+    // A cadeia da resposta da IA começa, desde 2026-10-11, no despachante em
+    // partes: dois chamadores — o grafo (`state.response.text`, raiz) e o
+    // envio do teste de ativação (`input`, que segue até `deliverReply`).
     expect(followed).toEqual([
-      {
-        site: "modules/activation-test/ActivationTestReplySender.ts:120",
-        siteOrigin: "input",
-        transitFunction: "sendAiReply",
-        callers: [
-          {
-            at: "modules/activation-test/ActivationTestAiDriver.ts:228",
-            callerFunction: "deliverReply",
-            category: "text_in_transit_named_origin",
-            origin: "reply",
-          },
-        ],
-      },
       {
         site: "modules/channel/platform/PlatformWhatsAppSender.ts:98",
         siteOrigin: "message",
         transitFunction: "sendToTenantUnderTest",
+        // 852 → 874: o import de `awaitsConfirmation` e o reenvio do cliente
+        // simulado quando a IA para em `prepare` no passo
+        // AI_CONFIRMS_APPOINTMENT empurram sendAsClient 22 linhas para baixo
+        // — o chamador continua um só (validação de 2026-10-11).
         callers: [
           {
-            at: "modules/activation-test/ActivationTestService.ts:852",
+            at: "modules/activation-test/ActivationTestService.ts:886",
             callerFunction: "sendAsClient",
             category: "text_in_transit_named_origin",
             origin: "text",
+          },
+        ],
+      },
+      {
+        site: "modules/outbox/ai-reply-dispatch.ts:225",
+        siteOrigin: "reply",
+        transitFunction: "dispatchAiReply",
+        callers: [
+          {
+            at: "modules/activation-test/ActivationTestReplySender.ts:135",
+            callerFunction: "sendAiReply",
+            category: "text_in_transit_named_origin",
+            origin: "input",
+          },
+          {
+            at: "modules/graph/message-graph.ts:1338",
+            callerFunction: "sendResponse",
+            category: "assistant_decision_text",
+            origin: undefined,
           },
         ],
       },
@@ -1844,19 +1856,27 @@ describe("a cadeia de trânsito é seguida até o chamador, elo a elo (Goal040 /
       ]),
     );
     expect(excluded).toEqual({
-      sendAiReply: [
+      // Primeiro elo da cadeia da resposta da IA (2026-10-11): a implementação
+      // de `dispatchAiReply` e os dois imports que a nomeiam.
+      dispatchAiReply: [
         {
-          at: "modules/activation-test/ActivationTestReplySender.ts:104",
-          reason: "port_declaration_or_implementation",
+          at: "modules/activation-test/ActivationTestReplySender.ts:14",
+          reason: "type_or_string_reference",
         },
         {
-          at: "modules/activation-test/ActivationTestReplySender.ts:60",
+          at: "modules/graph/message-graph.ts:42",
+          reason: "type_or_string_reference",
+        },
+        {
+          at: "modules/outbox/ai-reply-dispatch.ts:193",
           reason: "port_declaration_or_implementation",
         },
       ],
       sendToTenantUnderTest: [
         {
-          at: "modules/activation-test/ActivationTestService.ts:90",
+          // 90 → 91: uma linha a mais no import de ActivationTestAiDriver.js
+          // (`awaitsConfirmation`, validação de 2026-10-11).
+          at: "modules/activation-test/ActivationTestService.ts:92",
           reason: "type_or_string_reference",
         },
         {
@@ -2242,8 +2262,10 @@ function extractSendAsClientText(source: string, stepName: string): string {
 }
 
 /**
- * Os quatro textos do canal de teste de ativação (Goal039 / WU-02): o aviso
- * ao observador humano e as três falas do cliente simulado. Nenhum é texto
+ * Os cinco textos do canal de teste de ativação (Goal039 / WU-02): o aviso
+ * ao observador humano e as quatro falas do cliente simulado (a quarta, a
+ * confirmação quando a IA para em `prepare`, entrou na validação de
+ * 2026-10-11). Nenhum é texto
  * que o produto emite para uma pessoa cliente real — o aviso é dirigido a
  * quem observa o teste, e as falas são o script que o teste envia *como se
  * fosse* o cliente, para a IA responder, não respostas do produto. Por isso
@@ -2284,6 +2306,15 @@ const ACTIVATION_TEST_CHANNEL_TEXTS = [
     text: extractSendAsClientText(
       activationTestServiceSource,
       "CLIENT_ACCEPTS_SLOT",
+    ),
+  },
+  {
+    category: "activation_test_channel" as const,
+    reason:
+      "fala do cliente simulado (confirmação quando a IA para em `prepare`, validação de 2026-10-11), não resposta do produto",
+    text: extractSendAsClientText(
+      activationTestServiceSource,
+      "AI_CONFIRMS_APPOINTMENT",
     ),
   },
 ];
@@ -2403,8 +2434,8 @@ describe("conjunto verificado de texto de cliente inclui notification-message.ts
     );
   });
 
-  it("ACTIVATION_TEST_NOTICE e as três falas do cliente simulado ficam em categoria declarada, fora do guardrail de espera", () => {
-    expect(ACTIVATION_TEST_CHANNEL_TEXTS).toHaveLength(4);
+  it("ACTIVATION_TEST_NOTICE e as quatro falas do cliente simulado (a quarta é a confirmação de AI_CONFIRMS_APPOINTMENT, validação de 2026-10-11) ficam em categoria declarada, fora do guardrail de espera", () => {
+    expect(ACTIVATION_TEST_CHANNEL_TEXTS).toHaveLength(5);
     for (const entry of ACTIVATION_TEST_CHANNEL_TEXTS) {
       expect(entry.category).toBe("activation_test_channel");
       expect(entry.reason.length).toBeGreaterThan(0);
@@ -2415,28 +2446,28 @@ describe("conjunto verificado de texto de cliente inclui notification-message.ts
 
   it("PRODUCT_OWN_TEXTS não muda: continua idêntico ao conjunto que a suíte já prova na baseline", () => {
     const baselineFixedTexts = [
-      "Vou chamar uma pessoa da equipe pra te responder com atencao por aqui, ta?",
+      "Vou chamar uma pessoa da equipe pra te responder com atenção por aqui, tá?",
       "Vou chamar a profissional para continuar seu atendimento.",
-      "Vou deixar essa conversa para a profissional responder, ta?",
-      "Sinto muito por isso. Vou chamar uma pessoa da equipe pra te atender com atencao por aqui, ta?",
-      "Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, ta bom?",
+      "Vou deixar essa conversa para a profissional responder, tá?",
+      "Sinto muito por isso. Vou chamar uma pessoa da equipe pra te atender com atenção por aqui, tá?",
+      "Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, tá bom?",
       "Vou deixar essa mensagem para ela responder pessoalmente.",
       "Certo, vou te ajudar por aqui.",
       // QA A-01 / Goal057: mesma entrada nova da baseline do fechamento (A-09 / Goal034).
-      "Ainda nao ficou registrado na agenda. Posso confirmar agora pra voce?",
+      "Ainda não ficou registrado na agenda. Posso confirmar agora pra você?",
     ];
     const baselineGreetings = [
-      "Olá, tudo bem? Como posso te ajudar hoje?",
-      "Oii, tudo bem? Como posso te ajudar hoje?",
-      "Oii, tudo bem? Como posso te ajudar hoje? 😊",
+      "Olá, tudo bem? Como posso te ajudar?",
+      "Oii, tudo bem? Como posso te ajudar?",
+      "Oii, tudo bem? Como posso te ajudar? 😊",
     ];
     const baselineMessageGraphTexts = [
       "Recebi sua mensagem, mas por enquanto consigo responder melhor por texto. Me envie sua pergunta em texto que continuo por aqui.",
       "Tive um problema para consultar o sistema agora. Vou chamar a profissional para continuar seu atendimento.",
-      "Recebi seu audio, mas nao consegui entender o conteudo dele agora. Pode me mandar em texto, por favor? Assim continuo seu atendimento por aqui.",
-      "Recebi sua imagem e ja chamei a profissional para dar uma olhada com voce. Ela continua seu atendimento por aqui.",
-      "Recebi seu documento e ele ja esta aqui na conversa. Por enquanto nao consigo abrir arquivos, entao me conta em texto o que voce precisa que eu ajudo.",
-      "Recebi seu video e ele ja esta aqui na conversa. Por enquanto nao consigo assistir por aqui, entao me conta em texto o que voce precisa que eu ajudo.",
+      "Recebi seu áudio, mas não consegui entender o conteúdo dele agora. Pode me mandar em texto, por favor? Assim continuo seu atendimento por aqui.",
+      "Recebi sua imagem e já chamei a profissional para dar uma olhada com você. Ela continua seu atendimento por aqui.",
+      "Recebi seu documento e ele já está aqui na conversa. Por enquanto não consigo abrir arquivos, então me conta em texto o que você precisa que eu ajudo.",
+      "Recebi seu vídeo e ele já está aqui na conversa. Por enquanto não consigo assistir por aqui, então me conta em texto o que você precisa que eu ajudo.",
     ];
     expect(PRODUCT_OWN_TEXTS).toHaveLength(
       baselineFixedTexts.length +
@@ -2526,7 +2557,7 @@ describe("todo egresso HTTP fora da porta do canal é enumerado com resíduo zer
         // ponto (isencao de politica, leitura de antecedencia minima), e o
         // Goal142 (WU-02) a leitura dos dependentes e `includeDependents`; a
         // linha e o numero real, computado pelo AST, nao um valor escolhido.
-        line: 881,
+        line: 904,
         category: "env_var_SCHEDULING_SERVICE_BASE_URL",
       },
       {
@@ -2669,12 +2700,12 @@ describe("o egresso genérico é fail-closed, com o primitivo e a contagem de ch
   });
 });
 
-describe("a cadeia de trânsito é seguida transitivamente até a raiz de cada ramo, com os cinco chamadores de segundo elo nomeados (Goal041 / WU-04)", () => {
+describe("a cadeia de trânsito é seguida transitivamente até a raiz de cada ramo, com os seis chamadores de segundo elo nomeados (Goal041 / WU-04)", () => {
   /** Caminho do elo relativo a `apps/ai-orchestrator/src`, no formato `arquivo:linha`. */
   const at = (filePath: string, line: number): string =>
     `${filePath.replace(/\\/g, "/").split("/ai-orchestrator/src/")[1]}:${line}`;
 
-  it("os dois ramos têm, juntos, exatamente cinco elos de segunda profundidade, cada um nomeado com chamador, categoria e raiz", () => {
+  it("os dois ramos têm, juntos, exatamente seis elos de segunda profundidade, cada um nomeado com chamador, categoria e raiz — os cinco do Goal041 e o reenvio do cliente simulado no passo AI_CONFIRMS_APPOINTMENT quando a IA para em `prepare` (validação de 2026-10-11)", () => {
     const chains = discoverSendTextTransitChains(
       aiOrchestratorSrcPath,
       resolveVerifiedComposers(),
@@ -2690,18 +2721,24 @@ describe("a cadeia de trânsito é seguida transitivamente até a raiz de cada r
         rootKind: link.root?.kind,
       }))
       .sort((a, b) => a.at.localeCompare(b.at));
-    expect(secondLinks).toHaveLength(5);
+    // Os quatro elos de ActivationTestService.ts descem uma linha pelo import
+    // de `awaitsConfirmation`; o sexto (:710) é a confirmação do cliente
+    // simulado (validação de 2026-10-11).
+    // Desde 2026-10-11 a resposta da IA passa por `dispatchAiReply`: o elo de
+    // segunda profundidade do teste de ativação é `deliverReply → sendAiReply`
+    // (ainda em trânsito), e `deliver → deliverReply` desceu para o terceiro.
+    expect(secondLinks).toHaveLength(6);
     expect(secondLinks).toEqual([
       {
-        at: "modules/activation-test/ActivationTestAiDriver.ts:203",
-        callee: "deliverReply",
-        caller: "deliver",
-        category: "assistant_decision_text",
+        at: "modules/activation-test/ActivationTestAiDriver.ts:228",
+        callee: "sendAiReply",
+        caller: "deliverReply",
+        category: "text_in_transit_named_origin",
         literalText: undefined,
-        rootKind: "assistant_decision_text",
+        rootKind: undefined,
       },
       {
-        at: "modules/activation-test/ActivationTestService.ts:604",
+        at: "modules/activation-test/ActivationTestService.ts:606",
         callee: "sendAsClient",
         caller: "performStep",
         category: "literal_text_at_link",
@@ -2709,7 +2746,7 @@ describe("a cadeia de trânsito é seguida transitivamente até a raiz de cada r
         rootKind: "literal_text_at_link",
       },
       {
-        at: "modules/activation-test/ActivationTestService.ts:608",
+        at: "modules/activation-test/ActivationTestService.ts:610",
         callee: "sendAsClient",
         caller: "performStep",
         category: "literal_text_at_link",
@@ -2720,7 +2757,7 @@ describe("a cadeia de trânsito é seguida transitivamente até a raiz de cada r
         rootKind: "literal_text_at_link",
       },
       {
-        at: "modules/activation-test/ActivationTestService.ts:653",
+        at: "modules/activation-test/ActivationTestService.ts:655",
         callee: "sendAsClient",
         caller: "performStep",
         category: "literal_text_at_link",
@@ -2731,13 +2768,24 @@ describe("a cadeia de trânsito é seguida transitivamente até a raiz de cada r
         rootKind: "literal_text_at_link",
       },
       {
-        at: "modules/activation-test/ActivationTestService.ts:679",
+        at: "modules/activation-test/ActivationTestService.ts:692",
         callee: "sendAsClient",
         caller: "performStep",
         category: "literal_text_at_link",
         literalText: extractSendAsClientText(
           activationTestServiceSource,
           "CLIENT_ACCEPTS_SLOT",
+        ),
+        rootKind: "literal_text_at_link",
+      },
+      {
+        at: "modules/activation-test/ActivationTestService.ts:722",
+        callee: "sendAsClient",
+        caller: "performStep",
+        category: "literal_text_at_link",
+        literalText: extractSendAsClientText(
+          activationTestServiceSource,
+          "AI_CONFIRMS_APPOINTMENT",
         ),
         rootKind: "literal_text_at_link",
       },
@@ -2764,9 +2812,15 @@ describe("a cadeia de trânsito é seguida transitivamente até a raiz de cada r
     const rootKinds = chains
       .flatMap((chain) => chain.roots.map((root) => root.kind))
       .sort();
+    // Cinco raízes literais: as quatro do Goal041 e a confirmação do cliente
+    // simulado no passo AI_CONFIRMS_APPOINTMENT (validação de 2026-10-11).
+    // Duas raízes de decisão do assistente: o grafo e o teste de ativação,
+    // ambos chegando ao despachante em partes (2026-10-11).
     expect(rootKinds).toEqual(
       [
         "assistant_decision_text",
+        "assistant_decision_text",
+        "literal_text_at_link",
         "literal_text_at_link",
         "literal_text_at_link",
         "literal_text_at_link",
@@ -4193,7 +4247,8 @@ describe("WU-02 é exercitado: delegação de dois níveis alcança fetch, membr
  * Os quatro controles negativos de WU-04 (Goal044). Cada um monta a própria
  * árvore sintética em diretório temporário e roda o descobridor real sobre
  * ela — nunca a árvore real —, removendo todo diretório no `finally`. Nenhum
- * amplia nem estreita o conjunto de 10 rotas que a suíte permanente assere.
+ * amplia nem estreita o conjunto de rotas que a suíte permanente assere (10
+ * no Goal044; 11 desde o GET /user/contacts da validação de 2026-10-11).
  * ========================================================================= */
 
 describe("controle negativo 1 (Goal044 / WU-04) — helper com chamador que passa a base do serviço Go em outro arquivo, ligado por import com alias: antes do arquivo existir, o sítio fica em notGoBound; depois, entra no conjunto", () => {
@@ -6216,25 +6271,25 @@ describe("Goal046 / WU-04 — o conjunto de categorias de recusa é conferido co
 });
 
 describe("Goal046 / WU-04 — a árvore real produz os números desta rodada, e as invariantes de reconhecimento não são vácuas", () => {
-  it("1 superfície, 4 ligações resolvidas, 10 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — os mesmos números da baseline do Goal045, exceto o de arquivos varridos pela resolução de instanciação: com o modelo AgendaViewPreference do Goal073 gerado em apps/bff/src/generated/prisma, o modelo HumanTakeover do Goal074 gerado em apps/ai-orchestrator/src/generated/prisma modules/prompts/service-instructions.ts do Goal078 e lib/calendar-source.ts do Goal109, elas somam hoje 210 arquivos .ts (121 em apps/ai-orchestrator/src, 89 em apps/bff/src) — o número computado pelo AST (210) prevalece sobre qualquer contagem anterior capturada antes desse arquivo existir na árvore", () => {
+  it("1 superfície, 4 ligações resolvidas, 11 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — os mesmos números da baseline do Goal045, exceto o de arquivos varridos pela resolução de instanciação e o de rotas: com o modelo AgendaViewPreference do Goal073 gerado em apps/bff/src/generated/prisma, o modelo HumanTakeover do Goal074 gerado em apps/ai-orchestrator/src/generated/prisma modules/prompts/service-instructions.ts do Goal078, lib/calendar-source.ts do Goal109 e lib/whatsapp-contacts.ts do BFF, elas somam hoje 212 arquivos .ts (122 em apps/ai-orchestrator/src, com modules/outbox/ai-reply-dispatch.ts do despacho em partes de 2026-10-11, 90 em apps/bff/src), e a 11ª rota é o GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) — o número computado pelo AST (212) prevalece sobre qualquer contagem anterior capturada antes desse arquivo existir na árvore", () => {
     const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
 
     expect(internalClientSurfaces).toHaveLength(1);
     expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
-    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(210);
-    expect(requests).toHaveLength(10);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(212);
+    expect(requests).toHaveLength(11);
     expect(nonGoBoundInstantiations).toHaveLength(2);
     expect(nonTransportMemberCalls).toHaveLength(0);
   });
 
-  it("product-transport-routes.txt continua com as mesmas 10 rotas do conjunto que a árvore real alcança", () => {
+  it("product-transport-routes.txt continua com as mesmas 11 rotas do conjunto que a árvore real alcança — as 10 do Goal046 e o GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11)", () => {
     const routesFilePath = join(
       dirname(fileURLToPath(import.meta.url)),
       "../support/product-transport-routes.txt",
     );
     const routes = readProductTransportRoutesFile(routesFilePath);
-    expect(routes).toHaveLength(10);
+    expect(routes).toHaveLength(11);
     const { requests } = discoverGoServiceHttpRequests(
       aiOrchestratorSrcPath,
       bffSrcPath,
@@ -11899,20 +11954,20 @@ describe("Goal047 / WU-04 (§5) — as categorias de recusa deste caminho existe
   });
 });
 
-describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta rodada, e as 46 ocorrências de this.http. são classificadas sem recusa alguma", () => {
-  it("1 superfície, 4 ligações, 210 arquivos varridos, 10 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal, exceto o de arquivos varridos, pelo modelo AgendaViewPreference do Goal073, pelo modelo HumanTakeover do Goal074, por modules/prompts/service-instructions.ts do Goal078 e por lib/calendar-source.ts do Goal109", () => {
+describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta rodada, e as 47 ocorrências de this.http. são classificadas sem recusa alguma", () => {
+  it("1 superfície, 4 ligações, 212 arquivos varridos, 11 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal, exceto o de arquivos varridos, pelo modelo AgendaViewPreference do Goal073, pelo modelo HumanTakeover do Goal074, por modules/prompts/service-instructions.ts do Goal078, por lib/calendar-source.ts do Goal109, por lib/whatsapp-contacts.ts do BFF e por modules/outbox/ai-reply-dispatch.ts (2026-10-11), e o de rotas, pelo GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11)", () => {
     const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
 
     expect(internalClientSurfaces).toHaveLength(1);
     expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
-    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(210);
-    expect(requests).toHaveLength(10);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(212);
+    expect(requests).toHaveLength(11);
     expect(nonGoBoundInstantiations).toHaveLength(2);
     expect(nonTransportMemberCalls).toHaveLength(0);
   });
 
-  it("as 46 ocorrências de this.http. em apps/bff/src/clients/ estão todas na forma direta this.http.<membro>(, sem exceção, e a leitura completa não lança recusa alguma sobre a árvore real", () => {
+  it("as 47 ocorrências de this.http. em apps/bff/src/clients/ — as 46 do Goal047 e o this.http.request de EvolutionClient.getContacts (GET /user/contacts, validação de 2026-10-11) — estão todas na forma direta this.http.<membro>(, sem exceção, e a leitura completa não lança recusa alguma sobre a árvore real", () => {
     const clientsRoot = join(bffSrcPath, "clients");
     const files = listTypeScriptSources(clientsRoot);
     let totalOccurrences = 0;
@@ -11922,8 +11977,8 @@ describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta roda
       totalOccurrences += (source.match(/\bthis\.http\./gu) ?? []).length;
       totalDirectCalls += (source.match(/\bthis\.http\.[A-Za-z_$][\w$]*\(/gu) ?? []).length;
     }
-    expect(totalOccurrences).toBe(46);
-    expect(totalDirectCalls).toBe(46);
+    expect(totalOccurrences).toBe(47);
+    expect(totalDirectCalls).toBe(47);
     expect(() =>
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath),
     ).not.toThrow();
@@ -16038,5 +16093,33 @@ describe("Goal055 / FIX-001 (§10) — controles negativos: as dez amarras do ei
     for (const category of PROVEN_UNREACHABLE_REFUSAL_CATEGORIES.keys()) {
       expect(allRefusalCategories).toContain(category);
     }
+  });
+});
+
+describe("resposta da IA em várias mensagens: a parte dividida segue como texto em trânsito da origem (2026-10-11)", () => {
+  it("`<partes>[i]` de `splitAiReplyIntoParts(<origem>.text)` no mesmo bloco é trânsito de `<origem>`; array de outra fonte é resíduo", () => {
+    const fixture = [
+      "export async function despachar(provider: P, reply: { text: string }) {",
+      "  const parts = splitAiReplyIntoParts(reply.text);",
+      "  for (let index = 0; index < parts.length; index += 1) {",
+      '    await provider.sendText({ to: "1", text: parts[index] });',
+      "  }",
+      "}",
+    ].join("\n");
+    expect(classifySendTextSites(fixture, "<fixture-partes>")).toEqual([
+      {
+        filePath: "<fixture-partes>",
+        line: 4,
+        category: "text_in_transit_named_origin",
+        origin: "reply",
+      },
+    ]);
+    const outraFonte = fixture.replace(
+      "splitAiReplyIntoParts(reply.text)",
+      "inventaPartes(reply.text)",
+    );
+    expect(() =>
+      classifySendTextSites(outraFonte, "<fixture-residuo>"),
+    ).toThrowError(/<fixture-residuo>:4: chamada sendText\(\.\.\.\) com forma de "text:" não reconhecida/);
   });
 });

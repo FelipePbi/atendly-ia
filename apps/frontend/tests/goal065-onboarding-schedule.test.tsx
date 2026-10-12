@@ -2,10 +2,13 @@
 /**
  * Goal065/WU-03 — Primeiro serviço numa etapa só (nome, duração e preço nos
  * quatro tipos, sem `onboardingPriceType` nem conversão), "Serviços
- * adicionais" opcional por `POST /v1/services` sem trocar o serviço do
- * onboarding, dias de segunda a domingo, horário-base com "Personalizar dias
+ * adicionais" opcional sem trocar o serviço do onboarding, dias de segunda a domingo, horário-base com "Personalizar dias
  * diferentes" (uma regra por dia) e o resumo de "Agenda pronta" sem texto de
  * desenvolvimento nem "Fonte oficial".
+ *
+ * Decisão de 2026-10-12: o adicional passou a ir por `PATCH /v1/onboarding`
+ * (sem `id`), que não pede cor — o servidor sorteia uma da paleta —, porque
+ * `POST /v1/services` passou a exigir a cor.
  */
 
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -17,6 +20,8 @@ import {
   OnboardingRuntimeProvider,
 } from "@/features/onboarding/OnboardingRuntime";
 import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
+
+import { advanceDemo, runDemoToEnd } from "./support/onboarding-demo";
 
 const push = vi.fn();
 const replace = vi.fn();
@@ -190,7 +195,7 @@ describe("servico-nome: os quatro tipos gravam e releem sem conversão", () => {
   });
 });
 
-describe("servicos-adicionais: cria por POST /v1/services sem trocar o serviço do onboarding", () => {
+describe("servicos-adicionais: cria pelo onboarding, sem cor, sem trocar o serviço do onboarding", () => {
   test("lista o serviço do onboarding e os ativos, sem repetir o do onboarding", async () => {
     listServiceCatalog.mockResolvedValue({
       editable: true,
@@ -209,18 +214,31 @@ describe("servicos-adicionais: cria por POST /v1/services sem trocar o serviço 
     expect(screen.getAllByText("Corte")).toHaveLength(1);
   });
 
-  test("Adicionar outro serviço chama POST /v1/services e mostra o criado na lista", async () => {
-    createServiceCatalog.mockResolvedValue(
-      serviceFixture({ id: "svc-2", name: "Barba", durationMinutes: 30, price: 40 }),
-    );
+  test("Adicionar outro serviço grava pelo onboarding sem perguntar a cor e mostra o criado na lista", async () => {
     const user = await renderStep(
       "servicos-adicionais",
       stateFixture({ service: serviceFixture({ id: "svc-1" }) }),
     );
+    listServiceCatalog.mockResolvedValue({
+      editable: true,
+      items: [
+        serviceFixture({ id: "svc-1", name: "Corte" }),
+        serviceFixture({
+          colorToken: "EMERALD",
+          id: "svc-2",
+          name: "Barba",
+          durationMinutes: 30,
+          price: 40,
+        }),
+      ],
+      source: "AVENLY",
+    });
 
     await user.click(
       await screen.findByRole("button", { name: "Adicionar outro serviço" }),
     );
+    expect(screen.queryByText(/Cor na agenda/)).toBeNull();
+    expect(screen.queryByRole("radiogroup")).toBeNull();
     await user.type(screen.getByLabelText("Nome do serviço"), "Barba");
     const duration = screen.getByLabelText("Duração em minutos");
     await user.clear(duration);
@@ -229,16 +247,22 @@ describe("servicos-adicionais: cria por POST /v1/services sem trocar o serviço 
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
     await waitFor(() =>
-      expect(createServiceCatalog).toHaveBeenCalledWith(
-        expect.objectContaining({
+      expect(updateOnboarding).toHaveBeenCalledWith({
+        service: {
           active: true,
           durationMinutes: 30,
           name: "Barba",
           price: 40,
           priceType: "FIXED",
-        }),
-      ),
+        },
+      }),
     );
+    const [patch] = updateOnboarding.mock.calls.at(-1) as [
+      { service: Record<string, unknown> },
+    ];
+    expect(patch.service).not.toHaveProperty("id");
+    expect(patch.service).not.toHaveProperty("colorToken");
+    expect(createServiceCatalog).not.toHaveBeenCalled();
     expect(await screen.findByText("Barba")).toBeVisible();
   });
 
@@ -289,7 +313,7 @@ describe("servicos-adicionais: cria por POST /v1/services sem trocar o serviço 
     expect(createServiceCatalog).not.toHaveBeenCalled();
   });
 
-  test("Adicionar com o formulário vazio mostra os erros no campo, sem chamar POST /v1/services", async () => {
+  test("Adicionar com o formulário vazio mostra os erros no campo, sem gravar nada", async () => {
     const user = await renderStep(
       "servicos-adicionais",
       stateFixture({ service: serviceFixture() }),
@@ -311,6 +335,7 @@ describe("servicos-adicionais: cria por POST /v1/services sem trocar o serviço 
     );
     expect(nameInput).toHaveFocus();
     expect(createServiceCatalog).not.toHaveBeenCalled();
+    expect(updateOnboarding).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });
 });
@@ -394,29 +419,15 @@ function availabilityFixture(
   };
 }
 
-// Com prefers-reduced-motion a demonstração abre inteira (Goal079): a
-// resposta de preço é o começo da terceira mensagem, seguida da duração.
-function stubReducedMotion() {
-  Object.defineProperty(window, "matchMedia", {
-    configurable: true,
-    value: (query: string) => ({
-      addEventListener: vi.fn(),
-      addListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-      matches: query.includes("prefers-reduced-motion"),
-      media: query,
-      onchange: null,
-      removeEventListener: vi.fn(),
-      removeListener: vi.fn(),
-    }),
-    writable: true,
-  });
-}
-
+// A demonstração entra item a item, também com movimento reduzido (validação
+// de 2026-10-11): roda a conversa até o fim com relógio falso. A resposta de
+// preço é o começo da terceira mensagem, seguida da duração.
 describe("demonstracao-da-ia: a resposta de preço segue os quatro tipos", () => {
-  beforeEach(stubReducedMotion);
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
   afterEach(() => {
-    Reflect.deleteProperty(window, "matchMedia");
+    vi.useRealTimers();
   });
 
   test.each([
@@ -434,9 +445,9 @@ describe("demonstracao-da-ia: a resposta de preço segue os quatro tipos", () =>
         service: serviceFixture({ price, priceType }),
       }),
     );
-    expect(
-      await screen.findByText(reply, { exact: false }),
-    ).toBeVisible();
+    await advanceDemo(0);
+    await runDemoToEnd();
+    expect(screen.getByText(reply, { exact: false })).toBeVisible();
     // Nunca um preço inventado: "Sem preço" não vira R$ 0,00.
     expect(screen.queryByText(/R\$\s?0,00/)).toBeNull();
   });

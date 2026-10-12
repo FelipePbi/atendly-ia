@@ -269,7 +269,7 @@ describe("service catalog: MVP attributes", () => {
     expect(created.recurrenceIntervalDays).toBe(14);
   });
 
-  it("defaults buffers to zero and leaves recurrence/description/color unset", async () => {
+  it("defaults buffers to zero, leaves recurrence/description unset and draws a palette color", async () => {
     const { services } = service();
     const created = await services.create({
       name: "Corte",
@@ -281,7 +281,10 @@ describe("service catalog: MVP attributes", () => {
     expect(created.bufferAfterMinutes).toBe(0);
     expect(created.recurrenceIntervalDays).toBeNull();
     expect(created.description).toBeNull();
-    expect(created.colorToken).toBeNull();
+    // Decisão de 2026-10-12: sem cor informada, cor aleatória da paleta.
+    expect(["ROSE", "AMBER", "EMERALD", "SKY", "VIOLET", "SLATE"]).toContain(
+      created.colorToken,
+    );
   });
 
   it("refuses a negative buffer and a non-positive recurrence interval", async () => {

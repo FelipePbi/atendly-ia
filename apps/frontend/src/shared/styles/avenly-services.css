@@ -851,7 +851,16 @@
   line-height: 1.4;
 }
 
-/* Cor na agenda: sem cor, seis cores e a prévia. */
+/* Cor na agenda: obrigatória (2026-10-12), seis cores e a prévia. */
+.service-color-error {
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.service-option.has-error .service-option-title,
+.service-option.has-error .service-option-value-text {
+  color: var(--danger);
+}
 .service-color-dot {
   width: 14px;
   height: 14px;

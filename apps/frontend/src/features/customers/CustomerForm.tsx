@@ -86,9 +86,8 @@ export function CustomerForm() {
     }
     setChecking(true);
     try {
-      const found = await getProductServices().customers.listCandidatesByPhone(
-        phone,
-      );
+      const found =
+        await getProductServices().customers.listCandidatesByPhone(phone);
       if (found.items.length > 0) {
         setCandidates(found.items);
         setPending({ name, phone });
@@ -97,7 +96,10 @@ export function CustomerForm() {
       }
     } catch (caught: unknown) {
       setMessage(
-        requestError(caught, "Não foi possível verificar o telefone informado."),
+        requestError(
+          caught,
+          "Não foi possível verificar o telefone informado.",
+        ),
       );
     } finally {
       setChecking(false);
@@ -152,11 +154,15 @@ export function CustomerForm() {
             {candidates.length === 1
               ? "cadastro com o telefone"
               : "cadastros com o telefone"}{" "}
-            {displayPhone(pending.phone, "")}. O mesmo número pode pertencer a mais de uma
-            pessoa: escolha um cadastro existente ou confirme que é uma
-            pessoa nova. A Avenly não junta cadastros automaticamente.
+            {displayPhone(pending.phone, "")}. O mesmo número pode pertencer a
+            mais de uma pessoa: escolha um cadastro existente ou confirme que é
+            uma pessoa nova. A Avenly não junta cadastros automaticamente.
           </p>
-          <div aria-label="Cadastros com este telefone" className="list" role="list">
+          <div
+            aria-label="Cadastros com este telefone"
+            className="list"
+            role="list"
+          >
             {candidates.map((candidate) => (
               <ListItem
                 copy={displayPhone(candidate.phone, "Telefone não informado")}
@@ -207,7 +213,8 @@ export function CustomerForm() {
             />
             <div className="field">
               <label className="label" htmlFor={phoneId}>
-                Telefone <span className="customer-form-optional">(opcional)</span>
+                Telefone{" "}
+                <span className="customer-form-optional">(opcional)</span>
               </label>
               <div className="input-wrap">
                 <input
@@ -266,7 +273,11 @@ export function CustomerForm() {
               disabled={checking || busy}
               type="submit"
             >
-              {checking ? "Verificando..." : busy ? "Criando..." : "Salvar cliente"}
+              {checking
+                ? "Verificando..."
+                : busy
+                  ? "Criando..."
+                  : "Salvar cliente"}
             </button>
           </div>
         </form>

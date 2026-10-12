@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { type Appointment, BffHttpError, type CalendarState } from "@/data";
 import { AvailabilityExceptions } from "@/features/agenda/AvailabilityExceptions";
+import { BlockForm } from "@/features/agenda/BlockForm";
 import {
   canPerform,
   operationLabel,
@@ -133,10 +134,44 @@ function renderScreen() {
   );
 }
 
+// Pedido de 2026-10-12 (D-169): o dia fechado (indisponibilidade) é criado em
+// "Bloquear horário", com "Dia inteiro" ligado (`?type=CLOSED` já abre assim,
+// numa tela só desde a revisão do mesmo dia); a tela de /agenda/excecoes
+// ficou só com o "Horário extra" e a lista das duas exceções.
+function renderBlockForm() {
+  window.history.pushState(
+    {},
+    "",
+    `/agenda/bloquear?type=CLOSED&date=${ISO_TODAY}`,
+  );
+  return render(
+    <ShellConfigProvider>
+      <BlockForm />
+    </ShellConfigProvider>,
+  );
+}
+
+async function openClosedStep() {
+  expect(
+    await screen.findByRole("switch", { name: "Dia inteiro" }),
+  ).toBeChecked();
+}
+
 describe("disponibilidade extra e indisponibilidade podem ser criadas e removidas por data", () => {
-  test("cria disponibilidade extra e indisponibilidade de dia inteiro, e remove ambas", async () => {
+  test("cria horário extra e remove; o dia fechado listado também pode ser removido", async () => {
     getCalendar.mockResolvedValue(calendarFixture());
-    listAvailabilityExceptions.mockResolvedValue([]);
+    listAvailabilityExceptions.mockResolvedValue([
+      {
+        available: false,
+        date: ISO_TODAY,
+        decidedBy: null,
+        decidedReason: null,
+        endTime: null,
+        id: "exc-unavailable",
+        reason: "Feriado local",
+        startTime: null,
+      },
+    ]);
     createExtraAvailability.mockResolvedValue({
       available: true,
       date: ISO_TODAY,
@@ -147,6 +182,51 @@ describe("disponibilidade extra e indisponibilidade podem ser criadas e removida
       reason: null,
       startTime: "09:00",
     });
+    removeAvailabilityException.mockResolvedValue({ deleted: true });
+    const user = userEvent.setup();
+
+    const { container } = renderScreen();
+
+    await screen.findByRole("heading", { level: 1, name: "Horário extra" });
+    const list = await screen.findByRole("list");
+    expect(within(list).getByText("Fechado")).toBeVisible();
+    expect(within(list).getByText("Feriado local")).toBeVisible();
+    expect(within(list).getByText("Dia inteiro")).toBeVisible();
+    await expectNoA11yViolations(container);
+
+    await user.click(
+      screen.getByRole("button", { name: "Liberar horário extra" }),
+    );
+    expect(createExtraAvailability).toHaveBeenCalledWith({
+      date: ISO_TODAY,
+      endTime: "18:00",
+      startTime: "09:00",
+    });
+    expect(await within(list).findByText("Horário extra")).toBeVisible();
+    expect(
+      within(list).getAllByRole("button", { name: "Remover" }),
+    ).toHaveLength(2);
+
+    const extraItem = within(list).getByText("Horário extra").closest("li");
+    if (!extraItem) throw new Error("item de horário extra não encontrado");
+    await user.click(
+      within(extraItem).getByRole("button", { name: "Remover" }),
+    );
+    expect(removeAvailabilityException).toHaveBeenCalledWith("exc-extra");
+    await screen.findByText("Fechado");
+    expect(within(list).queryByText("Horário extra")).toBeNull();
+
+    await user.click(within(list).getByRole("button", { name: "Remover" }));
+    expect(removeAvailabilityException).toHaveBeenCalledWith("exc-unavailable");
+    expect(
+      await screen.findByText(
+        "Nenhum horário extra ou dia fechado nos próximos 90 dias.",
+      ),
+    ).toBeVisible();
+  });
+
+  test("o dia fechado de dia inteiro nasce em Bloquear horário com o payload de antes", async () => {
+    getCalendar.mockResolvedValue(calendarFixture());
     createUnavailability.mockResolvedValue({
       available: false,
       date: ISO_TODAY,
@@ -157,37 +237,19 @@ describe("disponibilidade extra e indisponibilidade podem ser criadas e removida
       reason: "Feriado local",
       startTime: null,
     });
-    removeAvailabilityException.mockResolvedValue({ deleted: true });
     const user = userEvent.setup();
 
-    renderScreen();
-
-    await screen.findByRole("heading", { name: "Tipo" });
-    expect(
-      screen.getByText(
-        "Nenhuma disponibilidade extra ou indisponibilidade nos próximos 90 dias.",
-      ),
-    ).toBeVisible();
-
-    await user.click(
-      screen.getByRole("button", { name: "Confirmar disponibilidade extra" }),
-    );
-    expect(createExtraAvailability).toHaveBeenCalledWith({
-      date: ISO_TODAY,
-      endTime: "18:00",
-      startTime: "09:00",
-    });
-    const list = await screen.findByRole("list");
-    expect(within(list).getByText("Disponibilidade extra")).toBeVisible();
-
-    await user.click(screen.getByRole("radio", { name: /^Indisponibilidade/ }));
+    renderBlockForm();
+    await openClosedStep();
+    await user.click(screen.getByRole("button", { name: "Motivo" }));
     await user.type(
       screen.getByLabelText("Motivo (opcional)"),
       "Feriado local",
     );
     await user.click(
-      screen.getByRole("button", { name: "Confirmar indisponibilidade" }),
+      screen.getByRole("button", { name: "Confirmar fechamento" }),
     );
+
     expect(createUnavailability).toHaveBeenCalledWith({
       date: ISO_TODAY,
       decidedReason: undefined,
@@ -195,33 +257,14 @@ describe("disponibilidade extra e indisponibilidade podem ser criadas e removida
       reason: "Feriado local",
       startTime: undefined,
     });
-    expect(await screen.findByText("Feriado local")).toBeVisible();
-    expect(screen.getAllByText("Dia inteiro").length).toBeGreaterThan(0);
-    expect(
-      within(list).getAllByRole("button", { name: "Remover" }),
-    ).toHaveLength(2);
-
-    const extraItem = within(list)
-      .getByText("Disponibilidade extra")
-      .closest("li");
-    if (!extraItem)
-      throw new Error("item de disponibilidade extra não encontrado");
-    await user.click(
-      within(extraItem).getByRole("button", { name: "Remover" }),
-    );
-    expect(removeAvailabilityException).toHaveBeenCalledWith("exc-extra");
-    await screen.findByText("Indisponível");
-    expect(within(list).queryByText("Disponibilidade extra")).toBeNull();
-    expect(
-      within(list).getAllByRole("button", { name: "Remover" }),
-    ).toHaveLength(1);
+    expect(await screen.findByText("Dia fechado confirmado")).toBeVisible();
+    expect(screen.getByText("Feriado local")).toBeVisible();
   });
 });
 
 describe("indisponibilidade que cobre atendimento confirmado", () => {
   test("mostra o que será afetado e só reenvia com decidedReason explícito", async () => {
     getCalendar.mockResolvedValue(calendarFixture());
-    listAvailabilityExceptions.mockResolvedValue([]);
     listAppointments.mockResolvedValue([appointmentFixture()]);
     listTimeBlocks.mockResolvedValue([]);
     createUnavailability
@@ -246,17 +289,15 @@ describe("indisponibilidade que cobre atendimento confirmado", () => {
       });
     const user = userEvent.setup();
 
-    renderScreen();
-
-    await screen.findByRole("heading", { name: "Tipo" });
-    await user.click(screen.getByRole("radio", { name: /^Indisponibilidade/ }));
+    renderBlockForm();
+    await openClosedStep();
     await user.click(
-      screen.getByRole("button", { name: "Confirmar indisponibilidade" }),
+      screen.getByRole("button", { name: "Confirmar fechamento" }),
     );
 
     expect(
       await screen.findByText(
-        "Esta indisponibilidade cobre atendimento já confirmado",
+        "Este fechamento cobre atendimento já confirmado",
       ),
     ).toBeVisible();
     expect(screen.getByText("Atendimento")).toBeVisible();
@@ -268,7 +309,7 @@ describe("indisponibilidade que cobre atendimento confirmado", () => {
     );
     expect(
       await screen.findByText(
-        "Descreva o motivo da decisão. Sem motivo, a indisponibilidade não é enviada.",
+        "Descreva o motivo da decisão. Sem motivo, o fechamento não é enviado.",
       ),
     ).toBeVisible();
     expect(createUnavailability).toHaveBeenCalledTimes(1);
@@ -290,7 +331,7 @@ describe("indisponibilidade que cobre atendimento confirmado", () => {
       startTime: undefined,
     });
     expect(
-      await screen.findByText("Decisão: Fechamento excepcional para reforma"),
+      await screen.findByText("Fechamento excepcional para reforma"),
     ).toBeVisible();
   });
 });
@@ -298,7 +339,6 @@ describe("indisponibilidade que cobre atendimento confirmado", () => {
 describe("nenhum campo decidedBy existe em formulário algum", () => {
   test("nem no formulário de criação nem no painel de conflito", async () => {
     getCalendar.mockResolvedValue(calendarFixture());
-    listAvailabilityExceptions.mockResolvedValue([]);
     listAppointments.mockResolvedValue([appointmentFixture()]);
     listTimeBlocks.mockResolvedValue([]);
     createUnavailability.mockRejectedValueOnce(
@@ -311,19 +351,16 @@ describe("nenhum campo decidedBy existe em formulário algum", () => {
       }),
     );
     const user = userEvent.setup();
-    const { container } = renderScreen();
+    const { container } = renderBlockForm();
 
-    await screen.findByRole("heading", { name: "Tipo" });
+    await openClosedStep();
     expect(screen.queryByLabelText(/decidido por/i)).toBeNull();
     expect(screen.queryByText(/decidido por/i)).toBeNull();
 
-    await user.click(screen.getByRole("radio", { name: /^Indisponibilidade/ }));
     await user.click(
-      screen.getByRole("button", { name: "Confirmar indisponibilidade" }),
+      screen.getByRole("button", { name: "Confirmar fechamento" }),
     );
-    await screen.findByText(
-      "Esta indisponibilidade cobre atendimento já confirmado",
-    );
+    await screen.findByText("Este fechamento cobre atendimento já confirmado");
 
     expect(screen.queryByLabelText(/decidido por/i)).toBeNull();
     expect(screen.queryByText(/decidido por/i)).toBeNull();

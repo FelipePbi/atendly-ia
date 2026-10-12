@@ -134,6 +134,12 @@ A hipótese anterior previa um único plano pago. Direção atual: dois planos, 
 
 As demais hipóteses de monetização (404–434) continuam hipóteses, exceto onde a nova direção as confirma: teste de 14 dias (406), início na ativação da IA (407), agenda utilizável antes do teste (408), IA pausa e dados permanecem sem assinatura (411) e lembretes não continuam sem assinatura (414).
 
+## Série de atendimentos em tela própria
+
+**Substituída em 2026-10-12** (D-171).
+
+A série de atendimento era uma tela à parte, com formulário próprio, e só podia ser confirmada inteira. Direção atual: repetir é parte do novo agendamento ("Repetir este atendimento"), com revisão antes de confirmar e a possibilidade de pular a data com conflito. O link antigo abre o novo agendamento com a repetição ligada.
+
 ## Relacionado
 
 - [[04-Referencia/99-Perguntas-e-Respostas]]

@@ -41,6 +41,9 @@ const serviceSchema = z.object({
   bufferBeforeMinutes: z.number().int().nonnegative().default(0),
   bufferAfterMinutes: z.number().int().nonnegative().default(0),
   recurrenceIntervalDays: z.number().int().positive().nullable().default(null),
+  // Atendimentos dos últimos 90 dias com o serviço (D-170). Só a leitura do
+  // catálogo traz; ausente no Scheduling anterior e na criação/edição.
+  usageCount: z.number().int().nonnegative().optional(),
 });
 // Próximo e último atendimento por cliente, no fuso do calendário do negócio
 // (Goal075). Ausentes na resposta anterior a este Goal.
@@ -323,6 +326,17 @@ const timeBlockSchema = z.object({
   kind: timeBlockKindSchema.default("BLOCK"),
   title: z.string().nullable().default(null),
   seriesId: z.string().nullable().default(null),
+  // Quando foi criado e o padrão da série (pedido de 2026-10-12); defaults
+  // mantêm decodável o Scheduling anterior.
+  createdAt: z.string().nullable().default(null),
+  series: z
+    .object({
+      daysOfWeek: z.array(z.number().int().min(0).max(6)),
+      occurrenceCount: z.number().int().nullable(),
+      seriesEndDate: z.string().nullable(),
+    })
+    .nullable()
+    .default(null),
 });
 const availabilityExceptionSchema = z.object({
   id: z.string(),

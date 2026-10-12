@@ -378,8 +378,13 @@ const FLOWS: Flow[] = [
   {
     name: "novo agendamento",
     frame: "A6",
-    screen: () => <AppointmentForm />,
+    screen: () => <AppointmentForm customerId="cus-ana" />,
     field: async (user) => {
+      // "Adicionar observação" aparece com o serviço (revelação progressiva,
+      // pedido de 2026-10-12, D-170).
+      await user.click(
+        await screen.findByRole("checkbox", { name: /Corte feminino/ }),
+      );
       await user.click(
         await screen.findByRole("button", { name: /Adicionar observação/ }),
       );
@@ -499,7 +504,9 @@ describe.each(FLOWS)(
       expect(container.querySelector(".list-detail-flat")).not.toBeNull();
     });
 
-    test("a partir de 1024 px a coluna e a barra aparecem e a coluna busca uma vez", async () => {
+    // Pedido de 2026-10-12 (D-170): criar, cancelar e remarcar não mostram
+    // mais a barra da Agenda (Dia/Semana/Mês, ‹ › e "+ Novo") acima da coluna.
+    test("a partir de 1024 px a coluna aparece, sem a barra da Agenda, e busca uma vez", async () => {
       const { container } = await renderFlow(flow, WIDE);
 
       const column = await waitFor(() => {
@@ -507,11 +514,8 @@ describe.each(FLOWS)(
         expect(found).not.toBeNull();
         return found as HTMLElement;
       });
-      await waitFor(() =>
-        expect(
-          container.querySelector(".agenda-command-bar"),
-        ).not.toBeNull(),
-      );
+      await waitFor(() => expect(listAppointments).toHaveBeenCalledTimes(1));
+      expect(container.querySelector(".agenda-command-bar")).toBeNull();
       expect(column).toBeInTheDocument();
       expect(container.querySelector(".agenda-appt-split")).not.toHaveClass(
         "agenda-appt-split-flat",

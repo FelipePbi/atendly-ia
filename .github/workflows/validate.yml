@@ -1,9 +1,10 @@
-# Gate de validação da migração.
+# Gate de validação da migração e deploy de produção.
 #
-# Executa exatamente os mesmos comandos documentados em
-# docs/migration/VALIDATION_GATE.md. Não faz deploy, não usa banco
-# compartilhado e não depende de segredo real: as credenciais abaixo são
-# sintéticas e válidas apenas dentro do job.
+# Os jobs de validação executam exatamente os mesmos comandos documentados em
+# docs/migration/VALIDATION_GATE.md. Eles não usam banco compartilhado nem
+# segredo real: as credenciais abaixo são sintéticas e válidas apenas dentro
+# do job. Só o job `deploy` usa segredo real, e só roda em push na main com
+# todo o gate verde (docs/architecture/deploy-vm.md).
 name: validate
 
 on:
@@ -143,3 +144,35 @@ jobs:
           fi
         env:
           BFF_TEST_DATABASE_URL: ""
+
+  deploy:
+    name: deploy (production)
+    # Só push na main, e só depois de todo o gate verde: PR e
+    # workflow_dispatch nunca publicam. DEPLOY_ENABLED (variável do
+    # repositório) mantém o job pulado até a VM existir; ligado, segredo
+    # ausente falha alto em vez de pular calado.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      vars.DEPLOY_ENABLED == 'true'
+    needs: [core, go-windows, integration]
+    runs-on: ubuntu-latest
+    environment: production
+    # Um deploy por vez; um push novo espera o anterior em vez de cancelá-lo
+    # no meio de uma migração.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Trigger Coolify deploy
+        env:
+          COOLIFY_DEPLOY_WEBHOOK: ${{ secrets.COOLIFY_DEPLOY_WEBHOOK }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: |
+          if [ -z "$COOLIFY_DEPLOY_WEBHOOK" ] || [ -z "$COOLIFY_API_TOKEN" ]; then
+            echo "::error::COOLIFY_DEPLOY_WEBHOOK and COOLIFY_API_TOKEN must be set when DEPLOY_ENABLED is true"
+            exit 1
+          fi
+          curl --fail-with-body --silent --show-error --max-time 60 \
+            --header "Authorization: Bearer $COOLIFY_API_TOKEN" \
+            "$COOLIFY_DEPLOY_WEBHOOK"

@@ -5,11 +5,13 @@ import { useState } from "react";
 import { type TimeBlock } from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
+import { DateField, TimeField } from "@/shared/ui/pickers/PickerFields";
 
 import { zonedDateTimeToIso } from "./AppointmentFlowShell";
 import { SeriesConflictPanel } from "./BlockSeriesForm";
 import {
   formatDate,
+  formatDuration,
   requestError,
   seriesConflicts,
   type SeriesOccurrenceConflict,
@@ -61,7 +63,9 @@ export function OccurrenceActions({
       await getProductServices().calendar.removeBlockOccurrence(block.id);
       onChanged?.(null);
     } catch (caught) {
-      setError(requestError(caught, "Não foi possível remover esta ocorrência."));
+      setError(
+        requestError(caught, "Não foi possível remover esta ocorrência."),
+      );
     } finally {
       setBusy(false);
     }
@@ -182,8 +186,11 @@ export function OccurrenceActions({
           {error}
         </p>
       )}
-      <section aria-labelledby="occurrence-scope-title" className="agenda-detail-section">
-        <p className="eyebrow">{timeBlockKindLabel(block.kind)}</p>
+      <OccurrenceDetails block={block} timezone={timezone} />
+      <section
+        aria-labelledby="occurrence-scope-title"
+        className="agenda-detail-section"
+      >
         <h3 id="occurrence-scope-title">Esta ocorrência</h3>
         <p className="muted">
           Afeta só {formatDate(startParts.date)}; a série continua como está.
@@ -193,25 +200,22 @@ export function OccurrenceActions({
             <div className="agenda-form-grid">
               <label className="field">
                 <span>Data</span>
-                <input
-                  onChange={(event) => setMoveDate(event.target.value)}
-                  type="date"
+                <DateField
+                  onValueChange={(value) => setMoveDate(value)}
                   value={moveDate}
                 />
               </label>
               <label className="field">
                 <span>Início</span>
-                <input
-                  onChange={(event) => setMoveStart(event.target.value)}
-                  type="time"
+                <TimeField
+                  onValueChange={(value) => setMoveStart(value)}
                   value={moveStart}
                 />
               </label>
               <label className="field">
                 <span>Fim</span>
-                <input
-                  onChange={(event) => setMoveEnd(event.target.value)}
-                  type="time"
+                <TimeField
+                  onValueChange={(value) => setMoveEnd(value)}
                   value={moveEnd}
                 />
               </label>
@@ -225,7 +229,11 @@ export function OccurrenceActions({
               >
                 Cancelar
               </Button>
-              <Button loading={busy} onClick={() => void moveOccurrence()} type="button">
+              <Button
+                loading={busy}
+                onClick={() => void moveOccurrence()}
+                type="button"
+              >
                 Confirmar novo horário
               </Button>
             </div>
@@ -253,12 +261,15 @@ export function OccurrenceActions({
       </section>
 
       {block.seriesId && (
-        <section aria-labelledby="series-scope-title" className="agenda-detail-section">
+        <section
+          aria-labelledby="series-scope-title"
+          className="agenda-detail-section"
+        >
           <h3 id="series-scope-title">A série a partir daqui</h3>
           <p className="muted">
             Editar ou remover a partir de {formatDate(startParts.date)} encerra
-            a série atual nesta data e, se editada, cria outra a partir dela —
-            as ocorrências passadas nunca são tocadas.
+            a série atual nesta data e, se editada, cria outra a partir dela. As
+            ocorrências passadas nunca são tocadas.
           </p>
           {editingSeries ? (
             <>
@@ -272,17 +283,15 @@ export function OccurrenceActions({
                 </label>
                 <label className="field">
                   <span>Início</span>
-                  <input
-                    onChange={(event) => setSeriesStart(event.target.value)}
-                    type="time"
+                  <TimeField
+                    onValueChange={(value) => setSeriesStart(value)}
                     value={seriesStart}
                   />
                 </label>
                 <label className="field">
                   <span>Fim</span>
-                  <input
-                    onChange={(event) => setSeriesEnd(event.target.value)}
-                    type="time"
+                  <TimeField
+                    onValueChange={(value) => setSeriesEnd(value)}
                     value={seriesEnd}
                   />
                 </label>
@@ -328,5 +337,122 @@ export function OccurrenceActions({
         </section>
       )}
     </div>
+  );
+}
+
+const WEEKDAYS = [
+  "domingo",
+  "segunda",
+  "terça",
+  "quarta",
+  "quinta",
+  "sexta",
+  "sábado",
+];
+
+/** "Terça, 14 de outubro": o dia local da ocorrência, no fuso da agenda. */
+export function occurrenceDayLabel(date: string): string {
+  const [year = 0, month = 1, day = 1] = date.split("-").map(Number);
+  const value = new Date(Date.UTC(year, month - 1, day, 12));
+  const weekday = WEEKDAYS[value.getUTCDay()] ?? "";
+  const dayMonth = new Intl.DateTimeFormat("pt-BR", {
+    day: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  }).format(value);
+  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}, ${dayMonth}`;
+}
+
+/** "Repete toda terça", "Repete todo sábado" ou "Repete toda semana: segunda e quarta". */
+export function seriesPatternLabel(
+  series: NonNullable<TimeBlock["series"]>,
+): string {
+  const days = series.daysOfWeek
+    .map((day) => WEEKDAYS[day])
+    .filter((day): day is string => Boolean(day));
+  let pattern: string;
+  if (days.length === 1) {
+    const [only = ""] = days;
+    pattern = `Repete ${only === "sábado" || only === "domingo" ? "todo" : "toda"} ${only}`;
+  } else if (days.length === 7) {
+    pattern = "Repete todo dia";
+  } else {
+    const last = days.at(-1) ?? "";
+    pattern = `Repete toda semana: ${days.slice(0, -1).join(", ")} e ${last}`;
+  }
+  if (series.seriesEndDate) {
+    const [, month = "", day = ""] = series.seriesEndDate.split("-");
+    return `${pattern}, até ${day}/${month}`;
+  }
+  if (series.occurrenceCount) {
+    return `${pattern}, ${series.occurrenceCount} vezes`;
+  }
+  return pattern;
+}
+
+/** "11/10 às 18:59", no fuso da agenda. */
+function createdAtLabel(iso: string, timezone?: string | null): string {
+  const parts = zonedDateTimeParts(iso, timezone);
+  const [, month = "", day = ""] = parts.date.split("-");
+  return `${day}/${month} às ${parts.time}`;
+}
+
+/**
+ * Detalhes do bloqueio no topo da folha de ações (pedido de 2026-10-12), no
+ * padrão do detalhe de atendimento A5: rótulo pequeno em caixa alta e o valor
+ * embaixo. Motivo, série e criação só aparecem quando existem; o bloco não
+ * guarda quem o criou, então não há autor.
+ */
+function OccurrenceDetails({
+  block,
+  timezone,
+}: {
+  block: TimeBlock;
+  timezone?: string | null;
+}) {
+  const start = zonedDateTimeParts(block.startAt, timezone);
+  const end = zonedDateTimeParts(block.endAt, timezone);
+  const minutes = Math.round(
+    (new Date(block.endAt).getTime() - new Date(block.startAt).getTime()) /
+      60000,
+  );
+  const kind = timeBlockKindLabel(block.kind);
+  const facts: Array<{ label: string; value: string }> = [
+    {
+      label: "Quando",
+      value: `${occurrenceDayLabel(start.date)} · ${start.time} às ${end.time} (${formatDuration(minutes)})`,
+    },
+  ];
+  if (block.reason?.trim())
+    facts.push({ label: "Motivo", value: block.reason });
+  if (block.series) {
+    facts.push({ label: "Repetição", value: seriesPatternLabel(block.series) });
+  } else if (block.seriesId) {
+    facts.push({ label: "Repetição", value: "Faz parte de uma série" });
+  }
+  if (block.createdAt) {
+    facts.push({
+      label: "Criado em",
+      value: createdAtLabel(block.createdAt, timezone),
+    });
+  }
+  return (
+    <section
+      aria-labelledby="occurrence-details-title"
+      className="agenda-occurrence-details"
+    >
+      <p className="eyebrow">{kind}</p>
+      <h3 className="agenda-occurrence-title" id="occurrence-details-title">
+        {block.title?.trim() || kind}
+      </h3>
+      <dl className="agenda-occurrence-facts">
+        {facts.map((fact) => (
+          <div className="agenda-appt-block" key={fact.label}>
+            <dt className="agenda-appt-label">{fact.label}</dt>
+            <dd className="agenda-appt-text">{fact.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }

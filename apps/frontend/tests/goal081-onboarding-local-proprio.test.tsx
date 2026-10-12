@@ -3,7 +3,9 @@
  * Goal081/WU-01 — Local próprio não trava o onboarding. O dublê de
  * `onboarding.update` aplica a regra do BFF (`resolveBusinessProfileFields`):
  * `ON_SITE` sem endereço, enviado ou já gravado, é recusado com
- * `400 BUSINESS_ADDRESS_REQUIRED` e `details.field: "address"`. A etapa
+ * `400 BUSINESS_ADDRESS_REQUIRED` e `details.field: "address"`; partes de
+ * endereço (`addressParts`) não nulas satisfazem ON_SITE e montam `address`
+ * como o BFF. A etapa
  * `modalidade` com Local próprio não grava e segue para `endereco`; `endereco`
  * grava endereço e modalidades juntos e, sem Local próprio no rascunho, volta
  * para `modalidade` sem gravar.
@@ -15,11 +17,18 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   BffHttpError,
+  type BusinessAddressParts,
   type BusinessModality,
   type OnboardingState,
 } from "@/data";
 import { OnboardingRuntimeProvider } from "@/features/onboarding/OnboardingRuntime";
 import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
+
+import {
+  composedAddress,
+  fillAddress,
+  FLORES_ADDRESS,
+} from "./support/address";
 
 const push = vi.fn();
 const replace = vi.fn();
@@ -43,6 +52,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 
 type StoredBusiness = {
   address: string | null;
+  addressParts: BusinessAddressParts | null;
   category: string;
   modalities: BusinessModality[];
   name: string;
@@ -79,6 +89,7 @@ beforeEach(() => {
   refreshSession.mockResolvedValue(null);
   stored = {
     address: null,
+    addressParts: null,
     category: "Cabelo",
     modalities: [],
     name: "Studio Aurora",
@@ -87,7 +98,18 @@ beforeEach(() => {
   getOnboarding.mockImplementation(async () => stateFrom(stored));
   updateOnboarding.mockImplementation(
     async (patch: { business?: Partial<StoredBusiness> }) => {
-      const next = { ...stored, ...patch.business };
+      const business = patch.business ?? {};
+      const next = { ...stored, ...business };
+      // Como o BFF: partes explícitas substituem e montam `address`; um
+      // `address` solto limpa as partes; chave ausente preserva as duas.
+      if ("addressParts" in business) {
+        next.addressParts = business.addressParts ?? null;
+        next.address = next.addressParts
+          ? composedAddress(next.addressParts)
+          : (business.address ?? null);
+      } else if ("address" in business) {
+        next.addressParts = null;
+      }
       const address = (next.address ?? "").trim();
       if (next.modalities.includes("ON_SITE") && address === "") {
         throw businessRefused();
@@ -121,10 +143,7 @@ describe("Local próprio contra o dublê que aplica a regra do BFF", () => {
 
     // `router.push` troca a página e o provedor, que guarda o rascunho, fica.
     rerender(screens("endereco"));
-    await user.type(
-      await screen.findByLabelText("Endereço do seu espaço"),
-      "Rua das Flores, 100",
-    );
+    await fillAddress(user, FLORES_ADDRESS);
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     await waitFor(() =>
@@ -133,21 +152,23 @@ describe("Local próprio contra o dublê que aplica a regra do BFF", () => {
     expect(updateOnboarding).toHaveBeenCalledTimes(1);
     expect(updateOnboarding).toHaveBeenCalledWith({
       business: {
-        address: "Rua das Flores, 100",
+        addressParts: FLORES_ADDRESS,
         category: "Cabelo",
         modalities: ["ON_SITE"],
         name: "Studio Aurora",
         timezone: "America/Sao_Paulo",
       },
     });
+    // O dublê aceitou (partes não nulas satisfazem ON_SITE) e montou o texto.
     await expect(
       updateOnboarding.mock.results[0]?.value,
     ).resolves.toBeDefined();
     expect(stored.modalities).toEqual(["ON_SITE"]);
-    expect(stored.address).toBe("Rua das Flores, 100");
-    expect(
-      screen.queryByText("Informe o endereço do seu espaço."),
-    ).toBeNull();
+    expect(stored.addressParts).toEqual(FLORES_ADDRESS);
+    expect(stored.address).toBe(
+      "Rua das Flores, 100 - Centro, São Paulo - SP, CEP 01310-100",
+    );
+    expect(screen.queryByText("Informe o CEP com 8 números.")).toBeNull();
   });
 
   test("voltar de endereco para modalidade mantém Local próprio marcado", async () => {
@@ -161,7 +182,7 @@ describe("Local próprio contra o dublê que aplica a regra do BFF", () => {
     );
 
     rerender(screens("endereco"));
-    await screen.findByLabelText("Endereço do seu espaço");
+    await screen.findByLabelText("CEP");
     rerender(screens("modalidade"));
 
     expect(
@@ -196,10 +217,7 @@ describe("endereco sem Local próprio no rascunho", () => {
     const user = userEvent.setup();
     render(screens("endereco"));
 
-    await user.type(
-      await screen.findByLabelText("Endereço do seu espaço"),
-      "Rua das Flores, 100",
-    );
+    await fillAddress(user, FLORES_ADDRESS);
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     await waitFor(() =>
@@ -208,5 +226,6 @@ describe("endereco sem Local próprio no rascunho", () => {
     expect(updateOnboarding).not.toHaveBeenCalled();
     expect(stored.modalities).toEqual([]);
     expect(stored.address).toBeNull();
+    expect(stored.addressParts).toBeNull();
   });
 });

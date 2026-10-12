@@ -23,7 +23,7 @@ import { VOCABULARIO_DE_ESPERA } from "../support/vocabulario-de-espera.js";
  */
 
 const COMMITMENT_NOT_RECORDED =
-  "Ainda nao ficou registrado na agenda. Posso confirmar agora pra voce?";
+  "Ainda não ficou registrado na agenda. Posso confirmar agora pra você?";
 
 describe("vocabulario de afirmacao de efeito (QA A-01)", () => {
   it("e um conjunto fechado e congelado, por tipo, ja escrito na forma normalizada", () => {

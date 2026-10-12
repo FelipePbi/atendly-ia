@@ -90,7 +90,7 @@ function NoWhatsappState() {
         <div className="conversation-no-whatsapp-copy">
           <h2>Conecte seu WhatsApp para ver suas conversas aqui.</h2>
           <p>
-            Elas ficam organizadas em Comercial, Não classificadas e Pessoal — e
+            Elas ficam organizadas em Comercial, Não classificadas e Pessoal, e
             a IA passa a atender seus clientes. Você continua usando o WhatsApp
             normalmente.
           </p>

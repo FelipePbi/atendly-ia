@@ -430,7 +430,7 @@ describe("audio sem transcricao nao inventa conteudo", () => {
     expect(subject.automation.prepareGraphTurn).not.toHaveBeenCalled();
     expect(subject.automation.invokeGraphAgent).not.toHaveBeenCalled();
     const sent = subject.provider.sendText.mock.calls[0][0].text as string;
-    expect(sent).toContain("Recebi seu audio");
+    expect(sent).toContain("Recebi seu áudio");
     expect(sent).toContain("texto");
   });
 

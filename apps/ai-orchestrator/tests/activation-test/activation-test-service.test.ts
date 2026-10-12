@@ -161,6 +161,11 @@ class AiDouble {
   /** Ferramentas que a IA deixa de chamar, para provar cada marco isolado. */
   skipTools = new Set<string>();
   appointmentId = "appointment-1";
+  /**
+   * Como a IA de verdade: `prepare` ao ouvir "reservar" e pede confirmacao;
+   * so cria o agendamento (`confirm`) quando o cliente confirma.
+   */
+  twoPhase = false;
   /** Estado de entrega da resposta da IA pelo canal do tenant. */
   replyDelivery: string = "SENT";
   private sequence = 0;
@@ -204,7 +209,31 @@ class AiDouble {
     let reply = "Certo!";
 
     // A ordem importa: "pode reservar esse horario" tambem contem "horario".
-    if (lowered.includes("reservar")) {
+    // No modo de duas fases o resultado vem no envelope real da tool
+    // (`{ ok, data }`, StructuredToolResult), como o que fica gravado.
+    if (this.twoPhase && lowered.includes("confirmar")) {
+      reply = `Confirmado para ${SLOT.date} as ${SLOT.startTime}.`;
+      this.callTool(
+        conversationId,
+        "create_appointment",
+        { ok: true, data: { appointment: { id: this.appointmentId } } },
+        toolCalls,
+      );
+    } else if (this.twoPhase && lowered.includes("reservar")) {
+      reply = `Posso confirmar ${SLOT.date} as ${SLOT.startTime}?`;
+      this.callTool(
+        conversationId,
+        "create_appointment",
+        {
+          ok: true,
+          data: {
+            hold: { id: "hold-1" },
+            pendingAction: { type: "schedule", ...SLOT },
+          },
+        },
+        toolCalls,
+      );
+    } else if (lowered.includes("reservar")) {
       reply = `Confirmado para ${SLOT.date} as ${SLOT.startTime}.`;
       this.callTool(
         conversationId,
@@ -215,7 +244,9 @@ class AiDouble {
     } else if (lowered.includes("custa")) {
       reply = `${SERVICE.name}: R$ ${SERVICE.price?.toFixed(2)}.`;
       this.callTool(conversationId, "list_services", { services: [SERVICE] }, toolCalls);
-    } else if (lowered.includes("horario")) {
+    } else if (
+      lowered.normalize("NFD").replace(/\p{Diacritic}/gu, "").includes("horario")
+    ) {
       reply = `Tenho ${SLOT.date} as ${SLOT.startTime}. Posso reservar?`;
       this.callTool(
         conversationId,
@@ -395,8 +426,11 @@ describe("execucao do teste real: caminho feliz", () => {
     // nela, e as respostas da conversa sao as que ela gravou.
     expect(ai.deliveries).toEqual([
       `Oi! Quanto custa ${SERVICE.name}?`,
-      "Otimo. Qual o proximo horario disponivel?",
-      "Perfeito, pode reservar esse horario.",
+      "Ótimo. Qual o próximo horário disponível?",
+      // O cliente simulado diz qual horario escolheu, o primeiro que a IA
+      // consultou: "pode reservar" sozinho nao escolhe entre varias opcoes
+      // (validacao de 2026-10-11).
+      `Perfeito, pode reservar às ${Number(SLOT.startTime.slice(0, 2))}h${SLOT.startTime.slice(3) === "00" ? "" : SLOT.startTime.slice(3)}.`,
     ]);
   });
 
@@ -879,6 +913,25 @@ describe("o codigo da falha nomeia a causa real", () => {
     expect(failed?.failureCode).not.toBe(
       ACTIVATION_TEST_REFUSALS.NO_AVAILABILITY,
     );
+  });
+
+  it("IA que prepara e pede confirmacao: o cliente simulado confirma e o agendamento vale", async () => {
+    const runs = new InMemoryActivationTestRuns();
+    const ai = new AiDouble(runs);
+    ai.twoPhase = true;
+    const { service } = build({ ai, runs });
+
+    const started = await service.start(startInput);
+    const done = await service.execute({
+      tenantId: TENANT,
+      runId: started.id,
+      userId: "user-1",
+      requestId: "request-1",
+    });
+
+    expect(done?.failureCode ?? null).toBeNull();
+    expect(done?.appointmentId).toBe("appointment-1");
+    expect(ai.deliveries).toContain("Sim, pode confirmar.");
   });
 
   it("nenhum codigo de falha da execucao vira 500", async () => {

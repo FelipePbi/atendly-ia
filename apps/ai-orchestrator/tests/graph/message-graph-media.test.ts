@@ -284,7 +284,7 @@ describe("video: aparece sem interpretacao", () => {
     ).resolves.toMatchObject({ action: "unsupported_message" });
 
     expect(subject.provider.sendText).toHaveBeenCalledWith(
-      expect.objectContaining({ text: expect.stringContaining("video") }),
+      expect.objectContaining({ text: expect.stringContaining("vídeo") }),
     );
     expect(subject.automation.prepareGraphTurn).not.toHaveBeenCalled();
     expect(subject.handoff.pauseIndefinitely).not.toHaveBeenCalled();
@@ -339,7 +339,7 @@ describe("gif: video que nao decide nada", () => {
     ).resolves.toMatchObject({ action: "unsupported_message" });
 
     expect(subject.provider.sendText).toHaveBeenCalledWith(
-      expect.objectContaining({ text: expect.stringContaining("video") }),
+      expect.objectContaining({ text: expect.stringContaining("vídeo") }),
     );
     expect(subject.sessions.recordContactMessage).toHaveBeenCalled();
   });

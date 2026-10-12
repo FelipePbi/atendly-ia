@@ -24,6 +24,7 @@ import {
   notImportedSentence,
   PENDING_ITEMS_READ_FAILED,
   PENDING_PANEL_NOTE,
+  PENDING_PANEL_NOTE_FAILED_ONLY,
   pendingMoreLabel,
   pendingNotProcessedLabel,
   pendingPanelHeading,
@@ -135,10 +136,15 @@ function executionAdvanced(
  * A tela em andamento (2.I7) não conta o que ainda não foi processado: a linha
  * já diz isso pelo estado e pela barra.
  */
-function outstandingDetail(category: ProgressCategory, includePending = true): string {
+function outstandingDetail(
+  category: ProgressCategory,
+  includePending = true,
+): string {
   const parts: string[] = [];
   if (includePending && category.pending > 0) {
-    parts.push(`${importCountFormatter.format(category.pending)} ainda não processados`);
+    parts.push(
+      `${importCountFormatter.format(category.pending)} ainda não processados`,
+    );
   }
   if (category.needsReview > 0) {
     parts.push(
@@ -146,13 +152,17 @@ function outstandingDetail(category: ProgressCategory, includePending = true): s
     );
   }
   if (category.failed > 0) {
-    parts.push(`${importCountFormatter.format(category.failed)} não importados`);
+    parts.push(
+      `${importCountFormatter.format(category.failed)} não importados`,
+    );
   }
   return parts.join(" · ");
 }
 
 function orderedCategories(categories: ProgressCategory[]): ProgressCategory[] {
-  const byCategory = new Map(categories.map((entry) => [entry.category, entry]));
+  const byCategory = new Map(
+    categories.map((entry) => [entry.category, entry]),
+  );
   return CATEGORY_ORDER.map((category) => byCategory.get(category)).filter(
     (entry): entry is ProgressCategory => entry !== undefined,
   );
@@ -220,7 +230,9 @@ function ImportRunningBody({
         >
           <span
             className="imports-running-fill"
-            style={{ width: total > 0 ? `${(processed / total) * 100}%` : "0%" }}
+            style={{
+              width: total > 0 ? `${(processed / total) * 100}%` : "0%",
+            }}
           />
         </div>
         <p aria-live="polite" className="sr-only">
@@ -259,7 +271,10 @@ function ImportRunningBody({
               key={category.category}
             >
               {state === "done" && (
-                <span aria-hidden="true" className="imports-running-mark is-done">
+                <span
+                  aria-hidden="true"
+                  className="imports-running-mark is-done"
+                >
                   <svg
                     fill="none"
                     height="13"
@@ -275,13 +290,19 @@ function ImportRunningBody({
                 </span>
               )}
               {state === "active" && (
-                <span aria-hidden="true" className="imports-running-mark is-active">
+                <span
+                  aria-hidden="true"
+                  className="imports-running-mark is-active"
+                >
                   <span className="imports-running-halo" />
                   <span className="imports-running-dot" />
                 </span>
               )}
               {state === "queued" && (
-                <span aria-hidden="true" className="imports-running-mark is-queued" />
+                <span
+                  aria-hidden="true"
+                  className="imports-running-mark is-queued"
+                />
               )}
               {state === "active" ? (
                 <div className="imports-running-body">
@@ -299,7 +320,9 @@ function ImportRunningBody({
                   <span aria-hidden="true" className="imports-running-bar">
                     <span
                       className="imports-running-bar-fill"
-                      style={{ width: `${(categoryProcessed / categoryTotal) * 100}%` }}
+                      style={{
+                        width: `${(categoryProcessed / categoryTotal) * 100}%`,
+                      }}
                     />
                   </span>
                 </div>
@@ -324,7 +347,11 @@ function ImportRunningBody({
       </ul>
       {needsReview > 0 && (
         <div className="imports-running-footer">
-          <button className="imports-text-action" type="button" onClick={onReview}>
+          <button
+            className="imports-text-action"
+            type="button"
+            onClick={onReview}
+          >
             Revisar itens
           </button>
         </div>
@@ -361,15 +388,19 @@ function ImportPendingBody({
   counts,
   onCorrect,
   read,
+  sessionId,
 }: {
   categories: ProgressCategory[];
   counts: ImportProgress["counts"];
   onCorrect: (category: ImportCategory) => void;
+  sessionId: string;
   /** `null` enquanto a leitura dos itens em revisão não terminou. */
   read: ReviewRead | null;
 }) {
   const outstanding = outstandingOf(counts);
-  const reviewCategories = categories.filter((category) => category.needsReview > 0);
+  const reviewCategories = categories.filter(
+    (category) => category.needsReview > 0,
+  );
   const failedCategories = categories.filter((category) => category.failed > 0);
   const reading = counts.needsReview > 0 && read === null;
   const shown = read && !read.failed ? read.items : [];
@@ -438,8 +469,7 @@ function ImportPendingBody({
                       type="button"
                       onClick={() => onCorrect(category)}
                     >
-                      {copy.action}{" "}
-                      <span className="sr-only">{name}</span>
+                      {copy.action} <span className="sr-only">{name}</span>
                     </button>
                   </li>
                 );
@@ -461,7 +491,7 @@ function ImportPendingBody({
                 ))}
               {failedCategories.map((category) => (
                 <li
-                  className="imports-pending-row"
+                  className="imports-pending-row is-failed"
                   key={`failed-${category.category}`}
                 >
                   <div className="imports-pending-who">
@@ -480,6 +510,11 @@ function ImportPendingBody({
                       </span>
                     ))}
                   </div>
+                  <FailedItems
+                    category={category.category}
+                    failed={category.failed}
+                    sessionId={sessionId}
+                  />
                 </li>
               ))}
               {counts.pending > 0 && (
@@ -499,10 +534,120 @@ function ImportPendingBody({
               </p>
             )}
           </section>
-          <p className="imports-pending-note">{PENDING_PANEL_NOTE}</p>
+          <p className="imports-pending-note">
+            {counts.needsReview === 0 && counts.pending === 0
+              ? PENDING_PANEL_NOTE_FAILED_ONLY
+              : PENDING_PANEL_NOTE}
+          </p>
         </>
       )}
     </div>
+  );
+}
+
+const FAILED_ITEMS_PAGE = 50;
+
+/**
+ * Os registros que não entraram, sob a linha da categoria (validação de
+ * 2026-10-11): a pessoa via só a contagem e o motivo, sem saber quais eram.
+ * Lê sob demanda, 50 por vez, só os itens `FAILED` da categoria.
+ */
+function FailedItems({
+  category,
+  failed,
+  sessionId,
+}: {
+  category: ImportCategory;
+  failed: number;
+  sessionId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<ImportItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const listId = `failed-items-${category}`;
+
+  async function load(offset: number) {
+    setLoading(true);
+    setError(false);
+    try {
+      const page = await getProductServices().migration.listImportItems(
+        sessionId,
+        category,
+        { limit: FAILED_ITEMS_PAGE, offset, status: "FAILED" },
+      );
+      setItems((current) => [...current, ...page.items]);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <button
+        aria-controls={listId}
+        aria-expanded={open}
+        className="imports-pending-action imports-failed-toggle"
+        type="button"
+        onClick={() => {
+          const next = !open;
+          setOpen(next);
+          if (next && items.length === 0 && !loading) void load(0);
+        }}
+      >
+        {open
+          ? "Ocultar registros"
+          : failed === 1
+            ? "Ver qual registro ficou de fora"
+            : `Ver quais registros ficaram de fora`}
+      </button>
+      {open && (
+        <div
+          aria-busy={loading || undefined}
+          className="imports-failed-items"
+          id={listId}
+        >
+          <ul>
+            {items.map((item) => (
+              <li key={item.id}>
+                <span className="imports-pending-name">
+                  {item.label?.trim() || "Sem nome"}
+                </span>
+                <span className="imports-pending-why">
+                  {failedReasonLabel(item.reasonCode ?? "")}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {loading && (
+            <p className="imports-pending-why">Carregando registros…</p>
+          )}
+          {error && (
+            <p className="imports-pending-why" role="status">
+              Não foi possível carregar os registros.{" "}
+              <button
+                className="imports-pending-action"
+                type="button"
+                onClick={() => void load(items.length)}
+              >
+                Tentar de novo
+              </button>
+            </p>
+          )}
+          {!loading && !error && items.length < failed && (
+            <button
+              className="imports-pending-action"
+              type="button"
+              onClick={() => void load(items.length)}
+            >
+              Ver mais
+            </button>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -529,7 +674,9 @@ export function ImportRunScreen({
   const [readToken, setReadToken] = useState(0);
   const [reviewing, setReviewing] = useState(false);
   // A categoria que a ação de um item do 2.I8 abre; `null` abre a lista.
-  const [reviewCategory, setReviewCategory] = useState<ImportCategory | null>(null);
+  const [reviewCategory, setReviewCategory] = useState<ImportCategory | null>(
+    null,
+  );
   const [reviewRead, setReviewRead] = useState<ReviewRead | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
@@ -543,9 +690,10 @@ export function ImportRunScreen({
   // pendências é outro corpo (`{acceptPending:true}` no lugar de `{}`), e o
   // domínio inclui esse campo no hash da idempotência: reusar a chave faria o
   // backend recusar por conflito e deixaria a decisão irreversível sem saída.
-  const completionAttempt = useRef<{ acceptPending: boolean; key: string } | null>(
-    null,
-  );
+  const completionAttempt = useRef<{
+    acceptPending: boolean;
+    key: string;
+  } | null>(null);
   // O guarda de dupla submissão é `ref`, não estado: dois cliques no mesmo
   // tick não esperam por re-render, e concluir duas vezes é irreversível.
   const submitting = useRef(false);
@@ -616,7 +764,10 @@ export function ImportRunScreen({
           failed: false,
           items: pages
             .flatMap((page, index) =>
-              page.items.map((item) => ({ category: targets[index].category, item })),
+              page.items.map((item) => ({
+                category: targets[index].category,
+                item,
+              })),
             )
             .slice(0, PENDING_ITEMS_LIMIT),
           progress: current,
@@ -675,7 +826,9 @@ export function ImportRunScreen({
     } catch (caught: unknown) {
       submitting.current = false;
       setCompleting(false);
-      if (schedulingRefusalCode(caught) === "IMPORT_PENDING_ACCEPTANCE_REQUIRED") {
+      if (
+        schedulingRefusalCode(caught) === "IMPORT_PENDING_ACCEPTANCE_REQUIRED"
+      ) {
         // O banco viu pendência que a última leitura não tinha. A resposta é
         // pedir a confirmação ao negócio, nunca reenviar `acceptPending` por
         // conta própria.
@@ -778,12 +931,17 @@ export function ImportRunScreen({
     );
   }
 
-  const startedAt = formatImportDateTime(progress.startedAt ?? session.startedAt);
+  const startedAt = formatImportDateTime(
+    progress.startedAt ?? session.startedAt,
+  );
   // Interrompida: o lease sumiu sem o trabalho terminar (Goal061 §6). Não é
   // mais "em andamento" de fato, mesmo que `status` ainda diga `EXECUTING`.
   const interrupted = progress.interrupted;
-  const causeMessage = progress.lastError ? workErrorLabel(progress.lastError.code) : null;
-  const executing = (progress.status === "EXECUTING" && !interrupted) || retrying;
+  const causeMessage = progress.lastError
+    ? workErrorLabel(progress.lastError.code)
+    : null;
+  const executing =
+    (progress.status === "EXECUTING" && !interrupted) || retrying;
   const terminal = TERMINAL_STATUSES.has(progress.status);
   const completable = COMPLETABLE_STATUSES.has(progress.status) && !executing;
   const outstanding = outstandingOf(progress.counts);
@@ -861,6 +1019,7 @@ export function ImportRunScreen({
               setReviewing(true);
             }}
             read={pendingRead}
+            sessionId={session.sessionId}
           />
         ) : running ? (
           <ImportRunningBody
@@ -880,7 +1039,9 @@ export function ImportRunScreen({
                 <h2>{STATUS_LABELS[progress.status]}</h2>
                 <p>
                   Minha Agenda
-                  {session.sourceAccountLabel ? ` · ${session.sourceAccountLabel}` : ""}
+                  {session.sourceAccountLabel
+                    ? ` · ${session.sourceAccountLabel}`
+                    : ""}
                   {startedAt ? ` · desde ${startedAt}` : ""}
                 </p>
               </div>
@@ -895,13 +1056,16 @@ export function ImportRunScreen({
               >
                 <span
                   className="imports-progress-fill"
-                  style={{ width: total > 0 ? `${(processed / total) * 100}%` : "0%" }}
+                  style={{
+                    width: total > 0 ? `${(processed / total) * 100}%` : "0%",
+                  }}
                 />
               </div>
               <p aria-live="polite" className="imports-progress-summary">
                 {importCountFormatter.format(processed)} de{" "}
                 {importCountFormatter.format(total)} registros processados ·{" "}
-                {importCountFormatter.format(progress.counts.imported)} importados
+                {importCountFormatter.format(progress.counts.imported)}{" "}
+                importados
               </p>
               {progressError && (
                 <p className="imports-note" role="status">
@@ -930,15 +1094,16 @@ export function ImportRunScreen({
                       <div>
                         <strong>{CATEGORY_LABELS[category.category]}</strong>
                         <small>{outstandingDetail(category)}</small>
-                        {category.failed > 0 && category.failedReasons.length > 0 && (
-                          <ul className="imports-failed-reasons">
-                            {category.failedReasons.map((reason) => (
-                              <li key={reason.reasonCode}>
-                                {`${failedReasonLabel(reason.reasonCode)} (${importCountFormatter.format(reason.count)})`}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
+                        {category.failed > 0 &&
+                          category.failedReasons.length > 0 && (
+                            <ul className="imports-failed-reasons">
+                              {category.failedReasons.map((reason) => (
+                                <li key={reason.reasonCode}>
+                                  {`${failedReasonLabel(reason.reasonCode)} (${importCountFormatter.format(reason.count)})`}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                       </div>
                       <span className="imports-row-count">
                         {importCountFormatter.format(outstandingOf(category))}
@@ -1019,7 +1184,9 @@ export function ImportRunScreen({
               {/* Quem está ocupada é a confirmação, quando ela está aberta:
                   dois botões dizendo "Concluindo..." ao mesmo tempo não dizem
                   qual deles é a decisão. */}
-              {completing && !confirmOpen ? "Concluindo..." : "Concluir importação"}
+              {completing && !confirmOpen
+                ? "Concluindo..."
+                : "Concluir importação"}
             </button>
             {pendingView && progress.counts.needsReview > 0 && (
               <button
@@ -1033,7 +1200,12 @@ export function ImportRunScreen({
           </div>
         )}
 
-        <ReplaceAccountZone onReplace={onReplaceAccount} />
+        {/* Em andamento e na tela parada (quase concluída) a troca de conta
+            sai da tela (validação de 2026-10-11); fica nos estados
+            interrompido, terminal e de continuação. */}
+        {!running && !pendingView && (
+          <ReplaceAccountZone onReplace={onReplaceAccount} />
+        )}
       </ImportsPage>
 
       <Dialog

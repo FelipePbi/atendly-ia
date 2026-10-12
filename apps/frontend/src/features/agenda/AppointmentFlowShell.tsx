@@ -1,17 +1,21 @@
 "use client";
 
+import clsx from "clsx";
 import Link from "next/link";
-import { type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 import { type CalendarState } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { PushedBar } from "@/shared/layout/PushedBar";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
+import { useSplashPresenting } from "@/shared/motion/splash";
+import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import { StatePanel } from "@/shared/ui/States";
 
 import { AgendaLoading } from "./AgendaBoard";
 import { AgendaDayColumn } from "./AgendaDayColumn";
+import { recalledAppointment } from "./agendaMemory";
 import { isoDate } from "./occupancy";
 
 /**
@@ -26,6 +30,7 @@ import { isoDate } from "./occupancy";
 export type AppointmentRoute = { date: string | null; id?: string };
 
 export function AppointmentFlowShell({
+  agendaBar = true,
   appointmentRoute,
   backHref = "/agenda",
   bare = false,
@@ -36,6 +41,12 @@ export function AppointmentFlowShell({
   loading,
   title,
 }: {
+  /**
+   * Barra da Agenda acima da coluna do Dia, de 1024 px em diante. Criar,
+   * remarcar e cancelar a desligam (D-170, pedido de 2026-10-12): a pessoa
+   * já está num fluxo, e só a barra própria dele ("×" ou voltar) fica.
+   */
+  agendaBar?: boolean;
   appointmentRoute?: AppointmentRoute;
   backHref?: string;
   /** A tela traz a própria barra (`PushedBar`) e cuida do carregamento. */
@@ -49,6 +60,15 @@ export function AppointmentFlowShell({
   title: string;
 }) {
   const wide = useWideLayout();
+  // Esqueleto só se a carga passar de ~150 ms (D-168): o que chega antes
+  // entra direto, sem piscar.
+  const showSkeleton = useDeferredLoading(loading);
+  // O dia do agendamento que a Agenda já leu nesta aba posiciona a coluna
+  // enquanto a tela da rota ainda lê o seu (D-167).
+  const routeId = appointmentRoute?.id;
+  const [rememberedDate] = useState(() =>
+    routeId ? (recalledAppointment(routeId)?.date ?? null) : null,
+  );
   // Uma chamada por árvore (D-030, D-031, D-103 (f)): a coluna ao lado não
   // configura a casca.
   useShellConfig({
@@ -58,10 +78,17 @@ export function AppointmentFlowShell({
     ...(appointmentRoute ? { pushed: true } : {}),
     title,
   });
+  // Depois do splash da marca a tela se apresenta (D-168, revisão de
+  // 2026-10-12): com a coluna ao lado, quem apresenta é a divisão
+  // (`AgendaDayColumn`); sem ela, a própria página — barra, depois o corpo.
+  const presenting = useSplashPresenting() && !appointmentRoute;
   const page = bare ? (
     children
   ) : closeLabel ? (
-    <div className="agenda-new-screen">
+    <div
+      className={clsx("agenda-new-screen", presenting && "is-presenting")}
+      data-presenting={presenting ? "true" : undefined}
+    >
       <PushedBar
         backHref={backHref}
         backIcon="x"
@@ -69,11 +96,14 @@ export function AppointmentFlowShell({
         title={title}
       />
       <div className="agenda-new-screen-body">
-        {loading ? <AgendaLoading /> : children}
+        {loading ? showSkeleton && <AgendaLoading /> : children}
       </div>
     </div>
   ) : (
-    <div className="agenda-flow-page">
+    <div
+      className={clsx("agenda-flow-page", presenting && "is-presenting")}
+      data-presenting={presenting ? "true" : undefined}
+    >
       <header className="agenda-flow-header">
         <Link className="agenda-flow-back" href={backHref}>
           <Icon name="chevron-left" /> Voltar
@@ -81,16 +111,19 @@ export function AppointmentFlowShell({
         <h1>{title}</h1>
         {description && <p>{description}</p>}
       </header>
-      {loading ? <AgendaLoading /> : children}
+      {loading ? showSkeleton && <AgendaLoading /> : children}
     </div>
   );
   if (!appointmentRoute) return page;
   return (
     <AgendaDayColumn
       appointmentId={appointmentRoute.id}
+      bar={agendaBar}
       calendar={calendar}
       date={
-        appointmentRoute.date ?? (loading ? null : isoDate(new Date()))
+        appointmentRoute.date ??
+        rememberedDate ??
+        (loading ? null : isoDate(new Date()))
       }
       panelFirst={Boolean(closeLabel)}
       split={wide}
@@ -114,7 +147,13 @@ export function ReadOnlyState({ operation }: { operation: string }) {
   );
 }
 
-export function Summary({ children, title }: { children: ReactNode; title: string }) {
+export function Summary({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title: string;
+}) {
   return (
     <aside className="agenda-summary-card">
       <h2>{title}</h2>
@@ -139,7 +178,6 @@ export function formatMoney(value: number | null): string {
     currency: "BRL",
   }).format(value);
 }
-
 
 export function zonedDateTimeToIso(
   date: string,

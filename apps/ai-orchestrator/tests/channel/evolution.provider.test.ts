@@ -67,6 +67,31 @@ describe("EvolutionProvider", () => {
     });
   });
 
+  it("pede o 'digitando…' pelo campo delay so quando typingDelayMs vem", async () => {
+    vi.stubEnv("EVOLUTION_BASE_URL", "http://evolution-go:8080/");
+    vi.stubEnv("EVOLUTION_SEND_TEXT_PATH", "/send/text");
+    vi.resetModules();
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ messageId: "m" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { EvolutionProvider } =
+      await import("../../src/modules/channel/adapters/evolution/EvolutionProvider.js");
+    const provider = new EvolutionProvider(undefined, "instance-token", "instance-1");
+
+    await provider.sendText({ to: "5511999999999", text: "a", typingDelayMs: 1500 });
+    await provider.sendText({ to: "5511999999999", text: "b" });
+
+    const bodies = fetchMock.mock.calls.map((call) =>
+      JSON.parse((call as unknown as [string, { body: string }])[1].body),
+    );
+    expect(bodies[0]).toMatchObject({ text: "a", delay: 1500 });
+    expect(bodies[1]).not.toHaveProperty("delay");
+  });
+
   it("extracts message ids from nested Evolution Go responses", async () => {
     vi.stubEnv("EVOLUTION_BASE_URL", "http://evolution-go:8080");
     vi.stubEnv("EVOLUTION_API_KEY", "global-key");

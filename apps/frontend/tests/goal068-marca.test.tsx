@@ -18,7 +18,7 @@ describe("Brand — marca v4", () => {
   test("renderiza svg aria-hidden com os três traços do Marca.dc.html e stroke=currentColor", () => {
     render(<Brand />);
 
-    const link = screen.getByRole("link", { name: "Avenly — Início" });
+    const link = screen.getByRole("link", { name: "Avenly, Início" });
     const svg = link.querySelector("svg.brand-mark");
 
     expect(svg).not.toBeNull();
@@ -42,7 +42,7 @@ describe("Brand — marca v4", () => {
   test("link mantém apenas um elemento .brand-mark, sem span de caixa", () => {
     render(<Brand />);
 
-    const link = screen.getByRole("link", { name: "Avenly — Início" });
+    const link = screen.getByRole("link", { name: "Avenly, Início" });
     const marks = link.querySelectorAll(".brand-mark");
 
     expect(marks).toHaveLength(1);

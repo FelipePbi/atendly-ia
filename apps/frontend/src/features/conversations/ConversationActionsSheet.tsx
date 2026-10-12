@@ -1,9 +1,19 @@
 "use client";
 
 import clsx from "clsx";
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 
 import type { SessionCategory } from "@/data";
+import { type SheetClose, SheetCloseContext } from "@/shared/motion/sheetClose";
+import { runViewTransition } from "@/shared/motion/viewTransition";
 
 export type CategoryWriteScope = "CONVERSATION" | "CONTACT";
 
@@ -91,6 +101,21 @@ export function ChatSheetShell({
     onCloseRef.current = onClose;
   }, [onClose]);
 
+  // Fechar é sair em 160 ms (pedido do usuário, 2026-10-12): o `onClose` roda
+  // numa View Transition e `avenly-motion.css` anima a foto da folha saindo.
+  // Sem a API, ou com movimento reduzido, fecha na hora como antes. O que
+  // vier em `after` (a data escolhida no calendário, por exemplo) muda a tela
+  // no mesmo quadro em que a folha some.
+  const close = useCallback<SheetClose>((after) => {
+    void runViewTransition(
+      () => {
+        onCloseRef.current();
+        after?.();
+      },
+      { types: ["sheet-close"] },
+    );
+  }, []);
+
   useEffect(() => {
     const previousFocus =
       document.activeElement instanceof HTMLElement
@@ -104,7 +129,7 @@ export function ChatSheetShell({
     document.body.classList.add("has-overlay");
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        onCloseRef.current();
+        close();
         return;
       }
       if (event.key !== "Tab" || !panel) return;
@@ -125,35 +150,42 @@ export function ChatSheetShell({
       document.removeEventListener("keydown", handleKeyDown);
       previousFocus?.focus();
     };
-  }, []);
+  }, [close]);
 
-  return (
-    <div
-      className="chat-sheet-wrap"
-      onMouseDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        // Sem isto o foco devolvido ao abrir é perdido pelo padrão do mousedown.
-        event.preventDefault();
-        onClose();
-      }}
-      role="presentation"
-    >
-      <section
-        aria-labelledby={titleId}
-        aria-modal="true"
-        className={clsx("chat-sheet", className)}
-        ref={panelRef}
-        role="dialog"
+  // A folha vai para o `body` (bug de 2026-10-12): dentro da página ela
+  // herdava o contexto de empilhamento do invólucro de transição
+  // (`.motion-page`, com `view-transition-name`), e a barra inferior do app
+  // (z-index 50, irmã do `main`) a cobria apesar do z-index de diálogo.
+  return createPortal(
+    <SheetCloseContext.Provider value={close}>
+      <div
+        className="chat-sheet-wrap"
+        onMouseDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          // Sem isto o foco devolvido ao abrir é perdido pelo padrão do mousedown.
+          event.preventDefault();
+          close();
+        }}
+        role="presentation"
       >
-        {!visibleTitleId && (
-          <h2 className="sr-only" id={titleId}>
-            {title}
-          </h2>
-        )}
-        <div aria-hidden="true" className="chat-sheet-handle" />
-        {children}
-      </section>
-    </div>
+        <section
+          aria-labelledby={titleId}
+          aria-modal="true"
+          className={clsx("chat-sheet", className)}
+          ref={panelRef}
+          role="dialog"
+        >
+          {!visibleTitleId && (
+            <h2 className="sr-only" id={titleId}>
+              {title}
+            </h2>
+          )}
+          <div aria-hidden="true" className="chat-sheet-handle" />
+          {children}
+        </section>
+      </div>
+    </SheetCloseContext.Provider>,
+    document.body,
   );
 }
 

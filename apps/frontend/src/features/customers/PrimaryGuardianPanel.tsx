@@ -118,14 +118,11 @@ export function PrimaryGuardianPanel({
     setBusy(true);
     setError(null);
     try {
-      const result = await getProductServices().customers.clearPrimaryGuardian(
-        customerId,
-      );
+      const result =
+        await getProductServices().customers.clearPrimaryGuardian(customerId);
       onChange(result && "deleted" in result ? null : result);
     } catch (caught: unknown) {
-      setError(
-        requestError(caught, "Não foi possível remover o responsável."),
-      );
+      setError(requestError(caught, "Não foi possível remover o responsável."));
     } finally {
       setBusy(false);
     }

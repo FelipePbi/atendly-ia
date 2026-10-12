@@ -28,8 +28,14 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
   }),
 }));
 
+const refreshStatus = vi.fn();
+
 vi.mock("@/shared/runtime/systemStatus", () => ({
-  useSystemStatus: () => ({ aiView: "unknown", whatsappView: "unknown" }),
+  useSystemStatus: () => ({
+    aiView: "unknown",
+    refresh: refreshStatus,
+    whatsappView: "unknown",
+  }),
 }));
 
 function notificationFixture(overrides: Partial<Notification> = {}): Notification {

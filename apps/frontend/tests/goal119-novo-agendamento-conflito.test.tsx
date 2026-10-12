@@ -27,33 +27,38 @@ import { AppointmentForm } from "@/features/agenda/AppointmentForm";
 import { RescheduleFlow } from "@/features/agenda/RescheduleFlow";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
+import { chooseManualTime } from "./support/pickers";
+
 const replace = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace }),
 }));
 
-const createAppointment = vi.fn<
-  (
-    input: CreateAppointmentInput,
-    idempotencyKey: string,
-    signal?: AbortSignal,
-  ) => Promise<Appointment>
->();
-const createHold = vi.fn<
-  (
-    input: CreateHoldInput,
-    idempotencyKey: string,
-    signal?: AbortSignal,
-  ) => Promise<AppointmentHold>
->();
+const createAppointment =
+  vi.fn<
+    (
+      input: CreateAppointmentInput,
+      idempotencyKey: string,
+      signal?: AbortSignal,
+    ) => Promise<Appointment>
+  >();
+const createHold =
+  vi.fn<
+    (
+      input: CreateHoldInput,
+      idempotencyKey: string,
+      signal?: AbortSignal,
+    ) => Promise<AppointmentHold>
+  >();
 const getAppointment = vi.fn();
-const getAvailability = vi.fn<
-  (
-    query: AvailabilityQuery,
-    signal?: AbortSignal,
-  ) => Promise<AvailabilitySlot[]>
->();
+const getAvailability =
+  vi.fn<
+    (
+      query: AvailabilityQuery,
+      signal?: AbortSignal,
+    ) => Promise<AvailabilitySlot[]>
+  >();
 const getCalendar = vi.fn();
 const listAppointments = vi.fn();
 const listTimeBlocks = vi.fn();
@@ -107,7 +112,9 @@ function customerFixture(overrides: Partial<Customer> = {}): Customer {
   };
 }
 
-function holdFixture(overrides: Partial<AppointmentHold> = {}): AppointmentHold {
+function holdFixture(
+  overrides: Partial<AppointmentHold> = {},
+): AppointmentHold {
   return {
     contactRef: null,
     customerId: "cus-ana",
@@ -276,10 +283,7 @@ async function openConflictByHold(time = "12:00") {
   createHold.mockRejectedValue(conflictError());
   const user = await pickService();
   await user.click(screen.getByRole("button", { name: "Outro horário" }));
-  await user.type(
-    screen.getByLabelText("Outro horário, fora dos oferecidos"),
-    time,
-  );
+  await chooseManualTime(user, time);
   await user.click(screen.getByRole("button", { name: "Usar este horário" }));
   await screen.findByRole("alert");
   return user;
@@ -383,7 +387,9 @@ describe("a recusa leva ao conflito do A7", () => {
         screen.queryByRole("button", { name: "Encaixar mesmo assim" }),
       ).not.toBeInTheDocument(),
     );
-    expect(screen.queryByLabelText("Motivo do encaixe")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Motivo do encaixe"),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -394,7 +400,7 @@ describe("textos do aviso por caso", () => {
     const notice = await settledNotice();
 
     expect(notice).toHaveTextContent(
-      "Ana Paula tem Corte feminino às 12:00 (em confirmação). Você pode encaixar mesmo assim — os dois vão ficar no mesmo horário na sua agenda.",
+      "Ana Paula tem Corte feminino às 12:00 (em confirmação). Você pode encaixar mesmo assim: os dois vão ficar no mesmo horário na sua agenda.",
     );
     expect(within(notice).getByText("Ana Paula").tagName).toBe("STRONG");
   });
@@ -482,9 +488,7 @@ describe("textos do aviso por caso", () => {
     expect(notice).toHaveTextContent(
       'Compromisso pessoal "Dentista" das 12:50 às 13:00.',
     );
-    expect(notice).toHaveTextContent(
-      "Compromisso pessoal das 12:55 às 13:00.",
-    );
+    expect(notice).toHaveTextContent("Compromisso pessoal das 12:55 às 13:00.");
   });
 
   test("intervalo entre atendimentos (buffer)", async () => {
@@ -503,16 +507,20 @@ describe("textos do aviso por caso", () => {
     );
   });
 
-  test("nada ocupa o intervalo: o título diz que está fora do horário de atendimento", async () => {
+  // Sem as regras do expediente (Configurações não lidas), a tela não afirma
+  // "fora do horário de atendimento" (bug de 2026-10-12).
+  test("nada ocupa o intervalo e o expediente não foi lido: não inventa motivo", async () => {
     await openConflictByHold();
     const notice = await settledNotice();
 
     expect(notice).toHaveTextContent(
-      "Esse horário está fora do seu horário de atendimento",
+      "Esse horário não foi liberado pela agenda",
     );
     expect(notice).toHaveTextContent(
-      "Nada na sua agenda ocupa 12:00–13:00, mas o horário fica fora da grade de atendimento. Você pode encaixar mesmo assim.",
+      "Nada na sua agenda ocupa 12:00–13:00, mas a agenda não liberou o horário agora.",
     );
+    expect(notice).toHaveTextContent("Você pode encaixar mesmo assim.");
+    expect(notice).not.toHaveTextContent("fora do seu horário de atendimento");
   });
 
   test("leitura da ocupação falhou: nunca vira 'nada ocupa'", async () => {
@@ -595,7 +603,9 @@ describe("encaixar mesmo assim", () => {
     await waitFor(() => expect(createAppointment).toHaveBeenCalledTimes(1));
     const body = createAppointment.mock.calls[0][0];
     expect(body.overlapOverride).toBe(true);
-    expect(body.overlapOverrideReason).toBe("Cliente antiga, encaixe combinado");
+    expect(body.overlapOverrideReason).toBe(
+      "Cliente antiga, encaixe combinado",
+    );
     expect(body.startTime).toBe("12:00");
     expect(body.date).toBe(ISO_TODAY);
     expect(body.serviceIds).toEqual(["svc-corte"]);
@@ -609,17 +619,23 @@ describe("encaixar mesmo assim", () => {
     const user = await openConflictByHold();
     await settledNotice();
 
-    const days = within(screen.getByRole("group", { name: "Data" })).getAllByRole(
-      "button",
+    const dateGroup = screen.getByRole("group", { name: "Data" });
+    await user.click(
+      within(dateGroup).getByRole("button", { name: "Próxima semana" }),
     );
-    await user.click(days[1]);
+    const otherDay = within(dateGroup)
+      .getAllByRole("gridcell")
+      .find((cell) => cell.getAttribute("aria-selected") === "false");
+    await user.click(otherDay as HTMLElement);
 
     await waitFor(() =>
       expect(
         screen.queryByRole("button", { name: "Encaixar mesmo assim" }),
       ).not.toBeInTheDocument(),
     );
-    expect(screen.queryByLabelText("Motivo do encaixe")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Motivo do encaixe"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(createAppointment).not.toHaveBeenCalled();
     expect(
@@ -638,7 +654,9 @@ describe("encaixar mesmo assim", () => {
         screen.queryByRole("button", { name: "Encaixar mesmo assim" }),
       ).not.toBeInTheDocument(),
     );
-    expect(screen.queryByLabelText("Motivo do encaixe")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Motivo do encaixe"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(createAppointment).not.toHaveBeenCalled();
     expect(
@@ -657,7 +675,9 @@ describe("encaixar mesmo assim", () => {
         screen.queryByRole("button", { name: "Encaixar mesmo assim" }),
       ).not.toBeInTheDocument(),
     );
-    expect(screen.queryByLabelText("Motivo do encaixe")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Motivo do encaixe"),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /^Criar agendamento/ }),
     ).toBeVisible();
@@ -703,7 +723,10 @@ describe("escolher outro horário", () => {
     expect(
       screen.getByRole("radio", { name: /10:00/ }).closest(".agenda-new-chip"),
     ).toHaveClass("is-conflict");
-    await user.type(screen.getByLabelText("Motivo do encaixe"), "Encaixe antigo");
+    await user.type(
+      screen.getByLabelText("Motivo do encaixe"),
+      "Encaixe antigo",
+    );
 
     await user.click(
       screen.getByRole("button", { name: "Escolher outro horário" }),
@@ -738,14 +761,18 @@ describe("escolher outro horário", () => {
         screen.queryByRole("button", { name: "Encaixar mesmo assim" }),
       ).not.toBeInTheDocument(),
     );
-    expect(screen.queryByRole("radio", { name: /12:00/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("radio", { name: /12:00/ }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getAllByRole("radio").map((radio) => radio.getAttribute("name")),
     ).toEqual(["start-time", "start-time"]);
     expect(
       screen
         .getAllByRole("radio")
-        .some((radio) => radio.closest(".agenda-new-chip")?.classList.contains("is-conflict")),
+        .some((radio) =>
+          radio.closest(".agenda-new-chip")?.classList.contains("is-conflict"),
+        ),
     ).toBe(false);
   });
 
@@ -757,11 +784,10 @@ describe("escolher outro horário", () => {
     await user.click(
       await screen.findByRole("checkbox", { name: /Corte feminino/ }),
     );
-    await user.click(await screen.findByRole("button", { name: "Outro horário" }));
-    await user.type(
-      screen.getByLabelText("Outro horário, fora dos oferecidos"),
-      "12:00",
+    await user.click(
+      await screen.findByRole("button", { name: "Outro horário" }),
     );
+    await chooseManualTime(user, "12:00");
     await user.click(screen.getByRole("button", { name: "Usar este horário" }));
     await settledNotice();
 
@@ -769,9 +795,7 @@ describe("escolher outro horário", () => {
       screen.getByRole("button", { name: "Escolher outro horário" }),
     );
 
-    await waitFor(() =>
-      expect(document.activeElement?.tagName).toBe("LEGEND"),
-    );
+    await waitFor(() => expect(document.activeElement?.tagName).toBe("LEGEND"));
     expect(document.activeElement).toHaveTextContent("Horário");
     expect(createAppointment).not.toHaveBeenCalled();
   });
@@ -819,6 +843,8 @@ describe("remarcar não muda", () => {
     expect(
       screen.queryByRole("button", { name: "Encaixar mesmo assim" }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Motivo do encaixe")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Motivo do encaixe"),
+    ).not.toBeInTheDocument();
   });
 });

@@ -74,7 +74,9 @@ export function DaySummaryCard({
 
   return (
     <section aria-label="Resumo do dia" className="agenda-day-summary-card">
-      <span className="agenda-summary-heading">
+      {/* Escolher outro dia na Semana troca o resumo: o título é anunciado
+          sem tirar o foco do cabeçalho tocado (pedido de 2026-10-12). */}
+      <span aria-live="polite" className="agenda-summary-heading">
         {heading}
         {appointmentCount > 0 && (
           <span className="agenda-summary-count">
@@ -104,9 +106,7 @@ export function DaySummaryCard({
           </span>
         ))}
         {others.length > 0 && (
-          <span className="agenda-summary-others">
-            + {others.join(" · ")}
-          </span>
+          <span className="agenda-summary-others">+ {others.join(" · ")}</span>
         )}
       </div>
       <button

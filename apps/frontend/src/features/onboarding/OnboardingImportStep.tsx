@@ -51,11 +51,7 @@ export function OnboardingImportStep({
  * aviso de sucesso não aparece. Abaixo do botão, a nota diz onde o histórico
  * fica.
  */
-function ImportDoneActions({
-  go,
-}: {
-  go: (step: OnboardingScenario) => void;
-}) {
+function ImportDoneActions({ go }: { go: (step: OnboardingScenario) => void }) {
   const { refresh } = useOnboardingRuntime();
   const [next, setNext] = useState<ReturnType<typeof stepAfterImport> | null>(
     null,

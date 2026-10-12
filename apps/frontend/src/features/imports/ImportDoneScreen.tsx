@@ -19,7 +19,10 @@ import type { ImportHistory } from "./types";
 const SIDEBAR_QUERY = "(min-width: 1100px)";
 
 function subscribe(onChange: () => void): () => void {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+  if (
+    typeof window === "undefined" ||
+    typeof window.matchMedia !== "function"
+  ) {
     return () => undefined;
   }
   const query = window.matchMedia(SIDEBAR_QUERY);
@@ -45,8 +48,8 @@ export function ImportDonePathNote() {
   const sidebar = useSyncExternalStore(subscribe, getSnapshot, () => false);
   return (
     <p className="imports-done-path">
-      O histórico desta importação fica em{" "}
-      {sidebar ? "Configurações" : "Mais"} › Importação.
+      O histórico desta importação fica em {sidebar ? "Configurações" : "Mais"}{" "}
+      › Importação.
     </p>
   );
 }

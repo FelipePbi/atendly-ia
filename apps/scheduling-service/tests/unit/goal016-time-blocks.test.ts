@@ -265,7 +265,53 @@ describe("GET /internal/time-blocks", () => {
         seriesId: null,
         startAt: "2026-09-14T15:00:00.000Z",
         title: "Dentista",
+        createdAt: null,
+        series: null,
       },
+    ]);
+  });
+
+  // Pedido de 2026-10-12: a folha de ações do bloqueio mostra quando ele foi
+  // criado e o padrão da série; os dois vêm na mesma leitura da grade.
+  it("devolve createdAt e o resumo da série da ocorrência", async () => {
+    seedCalendar(database, tenantId);
+    database.client.timeBlock.rows.push({
+      id: "block-series-1",
+      tenantId,
+      startAt: new Date("2026-09-15T15:00:00.000Z"),
+      endAt: new Date("2026-09-15T16:15:00.000Z"),
+      reason: "Almoço",
+      kind: "BLOCK",
+      title: null,
+      seriesId: "series-1",
+      occurrenceDate: null,
+      createdAt: new Date("2026-09-11T21:59:00.000Z"),
+      series: {
+        daysOfWeek: [4, 2],
+        occurrenceCount: null,
+        seriesEndDate: new Date("2026-12-31T00:00:00.000Z"),
+      },
+    } as never);
+    app = await buildTestApp(database.client as never);
+
+    const response = await app.inject({
+      headers: headers(),
+      method: "GET",
+      url: "/internal/time-blocks?startDate=2026-09-15&endDate=2026-09-15",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual([
+      expect.objectContaining({
+        createdAt: "2026-09-11T21:59:00.000Z",
+        id: "block-series-1",
+        series: {
+          daysOfWeek: [2, 4],
+          occurrenceCount: null,
+          seriesEndDate: "2026-12-31",
+        },
+        seriesId: "series-1",
+      }),
     ]);
   });
 

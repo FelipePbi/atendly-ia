@@ -269,7 +269,9 @@ export function WhatsAppConnectionPanel({
   // número já conectou, até o código expirar.
   useEffect(() => {
     if (!linking || linking.mode !== "PAIRING_CODE") return undefined;
-    const expiresAtMs = linking.expiresAt ? Date.parse(linking.expiresAt) : null;
+    const expiresAtMs = linking.expiresAt
+      ? Date.parse(linking.expiresAt)
+      : null;
 
     const poller = schedulePoll(async () => {
       if (expiresAtMs !== null && Date.now() >= expiresAtMs) {
@@ -479,7 +481,7 @@ export function WhatsAppConnectionPanel({
 
         {personalAnswer === "YES" && (
           <div className="settings-control-block">
-            <strong>Tudo bem — você continua no controle:</strong>
+            <strong>Tudo bem, você continua no controle:</strong>
             <div className="settings-control-item">
               <ControlIcon>
                 <path d="M4 7h16M4 12h16M4 17h10" />
@@ -642,7 +644,9 @@ export function WhatsAppConnectionPanel({
             </ol>
             <div className="settings-waiting-row">
               <span aria-hidden="true" className="settings-waiting-dot" />
-              <span>Aguardando conexão… detectamos sozinhos quando conectar.</span>
+              <span>
+                Aguardando conexão… detectamos sozinhos quando conectar.
+              </span>
             </div>
           </div>
           {error && (
@@ -693,7 +697,9 @@ export function WhatsAppConnectionPanel({
           </ol>
           <div className="settings-waiting-row">
             <span aria-hidden="true" className="settings-waiting-dot" />
-            <span>Aguardando conexão… detectamos sozinhos quando conectar.</span>
+            <span>
+              Aguardando conexão… detectamos sozinhos quando conectar.
+            </span>
           </div>
           <div className="settings-form-actions">
             <a
@@ -717,83 +723,88 @@ export function WhatsAppConnectionPanel({
         <section className="settings-panel settings-connect-panel">
           {!phased && (
             <>
-          <div className="settings-consent-note">
-            <label className="check">
-              <input
-                checked={consentChecked}
-                required
-                type="checkbox"
-                onChange={(event) => setConsentChecked(event.target.checked)}
-              />
-              <span aria-hidden="true" className="check-box" />
-              <span>
-                Entendo que as conversas deste número poderão ser processadas
-                e armazenadas para oferecer os recursos da Avenly.
-              </span>
-            </label>
-            <Link
-              className="settings-consent-link"
-              href="/politica-de-privacidade"
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              Saiba mais
-            </Link>
-          </div>
+              <div className="settings-consent-note">
+                <label className="check">
+                  <input
+                    checked={consentChecked}
+                    required
+                    type="checkbox"
+                    onChange={(event) =>
+                      setConsentChecked(event.target.checked)
+                    }
+                  />
+                  <span aria-hidden="true" className="check-box" />
+                  <span>
+                    Entendo que as conversas deste número poderão ser
+                    processadas e armazenadas para oferecer os recursos da
+                    Avenly.
+                  </span>
+                </label>
+                <Link
+                  className="settings-consent-link"
+                  href="/politica-de-privacidade"
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  Saiba mais
+                </Link>
+              </div>
 
-          <div className="field">
-            <span className="label">
-              Você usa esse número também para conversas pessoais?
-            </span>
-            <div className="settings-segmented">
-              <label>
-                <input
-                  checked={personalAnswer === "YES"}
-                  name="whatsapp-personal-number"
-                  type="radio"
-                  onChange={() => setPersonalAnswer("YES")}
-                />
-                <span>Sim, também</span>
-              </label>
-              <label>
-                <input
-                  checked={personalAnswer === "NO"}
-                  name="whatsapp-personal-number"
-                  type="radio"
-                  onChange={() => setPersonalAnswer("NO")}
-                />
-                <span>Não, só trabalho</span>
-              </label>
-            </div>
-          </div>
+              <div className="field">
+                <span className="label">
+                  Você usa esse número também para conversas pessoais?
+                </span>
+                <div className="settings-segmented">
+                  <label>
+                    <input
+                      checked={personalAnswer === "YES"}
+                      name="whatsapp-personal-number"
+                      type="radio"
+                      onChange={() => setPersonalAnswer("YES")}
+                    />
+                    <span>Sim, também</span>
+                  </label>
+                  <label>
+                    <input
+                      checked={personalAnswer === "NO"}
+                      name="whatsapp-personal-number"
+                      type="radio"
+                      onChange={() => setPersonalAnswer("NO")}
+                    />
+                    <span>Não, só trabalho</span>
+                  </label>
+                </div>
+              </div>
 
-          {personalAnswer === "YES" && (
-            <div className="settings-control-block">
-              <strong>Tudo bem — você continua no controle:</strong>
-              <div className="settings-control-item">
-                <Icon name="inbox" />
-                <span>
-                  Suas conversas ficam separadas em <strong>Comercial</strong>,{" "}
-                  <strong>Não classificadas</strong> e{" "}
-                  <strong>Pessoal</strong>.
-                </span>
-              </div>
-              <div className="settings-control-item">
-                <Icon name="x" />
-                <span>
-                  Você marca contatos que a IA <strong>nunca</strong> deve
-                  responder.
-                </span>
-              </div>
-              <div className="settings-control-item">
-                <Icon name="info" />
-                <span>
-                  Em conversas pessoais a IA fica <strong>desativada</strong>.
-                  Quando você responde, ela sai de cena.
-                </span>
-              </div>
-            </div>
-          )}
+              {personalAnswer === "YES" && (
+                <div className="settings-control-block">
+                  <strong>Tudo bem, você continua no controle:</strong>
+                  <div className="settings-control-item">
+                    <Icon name="inbox" />
+                    <span>
+                      Suas conversas ficam separadas em{" "}
+                      <strong>Comercial</strong>,{" "}
+                      <strong>Não classificadas</strong> e{" "}
+                      <strong>Pessoal</strong>.
+                    </span>
+                  </div>
+                  <div className="settings-control-item">
+                    <Icon name="x" />
+                    <span>
+                      Você marca contatos que a IA <strong>nunca</strong> deve
+                      responder.
+                    </span>
+                  </div>
+                  <div className="settings-control-item">
+                    <Icon name="info" />
+                    <span>
+                      Em conversas pessoais a IA fica{" "}
+                      <strong>desativada</strong>. Quando você responde, ela sai
+                      de cena.
+                    </span>
+                  </div>
+                </div>
+              )}
             </>
           )}
 

@@ -79,6 +79,7 @@ textarea {
 }
 button,
 a,
+label,
 input,
 select,
 textarea {
@@ -186,6 +187,79 @@ svg {
   stroke-dasharray: 100 400;
   stroke-dashoffset: 106;
   animation: at-brand-draw 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) 0.6s forwards;
+}
+/* Carregamento de tela inteira (BrandLoader): o "A" cresce e diminui no
+   centro, com duas ondas saindo por baixo dele. É o único sinal de que a
+   tela não travou, então as durações levam !important para vencer a regra
+   global de movimento reduzido (tokens.css e o fim deste arquivo), que
+   zeraria tudo e deixaria o símbolo parado. */
+.brand-loader-screen {
+  /* Cobre a tela: no primeiro carregamento a tela monta por baixo e só
+     aparece quando a primeira leitura dela terminou (D-168, revisão de
+     2026-10-12) — nunca um esqueleto depois do splash. */
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+}
+/* Saída: some em 160 ms (token) e deixa a tela de baixo se apresentar. */
+.brand-loader-screen.is-leaving {
+  pointer-events: none;
+  animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both;
+}
+.brand-loader-mark {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+.brand-loader-mark::before,
+.brand-loader-mark::after {
+  content: "";
+  position: absolute;
+  inset: 28px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+  animation: brand-loader-wave 1.8s ease-out infinite;
+  animation-duration: 1.8s !important;
+  animation-iteration-count: infinite !important;
+}
+.brand-loader-mark::after {
+  animation-delay: 0.9s !important;
+}
+.brand-loader {
+  position: relative;
+  display: block;
+  width: 52px;
+  height: 52px;
+  animation: brand-loader-breathe 1.8s ease-in-out infinite;
+  animation-duration: 1.8s !important;
+  animation-iteration-count: infinite !important;
+}
+@keyframes brand-loader-breathe {
+  0%,
+  100% {
+    transform: scale(0.9);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+@keyframes brand-loader-wave {
+  0% {
+    opacity: 0.08;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(3.4);
+  }
 }
 .brand-mark--check .brand-mark-check {
   stroke-dasharray: 100 400;
@@ -381,8 +455,12 @@ p {
   transform: none;
 }
 
+/* `align-content: start`: lado a lado, o campo sem erro esticava até a altura
+   do vizinho com a mensagem de erro e espalhava a sobra entre rótulo e
+   input, que desciam e saíam do alinhamento (validação de 2026-10-12). */
 .field {
   display: grid;
+  align-content: start;
   gap: 7px;
 }
 .label {
@@ -597,6 +675,7 @@ p {
   border-radius: var(--r-card);
   background: var(--surface);
   cursor: pointer;
+  user-select: none;
   transition: 160ms var(--ease);
 }
 .choice-card:hover {
@@ -694,7 +773,9 @@ p {
   height: 13px;
   stroke-width: 3;
 }
-.choice-card-modality:focus-within {
+/* Anel de foco só para teclado: no clique, o próprio cartão marcado já é o
+   retorno visual. */
+.choice-card-modality:has(input:focus-visible) {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
 }
@@ -1217,6 +1298,13 @@ p {
 .skeleton-line {
   height: 12px;
 }
+/* Esqueleto do tamanho de um texto de exemplo: o texto fica transparente e a
+   caixa da linha é a do texto real, então nada pula quando ele chega. */
+.skeleton-text {
+  border-radius: 6px;
+  color: transparent;
+  white-space: nowrap;
+}
 .skeleton-title {
   width: 48%;
   height: 18px;
@@ -1594,9 +1682,11 @@ p {
  * Tudo em `:where()` (especificidade zero): `:not([class])` já deixa de fora
  * quem tem classe, e qualquer regra de módulo vence em qualquer ordem.
  * Checkbox, radio, range, color, file, hidden e botões não entram na lista.
+ * As folhas (`.chat-sheet`) moram no `body`, fora da casca (bug de
+ * 2026-10-12), e recebem a mesma rede.
  */
 :where(
-    .app-frame
+    :is(.app-frame, .chat-sheet)
       :is(
         input:not([type]),
         input[type="text"],
@@ -1624,7 +1714,7 @@ p {
   padding: 0 14px;
   font: inherit;
 }
-:where(.app-frame textarea:not([class])) {
+:where(:is(.app-frame, .chat-sheet) textarea:not([class])) {
   min-height: 96px;
   padding: 12px 14px;
 }
@@ -1852,9 +1942,29 @@ p {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+/* Pedido de 2026-10-12: na sidebar (tablet e desktop), o cartão de WhatsApp
+   desconectado pulsa de leve, um anel na cor do perigo que se abre e some,
+   no mesmo ritmo do ponto da IA ativa. Movimento reduzido: parado. */
 .ia-card.is-disconnected {
   border-color: transparent;
   background: var(--danger-soft);
+  animation: at-alert-pulse 2.4s var(--at-ease-standard) infinite;
+}
+@keyframes at-alert-pulse {
+  0% {
+    box-shadow: 0 0 0 0
+      color-mix(in oklch, var(--danger), transparent 65%);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 8px
+      color-mix(in oklch, var(--danger), transparent 100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ia-card.is-disconnected {
+    animation: none;
+  }
 }
 .ia-card-ban {
   width: 18px;
@@ -2852,6 +2962,87 @@ button.onboarding-back-link {
   grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
+/* Endereço em partes (AddressFields): CEP; rua; número + complemento;
+   bairro; cidade + UF. Seis colunas em qualquer largura, para número/
+   complemento e cidade/UF ficarem lado a lado também no celular. */
+.address-fields {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 16px 12px;
+  align-items: start;
+}
+.address-postal-code {
+  grid-column: span 3;
+}
+.address-street,
+.address-district {
+  grid-column: span 6;
+}
+.address-number {
+  grid-column: span 2;
+}
+.address-complement,
+.address-city {
+  grid-column: span 4;
+}
+.address-state {
+  grid-column: span 2;
+}
+.address-optional {
+  color: var(--muted);
+  font-weight: 400;
+}
+.address-number-control {
+  display: grid;
+  gap: 8px;
+}
+.address-number .input:disabled {
+  background: var(--surface-secondary);
+}
+.address-no-number {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+.address-check {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--surface);
+  color: #fff;
+}
+.address-no-number input:checked + .address-check {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.address-check .icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 3;
+}
+.address-no-number:has(input:focus-visible) .address-check {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.address-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.address-fieldset > legend {
+  margin-bottom: 7px;
+  padding: 0;
+}
 /* Dias de atendimento (2.5): sete alvos de 46×56 e a linha-resumo. */
 .day-pill-row {
   display: flex;
@@ -2985,6 +3176,25 @@ button.onboarding-back-link {
 }
 .time-card-input::-webkit-calendar-picker-indicator {
   display: none;
+}
+/* Campo de hora compartilhado (src/shared/ui/pickers): a hora grande fica
+   com a largura toda e o relógio sobe para o canto do cartão, na linha do
+   rótulo. */
+.time-card {
+  position: relative;
+}
+.time-card .picker-field {
+  position: static;
+}
+.time-card .picker-field > .time-card-input {
+  padding-right: 0;
+}
+.time-card .picker-field-toggle {
+  top: 6px;
+  right: 6px;
+  width: 36px;
+  height: 36px;
+  transform: none;
 }
 /* Navegador em formato 12 h: AM/PM vira sufixo e a hora segue em destaque. */
 .time-card-input::-webkit-datetime-edit-ampm-field {
@@ -3323,7 +3533,7 @@ button.hours-day-row:focus-visible {
    (Goal079); com prefers-reduced-motion a cena abre completa e parada. */
 .onboarding-welcome-scene {
   position: relative;
-  height: 290px;
+  height: 316px;
   margin: 0;
 }
 .onboarding-welcome-scene > *,
@@ -4085,6 +4295,26 @@ button.hours-day-row:focus-visible {
   background: var(--surface-secondary);
   font-size: 14px;
 }
+/* Aviso no rodapé, ao lado do botão (whatsapp-conectar). */
+.onboarding-actions-alert {
+  min-width: 0;
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in oklch, var(--warning), white 62%);
+  border-radius: var(--r-input);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg-soft);
+  background: var(--warning-soft);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.onboarding-actions-alert .icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
 .onboarding-note.is-important {
   border-color: color-mix(in oklch, var(--warning), white 62%);
   background: var(--warning-soft);
@@ -4142,8 +4372,10 @@ button.hours-day-row:focus-visible {
    pergunta, o controle segmentado e o bloco "Tudo bem" do protótipo. Só existe
    com a prop de fase de `WhatsAppConnectionPanel`; Configurações mantém o
    estilo dos seletores `settings-*` sem estas regras. */
+/* Cabe sem rolagem num celular de 812 px, com o aviso no rodapé. */
 [data-step="whatsapp-conectar"] .onboarding-content {
-  gap: 20px;
+  padding-bottom: 4px;
+  gap: 16px;
 }
 .whatsapp-consent-phase {
   display: flex;
@@ -4427,6 +4659,20 @@ button.hours-day-row:focus-visible {
   padding: 14px;
   color: var(--muted);
   font-size: 14px;
+}
+/* Rótulo da lista de contatos do WhatsApp, abaixo das conversas. */
+.ignored-section {
+  margin: 0;
+  padding: 12px 14px 6px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ignored-card > .ignored-section:first-child {
+  border-top: 0;
 }
 .ignored-list {
   margin: 0;
@@ -4787,11 +5033,54 @@ button.ignored-row:focus-visible,
   font-size: 14px;
   line-height: 1.45;
 }
-/* Com movimento reduzido nada se move: as linhas já estão no lugar final e o
-   anel da linha atual fica parado e visível. */
+/* Etapa atual pulsando e etapa concluída "estalando" ao virar check
+   (validação de 2026-10-11). O teste leva minutos e só o movimento diz em
+   que ponto ele está, então o pulso e o check vencem a regra global de
+   movimento reduzido (tokens.css e o fim deste arquivo). A entrada das
+   linhas uma a uma continua desligada com movimento reduzido. */
+.activation-timeline-row.is-current .activation-timeline-marker::before {
+  animation-duration: 1.8s !important;
+  animation-iteration-count: infinite !important;
+}
+.activation-timeline-row.is-current .activation-timeline-pulse {
+  animation: activation-timeline-dot 1.8s ease-in-out infinite;
+  animation-duration: 1.8s !important;
+  animation-iteration-count: infinite !important;
+}
+.activation-timeline-row.is-current .activation-timeline-label {
+  color: var(--accent);
+}
+.activation-timeline-row.is-done .activation-timeline-marker {
+  animation: activation-timeline-check 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+  animation-duration: 0.45s !important;
+}
+.activation-timeline-link {
+  transition: background-color 0.4s ease;
+}
+@keyframes activation-timeline-dot {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.7);
+    opacity: 0.6;
+  }
+}
+@keyframes activation-timeline-check {
+  0% {
+    transform: scale(0.6);
+  }
+  60% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .activation-timeline.is-animated .activation-timeline-row,
-  .activation-timeline-row.is-current .activation-timeline-marker::before {
+  .activation-timeline.is-animated .activation-timeline-row {
     animation: none;
   }
 }
@@ -4892,12 +5181,25 @@ button.ignored-row:focus-visible,
   background: var(--accent);
   animation: at-pop 0.6s ease-out both;
 }
-.completion-disc-mark {
-  width: 34px;
-  height: 34px;
-  border: 5px solid var(--at-color-on-primary);
-  border-radius: 50%;
-  box-sizing: border-box;
+/* Check de sucesso da conclusão do teste real: se desenha uma vez ao abrir,
+   também com movimento reduzido (é o resultado, não enfeite). */
+.completion-check {
+  width: 58px;
+  height: 58px;
+  color: var(--at-color-on-primary);
+}
+.completion-check path {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: completion-check-draw 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) 0.35s
+    forwards;
+  animation-duration: 0.5s !important;
+  animation-delay: 0.35s !important;
+}
+@keyframes completion-check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 .completion-text {
   display: flex;
@@ -4993,24 +5295,8 @@ button.ignored-row:focus-visible,
   border: 1.5px solid var(--border-strong);
   background: var(--surface);
 }
-.onboarding-completion.is-inactive .completion-disc-mark {
-  border-color: #b9b1a6;
-}
-.completion-badge {
-  position: absolute;
-  right: 22px;
-  bottom: 22px;
-  width: 46px;
-  height: 46px;
-  border: 3px solid var(--bg);
-  border-radius: 50%;
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--at-color-success);
-  color: var(--surface);
-  animation: at-pop 0.5s ease-out 0.3s both;
+.onboarding-completion.is-inactive .completion-check {
+  color: var(--accent);
 }
 .completion-pill.is-inactive {
   background: var(--at-color-surface-active);
@@ -5027,7 +5313,6 @@ button.ignored-row:focus-visible,
 @media (prefers-reduced-motion: reduce) {
   .completion-ring,
   .completion-disc,
-  .completion-badge,
   .completion-text,
   .onboarding-column.is-completion .onboarding-actions {
     animation: none;
@@ -5137,14 +5422,58 @@ button.ignored-row:focus-visible,
 [data-step="demonstracao-da-ia"] .onboarding-heading > p {
   line-height: 1.4;
 }
+/* Respiro e linha discreta entre o cabeçalho fixo e a conversa que rola por
+   baixo dele. */
+[data-step="demonstracao-da-ia"] .onboarding-heading {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+/* Título e descrição fixos no topo; só a conversa rola, por baixo deles. */
+[data-step="demonstracao-da-ia"] .onboarding-content {
+  overflow: hidden;
+}
+[data-step="demonstracao-da-ia"] .onboarding-step-body {
+  /* `display: contents` por padrão (globals.css): aqui ele vira a caixa que
+     rola. */
+  display: block;
+  flex: 1;
+  min-height: 0;
+  /* Vai até a borda da coluna para a barra de rolagem ficar colada na
+     lateral, não ao lado dos balões; o respiro de 20 px volta por dentro. */
+  margin: 0 -20px;
+  padding: 0 20px;
+  overflow-y: auto;
+}
+/* O "Continuar" só entra no fim da conversa; entra suave, também com
+   movimento reduzido (só opacidade e um leve deslize). */
+[data-step="demonstracao-da-ia"] .onboarding-actions {
+  animation: demo-actions-in 600ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-duration: 600ms !important;
+}
+@keyframes demo-actions-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Largura do próprio texto: na abertura, título e descrição aparecem
+   centralizados no corpo da etapa (playDemoIntro). */
+[data-step="demonstracao-da-ia"] .onboarding-heading > * {
+  width: fit-content;
+  max-width: 100%;
+}
 .onboarding-demo-chat {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding-top: 16px;
 }
-/* Cada item só existe no DOM depois de entrar (Goal079); com
-   prefers-reduced-motion a conversa abre inteira e parada. */
+/* Cada item só existe no DOM depois de entrar (Goal079), e a sequência roda
+   também com prefers-reduced-motion (validação de 2026-10-11). */
 .onboarding-demo-chat > * {
   animation: rise var(--at-duration-moderate) var(--ease);
 }
@@ -5217,10 +5546,68 @@ button.ignored-row:focus-visible,
   height: 12px;
   flex: none;
 }
-@media (prefers-reduced-motion: reduce) {
-  .onboarding-demo-chat > * {
-    animation: none;
+/* "Digitando…" antes de cada mensagem (validação de 2026-10-11), do lado de
+   quem fala e no fundo do balão dele. */
+.demo-typing {
+  padding: 12px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.demo-typing.is-client {
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 16px 16px 16px 6px;
+  background: var(--surface);
+}
+.demo-typing.is-ai {
+  align-self: flex-end;
+  border-radius: 16px 16px 6px 16px;
+  background: var(--at-color-primary-tint-strong);
+}
+.demo-typing span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: demo-typing-dot 1.1s ease-in-out infinite;
+}
+.demo-typing span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.demo-typing span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes demo-typing-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
   }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+.demo-chat-end {
+  height: 0;
+}
+/* A conversa é o conteúdo da etapa: entrada dos balões e pontos do
+   "digitando…" vencem a regra global de movimento reduzido, que deixaria a
+   demonstração parada. */
+.onboarding-demo-chat > * {
+  animation-duration: var(--at-duration-moderate) !important;
+}
+.demo-typing span {
+  animation-duration: 1.1s !important;
+  animation-iteration-count: infinite !important;
+}
+.demo-typing span:nth-child(2) {
+  animation-delay: 0.15s !important;
+}
+.demo-typing span:nth-child(3) {
+  animation-delay: 0.3s !important;
 }
 .summary-row {
   display: flex;
@@ -5406,6 +5793,19 @@ button.ignored-row:focus-visible,
   height: 28px;
   margin: 0 auto 18px;
   color: var(--accent);
+}
+.analysis-panel-mark {
+  display: flex;
+  justify-content: center;
+  margin: 0 auto 14px;
+  color: var(--accent);
+}
+.analysis-panel-mark .brand-mark {
+  width: 36px;
+  height: 36px;
+}
+.analysis-panel > .btn {
+  margin-top: 16px;
 }
 .analysis-panel h2 {
   font-size: 18px;
@@ -5627,6 +6027,140 @@ button.ignored-row:focus-visible,
 .shell-status-banner {
   margin-bottom: 16px;
 }
+.shell-status-copy {
+  min-width: 0;
+}
+.shell-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+/* "Ocultar por 1h" (pedido de 2026-10-12): ação secundária em texto, ao lado
+   da principal; o aviso volta sozinho depois de uma hora. */
+.shell-status-hide {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--at-color-danger-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.shell-status-hide:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* Cartão flutuante (pedido de 2026-10-12): o `main` de toda tela tem padding
+   0, e o aviso colava nas bordas da área de conteúdo. Agora ele se solta com
+   margem em volta, sombra suave, cantos de 14 px e mais respiro interno.
+   Os avisos que se ocultam por 1h ficam numa camada de altura zero, presa ao
+   topo da área de conteúdo: flutuam sobre a tela e não empurram o layout. */
+.shell-status-layer {
+  position: sticky;
+  top: 0;
+  z-index: var(--at-z-sticky);
+  height: 0;
+  overflow: visible;
+}
+/* `top` relativo desloca sem ocupar espaço: a camada continua com altura 0.
+   O topo tem a mesma distância das laterais (20 px; 12 px no celular). */
+.shell-status-layer > .shell-status-banner {
+  position: relative;
+  top: 20px;
+  margin: 0 20px 8px;
+}
+.shell-status-banner {
+  margin: 16px 20px 8px;
+  padding: 14px 16px 14px 14px;
+  gap: 14px;
+  border-radius: 14px;
+  box-shadow:
+    0 1px 2px rgba(34, 30, 26, 0.06),
+    0 8px 24px -12px rgba(34, 30, 26, 0.22);
+}
+.shell-status-banner > .icon {
+  box-sizing: content-box;
+  width: 20px;
+  height: 20px;
+  padding: 9px;
+  border-radius: 10px;
+  background: rgba(255, 253, 250, 0.7);
+  color: var(--danger);
+}
+.shell-status-banner .alert-title {
+  margin-bottom: 2px;
+}
+.shell-status-actions {
+  gap: 8px;
+}
+.shell-status-banner .shell-status-link {
+  min-height: 40px;
+}
+/* No celular o aviso era um cartão de ~165 px com botão de largura total no
+   topo de toda tela. Agora são duas linhas: o título ao lado do ícone e, sob
+   ele, "Reconectar WhatsApp" e "Ocultar por 1h" como links. A frase longa
+   sai: o título e a ação já dizem o que aconteceu e o que fazer. */
+@media (max-width: 767px) {
+  .shell-status-layer > .shell-status-banner {
+    top: 12px;
+    margin: 0 12px 8px;
+  }
+  .shell-status-banner {
+    margin: 10px 12px 8px;
+    padding: 10px 12px;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "icon copy"
+      ". actions";
+    align-items: center;
+    row-gap: 2px;
+    column-gap: 10px;
+    border-radius: 12px;
+  }
+  .shell-status-banner > .icon {
+    grid-area: icon;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    background: none;
+  }
+  .shell-status-banner .shell-status-copy {
+    grid-area: copy;
+  }
+  .shell-status-banner .alert-title {
+    font-size: 13px;
+    line-height: 18px;
+  }
+  .shell-status-banner .alert-text {
+    display: none;
+  }
+  .shell-status-actions {
+    grid-area: actions;
+    margin-left: -8px;
+    flex-wrap: wrap;
+    gap: 0;
+  }
+  .shell-status-banner .shell-status-link {
+    width: auto;
+    min-height: 32px;
+    padding: 0 8px;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    color: var(--danger);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .shell-status-hide {
+    min-height: 32px;
+    padding: 0 8px;
+    font-weight: 500;
+  }
+}
 .operational-strip {
   margin-bottom: 24px;
   padding: 14px 16px;
@@ -5828,9 +6362,10 @@ button.operational-link:disabled {
   background: var(--at-color-danger-hover);
   transform: scale(0.98);
 }
-/* O AppShell foca o <main> (tabindex=-1) ao trocar de rota; ele não é operável,
-   e a Home é curta o bastante para o anel aparecer como linha no pé da tela. */
-.dashboard-main:focus-visible {
+/* O AppShell foca o <main> (tabindex=-1) ao trocar de rota e ao ocultar um
+   aviso; ele não é operável. O anel aparecia como linha verde no topo (e no pé
+   da Home) de toda tela, não só da Home (validação de 2026-10-12). */
+main#main-content:focus-visible {
   outline: none;
 }
 .dashboard-body {
@@ -8243,13 +8778,10 @@ button.operational-link:disabled {
   border-radius: 50%;
   background: currentColor;
 }
+/* Dia sem atendimento (quadro A2), aberto ou fechado: arte, título, frase e
+   "+ Criar agendamento" centralizados. O HTML/CSS do quadro é portado como
+   está; o que muda entre aberto e fechado é só a frase. */
 .agenda-day-empty {
-  display: grid;
-  gap: var(--s3);
-  justify-items: start;
-}
-/* Dia sem atendimento num dia em que o negócio não atende (quadro A2). */
-.agenda-day-closed {
   box-sizing: border-box;
   padding: 0 40px 120px;
   display: flex;
@@ -8259,17 +8791,17 @@ button.operational-link:disabled {
   gap: 14px;
   text-align: center;
 }
-.agenda-day-closed-art {
+.agenda-day-empty-art {
   width: 140px;
   display: flex;
   flex-direction: column;
   gap: 9px;
 }
-.agenda-day-closed-art > span {
+.agenda-day-empty-art > span {
   height: 1px;
   background: #d6cec2;
 }
-.agenda-day-closed-art > .agenda-day-closed-slot {
+.agenda-day-empty-art > .agenda-day-empty-slot {
   box-sizing: content-box;
   height: 26px;
   margin: 0 20px;
@@ -8277,18 +8809,18 @@ button.operational-link:disabled {
   border-radius: 8px;
   background: transparent;
 }
-.agenda-day-closed-title {
+.agenda-day-empty-title {
   margin: 6px 0 0;
   font-size: 17px;
   font-weight: 600;
 }
-.agenda-day-closed-copy {
+.agenda-day-empty-copy {
   margin: 0;
   color: #5f574e;
   font-size: 14px;
   line-height: 1.45;
 }
-.agenda-day-closed-create {
+.agenda-day-empty-create {
   display: inline-flex;
   align-items: center;
   gap: 6px;

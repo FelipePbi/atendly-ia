@@ -66,7 +66,6 @@ import BlockSeriesPage from "@/app/(platform)/agenda/bloquear/serie/page";
 import AvailabilityExceptionsPage from "@/app/(platform)/agenda/excecoes/page";
 import NewAppointmentPage from "@/app/(platform)/agenda/novo/page";
 import AgendaPage from "@/app/(platform)/agenda/page";
-import AppointmentSeriesPage from "@/app/(platform)/agenda/serie/page";
 
 const today = new Date();
 const ISO_TODAY = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -133,12 +132,11 @@ describe("cada fluxo obrigatório tem rota própria e é alcançável", () => {
   test.each([
     ["/agenda/bloquear", BlockTimePage, "Bloquear horário"],
     ["/agenda/bloquear/serie", BlockSeriesPage, "Criar série de bloqueio"],
-    ["/agenda/serie", AppointmentSeriesPage, "Série de atendimentos"],
-    [
-      "/agenda/excecoes",
-      AvailabilityExceptionsPage,
-      "Exceções de disponibilidade",
-    ],
+    // "/agenda/serie" saiu (D-171, 2026-10-12): redireciona para o novo
+    // agendamento com a repetição ligada (tests/novo-agendamento-repetir.test.tsx).
+    // Desde D-169 a rota é só o "Horário extra" (o dia fechado foi para
+    // "Bloquear horário"), alcançada por Configurações > Agenda.
+    ["/agenda/excecoes", AvailabilityExceptionsPage, "Horário extra"],
   ])("%s monta a tela do fluxo", async (_route, Page, title) => {
     renderPage(<Page />);
 
@@ -147,9 +145,11 @@ describe("cada fluxo obrigatório tem rota própria e é alcançável", () => {
     ).toBeVisible();
   });
 
-  test("a agenda oferece o caminho para as exceções de disponibilidade", async () => {
-    // Goal092: o botão solto "Exceções do dia" saiu; o caminho é o item
-    // "Exceção do dia" do menu "Novo".
+  test("a agenda oferece o caminho para fechar um dia", async () => {
+    // Goal092: o botão solto "Exceções do dia" saiu. Pedido de 2026-10-12
+    // (D-169): o item "Exceção do dia" do "Novo" virou o tipo "Dia ou
+    // período fechado" de "Bloquear horário"; o horário extra fica em
+    // Configurações > Agenda (tests/agenda-bloqueio-etapas.test.tsx).
     const user = userEvent.setup();
     renderPage(<AgendaPage />);
 
@@ -157,27 +157,33 @@ describe("cada fluxo obrigatório tem rota própria e é alcançável", () => {
 
     expect(
       within(screen.getByRole("dialog", { name: SHEET })).getByRole("link", {
-        name: "Exceção do dia",
+        name: "Bloquear horário",
       }),
-    ).toHaveAttribute("href", "/agenda/excecoes");
+    ).toHaveAttribute("href", "/agenda/bloquear");
   });
 
   test("bloquear horário oferece o caminho para a série de bloqueio", async () => {
     renderPage(<BlockTimePage />);
 
+    // Tela única desde a revisão de 2026-10-12 (D-169): a série fica ao lado
+    // de "Título e motivo", sem etapa antes.
     expect(
       await screen.findByRole("link", { name: "Repetir em dias fixos" }),
     ).toHaveAttribute("href", "/agenda/bloquear/serie");
   });
 
-  test("novo agendamento oferece o caminho para a série de atendimento", async () => {
+  test("novo agendamento não tem mais o link para a tela de série", async () => {
+    // Pedido de 2026-10-12 (D-171): repetir é parte do próprio agendamento,
+    // e "Repetir este atendimento" aparece depois do horário
+    // (tests/novo-agendamento-repetir.test.tsx).
     // Goal075: a página lê `customerId` de `searchParams`, então é async
     // (padrão de componente de servidor) — chamar e aguardar antes de montar.
     renderPage(await NewAppointmentPage({ searchParams: Promise.resolve({}) }));
 
+    await screen.findByRole("form", { name: "Novo agendamento" });
     expect(
-      await screen.findByRole("link", { name: "Agendar série" }),
-    ).toHaveAttribute("href", "/agenda/serie");
+      screen.queryByRole("link", { name: "Agendar série" }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -224,7 +230,7 @@ describe("as ações da ocorrência partem da própria grade", () => {
       within(daySection).getByRole("button", { name: /Almoço/ }),
     );
 
-    const panel = await screen.findByRole("region", {
+    const panel = await screen.findByRole("dialog", {
       name: "Ações de Bloqueio operacional",
     });
     expect(
@@ -251,7 +257,7 @@ describe("as ações da ocorrência partem da própria grade", () => {
       within(daySection).getByRole("button", { name: /Manutenção/ }),
     );
 
-    const panel = await screen.findByRole("region", {
+    const panel = await screen.findByRole("dialog", {
       name: "Ações de Bloqueio operacional",
     });
     expect(

@@ -110,7 +110,10 @@ describe("4.10: a tela como o quadro", () => {
     const art = container.querySelector(".completion-art");
     expect(art).toHaveAttribute("aria-hidden", "true");
     expect(container.querySelectorAll(".completion-ring")).toHaveLength(0);
-    expect(art?.querySelector(".completion-badge svg")).not.toBeNull();
+    // Validação de 2026-10-11: o check de sucesso fica no próprio disco, no
+    // lugar do anel neutro com o selo no canto.
+    expect(art?.querySelector(".completion-disc .completion-check")).not.toBeNull();
+    expect(art?.querySelector(".completion-badge")).toBeNull();
   });
 
   test("sem eyebrow e sem chevron de voltar", async () => {

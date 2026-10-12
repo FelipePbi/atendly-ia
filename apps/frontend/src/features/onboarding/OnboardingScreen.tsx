@@ -2,12 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  type FormEvent,
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 
 import { activationTestStartAction } from "@/features/activation-test/ActivationTestPanels";
 import { Icon } from "@/shared/icons/Icon";
@@ -39,7 +34,7 @@ import {
   skipWhatsappStep,
 } from "./blocks/whatsapp";
 import { OnboardingImportStep } from "./OnboardingImportStep";
-import { useOnboardingRuntime } from "./OnboardingRuntime";
+import { RuntimeMessage, useOnboardingRuntime } from "./OnboardingRuntime";
 import { type OnboardingBack, OnboardingShell } from "./OnboardingShell";
 import { type OnboardingScenario, onboardingScenarios } from "./scenarios";
 
@@ -57,6 +52,7 @@ export function OnboardingScreen({
     error: loadError,
     loading,
     refresh,
+    retry,
     setDraft,
   } = useOnboardingRuntime();
   const [busy, setBusy] = useState(false);
@@ -115,7 +111,8 @@ export function OnboardingScreen({
     whatsappPhase === "consent";
   // Número conectado (quadro 4.4): título e texto próprios da pergunta de
   // confirmação; a vinculação em curso mantém os de scenarios.ts.
-  const inConnectedPhase = scenario === "whatsapp-conectar" && whatsappConnected;
+  const inConnectedPhase =
+    scenario === "whatsapp-conectar" && whatsappConnected;
   const title = inConsentPhase
     ? "Antes de conectar"
     : inConnectedPhase
@@ -147,8 +144,10 @@ export function OnboardingScreen({
   }, [importWithoutSource]);
 
   if (loading || importWithoutSource)
-    return <OnboardingMessage message="Carregando sua configuração..." />;
-  if (loadError) return <OnboardingMessage message={loadError} />;
+    return <RuntimeMessage message="Carregando sua configuração..." />;
+  if (loadError) {
+    return <RuntimeMessage message={loadError} onRetry={retry} />;
+  }
 
   const blockId = blockForScenario(scenario);
   const isWelcomeStep = scenario === "boas-vindas";
@@ -363,13 +362,10 @@ export function OnboardingScreen({
         Seu progresso fica salvo a cada etapa.
       </p>
     </>
-  ) : isAiDemo && !demoDone ? (
-    null
-  ) : isSistemaAtual ? (
-    // Os dois cards do corpo já são a ação (QA O-19, O-22): não há
-    // "Continuar" aqui; a volta é o chevron do topo.
-    null
-  ) : isQuandoImportar ? (
+  ) : isAiDemo &&
+    !demoDone ? null : isSistemaAtual ? // Os dois cards do corpo já são a ação (QA O-19, O-22): não há
+  // "Continuar" aqui; a volta é o chevron do topo.
+  null : isQuandoImportar ? (
     // Principal primeiro, como no protótipo (quadro 2.2), no DOM e na tela.
     <>
       <button className="btn btn-primary" disabled={busy} type="submit">
@@ -422,7 +418,7 @@ export function OnboardingScreen({
         Abrir WhatsApp
       </a>
       <p className="onboarding-actions-note">
-        Pode sair do app — o teste continua e a tela se atualiza sozinha.
+        Pode sair do app: o teste continua e a tela se atualiza sozinha.
       </p>
       <button
         className="btn onboarding-actions-skip"
@@ -491,11 +487,7 @@ export function OnboardingScreen({
       </Link>
     </>
   ) : inConsentPhase ? (
-    <button
-      className="btn btn-primary"
-      disabled={!consentReady}
-      type="submit"
-    >
+    <button className="btn btn-primary" disabled={!consentReady} type="submit">
       Continuar
     </button>
   ) : inConnectedPhase ? (
@@ -523,6 +515,15 @@ export function OnboardingScreen({
       >
         {busy ? "Salvando..." : "Continuar"}
       </button>
+      {/* O aviso fica ao lado do "Continuar", no rodapé, e não no fim do
+          conteúdo: no celular a etapa cabe sem rolagem (validação de
+          2026-10-11). */}
+      {error && (
+        <div className="onboarding-actions-alert" role="alert">
+          <Icon name="alert" />
+          <span>{error}</span>
+        </div>
+      )}
     </>
   ) : isWhatsappIntro ? (
     // Principal primeiro, como no protótipo (tela 4.1), no DOM e na tela: no
@@ -635,25 +636,12 @@ export function OnboardingScreen({
       completion={isActivationTestSucceeded || isWhatsappConclusion}
       connected={inConnectedPhase}
       description={description}
-      error={error}
+      error={isWhatsappConnect && !inConnectedPhase ? null : error}
       eyebrow={eyebrow}
       onExit={() => void logout()}
       onSubmit={(event) => void submit(event)}
       scenario={scenario}
       title={title}
     />
-  );
-}
-
-function OnboardingMessage({ message }: { message: string }) {
-  return (
-    <main className="onboarding-shell">
-      <section className="onboarding-main">
-        <div className="analysis-panel" aria-live="polite">
-          <span className="spinner" aria-hidden="true" />
-          <p>{message}</p>
-        </div>
-      </section>
-    </main>
   );
 }

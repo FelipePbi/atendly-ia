@@ -12,8 +12,8 @@ import {
 } from "react";
 
 import { type Appointment, type TimeBlock } from "@/data";
-import { Button } from "@/shared/ui/Button";
 
+import { agendaDayHref, appointmentHref } from "./agendaLinks";
 import {
   addDays,
   type AgendaEntry,
@@ -117,20 +117,15 @@ export function DayView({
             : daySummaryLabel(appointmentCount, blockCount)}
         </span>
       </div>
-      {closedDay ? (
-        <ClosedDayEmpty
+      {rows.length === 0 ? (
+        <DayEmpty
           canCreateAppointment={canCreateAppointment}
-          weekday={parseDate(date).getDay()}
+          copy={
+            closedDay
+              ? closedDayCopy(parseDate(date).getDay(), canCreateAppointment)
+              : openDayCopy(canCreateAppointment)
+          }
         />
-      ) : rows.length === 0 ? (
-        <div className="agenda-day-empty">
-          <p className="agenda-no-results">Nenhum atendimento neste dia.</p>
-          {canCreateAppointment && (
-            <Button href="/agenda/novo" variant="secondary">
-              Criar agendamento
-            </Button>
-          )}
-        </div>
       ) : (
         <ul className="agenda-day-list">
           {rows.map((entry, index) => {
@@ -143,6 +138,7 @@ export function DayView({
                   <DayRow
                     currentAppointmentId={currentAppointmentId}
                     entry={entry}
+                    returnTo={agendaDayHref(date)}
                     isPast={isPast(entry, date, today, nowMinutes)}
                     onSelectAppointment={onSelectAppointment}
                     onSelectBlock={onSelectBlock}
@@ -181,14 +177,33 @@ function closedDayHeading(date: string, isToday: boolean): string {
   return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}, ${parsed.getDate()}`;
 }
 
-function ClosedDayEmpty({
+/** Frase do quadro A2: o dia da semana não tem horário de atendimento. */
+function closedDayCopy(weekday: number, canCreateAppointment: boolean): string {
+  const reason = `A IA não marca horários ${WEEKDAY_PLURAL[weekday]}`;
+  return canCreateAppointment
+    ? `${reason}, mas você pode criar um atendimento por conta própria.`
+    : `${reason}.`;
+}
+
+/**
+ * Dia que atende (ou cuja disponibilidade não foi lida) e está vazio. O quadro
+ * A2 só desenha o dia fechado; a frase aqui não afirma regra de horário, só
+ * de onde vêm os atendimentos (IA ou agendamento manual, vault Agenda).
+ */
+function openDayCopy(_canCreateAppointment: boolean): string {
+  // Texto escolhido pelo usuario em 2026-10-12; o link "Criar agendamento"
+  // aparece a parte, so com permissao.
+  return "Seu dia está livre. Quando a IA marcar um horário, ele aparece aqui.";
+}
+
+/** Dia sem atendimento, aberto ou fechado: o vazio do quadro A2. */
+function DayEmpty({
   canCreateAppointment,
-  weekday,
+  copy,
 }: {
   canCreateAppointment: boolean;
-  weekday: number;
+  copy: string;
 }) {
-  const reason = `A IA não marca horários ${WEEKDAY_PLURAL[weekday]}`;
   const ref = useRef<HTMLDivElement>(null);
   // No quadro A2 o vazio é `flex: 1` até o fim da tela: no celular a barra
   // inferior fica por cima dele; no tablet ela vem depois, no fluxo. Mede o
@@ -233,22 +248,18 @@ function ClosedDayEmpty({
     };
   }, []);
   return (
-    <div className="agenda-day-closed" ref={ref}>
-      <div aria-hidden="true" className="agenda-day-closed-art">
+    <div className="agenda-day-empty" ref={ref}>
+      <div aria-hidden="true" className="agenda-day-empty-art">
         <span />
         <span />
-        <span className="agenda-day-closed-slot" />
+        <span className="agenda-day-empty-slot" />
         <span />
         <span />
       </div>
-      <p className="agenda-day-closed-title">Nenhum atendimento neste dia.</p>
-      <p className="agenda-day-closed-copy">
-        {canCreateAppointment
-          ? `${reason}, mas você pode criar um atendimento por conta própria.`
-          : `${reason}.`}
-      </p>
+      <p className="agenda-day-empty-title">Nenhum atendimento neste dia.</p>
+      <p className="agenda-day-empty-copy">{copy}</p>
       {canCreateAppointment && (
-        <Link className="agenda-day-closed-create" href="/agenda/novo">
+        <Link className="agenda-day-empty-create" href="/agenda/novo">
           <svg
             aria-hidden="true"
             fill="none"
@@ -372,6 +383,7 @@ function DayRow({
   isPast,
   onSelectAppointment,
   onSelectBlock,
+  returnTo,
   selectedAppointmentId,
   selectedBlockId,
   serviceColors,
@@ -381,6 +393,8 @@ function DayRow({
   isPast: boolean;
   onSelectAppointment?: (appointment: Appointment) => void;
   onSelectBlock?: (block: TimeBlock) => void;
+  /** O dia desta lista: o detalhe aberto pela linha volta a ele (D-167). */
+  returnTo: string;
   selectedAppointmentId?: string | null;
   selectedBlockId?: string | null;
   serviceColors?: ServiceColorMap;
@@ -408,7 +422,8 @@ function DayRow({
 
   if (entry.kind === "appointment" && appointment) {
     const presentation = describeEntry(entry);
-    const current = Boolean(currentAppointmentId) && appointment.id === currentAppointmentId;
+    const current =
+      Boolean(currentAppointmentId) && appointment.id === currentAppointmentId;
     const selected = appointment.id === selectedAppointmentId;
     const content = (
       <AppointmentContent
@@ -419,10 +434,13 @@ function DayRow({
         title={presentation.title}
       />
     );
+    // O atendimento aberto ao lado (painel do Dia ou coluna da rota) fica
+    // destacado, e não só pela cor: `aria-current` acompanha a classe
+    // (pedido de 2026-10-12).
     const rowClass = clsx(
       className,
       presentation.isNoShow && "is-no-show",
-      selected && "is-selected",
+      (onSelectAppointment ? selected : current) && "is-selected",
     );
     // A partir de 1024px a lista seleciona em vez de navegar: o painel de
     // detalhe abre ao lado, na mesma tela (Goal069 §2). Abaixo disso,
@@ -430,6 +448,7 @@ function DayRow({
     if (onSelectAppointment) {
       return (
         <button
+          aria-current={selected ? "true" : undefined}
           aria-pressed={selected}
           className={rowClass}
           onClick={() => onSelectAppointment(appointment)}
@@ -443,7 +462,7 @@ function DayRow({
       <Link
         aria-current={current ? "page" : undefined}
         className={rowClass}
-        href={`/agenda/agendamento?id=${encodeURIComponent(appointment.id)}`}
+        href={appointmentHref(appointment.id, returnTo)}
       >
         {content}
       </Link>
@@ -451,10 +470,9 @@ function DayRow({
   }
 
   const content = <OccurrenceContent entry={entry} time={time} />;
-  const rowClass = clsx(
-    className,
-    block !== undefined && block.id === selectedBlockId && "is-selected",
-  );
+  // Bloqueio abre a folha modal (D-166): a linha não fica destacada como
+  // atendimento selecionado; `aria-pressed` diz que a folha é dela.
+  const rowClass = className;
 
   // Bloqueio e compromisso pessoal levam às ações da ocorrência: remover ou
   // mover só esta, ou editar a série a partir daqui (Goal016, item 5).

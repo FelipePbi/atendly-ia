@@ -435,7 +435,7 @@ describe.each<ImportsFrame>(["onboarding", "platform"])(
       expect(screen.queryByRole("button", { name: "Revisar itens" })).not.toBeInTheDocument();
     });
 
-    test("não há ação primária; a troca de conta segue por último, como hoje", async () => {
+    test("não há ação primária nem troca de conta durante a importação", async () => {
       const { container } = renderRun(frame);
 
       await screen.findByRole("heading", { name: "Importando…" });
@@ -443,7 +443,10 @@ describe.each<ImportsFrame>(["onboarding", "platform"])(
       expect(
         screen.queryByRole("button", { name: /Concluir importação|Continuar|Importar os/ }),
       ).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Conectar outra conta" })).toBeInTheDocument();
+      // A troca de conta sai da tela em andamento (validação de 2026-10-11).
+      expect(
+        screen.queryByRole("button", { name: "Conectar outra conta" }),
+      ).not.toBeInTheDocument();
       const page = container.querySelector(".imports-running") as HTMLElement;
       expect(page).toHaveAttribute("aria-busy", "true");
     });
@@ -787,13 +790,19 @@ describe("o CSS do andamento", () => {
     expect(body).toMatch(/font-variant-numeric:\s*tabular-nums/);
   });
 
-  test("o anel só respira com movimento permitido, e a transição da barra também", () => {
+  test("o anel respira e o brilho corre mesmo com movimento reduzido; só a transição da barra depende dele", () => {
+    // Decisão da validação de 2026-10-11: parada, a importação parece
+    // travada. As durações levam !important para vencer a regra global.
     const css = readCss();
+    expect(css).toMatch(
+      /\.imports-running-halo\s*\{[^}]*animation:\s*at-breathe 2\.4s[^}]*animation-iteration-count:\s*infinite\s*!important/,
+    );
+    expect(css).toMatch(
+      /\.imports-running\[aria-busy="true"\] \.imports-running-track::after,[^{]*\{[^}]*animation:\s*imports-running-sheen[^}]*animation-duration:\s*1\.6s\s*!important/,
+    );
     const permitted = mediaBlock(css, "prefers-reduced-motion: no-preference");
-    expect(permitted).toMatch(/\.imports-running-halo\s*\{[^}]*animation:\s*at-breathe 2\.4s/);
     expect(permitted).toMatch(/\.imports-running-fill\s*\{[^}]*transition/);
     const outside = css.replace(permitted, "");
-    expect(outside).not.toMatch(/\.imports-running[^{]*\{[^}]*animation:/);
     expect(outside).not.toMatch(/\.imports-running[^{]*\{[^}]*transition:/);
   });
 

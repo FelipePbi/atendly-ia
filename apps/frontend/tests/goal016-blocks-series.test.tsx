@@ -145,7 +145,10 @@ describe("BlockForm: bloqueio e compromisso pessoal são coisas distintas", () =
     await screen.findByRole("heading", { name: "Bloquear horário" });
     await expectNoA11yViolations(container);
 
-    await user.click(screen.getByRole("button", { name: "Confirmar bloqueio" }));
+    // Tela única desde a revisão de 2026-10-12 (D-169): abre direto no período.
+    await user.click(
+      screen.getByRole("button", { name: "Confirmar bloqueio" }),
+    );
 
     await waitFor(() => expect(createTimeBlock).toHaveBeenCalledTimes(1));
     expect(createTimeBlock.mock.calls[0][0]).toMatchObject({ kind: "BLOCK" });
@@ -163,8 +166,11 @@ describe("BlockForm: bloqueio e compromisso pessoal são coisas distintas", () =
     renderWithShell(<BlockForm />);
     await screen.findByRole("heading", { name: "Bloquear horário" });
 
+    // Desde a tela única de 2026-10-12 (D-169), o compromisso pessoal é a
+    // chave dentro de "Título e motivo".
+    await user.click(screen.getByRole("button", { name: "Título e motivo" }));
     await user.click(
-      screen.getByRole("radio", { name: /^Compromisso pessoal/ }),
+      screen.getByRole("switch", { name: "É um compromisso pessoal" }),
     );
     await user.type(screen.getByLabelText("Título (opcional)"), "Dentista");
     await user.click(
@@ -239,7 +245,9 @@ describe("BlockSeriesForm: série finita com exatamente um término", () => {
     await user.click(screen.getByRole("button", { name: "Criar série" }));
 
     expect(
-      await screen.findByText("2 ocorrência(s) cobrem um atendimento confirmado"),
+      await screen.findByText(
+        "2 ocorrência(s) cobrem um atendimento confirmado",
+      ),
     ).toBeVisible();
     expect(screen.getByText("28 de setembro de 2026")).toBeVisible();
     expect(screen.getByText("5 de outubro de 2026")).toBeVisible();
@@ -292,7 +300,9 @@ describe("BlockSeriesForm: série finita com exatamente um término", () => {
       unknown,
       [CreateBlockSeriesInput],
     ];
-    expect(secondInput[0]).toMatchObject({ forceOverlapReason: "Cliente avisado" });
+    expect(secondInput[0]).toMatchObject({
+      forceOverlapReason: "Cliente avisado",
+    });
     expect(secondInput[0].skipConflicts).toBeUndefined();
   });
 });
@@ -410,9 +420,7 @@ describe("OccurrenceActions: esta ocorrência não é a série a partir daqui", 
   });
 
   test("bloco fora de série não mostra nenhuma ação de série", () => {
-    render(
-      <OccurrenceActions block={timeBlockFixture({ seriesId: null })} />,
-    );
+    render(<OccurrenceActions block={timeBlockFixture({ seriesId: null })} />);
 
     expect(
       screen.queryByRole("button", { name: "Remover a série a partir daqui" }),

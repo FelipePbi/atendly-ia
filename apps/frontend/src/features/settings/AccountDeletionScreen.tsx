@@ -136,8 +136,8 @@ export function AccountDeletionScreen({
                     {deletionDateLabel(timezone)}
                   </span>
                   <span className="deletion-step-copy">
-                    Clientes, agenda, serviços e conversas são apagados de
-                    forma definitiva.
+                    Clientes, agenda, serviços e conversas são apagados de forma
+                    definitiva.
                   </span>
                 </div>
               </li>

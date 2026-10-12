@@ -109,6 +109,10 @@ Uma nova sessão após aproximadamente 24 horas pode voltar ao atendimento autom
 
 Para o cliente, a troca deve ser natural, sem mensagens como “agora você está falando com humano” ou “a IA voltou”.
 
+## Conversa resolvida
+
+`Marcar como resolvida` encerra a conversa: ela sai da fila de “Aguardando você”, o que estava pendente para a equipe é dado como resolvido e o campo de mensagem fica bloqueado. A próxima mensagem do cliente reabre a **mesma** conversa (não cria outra). Quem responde depois disso segue a regra da sessão: se o humano tinha assumido a sessão atual, a IA continua fora até `Retomar IA` ou até uma nova sessão.
+
 ## Um número por negócio
 
 Trocar o número não apaga clientes, agenda nem conversas armazenadas.

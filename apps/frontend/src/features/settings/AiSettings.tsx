@@ -18,6 +18,10 @@ import {
   readFinishedActivationTest,
   startActivationTest,
 } from "@/features/activation-test/ActivationTestPanels";
+import {
+  segmentExamples,
+  toneExamples,
+} from "@/features/onboarding/segmentExamples";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Dialog } from "@/shared/ui/Dialog";
@@ -83,6 +87,27 @@ export function AiSettings({
   // Tela do teste escolhida por uma ação desta página (iniciar, ver
   // resultado). Sem ação, a tela vem da execução lida.
   const [testPanel, setTestPanel] = useState<ActivationTestPanel | null>(null);
+  // Exemplos dos estilos no jeito do segmento e com o primeiro serviço ativo
+  // do negócio (validação de 2026-10-11); sem leitura, o exemplo do segmento.
+  const [serviceName, setServiceName] = useState<string | null>(null);
+  useEffect(() => {
+    const catalog = getProductServices().serviceCatalog;
+    if (!catalog?.list) return;
+    const controller = new AbortController();
+    catalog
+      .list(controller.signal)
+      .then((list) => {
+        if (controller.signal.aborted) return;
+        const first = list.items.find((service) => service.active);
+        setServiceName(first?.name ?? null);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+  const examples = toneExamples(
+    segmentExamples(settings.business?.category),
+    serviceName,
+  );
 
   const loadActivation = useCallback(async () => {
     setRead(await readActivation());
@@ -368,7 +393,7 @@ export function AiSettings({
               <ToneOption
                 busy={busy}
                 checked={tone === option.value}
-                example={option.example}
+                example={examples[option.value]}
                 key={option.value}
                 label={option.label}
                 onChoose={() => void chooseTone(option.value)}
@@ -386,8 +411,8 @@ export function AiSettings({
           <div className="ai-contract-column">
             <h2 className="ai-contract-title is-can">Sozinha, ela</h2>
             <p>
-              marca, remarca e cancela dentro dos seus horários · informa
-              preços e pagamento · confirma tudo antes de marcar
+              marca, remarca e cancela dentro dos seus horários · informa preços
+              e pagamento · confirma tudo antes de marcar
             </p>
           </div>
           <div className="ai-contract-column">
@@ -482,22 +507,13 @@ function activationTitle(
   return hasProof ? "IA pausada" : "IA desligada";
 }
 
-const TONE_OPTIONS: Array<{ example: string; label: string; value: AiTone }> = [
-  {
-    example: "“Olá! Gostaria de agendar um horário?”",
-    label: "Profissional",
-    value: "PROFESSIONAL",
-  },
-  {
-    example: "“Oi! Quer marcar um horário? 😊”",
-    label: "Equilibrada",
-    value: "BALANCED",
-  },
-  {
-    example: "“Oiii! Bora marcar? 😄”",
-    label: "Descontraída",
-    value: "CASUAL",
-  },
+const TONE_OPTIONS: Array<{
+  label: string;
+  value: "BALANCED" | "CASUAL" | "PROFESSIONAL";
+}> = [
+  { label: "Profissional", value: "PROFESSIONAL" },
+  { label: "Equilibrada", value: "BALANCED" },
+  { label: "Descontraída", value: "CASUAL" },
 ];
 
 function ToneOption({
@@ -562,9 +578,10 @@ function AppointmentNoticeRow() {
     setBusy(true);
     setMessage(null);
     try {
-      const preferences = await getProductServices().notifications.updatePreferences(
-        { aiAppointmentCreated: next },
-      );
+      const preferences =
+        await getProductServices().notifications.updatePreferences({
+          aiAppointmentCreated: next,
+        });
       setEnabled(preferences.aiAppointmentCreated);
     } catch {
       setMessage("Não foi possível salvar o aviso.");

@@ -39,6 +39,8 @@ import {
   type ActivationTestAiToolCall,
   type ActivationTestAiTurn,
   appointmentIdFromToolCall,
+  awaitsConfirmation,
+  firstOfferedSlot,
 } from "./ActivationTestAiDriver.js";
 import { ActivationTestCleanupService } from "./ActivationTestCleanupService.js";
 import {
@@ -50,9 +52,9 @@ import {
 
 /** Aviso separado, antes de qualquer demonstracao: a conversa e de teste. */
 export const ACTIVATION_TEST_NOTICE =
-  "Esta e uma conversa de teste da Avenly. Voce so precisa observar: a IA vai " +
+  "Esta é uma conversa de teste da Avenly. Você só precisa observar: a IA vai " +
   "conversar sozinha com um cliente simulado e marcar um atendimento de teste, " +
-  "que e removido no final.";
+  "que é removido no final.";
 
 /**
  * Quem pediu e em nome de quem.
@@ -654,7 +656,7 @@ export class ActivationTestService {
             run,
             step,
             attempt,
-            "Otimo. Qual o proximo horario disponivel?",
+            "Ótimo. Qual o próximo horário disponível?",
             { deliverToAi: true },
           )
         ).run;
@@ -676,11 +678,22 @@ export class ActivationTestService {
       }
 
       case "CLIENT_ACCEPTS_SLOT": {
+        // O cliente simulado escolhe um horario de verdade (o primeiro que a
+        // IA consultou), como uma pessoa faria. "Pode reservar esse horario"
+        // nao escolhe nada quando a IA ofereceu mais de um.
+        const availability = await this.runs.findAiToolCall({
+          tenantId: run.tenantId,
+          conversationId: requireConversationId(run),
+          name: ACTIVATION_TEST_TOOL_NAMES.AVAILABILITY,
+          since: run.startedAt,
+        });
+        const slot = availability ? firstOfferedSlot(availability) : null;
+        const chosen = slot ? `às ${slot}` : "esse horário";
         const sent = await this.sendAsClient(
           run,
           step,
           attempt,
-          "Perfeito, pode reservar esse horario.",
+          `Perfeito, pode reservar ${chosen}.`,
           { deliverToAi: true },
         );
         await this.record(run, "SLOT_SELECTED", {
@@ -694,11 +707,32 @@ export class ActivationTestService {
         // Fato: o agendamento que **a IA** criou, pelo id gravado no resultado
         // da ferramenta dela. O teste nao cria agendamento em lugar nenhum —
         // e por isso que este marco prova que a IA atendeu.
-        const toolCall = await this.requireAiToolCall(
+        let toolCall = await this.requireAiToolCall(
           run,
           ACTIVATION_TEST_TOOL_NAMES.APPOINTMENT,
           "a IA nao confirmou o agendamento",
         );
+        // A ferramenta tem duas fases: `prepare` segura o horario e a IA pede
+        // a confirmacao do cliente; so `confirm` cria o agendamento. Quando a
+        // IA parou em `prepare` (ela fez o certo: perguntou antes de marcar),
+        // o cliente simulado confirma, como uma pessoa faria, e o teste le de
+        // novo o que a IA fez (validacao de 2026-10-11).
+        if (!appointmentIdFromToolCall(toolCall) && awaitsConfirmation(toolCall)) {
+          run = (
+            await this.sendAsClient(
+              run,
+              step,
+              attempt,
+              "Sim, pode confirmar.",
+              { deliverToAi: true },
+            )
+          ).run;
+          toolCall = await this.requireAiToolCall(
+            run,
+            ACTIVATION_TEST_TOOL_NAMES.APPOINTMENT,
+            "a IA nao confirmou o agendamento",
+          );
+        }
         const appointmentId = appointmentIdFromToolCall(toolCall);
         if (!appointmentId) {
           // Preparar nao e confirmar. O codigo nomeia isto em vez de culpar a
@@ -874,6 +908,13 @@ export class ActivationTestService {
     }
 
     const turn = await this.deliverToAi(run, text, externalMessageId);
+    // Conversa de teste (cliente simulado, nunca cliente real): o texto das
+    // duas falas vai para o log, para diagnosticar um passo que falhou depois
+    // que a limpeza apagou a conversa.
+    this.logger.info(
+      { runId: run.id, step, client: text, ai: turn.aiText.slice(0, 500) },
+      "Activation test turn",
+    );
     // As linhas que a IA gravou neste turno — a do cliente e a dela — entram
     // no registro do que a execucao criou, que e o que a limpeza remove.
     const created = [turn.clientMessageId, turn.aiMessageId].filter(
@@ -983,7 +1024,17 @@ function correlationFor(
 ): string {
   // O numero da tentativa entra na chave: a retentativa de um envio que pode
   // ter saido nao colide com a linha ja gravada da tentativa anterior.
-  return `activation-test-${run.id}-${step.toLowerCase()}-${attempt}`;
+  // A chave vira o id da mensagem no WhatsApp, que recusa id longo (erro 479
+  // a partir de 65 caracteres, visto com `ai_confirms_appointment`): o passo
+  // entra pelas duas primeiras letras de cada palavra (unicas entre os
+  // passos: CLIENT_ASKS_SLOT e "classl", CLIENT_ACCEPTS_SLOT e "clacsl"), e
+  // o id fica bem abaixo do teto.
+  const stepCode = step
+    .toLowerCase()
+    .split("_")
+    .map((word) => word.slice(0, 2))
+    .join("");
+  return `activation-test-${run.id}-${stepCode}-${attempt}`;
 }
 
 function schedulingContext(input: {

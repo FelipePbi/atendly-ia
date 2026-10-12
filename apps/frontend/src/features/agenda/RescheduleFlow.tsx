@@ -12,8 +12,19 @@ import {
 } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { PushedBar } from "@/shared/layout/PushedBar";
+import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { DatePicker } from "@/shared/ui/pickers/DatePicker";
+import { TimeField } from "@/shared/ui/pickers/PickerFields";
+import { PickerPopover } from "@/shared/ui/pickers/PickerPopover";
 
+import { appointmentHref } from "./agendaLinks";
+import {
+  forgetAgendaChanges,
+  recalledAppointment,
+  recalledCalendar,
+  rememberAppointment,
+} from "./agendaMemory";
 import { initials, totalPriceLabel } from "./AppointmentDetail";
 import { AppointmentFlowShell, ReadOnlyState } from "./AppointmentFlowShell";
 import { readOccupancy } from "./AppointmentForm";
@@ -38,6 +49,7 @@ import {
   serviceColorMap,
   serviceNames,
 } from "./occupancy";
+import type { ConflictAvailability } from "./SlotConflictNotice";
 import { holdNotice } from "./SlotPicker";
 
 const STRIP_DAYS = 6;
@@ -48,17 +60,42 @@ const STRIP_DAYS = 6;
  * remarcação commitar — e sobrepor exige motivo. "Confirmar novo horário" é o
  * único passo: não há diálogo de confirmação depois dele.
  */
-export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
+export function RescheduleFlow({
+  appointmentId,
+  returnTo,
+}: {
+  appointmentId?: string;
+  /** Origem do detalhe (D-167): o retorno ao detalhe a leva adiante. */
+  returnTo?: string;
+}) {
   const router = useRouter();
   const hold = useHoldSession();
-  const dateInputRef = useRef<HTMLInputElement>(null);
-  const [appointment, setAppointment] = useState<Appointment | null>(null);
-  const [calendar, setCalendar] = useState<CalendarState | null>(null);
+  const moreDateRef = useRef<HTMLButtonElement>(null);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  // Vindo do detalhe, o agendamento e o calendário já estão na memória da
+  // aba (D-167): a tela abre preenchida e a leitura abaixo revalida (D-168).
+  const [seed] = useState(() => {
+    const remembered = appointmentId
+      ? recalledAppointment(appointmentId)
+      : null;
+    const rememberedCalendar = remembered ? recalledCalendar() : null;
+    return remembered && rememberedCalendar
+      ? { appointment: remembered, calendar: rememberedCalendar }
+      : null;
+  });
+  const [appointment, setAppointment] = useState<Appointment | null>(
+    seed?.appointment ?? null,
+  );
+  const [calendar, setCalendar] = useState<CalendarState | null>(
+    seed?.calendar ?? null,
+  );
   const [serviceColors, setServiceColors] = useState<ServiceColorMap>(
     () => new Map(),
   );
-  const [date, setDate] = useState(isoDate(new Date()));
-  const [stripStart, setStripStart] = useState(isoDate(new Date()));
+  const [date, setDate] = useState(() =>
+    seed ? initialRescheduleDate(seed.appointment) : isoDate(new Date()),
+  );
+  const [stripStart, setStripStart] = useState(date);
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(Boolean(appointmentId));
   const [startTime, setStartTime] = useState("");
@@ -68,15 +105,33 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
   // marcado por padrão, e a interface manda o campo sempre explicitamente —
   // nunca se apoia no default do contrato, que é o oposto.
   const [notifyCustomer, setNotifyCustomer] = useState(true);
-  const [loading, setLoading] = useState(Boolean(appointmentId));
+  const [loading, setLoading] = useState(Boolean(appointmentId) && !seed);
+  // Esqueleto só se a carga passar de ~150 ms, e nunca sob o splash (D-168).
+  const showSkeleton = useDeferredLoading(loading);
   const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState<ConflictState | null>(null);
+  // Expediente e granularidade para o aviso de recusa dizer o motivo real
+  // (2026-10-12); sem a leitura, o aviso nao afirma motivo.
+  const [availabilitySettings, setAvailabilitySettings] =
+    useState<ConflictAvailability | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    const settingsService = getProductServices().settings;
+    if (!settingsService || typeof settingsService.get !== "function") return;
+    settingsService
+      .get(controller.signal)
+      .then((state) => setAvailabilitySettings(state.availability ?? null))
+      .catch(() => {
+        // Sem as regras o aviso usa o texto neutro; nao bloqueia o fluxo.
+      });
+    return () => controller.abort();
+  }, []);
   const [error, setError] = useState<string | null>(() =>
     appointmentId ? null : "O agendamento não foi informado.",
   );
 
   const detailHref = appointmentId
-    ? `/agenda/agendamento?id=${encodeURIComponent(appointmentId)}`
+    ? appointmentHref(appointmentId, returnTo)
     : "/agenda";
 
   useEffect(() => {
@@ -90,12 +145,13 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
       getProductServices().calendar.getCalendar(controller.signal),
     ])
       .then(([appointmentResult, calendarResult]) => {
-        const initial =
-          appointmentResult.date < isoDate(new Date())
-            ? isoDate(new Date())
-            : appointmentResult.date;
         setAppointment(appointmentResult);
         setCalendar(calendarResult);
+        rememberAppointment(appointmentResult);
+        // Semeada da memória, a tela já está no dia certo e a pessoa pode
+        // ter mexido nele: a revalidação não o move.
+        if (seed) return;
+        const initial = initialRescheduleDate(appointmentResult);
         setDate(initial);
         setStripStart(initial);
       })
@@ -109,7 +165,7 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [appointmentId]);
+  }, [appointmentId, seed]);
 
   // Só a cor do ponto do serviço depende do catálogo: sem ele o ponto fica
   // neutro e a remarcação continua.
@@ -251,7 +307,10 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
         input,
         newIdempotencyKey(),
       );
-      router.replace(`/agenda/agendamento?id=${encodeURIComponent(result.id)}`);
+      // O que a Agenda leu antes da remarcação deixou de valer (D-167).
+      forgetAgendaChanges();
+      rememberAppointment(result);
+      router.replace(appointmentHref(result.id, returnTo));
     } catch (caught) {
       if (isHoldLostError(caught)) {
         hold.markLost();
@@ -293,7 +352,10 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
     ? appointmentServiceColors(appointment, serviceColors)
     : [];
   const summaryMeta = appointment
-    ? [formatDuration(appointment.durationMinutes), totalPriceLabel(appointment)]
+    ? [
+        formatDuration(appointment.durationMinutes),
+        totalPriceLabel(appointment),
+      ]
         .filter(Boolean)
         .join(" · ")
     : "";
@@ -302,6 +364,7 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
 
   return (
     <AppointmentFlowShell
+      agendaBar={false}
       appointmentRoute={{ date: appointment?.date ?? null, id: appointmentId }}
       bare
       calendar={calendar}
@@ -322,7 +385,7 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
           title="Remarcar"
         />
         <div className="agenda-appt-body agenda-rs-body">
-          {loading && (
+          {loading && showSkeleton && (
             <>
               <span className="skeleton skeleton-title" />
               <span className="skeleton skeleton-line" />
@@ -333,9 +396,11 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
               {error}
             </p>
           )}
-          {!loading && calendar && !calendar.capabilities.createAppointments && (
-            <ReadOnlyState operation="reagendar" />
-          )}
+          {!loading &&
+            calendar &&
+            !calendar.capabilities.createAppointments && (
+              <ReadOnlyState operation="reagendar" />
+            )}
           {!loading &&
             appointment &&
             calendar?.capabilities.createAppointments && (
@@ -385,7 +450,7 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
                           Novo horário
                         </span>
                         <span className="agenda-rs-box-value">
-                          {startTime ? shortSlot(date, startTime) : "—"}
+                          {startTime ? shortSlot(date, startTime) : "-"}
                         </span>
                       </div>
                     </div>
@@ -425,37 +490,49 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
                           );
                         })}
                         <span className="agenda-rs-day is-more">
-                          <span aria-hidden="true" className="agenda-rs-day-week">
+                          <span
+                            aria-hidden="true"
+                            className="agenda-rs-day-week"
+                          >
                             …
                           </span>
                           <button
+                            aria-expanded={datePickerOpen}
+                            aria-haspopup="dialog"
                             aria-label="Outra data"
                             className="agenda-rs-more"
+                            ref={moreDateRef}
                             type="button"
-                            onClick={() => {
-                              const input = dateInputRef.current;
-                              if (!input) return;
-                              if (typeof input.showPicker === "function")
-                                input.showPicker();
-                              else input.click();
-                            }}
+                            onClick={() => setDatePickerOpen((open) => !open)}
                           >
                             <Icon name="calendar" />
                           </button>
-                          <input
-                            aria-label="Escolher outra data"
-                            className="agenda-rs-date-input"
-                            min={isoDate(new Date())}
-                            ref={dateInputRef}
-                            tabIndex={-1}
-                            type="date"
-                            value={date}
-                            onChange={(event) => {
-                              if (!event.target.value) return;
-                              setStripStart(event.target.value);
-                              chooseDate(event.target.value);
-                            }}
-                          />
+                          {datePickerOpen && (
+                            <PickerPopover
+                              anchorRef={moreDateRef}
+                              label="Escolher outra data"
+                              preferredWidth={360}
+                              onClose={(reason) => {
+                                setDatePickerOpen(false);
+                                if (reason === "escape")
+                                  moreDateRef.current?.focus();
+                              }}
+                            >
+                              <DatePicker
+                                autoFocus
+                                collapseOnPick={false}
+                                min={isoDate(new Date())}
+                                startExpanded
+                                value={date}
+                                onChange={(value) => {
+                                  setDatePickerOpen(false);
+                                  moreDateRef.current?.focus();
+                                  setStripStart(value);
+                                  chooseDate(value);
+                                }}
+                              />
+                            </PickerPopover>
+                          )}
                         </span>
                       </div>
                     </div>
@@ -489,7 +566,9 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
                                   checked={startTime === slot.startTime}
                                   name="start-time"
                                   type="radio"
-                                  onChange={() => void chooseTime(slot.startTime)}
+                                  onChange={() =>
+                                    void chooseTime(slot.startTime)
+                                  }
                                 />
                                 <span>{slot.startTime}</span>
                               </label>
@@ -514,12 +593,10 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
                         <div className="agenda-rs-manual">
                           <label className="agenda-rs-manual-field">
                             <span>Outro horário, fora dos oferecidos</span>
-                            <input
-                              type="time"
+                            <TimeField
+                              duration={durationMinutes}
                               value={manualTime}
-                              onChange={(event) =>
-                                setManualTime(event.target.value)
-                              }
+                              onValueChange={(value) => setManualTime(value)}
                             />
                           </label>
                           <button
@@ -544,9 +621,7 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
                     <label className="agenda-rs-notify">
                       <span className="agenda-rs-notify-text">
                         <strong>Avisar a cliente pelo WhatsApp</strong>
-                        <small>
-                          Recomendado: a data e o horário mudaram.
-                        </small>
+                        <small>Recomendado: a data e o horário mudaram.</small>
                       </span>
                       <span className="agenda-rs-switch">
                         <input
@@ -556,13 +631,17 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
                             setNotifyCustomer(event.target.checked)
                           }
                         />
-                        <span aria-hidden="true" className="agenda-rs-switch-track" />
+                        <span
+                          aria-hidden="true"
+                          className="agenda-rs-switch-track"
+                        />
                       </span>
                     </label>
                   </div>
                 </div>
                 {conflict && (
                   <ConflictPanel
+                    availability={availabilitySettings}
                     busy={busy}
                     entries={conflict.entries}
                     interval={{
@@ -641,4 +720,10 @@ interface ConflictState {
   reason: string;
   reasonError: string | null;
   startTime: string;
+}
+
+/** O dia em que a remarcação começa: o do agendamento, ou hoje se ele já passou. */
+function initialRescheduleDate(appointment: Appointment): string {
+  const today = isoDate(new Date());
+  return appointment.date < today ? today : appointment.date;
 }

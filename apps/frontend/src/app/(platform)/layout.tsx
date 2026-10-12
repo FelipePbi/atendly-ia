@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "@/shared/layout/AppShell";
 import { ShellConfigProvider, useShellConfigValue } from "@/shared/layout/ShellConfig";
+import { useSplashArm, useSplashHold } from "@/shared/motion/splash";
 
 /**
  * Monta o AppShell uma única vez para todo o grupo `(platform)`. As telas não
@@ -25,6 +26,12 @@ export default function PlatformLayout({ children }: { children: ReactNode }) {
 
 function PlatformShellFrame({ children }: { children: ReactNode }) {
   const config = useShellConfigValue();
+  // No primeiro carregamento, o splash da marca só sai quando a tela se
+  // declarou à casca E terminou a primeira leitura que ela declara em
+  // `loading` (D-168): depois dele a tela entra com conteúdo, nunca com
+  // esqueleto. A espera é registrada antes de armar a saída.
+  useSplashHold(Boolean(config?.loading));
+  useSplashArm(config !== null);
   if (config?.chrome === false) return <>{children}</>;
   return (
     <AppShell

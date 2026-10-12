@@ -354,6 +354,17 @@ persistência estão superados pelos fatos abaixo, verificados no
   não apaga mais a tentativa: devolve 201 quando SENT e 202 com o estado real
   quando FAILED/UNKNOWN. `OutboxStore.reconcileFromReceipt` leva PENDING/UNKNOWN
   a SENT por `correlationId` ou `externalMessageId`, escopado a tenant e canal.
+- **FATO atual (2026-10-11):** a resposta da IA ao cliente (grafo e
+  `TenantChannelReplySender` do teste de ativação) sai por
+  `outbox/ai-reply-dispatch.ts`: `splitAiReplyIntoParts` divide o texto em até 4
+  partes e cada uma sai como mensagem própria, com `AI_REPLY_PART_GAP_MS`
+  (1200 ms) entre partes. A `Message` continua uma só (texto completo), só vira
+  SENT depois da última parte, e `deliveryPartsSent` guarda o progresso para o
+  retry não reenviar parte enviada. Só a última parte leva o `correlationId`; as
+  anteriores levam `<correlationId>-p<n>` — o recibo que reconcilia é o da
+  última, e `HandoffService.isBotOutboundMessage` reconhece o eco de qualquer
+  parte. Mensagem da profissional, lembrete, aviso e envio pelo número da
+  plataforma continuam em mensagem única.
 - **FATO atual:** `messageDto` da IA, o client do BFF e `publicApiSchemas.ts`
   do frontend expõem `deliveryState`/`deliveryDetail` como opcionais e
   anuláveis ([PUBLIC_API_V1](../../apps/bff/PUBLIC_API_V1.md)); não há UI nova.
@@ -7365,9 +7376,12 @@ no nome que dependiam da composição antiga, mais quatro testes novos
   servidor pelo mesmo motivo.
 - **Observação 2 do review073.** `ensureAgendaOnMeasuredDate` navega até a
   data semeada em qualquer visualização (dia, semana ou mês).
-- **Divergência declarada.** `DayDetailPanel` reaproveita
-  `LifecycleActions`/`AppointmentHistory`, mas não embute o componente
-  `AppointmentDetail` inteiro. Detalhe em [D-089](DECISIONS.md).
+- **Divergência declarada, resolvida em 2026-10-12.** `DayDetailPanel`
+  reaproveitava `LifecycleActions`/`AppointmentHistory`, mas não embutia o
+  componente `AppointmentDetail` inteiro ([D-089](DECISIONS.md)). Desde
+  [D-165](DECISIONS.md), o painel mostra o mesmo corpo do quadro A5 da rota
+  (`useAppointmentDetail` + `AppointmentDetailBody`), e a versão em linhas de
+  `LifecycleActions` deixou de existir.
 - **Vermelho da baseline dos testes reescritos (§6.6 e §6.5).** Com
   `AgendaBoard.tsx`, `WeekView.tsx` e `DayView.tsx` servidos do blob de
   `37c7371` por um plugin Vite, sem sobrescrever a árvore: §6.6
@@ -9079,7 +9093,7 @@ A Agenda segue os quadros A2, A3, A4 e A12 do protótipo nos quatro devices, e o
 
 - **Dia vazio (A2).** No dia sem atendimento nem bloqueio em que a disponibilidade lida não tem regra ativa, o resumo diz "{Dia}, {d} · você não atende neste dia" e o corpo diz "A IA não marca horários {aos domingos | às segundas | …}, mas você pode criar um atendimento por conta própria." com "+ Criar agendamento" (só com `createAppointments`). Com disponibilidade no dia, ou com a leitura pendente ou falhada, o corpo fica como antes. Hoje fica com anel na faixa da semana quando não é o dia escolhido. A partir de 1024 px, o painel de detalhe do dia fechado fica vazio.
 - **Mini-calendário (A3).** O título de mês e ano é o botão "Abrir calendário, {mês} de {ano}", com o chevron ⌄, nas três visualizações (revê D-108 (a)). A folha (`features/agenda/AgendaCalendarSheet.tsx`) lê o mês da grade com `listAppointments`, `listTimeBlocks` e `listAvailabilityExceptions` e `buildAgendaEntries`, marca ponto no dia com agendamento e cinza no dia com `isFullDayClosure` (agora em `occupancy.ts`), e move a Agenda sem trocar a visualização. A falha da leitura não bloqueia; fechar cancela a leitura em voo.
-- **Folha de criar (A4).** "Novo" e o botão flutuante abrem "O que você quer adicionar?" no lugar do menu suspenso, com Agendamento (`createAppointments`), Compromisso pessoal, Bloqueio e Exceção do dia (`manageAvailability`), cada uma com ícone e descrição, para os destinos de antes.
+- **Folha de criar (A4).** "Novo" e o botão flutuante abrem "O que você quer adicionar?" no lugar do menu suspenso, com Agendamento (`createAppointments`), Compromisso pessoal, Bloqueio e Exceção do dia (`manageAvailability`), cada uma com ícone e descrição, para os destinos de antes. Desde D-169 (2026-10-12) a folha tem só Agendamento e "Bloquear horário" (`/agenda/bloquear`, uma tela só desde a revisão do mesmo dia: período como pausa ou compromisso pessoal, ou dia inteiro fechado), e o horário extra fica em Configurações > Agenda.
 - **Dias visíveis (A12).** A pílula é um botão que abre a folha "Dias visíveis" (`features/agenda/AgendaVisibleDaysSheet.tsx`) na própria Agenda (revê D-109 (g)). Sete interruptores, nada gravado antes de "Salvar", `PATCH /v1/settings/agenda-view` só com `hiddenWeekdays` em ordem, limite de seis com a frase de `CalendarSettings.tsx` (que passou a exportar a frase e o detector da recusa), falha genérica com `role="alert"` e a Agenda aplicando os dias sem recarregar. O aviso na Semana para atendimento em dia oculto, que a frase da folha cita, não existe hoje (registrado em D-132).
 - **Casca das folhas.** As três usam `ChatSheetShell`. O `mousedown` no escurecido passou a chamar `preventDefault()` antes de fechar, para o foco voltar a quem abriu; K5, K6 e H7 ficaram iguais pixel a pixel à captura de antes.
 - **Alvos.** A2, A3, A4 e A12 entram em `apps/frontend/e2e/visual/targets.json`; `scripts/tests/visual-responses.test.mjs` exige os quatro.
@@ -9092,7 +9106,7 @@ A Agenda segue os quadros A2, A3, A4 e A12 do protótipo nos quatro devices, e o
 O conflito de horário do novo agendamento fica igual ao quadro A7 nos quatro devices, e encaixar continua exigindo decisão humana com motivo. D-133 foi aceita no [review119](reviews/119-review.md), na rodada 3. Só o frontend mudou: nenhuma mudança no BFF, no Scheduling ou no contrato.
 
 - **Conflito dentro do formulário.** Na recusa `409` do hold ou da criação em `/agenda/novo`, o horário recusado vira chip âmbar com o ícone de alerta (nome acessível com "ocupado"), o aviso âmbar (`features/agenda/SlotConflictNotice.tsx`, `role="alert"`) entra abaixo do bloco Horário, e o rodapé troca o CTA por "Encaixar mesmo assim" e "Escolher outro horário". O `ConflictPanel` deixa de ser usado na criação e continua na remarcação, sem mudança.
-- **Textos do aviso.** Só o que a leitura da ocupação trouxe: atendimento com "(presença confirmada)" ou "(em confirmação)"; bloqueio ou compromisso pessoal com o nome do título, senão do motivo, senão só o tipo; intervalo entre atendimentos; "fora do seu horário de atendimento" com a leitura respondida e vazia; "Não foi possível ver o que ocupa este horário" com a leitura falhada (nunca vira "nada ocupa"); "Consultando…" com "Encaixar mesmo assim" desabilitado.
+- **Textos do aviso.** Só o que a leitura da ocupação trouxe: atendimento com "(presença confirmada)" ou "(em confirmação)"; bloqueio ou compromisso pessoal com o nome do título, senão do motivo, senão só o tipo; intervalo entre atendimentos; com a leitura respondida e vazia, o motivo pelo expediente lido de Configurações, com o mesmo critério do motor (desde 2026-10-12): "fora do seu horário de atendimento" só quando o intervalo não cabe num período do dia (o corpo diz o expediente), "não está entre os que a sua agenda oferece (de N em N minutos)" quando cabe mas o início está fora do passo da granularidade, e "Esse horário não foi liberado pela agenda" (pode estar reservado numa confirmação em andamento) quando nada disso explica ou o expediente não foi lido; "Não foi possível ver o que ocupa este horário" com a leitura falhada (nunca vira "nada ocupa"); "Consultando…" com "Encaixar mesmo assim" desabilitado.
 - **Motivo.** O campo "Motivo do encaixe" continua obrigatório (D-032 (4)): sem motivo, ou só com espaços, nada é enviado e a mensagem aparece junto ao campo; com motivo, `create(motivo)` vai uma vez com `overlapOverride: true`.
 - **Escolher outro horário.** Não grava nada, libera o hold se há um vivo, limpa horário e motivo, devolve o chip ao normal (ou tira o chip extra de "Outro horário") e leva o foco ao primeiro horário livre ou à legenda "Horário".
 - **Rodapé do A7** (CSS só em `.agenda-new-footer.is-conflict`): "Escolher outro horário" transparente (hover `#EFEAE2`, ativo `#E5DED4`) com 54 px de altura; `letter-spacing: 0` nos dois botões; texto de "Encaixar mesmo assim" em `#F7F4EF`. O CTA do A6 não mudou.

@@ -9,5 +9,8 @@ export default defineConfig({
     // um worker reivindicar o evento do outro. Só vale quando o gate de
     // integração fornece o banco; o gate core segue paralelo.
     fileParallelism: !process.env.AI_TEST_DATABASE_URL,
+    // Filtro de validacao local do `.env` (so alguns numeros recebem resposta
+    // da IA) nao vale na suite: `dotenv` nao sobrescreve variavel ja definida.
+    env: { AI_REPLY_ONLY_PHONES: "" },
   },
 });

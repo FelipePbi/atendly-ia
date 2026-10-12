@@ -228,7 +228,7 @@ describe("ConversationContextPanel e ConversationSuggestions não ficam sem impo
     });
     expect(
       await within(context).findByRole("link", { name: "Ver perfil" }),
-    ).toHaveAttribute("href", "/clientes/detalhes?id=cust-1");
+    ).toHaveAttribute("href", "/clientes/detalhes?id=cust-1&voltar=%2Fconversas%2Fconv-1");
   });
 
   test("a sugestão da IA só é alcançada pelo chat quando há atendimento humano vigente", async () => {

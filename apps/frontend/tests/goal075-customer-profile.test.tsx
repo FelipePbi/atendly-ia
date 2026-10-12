@@ -357,6 +357,49 @@ describe("§6.10 — três abas: clique, seta e endereço direto", () => {
     expect(screen.getByRole("button", { name: "Nova observação" })).toBeVisible();
   });
 
+  test("aberto pela conversa: abre na aba Atendimentos e volta para a conversa", async () => {
+    // Validacao de 2026-10-12: "Ver agendamentos" abria o perfil no Resumo
+    // (na navegacao pelo app, window.location ainda tinha a URL anterior) e o
+    // voltar levava para a lista de clientes em vez da conversa.
+    window.history.pushState({}, "", "/conversas/conv-1");
+    render(
+      <ShellConfigProvider>
+        <ProductCustomersScreen
+          customerId="c1"
+          initialTab="atendimentos"
+          returnTo="/conversas/conv-1"
+          scenario="detail"
+        />
+      </ShellConfigProvider>,
+    );
+    await screen.findByRole("heading", { name: "Ana Paula" });
+
+    expect(screen.getByRole("tab", { name: "Atendimentos" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.getByRole("link", { name: "Voltar para a conversa" }),
+    ).toHaveAttribute("href", "/conversas/conv-1");
+  });
+
+  test("origem externa no voltar e ignorada: volta para a lista de clientes", async () => {
+    render(
+      <ShellConfigProvider>
+        <ProductCustomersScreen
+          customerId="c1"
+          returnTo="//evil.example/phish"
+          scenario="detail"
+        />
+      </ShellConfigProvider>,
+    );
+    await screen.findByRole("heading", { name: "Ana Paula" });
+
+    expect(
+      screen.getByRole("link", { name: "Voltar para clientes" }),
+    ).toHaveAttribute("href", "/clientes");
+  });
+
   test("os quatro números aparecem em Resumo", async () => {
     renderProfile();
     await screen.findByRole("heading", { name: "Ana Paula" });

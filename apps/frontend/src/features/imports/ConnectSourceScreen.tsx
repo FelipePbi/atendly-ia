@@ -149,7 +149,11 @@ export function ConnectSourceScreen({
     <ImportsPage
       description="Usamos seu acesso só para ler seus dados durante a importação. Ele é apagado assim que você concluir a importação."
       eyebrow={false}
-      title={replace ? "Conectar outra conta do Minha Agenda" : "Entre no Minha Agenda"}
+      title={
+        replace
+          ? "Conectar outra conta do Minha Agenda"
+          : "Entre no Minha Agenda"
+      }
     >
       <form
         className="imports-credentials"
@@ -218,7 +222,11 @@ export function ConnectSourceScreen({
               Cancelar
             </button>
           )}
-          <button className="btn btn-primary" disabled={submitting} type="submit">
+          <button
+            className="btn btn-primary"
+            disabled={submitting}
+            type="submit"
+          >
             {submitting ? "Conectando…" : "Analisar meus dados"}
           </button>
         </div>

@@ -3,6 +3,7 @@ import type {
   Tenant,
   User,
 } from "../generated/prisma/client.js";
+import { businessAddressPartsDto } from "./business-profile.js";
 
 export function userDto(
   user: Pick<User, "id" | "email" | "name" | "createdAt">,
@@ -40,6 +41,7 @@ export function businessProfileDto(profile: BusinessProfile | null) {
     currency: profile.currency,
     modalities: profile.modalities,
     address: profile.address,
+    addressParts: businessAddressPartsDto(profile.addressParts),
     createdAt: toIso(profile.createdAt),
     updatedAt: toIso(profile.updatedAt),
   };

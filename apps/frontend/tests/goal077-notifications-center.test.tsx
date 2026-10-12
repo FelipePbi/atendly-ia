@@ -35,6 +35,18 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
   }),
 }));
 
+// A tela relê o resumo da casca ao ser deixada (marcar ao ver, 2026-10-12);
+// esta suíte não monta `SystemStatusProvider`.
+const refreshStatus = vi.fn();
+
+vi.mock("@/shared/runtime/systemStatus", () => ({
+  useSystemStatus: () => ({
+    aiView: "unknown",
+    refresh: refreshStatus,
+    whatsappView: "unknown",
+  }),
+}));
+
 /** Um instante no fuso do navegador, para a hora esperada não depender do TZ. */
 function localIso(day: number, hour: number, minute: number): string {
   return new Date(2026, 8, day, hour, minute).toISOString();

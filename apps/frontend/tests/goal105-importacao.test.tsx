@@ -468,7 +468,7 @@ describe("Goal105 prova 1: I2 e a entrada da importação", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "Traga serviços, clientes, horários e agendamentos de uma vez. Leva alguns minutos e acontece uma única vez — depois, a Avenly é sua agenda oficial.",
+        "Traga serviços, clientes, horários e agendamentos de uma vez. Leva alguns minutos e acontece uma única vez. Depois, a Avenly é sua agenda oficial.",
       ),
     ).toBeVisible();
     expect(
@@ -603,10 +603,23 @@ describe("Goal105 prova 2: a origem (2.I1) vem antes das credenciais", () => {
 
   test("'Conectar outra conta', numa sessão viva, abre na origem; 'Cancelar' volta à sessão sem pedido", async () => {
     const user = userEvent.setup();
-    getImportState.mockResolvedValue(liveState(sessionFixture()));
+    // A tela parada ("Importação quase concluída") não tem mais a troca de
+    // conta (validação de 2026-10-11); a execução interrompida ainda tem.
+    getImportState.mockResolvedValue(liveState(sessionFixture({ interrupted: true })));
+    getImportProgress.mockResolvedValue({
+      categories: [],
+      counts: { failed: 0, imported: 0, needsReview: 0, pending: 12, skipped: 0 },
+      finishedAt: null,
+      interrupted: true,
+      lastError: null,
+      previewVersion: 1,
+      sessionId: "session-1",
+      startedAt: "2026-09-15T10:10:00.000Z",
+      status: "PARTIAL",
+    });
     renderImports();
 
-    await screen.findByRole("heading", { name: "Importação quase concluída" });
+    await screen.findByRole("heading", { name: "Isso parou no meio do caminho" });
     await user.click(screen.getByRole("button", { name: "Conectar outra conta" }));
     await user.click(
       screen.getByRole("button", { name: "Descartar e conectar outra conta" }),
@@ -622,7 +635,7 @@ describe("Goal105 prova 2: a origem (2.I1) vem antes das credenciais", () => {
     await user.click(screen.getByRole("button", { name: "Cancelar" }));
 
     expect(
-      await screen.findByRole("heading", { name: "Importação quase concluída" }),
+      await screen.findByRole("heading", { name: "Isso parou no meio do caminho" }),
     ).toBeVisible();
     expect(screen.queryByRole("heading", { name: ORIGIN_TITLE })).toBeNull();
     expect(getImportState).toHaveBeenCalledTimes(stateReads);
@@ -649,7 +662,7 @@ describe("Goal105 prova 3: I1, o histórico só de leitura", () => {
     expect(screen.queryByText(/camila@example\.com/)).toBeNull();
     expect(
       screen.getByText(
-        "A importação do Minha Agenda é feita uma única vez. Alterações feitas lá depois de 18/09 não chegam à Avenly — sua agenda oficial é esta.",
+        "A importação do Minha Agenda é feita uma única vez. Alterações feitas lá depois de 18/09 não chegam à Avenly: sua agenda oficial é esta.",
       ),
     ).toBeVisible();
   });
@@ -664,7 +677,7 @@ describe("Goal105 prova 3: I1, o histórico só de leitura", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "A importação do Minha Agenda é feita uma única vez. Alterações feitas lá depois de 19/09 não chegam à Avenly — sua agenda oficial é esta.",
+        "A importação do Minha Agenda é feita uma única vez. Alterações feitas lá depois de 19/09 não chegam à Avenly: sua agenda oficial é esta.",
       ),
     ).toBeVisible();
   });
@@ -1000,9 +1013,10 @@ describe("Goal105 prova 5: o que fica como era", () => {
       expect(
         await screen.findByRole("heading", { name: "Importação quase concluída" }),
       ).toBeVisible();
+      // A tela parada não oferece trocar de conta (validação de 2026-10-11).
       expect(
-        screen.getByRole("button", { name: "Conectar outra conta" }),
-      ).toBeVisible();
+        screen.queryByRole("button", { name: "Conectar outra conta" }),
+      ).toBeNull();
       await waitFor(() => expect(getImportProgress).toHaveBeenCalled());
       expect(startImport).not.toHaveBeenCalled();
       expect(connectIntegration).not.toHaveBeenCalled();

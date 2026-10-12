@@ -26,7 +26,14 @@ import { firstName, GuardianCard } from "./GuardianCard";
 import { initials } from "./initials";
 import { PrimaryGuardianPanel } from "./PrimaryGuardianPanel";
 
-type CustomerProfileProps = { customerId?: string };
+type CustomerProfileProps = {
+  customerId?: string;
+  /** `?aba=` lido no servidor: na navegacao pelo app, window.location ainda
+   * tem a URL anterior no primeiro render (validacao de 2026-10-12). */
+  initialTab?: string;
+  /** `?voltar=`: tela de origem, por exemplo a conversa. */
+  returnTo?: string;
+};
 
 type ProfileTab = "atendimentos" | "notas" | "resumo";
 
@@ -36,7 +43,11 @@ const TABS: Array<{ id: ProfileTab; label: string }> = [
   { id: "notas", label: "Notas" },
 ];
 
-export function CustomerProfile({ customerId }: CustomerProfileProps) {
+export function CustomerProfile({
+  customerId,
+  initialTab,
+  returnTo,
+}: CustomerProfileProps) {
   const wide = useWideLayout();
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [calendar, setCalendar] = useState<CalendarState | null>(null);
@@ -49,7 +60,10 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [tab, setTab] = useState<ProfileTab>(() => initialTabFromLocation());
+  const [tab, setTab] = useState<ProfileTab>(
+    () => profileTab(initialTab) ?? initialTabFromLocation(),
+  );
+  const back = backTarget(returnTo);
   // A conversa vem marcada com o dono para quem foi pedida: o resultado de
   // outro dono nunca é lido como o do dono atual.
   const [conversation, setConversation] = useState<{
@@ -217,8 +231,8 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
       )}
     >
       <PushedBar
-        backHref="/clientes"
-        backLabel="Voltar para clientes"
+        backHref={back.href}
+        backLabel={back.label}
         menuItems={menuItems}
         menuLabel="Mais ações do cliente"
       />
@@ -536,6 +550,31 @@ function ProfileLoading() {
  * A aba pedida por `?aba=` no link direto (Goal075 §4). Só decide a seleção
  * inicial; trocar de aba depois é sempre ação da própria tela.
  */
+function profileTab(value: string | undefined): ProfileTab | null {
+  return value === "atendimentos" || value === "notas" || value === "resumo"
+    ? value
+    : null;
+}
+
+/**
+ * Volta para a tela de origem quando ela veio no link (so caminho interno,
+ * nunca outro site); sem origem, volta para a lista de clientes.
+ */
+export function backTarget(returnTo: string | undefined): {
+  href: string;
+  label: string;
+} {
+  if (returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")) {
+    return {
+      href: returnTo,
+      label: returnTo.startsWith("/conversas/")
+        ? "Voltar para a conversa"
+        : "Voltar",
+    };
+  }
+  return { href: "/clientes", label: "Voltar para clientes" };
+}
+
 function initialTabFromLocation(): ProfileTab {
   if (typeof window === "undefined") return "resumo";
   const requested = new URLSearchParams(window.location.search).get("aba");

@@ -10,7 +10,7 @@ export function newIdempotencyKey(): string {
   }
   const values = new Uint32Array(4);
   globalThis.crypto.getRandomValues(values);
-  return Array.from(values, (value) => value.toString(16).padStart(8, "0")).join(
-    "-",
-  );
+  return Array.from(values, (value) =>
+    value.toString(16).padStart(8, "0"),
+  ).join("-");
 }

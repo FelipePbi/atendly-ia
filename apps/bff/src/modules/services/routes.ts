@@ -19,7 +19,7 @@ const serviceColorTokenSchema = z.enum([
   "VIOLET",
   "SLATE",
 ]);
-const serviceSchema = z.object({
+export const serviceSchema = z.object({
   name: z.string().trim().min(1).max(200),
   // Ausente vira pendencia de revisao (Goal007); nunca zero/duracao inventada.
   durationMinutes: z.number().int().positive().max(1_440).nullable().optional(),
@@ -27,12 +27,15 @@ const serviceSchema = z.object({
   price: z.number().nonnegative().nullable().optional(),
   active: z.boolean().default(true),
   description: z.string().trim().max(1_000).nullable().optional(),
-  colorToken: serviceColorTokenSchema.nullable().optional(),
+  // Decisão de 2026-10-12: a criação manual exige escolher a cor, e na edição
+  // ela pode ser trocada, nunca removida. Onboarding (PATCH /v1/onboarding) e
+  // importação não passam por aqui: o Scheduling sorteia a cor da paleta.
+  colorToken: serviceColorTokenSchema,
   bufferBeforeMinutes: z.number().int().nonnegative().max(240).nullable().optional(),
   bufferAfterMinutes: z.number().int().nonnegative().max(240).nullable().optional(),
   recurrenceIntervalDays: z.number().int().positive().max(365).nullable().optional(),
 });
-const patchSchema = serviceSchema
+export const patchSchema = serviceSchema
   .partial()
   .refine(
     (value) => Object.keys(value).length > 0,

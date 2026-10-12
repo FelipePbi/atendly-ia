@@ -62,6 +62,6 @@ describe("RouteAnnouncer", () => {
   test("the document title follows the route, which is what a tab shows", () => {
     pathname.current = "/agenda";
     render(<RouteAnnouncer />);
-    expect(document.title).toBe("Agenda — Avenly");
+    expect(document.title).toBe("Agenda · Avenly");
   });
 });

@@ -3,9 +3,14 @@ import { useEffect, useId, useState } from "react";
 import type { BusinessModality } from "@/data";
 import { Icon, type IconName } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import {
+  AddressFields,
+  addressPartsFromDraft,
+} from "@/shared/ui/AddressFields";
 
 import type { OnboardingDraft } from "../OnboardingRuntime";
 import type { OnboardingScenario } from "../scenarios";
+import { segmentExamples, welcomeAskFor } from "../segmentExamples";
 import type { OnboardingStepContext } from "./shared";
 
 /** Segmentos frequentes do vault (docs/product-vault/02-Fluxos/01-Onboarding.md);
@@ -47,15 +52,15 @@ export const BUSINESS_MODALITY_OPTIONS: Array<{
 ];
 
 const SEGMENT_REQUIRED_MESSAGE = "Escolha o segmento do seu negócio.";
-const MODALITY_REQUIRED_MESSAGE = "Escolha ao menos uma modalidade de atendimento.";
-const ADDRESS_REQUIRED_MESSAGE = "Informe o endereço do seu espaço.";
+const MODALITY_REQUIRED_MESSAGE =
+  "Escolha ao menos uma modalidade de atendimento.";
 
 export function businessStepBody(
   scenario: OnboardingScenario,
   draft: OnboardingDraft,
   setDraft: (updater: (value: OnboardingDraft) => OnboardingDraft) => void,
 ) {
-  if (scenario === "boas-vindas") return <WelcomeStepBody />;
+  if (scenario === "boas-vindas") return <WelcomeStepBody draft={draft} />;
   if (scenario === "segmento-e-nome") {
     return <SegmentAndNameStepBody draft={draft} setDraft={setDraft} />;
   }
@@ -85,7 +90,11 @@ function prefersReducedMotion(): boolean {
  * de 15:30 por último, em até 3,5 s e sem repetir. Com
  * `prefers-reduced-motion: reduce` a cena abre no estado final. "Começar"
  * não espera a animação. */
-function WelcomeStepBody() {
+function WelcomeStepBody({ draft }: { draft: OnboardingDraft }) {
+  // Cena no jeito do segmento e com o serviço real, quando já existem
+  // (retomada); na primeira visita, o exemplo genérico.
+  const examples = segmentExamples(draft.businessCategory);
+  const service = draft.serviceName.trim() || examples.sampleService;
   const [stage, setStage] = useState(() =>
     prefersReducedMotion() ? WELCOME_LAST_STAGE : 0,
   );
@@ -107,7 +116,9 @@ function WelcomeStepBody() {
       className="onboarding-welcome-scene"
       role="img"
     >
-      <div className="onboarding-welcome-client">Oi! Tem horário na sexta?</div>
+      <div className="onboarding-welcome-client">
+        {welcomeAskFor(examples, draft.serviceName)}
+      </div>
       {stage >= 1 && (
         <div className="onboarding-welcome-reply">
           <div className="onboarding-welcome-reply-bubble">
@@ -125,7 +136,7 @@ function WelcomeStepBody() {
             <span>{stage >= 3 ? "15:30" : null}</span>
             {stage >= 3 && (
               <div className="onboarding-welcome-booking">
-                <span>Ana Paula · Corte</span>
+                <span>{`${examples.clientName} · ${service}`}</span>
                 <span aria-hidden="true" className="onboarding-welcome-check">
                   <Icon name="check" />
                 </span>
@@ -173,7 +184,8 @@ function SegmentAndNameStepBody({
           role="group"
         >
           {FREQUENT_BUSINESS_SEGMENTS.map((segment) => {
-            const pressed = !customSegment && draft.businessCategory === segment;
+            const pressed =
+              !customSegment && draft.businessCategory === segment;
             return (
               <button
                 aria-pressed={pressed}
@@ -182,7 +194,10 @@ function SegmentAndNameStepBody({
                 type="button"
                 onClick={() => {
                   setCustomSegment(false);
-                  setDraft((value) => ({ ...value, businessCategory: segment }));
+                  setDraft((value) => ({
+                    ...value,
+                    businessCategory: segment,
+                  }));
                 }}
               >
                 {pressed && <Icon name="check" />}
@@ -321,26 +336,15 @@ function AddressStepBody({
   setDraft: (updater: (value: OnboardingDraft) => OnboardingDraft) => void;
 }) {
   return (
-    <label className="field">
-      <span className="label">Endereço do seu espaço</span>
-      <input
-        className="input"
-        data-error-message={ADDRESS_REQUIRED_MESSAGE}
-        data-server-field="business.address"
-        maxLength={300}
-        // `required` sozinho não barra um valor só de espaços; o padrão
-        // exige ao menos um caractere que não seja espaço.
-        pattern=".*\S.*"
-        required
-        value={draft.businessAddress}
-        onChange={(event) =>
-          setDraft((value) => ({
-            ...value,
-            businessAddress: event.target.value,
-          }))
-        }
-      />
-    </label>
+    <AddressFields
+      value={draft.businessAddress}
+      onChange={(updater) =>
+        setDraft((value) => ({
+          ...value,
+          businessAddress: updater(value.businessAddress),
+        }))
+      }
+    />
   );
 }
 
@@ -395,7 +399,7 @@ export async function persistBusinessStep(
   }
   await onboarding.update({
     business: {
-      address: ctx.draft.businessAddress.trim(),
+      addressParts: addressPartsFromDraft(ctx.draft.businessAddress),
       category: ctx.draft.businessCategory,
       modalities: ctx.draft.businessModalities,
       name: ctx.draft.businessName,

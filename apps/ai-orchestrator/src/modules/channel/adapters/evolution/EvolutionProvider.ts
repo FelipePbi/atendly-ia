@@ -258,6 +258,10 @@ function buildSendTextBody(input: SendTextInput): Record<string, unknown> {
   };
 
   if (input.correlationId) body.id = input.correlationId;
+  // A Evolution Go mostra "digitando…" pelo tempo pedido e so entao envia.
+  if (input.typingDelayMs && input.typingDelayMs > 0) {
+    body.delay = Math.round(input.typingDelayMs);
+  }
   if (input.quotedMessageId) {
     body.quoted = {
       messageId: input.quotedMessageId,

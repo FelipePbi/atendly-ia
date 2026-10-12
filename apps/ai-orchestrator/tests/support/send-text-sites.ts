@@ -626,6 +626,37 @@ function resolveBlockScopedComposerName(
   return composerName;
 }
 
+/**
+ * Divisor da resposta da IA em várias mensagens (decisão de produto
+ * 2026-10-11). Não cria texto: cada parte é um pedaço do texto que entrou.
+ */
+export const AI_REPLY_SPLITTER = "splitAiReplyIntoParts";
+
+/**
+ * Origem do texto quando o `text:` do envio é `<partes>[<índice>]` e, no mesmo
+ * bloco de função do sítio, `const <partes> = splitAiReplyIntoParts(<origem>.text)`.
+ * A parte continua sendo texto em trânsito da `<origem>` — o divisor só corta,
+ * não compõe —, então a cadeia segue pela mesma origem. `undefined` se não houver.
+ */
+function resolveBlockScopedSplitOrigin(
+  source: string,
+  identifier: string,
+  beforeIndex: number,
+): string | undefined {
+  const blockStart = findEnclosingFunctionBodyStart(source, beforeIndex);
+  const scope = source.slice(blockStart, beforeIndex);
+  const pattern = new RegExp(
+    `\\bconst\\s+${identifier}\\s*=\\s*${AI_REPLY_SPLITTER}\\s*\\(\\s*([A-Za-z_$][\\w$]*)\\.text\\s*\\)`,
+    "g",
+  );
+  let match: RegExpExecArray | null;
+  let origin: string | undefined;
+  while ((match = pattern.exec(scope))) {
+    origin = match[1];
+  }
+  return origin;
+}
+
 /** Classifica a expressão do `text:` de um sítio de chamada `sendText({...})` em uma categoria nomeada, ou `undefined` se a forma não for reconhecida. */
 function classifySendTextCallExpression(
   expression: string,
@@ -650,6 +681,17 @@ function classifySendTextCallExpression(
     const [, origin] = propertyAccess;
     if (origin === "body") return { category: "person_typed_text" };
     return { category: "text_in_transit_named_origin", origin };
+  }
+  const splitElement = expression.match(
+    /^([A-Za-z_$][\w$]*)\[[A-Za-z_$][\w$]*\]$/,
+  );
+  if (splitElement) {
+    const origin = resolveBlockScopedSplitOrigin(
+      source,
+      splitElement[1],
+      siteIndex,
+    );
+    if (origin) return { category: "text_in_transit_named_origin", origin };
   }
   return undefined;
 }

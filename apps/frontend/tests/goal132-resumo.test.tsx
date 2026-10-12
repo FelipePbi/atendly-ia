@@ -9,7 +9,8 @@
  *   Configurações;
  * - as linhas seguem a ordem do quadro (serviços, clientes, agendamentos
  *   futuros, atendimentos anteriores, cancelamentos, faltas, bloqueios e
- *   horários), com o número antes do nome;
+ *   horários), com o nome antes do número (decisão da validação de
+ *   2026-10-11: "Cancelamentos 0", invertendo o quadro);
  * - horários com regras encontradas mostram o selo e nenhum número, e dizem
  *   "encontrados" para a tecnologia assistiva; com 0 regras, mostram o número;
  * - a legenda da limitação e "Você deixou esta categoria de fora" seguem como
@@ -192,24 +193,24 @@ describe.each<ImportsFrame>(["onboarding", "platform"])(
       expect(container.querySelector("p.eyebrow")).toBeNull();
     });
 
-    test("as linhas seguem a ordem do quadro, com o número antes do nome", async () => {
+    test("as linhas seguem a ordem do quadro, com o nome antes do número", async () => {
       renderSummary(frame);
 
       const rows = await summaryRows();
       expect(rows.map((row) => row.textContent)).toEqual([
-        "12serviços",
-        "386clientes",
-        "42agendamentos futuros",
-        "1.400atendimentos anteriores",
-        "9cancelamentos",
-        "0faltasO Minha Agenda não distingue falta de cancelamento. Nenhum atendimento será marcado como falta a partir de lá.",
-        "3bloqueios",
+        "Serviços12",
+        "Clientes386",
+        "Agendamentos futuros42",
+        "Atendimentos anteriores1.400",
+        "Cancelamentos9",
+        "FaltasO Minha Agenda não distingue falta de cancelamento. Nenhum atendimento será marcado como falta a partir de lá.0",
+        "Bloqueios3",
         "Horários de atendimento, encontrados",
       ]);
       const [services] = rows;
-      const [count, copy] = Array.from(services.children);
+      const [copy, count] = Array.from(services.children);
+      expect(copy.textContent).toBe("Serviços");
       expect(count.textContent).toBe("12");
-      expect(copy.textContent).toBe("serviços");
     });
 
     test("horários encontrados mostram o selo, sem número, e dizem 'encontrados'", async () => {
@@ -235,7 +236,7 @@ describe.each<ImportsFrame>(["onboarding", "platform"])(
       const row = rows[rows.length - 1];
       expect(row.querySelector(".imports-summary-seal")).toBeNull();
       expect(row.querySelector(".imports-summary-count")?.textContent).toBe("0");
-      expect(row.textContent).toBe("0horários de atendimento");
+      expect(row.textContent).toBe("Horários de atendimento0");
     });
 
     test("a legenda da categoria deixada de fora segue como hoje", async () => {
@@ -245,9 +246,9 @@ describe.each<ImportsFrame>(["onboarding", "platform"])(
       );
 
       const rows = await summaryRows();
-      const past = rows.find((row) => row.textContent?.includes("atendimentos anteriores"));
+      const past = rows.find((row) => row.textContent?.includes("Atendimentos anteriores"));
       expect(past?.textContent).toBe(
-        "1.400atendimentos anterioresVocê deixou esta categoria de fora",
+        "Atendimentos anterioresVocê deixou esta categoria de fora1.400",
       );
     });
 
@@ -372,12 +373,12 @@ describe("o CSS do resumo", () => {
     expect(css).not.toMatch(/\.imports-summary[^{]*\.imports-row-count/);
   });
 
-  test("o número é Literata 26 px com algarismos tabulares e 72 px de largura mínima", () => {
+  test("o número é Literata 22 px com algarismos tabulares, alinhado à direita", () => {
     const body = ruleBody(readCss(), ".imports-summary-count");
-    expect(body).toMatch(/font-size:\s*26px/);
+    expect(body).toMatch(/font-size:\s*22px/);
     expect(body).toMatch(/font-weight:\s*500/);
     expect(body).toMatch(/font-variant-numeric:\s*tabular-nums/);
-    expect(body).toMatch(/min-width:\s*72px/);
+    expect(body).toMatch(/margin-left:\s*auto/);
     expect(body).toMatch(/text-align:\s*right/);
     expect(body).toMatch(/Literata/);
   });

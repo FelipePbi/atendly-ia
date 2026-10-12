@@ -723,16 +723,34 @@
     background-position: -200% 0;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .imports-analysis-fill {
-    width: 100%;
-    background: #dceceb;
-    animation: none;
-  }
-  .imports-analysis-row,
-  .imports-analysis-pill {
-    animation: none;
-  }
+/* A análise leva minutos e só o movimento diz que ela está andando: as
+   animações vencem a regra global de movimento reduzido (tokens.css e o fim
+   de avenly.css), que zeraria durações e atrasos e deixaria a tela parada. */
+.imports-analysis-fill {
+  animation-duration: 1.6s !important;
+  animation-iteration-count: infinite !important;
+}
+.imports-analysis-pill {
+  animation-duration: 1.4s !important;
+  animation-iteration-count: infinite !important;
+}
+.imports-analysis-row {
+  animation-duration: 0.4s !important;
+}
+.imports-analysis-row:nth-child(1) {
+  animation-delay: 0.5s !important;
+}
+.imports-analysis-row:nth-child(2) {
+  animation-delay: 1.3s !important;
+}
+.imports-analysis-row:nth-child(3) {
+  animation-delay: 2.2s !important;
+}
+.imports-analysis-row:nth-child(4) {
+  animation-delay: 3.1s !important;
+}
+.imports-analysis-row:nth-child(5) {
+  animation-delay: 4s !important;
 }
 
 /*
@@ -743,9 +761,12 @@
  * da tela só na moldura do onboarding; as zonas de conflitos e de troca de
  * conta, que o quadro não mostra, vêm depois dele.
  */
+/* Compacto (validação de 2026-10-11): o resumo inteiro — oito linhas e o
+   rodapé — cabe numa tela de celular sem rolagem. A troca de conta saiu do
+   resumo e da escolha; segue nos estados de erro e de análise interrompida. */
 .imports-page:has(.imports-summary),
 .imports-pushed-body:has(.imports-summary) {
-  gap: 20px;
+  gap: 12px;
 }
 .onboarding-content.is-frame:has(.imports-summary) {
   padding-bottom: 0;
@@ -756,7 +777,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding-bottom: 46px;
+  padding-bottom: 8px;
 }
 .imports-summary {
   flex: 1;
@@ -777,7 +798,7 @@
   overflow: hidden;
 }
 .imports-summary-row {
-  padding: 16px;
+  padding: 8px 16px;
   display: flex;
   align-items: baseline;
   gap: 14px;
@@ -790,17 +811,19 @@
   align-items: center;
 }
 .imports-summary-count {
-  min-width: 72px;
+  flex: none;
+  margin-left: auto;
   font-family: var(--font-display, Literata, Georgia, serif);
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 500;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 .imports-summary-seal {
   width: 26px;
   height: 26px;
-  margin-left: 46px;
+  margin-left: auto;
   flex: none;
   display: flex;
   align-items: center;
@@ -810,6 +833,7 @@
   background: #dfefe4;
 }
 .imports-summary-copy {
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -819,16 +843,17 @@
   font-weight: 600;
 }
 .imports-summary-copy small {
-  margin-top: 0;
+  margin-top: 2px;
   color: #716859;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.35;
 }
 .imports-summary-actions {
-  padding: 12px 0 0;
+  padding: 4px 0 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
 }
 .imports-summary-actions .btn-primary {
   min-height: 52px;
@@ -1056,6 +1081,44 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+}
+/* Linha de categoria com falhas: resumo, "Ver os N registros" e a lista. */
+.imports-pending-row.is-failed {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.imports-pending-row.is-failed .imports-failed-toggle {
+  margin: 0;
+  padding: 4px 0;
+  min-height: 24px;
+  align-self: flex-start;
+}
+.imports-failed-items {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.imports-failed-items ul {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px dashed #ebd7ae;
+}
+.imports-failed-items li {
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px dashed #ebd7ae;
+}
+.imports-failed-items p {
+  margin: 0;
+}
+.imports-failed-items .imports-pending-action {
+  margin: 0;
+  padding: 4px 0;
 }
 .imports-pending-name {
   color: #221e1a;
@@ -1613,10 +1676,45 @@
   display: flex;
   justify-content: center;
 }
-@media (prefers-reduced-motion: no-preference) {
-  .imports-running-halo {
-    animation: at-breathe 2.4s ease-out infinite;
+/* Em andamento, a tela precisa se mexer mesmo quando o número ainda não
+   mudou (validação de 2026-10-11): o halo da categoria ativa respira e um
+   brilho corre nas duas barras. Os dois vencem a regra global de movimento
+   reduzido (tokens.css e o fim de avenly.css), que deixaria a tela parada
+   como se tivesse travado. */
+.imports-running-track,
+.imports-running-bar {
+  position: relative;
+}
+.imports-running[aria-busy="true"] .imports-running-track::after,
+.imports-running[aria-busy="true"] .imports-running-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(15, 95, 99, 0.3),
+    transparent
+  );
+  animation: imports-running-sheen 1.6s ease-in-out infinite;
+  animation-duration: 1.6s !important;
+  animation-iteration-count: infinite !important;
+}
+.imports-running-halo {
+  animation: at-breathe 2.4s ease-out infinite;
+  animation-duration: 2.4s !important;
+  animation-iteration-count: infinite !important;
+}
+@keyframes imports-running-sheen {
+  from {
+    transform: translateX(-100%);
   }
+  to {
+    transform: translateX(250%);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
   .imports-running-fill {
     transition: width 240ms ease;
   }

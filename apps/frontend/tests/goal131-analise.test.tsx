@@ -242,6 +242,15 @@ function readCss(): string {
 }
 
 /** Corpo da regra `selector { … }` (primeira ocorrência em `css`). */
+/** Todos os blocos de uma regra (a mesma classe pode aparecer mais de uma vez). */
+function ruleBodies(css: string, selector: string): string[] {
+  const escaped = selector.replace(/[.[\]()]/g, "\\$&");
+  return Array.from(
+    css.matchAll(new RegExp(`(?:^|[{}/])\\s*${escaped}\\s*\\{([^}]*)\\}`, "g")),
+    (match) => match[1],
+  );
+}
+
 function ruleBody(css: string, selector: string): string {
   const escaped = selector.replace(/[.[\]()]/g, "\\$&");
   const match = new RegExp(`(?:^|[{}])\\s*${escaped}\\s*\\{([^}]*)\\}`).exec(css);
@@ -269,15 +278,13 @@ describe("a barra é indeterminada", () => {
     expect(css).not.toMatch(/imports-analysis-grow/);
   });
 
-  test("com movimento reduzido a barra não para numa fração", () => {
-    const css = readCss();
-    const start = css.lastIndexOf("@media (prefers-reduced-motion: reduce)");
-    expect(start).toBeGreaterThan(-1);
-    const fill = ruleBody(css.slice(start), ".imports-analysis-fill");
+  test("a barra segue andando mesmo com movimento reduzido", () => {
+    // Decisão da validação de 2026-10-11: parada, a análise parece travada.
+    // A regra vence o seletor universal de movimento reduzido.
+    const fill = ruleBodies(readCss(), ".imports-analysis-fill").join("\n");
 
-    expect(fill).toMatch(/animation:\s*none/);
-    expect(fill).toMatch(/width:\s*100%/);
-    expect(fill).not.toMatch(/width:\s*(?!100%)\d/);
+    expect(fill).toMatch(/animation-duration:\s*1\.6s\s*!important/);
+    expect(fill).toMatch(/animation-iteration-count:\s*infinite\s*!important/);
   });
 });
 
@@ -295,14 +302,17 @@ describe("cartão da análise", () => {
 });
 
 describe("movimento reduzido", () => {
-  test("prefers-reduced-motion desliga a barra, as linhas e a pílula", () => {
+  test("barra, linhas e pílula animam mesmo com movimento reduzido", () => {
     const css = readCss();
-    const start = css.lastIndexOf("@media (prefers-reduced-motion: reduce)");
-    expect(start).toBeGreaterThan(-1);
-    const block = css.slice(start);
 
-    expect(block).toMatch(/\.imports-analysis-fill\s*\{[^}]*animation:\s*none/);
-    expect(block).toMatch(/\.imports-analysis-row[^{]*\{[^}]*animation:\s*none/);
-    expect(block).toMatch(/\.imports-analysis-pill\s*\{[^}]*animation:\s*none/);
+    expect(css).not.toMatch(
+      /prefers-reduced-motion[^{]*\{[^@]*\.imports-analysis[^{]*\{[^}]*animation:\s*none/,
+    );
+    expect(ruleBodies(css, ".imports-analysis-pill").join("\n")).toMatch(
+      /animation-iteration-count:\s*infinite\s*!important/,
+    );
+    expect(ruleBodies(css, ".imports-analysis-row:nth-child(5)").join("\n")).toMatch(
+      /animation-delay:\s*4s\s*!important/,
+    );
   });
 });

@@ -3,10 +3,10 @@ import path from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
 import {
-  test as base,
   expect,
   type Locator,
   type Page,
+  test as base,
   type TestInfo,
 } from "@playwright/test";
 
@@ -385,8 +385,10 @@ const test = base.extend<object, { typedSession: string }>({
     },
     { scope: "worker" },
   ],
-  storageState: async ({ typedSession }, use) => {
-    await use(typedSession);
+  // "provide" e o "use" das fixtures do Playwright; o nome "use" fazia a
+  // regra de hooks do React acusar falso positivo.
+  storageState: async ({ typedSession }, provide) => {
+    await provide(typedSession);
   },
 });
 
@@ -418,8 +420,10 @@ const onboardingTest = base.extend<object, { typedOnboardingSession: string }>({
     },
     { scope: "worker" },
   ],
-  storageState: async ({ typedOnboardingSession }, use) => {
-    await use(typedOnboardingSession);
+  // "provide" e o "use" das fixtures do Playwright; o nome "use" fazia a
+  // regra de hooks do React acusar falso positivo.
+  storageState: async ({ typedOnboardingSession }, provide) => {
+    await provide(typedOnboardingSession);
   },
 });
 
@@ -626,7 +630,7 @@ async function ensureAgendaOnMeasuredDate(page: Page): Promise<void> {
   // acontecer com a barra superior do Goal069, mas não há o que fazer aqui).
   if (!button || steps === 0) return;
   for (let clicked = 0; clicked < steps; clicked += 1) {
-    // eslint-disable-next-line no-await-in-loop -- each click must settle before the next
+    // Cada clique precisa assentar antes do proximo (sequencial de proposito).
     await button.click();
   }
 
@@ -2071,14 +2075,17 @@ for (const scenario of LIST_DETAIL_CASES) {
  * The appointment detail (Goal093, G-7). From `/agenda` on the seeded day, a
  * real click opens the detail the way a person does. Below 1024px the day list
  * is on screen and its row is a link; from 1024px the board opens on the week,
- * so the click goes to the seeded day, selects the row and takes "Ver detalhes
- * completos". Below 1024px the detail is a pushed screen: no tab bar, and
- * "Remarcar" and "Cancelar" are whole inside the window and at least 24px
- * (WCAG 2.5.8 AA). From 1024px the Agenda column sits beside the detail with
- * exactly one open row (`aria-current="page"`), the appointment just opened.
- * The screen goes through the same overflow, axe and focus checks as the
- * routes above. One `goto` and the clicks: no request beyond the screens it
- * walks through.
+ * so the click goes to the seeded day and selects the row, and the Day panel
+ * beside the list shows the A5 body in place (D-165): customer heading and
+ * "Remarcar", without "Ver detalhes completos" or "Ciclo do atendimento". The
+ * route is then opened with the id the panel carries. Below 1024px the detail
+ * is a pushed screen: no tab bar, and "Remarcar" and "Cancelar" are whole
+ * inside the window and at least 24px (WCAG 2.5.8 AA). From 1024px the Agenda
+ * column sits beside the detail with exactly one open row
+ * (`aria-current="page"`), the appointment just opened. The screen goes
+ * through the same overflow, axe and focus checks as the routes above. One
+ * `goto` and the clicks below 1024px, two `goto` from 1024px: no request
+ * beyond the screens it walks through.
  */
 type AppointmentDetailMeasure = {
   bottomNavRendered: boolean;
@@ -2164,11 +2171,37 @@ test(`G-7 appointment detail from /agenda, five widths`, async ({ page }, testIn
       `${what}: the row`,
       testInfo,
     );
-    await clickForReal(
+    // D-165 (validação de 2026-10-12): de 1024 px em diante a linha abre, no
+    // painel ao lado da lista, o mesmo corpo do quadro A5 da rota — sem
+    // "Ver detalhes completos" nem o antigo "Ciclo do atendimento".
+    await expectPath(page, /^\/agenda$/u, `${what}: the row at ${testInfo.project.name}`);
+    const panel = page.getByRole("complementary", { name: "Detalhe do agendamento" });
+    await expect(
+      panel.getByRole("heading", { name: SEED.customerName }).first(),
+      `${where}: the Day panel did not render the A5 body (customer heading) within ${CONTENT_TIMEOUT_MS}ms.`,
+    ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+    const panelReschedule = panel.getByRole("link", { name: "Remarcar", exact: true });
+    await expect(
+      panelReschedule,
+      `${where}: the Day panel has no "Remarcar" link within ${CONTENT_TIMEOUT_MS}ms.`,
+    ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+    await expect(
+      page.getByText("Ciclo do atendimento"),
+      `${where}: the Day panel still renders the old "Ciclo do atendimento" block.`,
+    ).toHaveCount(0);
+    await expect(
       page.getByRole("link", { name: "Ver detalhes completos" }),
-      `${what}: Ver detalhes completos`,
-      testInfo,
-    );
+      `${where}: the Day panel still links to "Ver detalhes completos".`,
+    ).toHaveCount(0);
+    // A rota do detalhe continua existindo nas telas largas (D-110 (a)), com
+    // a coluna da Agenda ao lado; sem link para ela no painel, ela é aberta
+    // pelo id que o próprio painel usa em "Remarcar".
+    const rescheduleHref = (await panelReschedule.getAttribute("href")) ?? "";
+    const appointmentId = new URLSearchParams(rescheduleHref.split("?")[1] ?? "").get("id");
+    expect(appointmentId, `${where}: "Remarcar" in the Day panel carries no appointment id (${rescheduleHref}).`).toBeTruthy();
+    await page.goto(`/agenda/agendamento?id=${encodeURIComponent(appointmentId ?? "")}`, {
+      waitUntil: "networkidle",
+    });
   }
   await expectPath(page, /^\/agenda\/agendamento$/u, `${what} at ${testInfo.project.name}`);
   await expect(

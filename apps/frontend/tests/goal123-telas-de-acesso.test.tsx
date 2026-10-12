@@ -31,7 +31,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 const { AuthScreen } = await import("@/features/auth/AuthScreen");
 
 const L2_MESSAGE =
-  "E-mail ou senha não conferem. Confira e tente de novo — ou recupere a senha.";
+  "E-mail ou senha não conferem. Confira e tente de novo ou recupere a senha.";
 
 beforeEach(() => {
   push.mockReset();
@@ -272,7 +272,7 @@ describe("L7 — senha redefinida", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "Pronto. Você já pode entrar com a nova senha — e a IA segue atendendo normalmente.",
+        "Pronto. Você já pode entrar com a nova senha. A IA segue atendendo normalmente.",
       ),
     ).toBeVisible();
     expect(screen.getByRole("link", { name: "Entrar" })).toHaveAttribute(

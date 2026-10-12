@@ -42,6 +42,8 @@ const listConversations = vi.fn();
 const setIgnored = vi.fn();
 const ignoreByPhone = vi.fn();
 const refreshSession = vi.fn();
+const listWhatsappContacts = vi.fn();
+const listIgnoredContacts = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
@@ -49,6 +51,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
     conversations: {
       ignoreByPhone,
       list: listConversations,
+      listIgnoredContacts,
       setIgnored,
     },
     onboarding: {
@@ -58,6 +61,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
     },
     whatsapp: {
       connect: vi.fn(),
+      contacts: listWhatsappContacts,
       disconnect: vi.fn(),
       get: getWhatsapp,
       qr: vi.fn(),
@@ -177,6 +181,8 @@ beforeEach(() => {
   listConversations.mockResolvedValue(FRAME_CONVERSATIONS);
   setIgnored.mockResolvedValue({});
   refreshSession.mockResolvedValue(null);
+  listWhatsappContacts.mockResolvedValue({ available: true, items: [] });
+  listIgnoredContacts.mockResolvedValue({ items: [], total: 0 });
   if (typeof window.matchMedia !== "function") {
     window.matchMedia = (query: string) =>
       ({
@@ -226,7 +232,7 @@ describe("4.5: a lista do onboarding", () => {
       /^WhatsApp$/,
     );
     expect(
-      screen.getByRole("searchbox", { name: "Buscar nas suas conversas" }),
+      screen.getByRole("searchbox", { name: "Buscar contatos e conversas" }),
     ).toBeVisible();
   });
 
@@ -273,7 +279,7 @@ describe("4.5: a lista do onboarding", () => {
     renderStep();
 
     expect(
-      await screen.findByText("Nenhuma conversa disponível ainda para escolher."),
+      await screen.findByText("Nenhum contato disponível ainda. Adicione pelo telefone."),
     ).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Adicionar por telefone" }),
@@ -365,7 +371,7 @@ describe("4.5: busca e telefone", () => {
 
     listConversations.mockResolvedValue([FRAME_CONVERSATIONS[3]]);
     await user.type(
-      screen.getByRole("searchbox", { name: "Buscar nas suas conversas" }),
+      screen.getByRole("searchbox", { name: "Buscar contatos e conversas" }),
       "ana",
     );
 
@@ -387,7 +393,7 @@ describe("4.5: busca e telefone", () => {
     await screen.findByRole("checkbox", { name: "Mãe" });
 
     await user.type(
-      screen.getByRole("searchbox", { name: "Buscar nas suas conversas" }),
+      screen.getByRole("searchbox", { name: "Buscar contatos e conversas" }),
       "ana{Enter}",
     );
 
@@ -401,11 +407,11 @@ describe("4.5: busca e telefone", () => {
 
     listConversations.mockResolvedValue([]);
     await user.type(
-      screen.getByRole("searchbox", { name: "Buscar nas suas conversas" }),
+      screen.getByRole("searchbox", { name: "Buscar contatos e conversas" }),
       "zzz",
     );
 
-    expect(await screen.findByText("Nenhuma conversa encontrada.")).toBeVisible();
+    expect(await screen.findByText("Ninguém encontrado. Confira o nome ou adicione pelo telefone.")).toBeVisible();
   });
 
   test("'Adicionar por telefone' abre o campo e o número marcado entra como linha marcada", async () => {
@@ -641,5 +647,140 @@ describe("4.5: alvo de toque", () => {
     expect(rule(".ignored-row")).toMatch(/min-height:\s*24px/);
     expect(rule(".ignored-box")).toMatch(/width:\s*24px/);
     expect(rule(".ignored-box")).toMatch(/height:\s*24px/);
+  });
+});
+
+/**
+ * Contatos do WhatsApp do número conectado (validação de 2026-10-11): na
+ * primeira vez ainda não há conversas na Avenly, e a pessoa escolhe entre os
+ * contatos do aparelho, lidos na hora.
+ */
+describe("4.5: contatos do WhatsApp", () => {
+  const PHONE_CONTACTS = [
+    { name: "Mãe", phone: "5511900000001" },
+    { name: null, phone: "5511900000002" },
+    // Já aparece como conversa: não se repete.
+    { name: "Tia Lú", phone: "5511933330000" },
+  ];
+
+  test("sem conversas, os contatos do WhatsApp aparecem com nome e telefone", async () => {
+    listConversations.mockResolvedValue([]);
+    listWhatsappContacts.mockResolvedValue({
+      available: true,
+      items: PHONE_CONTACTS,
+    });
+    renderStep();
+
+    expect(await screen.findByText("Contatos do WhatsApp")).toBeVisible();
+    const mae = screen.getByRole("checkbox", { name: "Mãe" });
+    expect(mae).toHaveAttribute("aria-checked", "false");
+    expect(mae).toHaveAccessibleDescription("+55 11 90000-0001");
+    expect(screen.getByRole("checkbox", { name: "+55 11 90000-0002" })).toBeVisible();
+    expect(
+      screen.queryByText("Nenhum contato disponível ainda. Adicione pelo telefone."),
+    ).not.toBeInTheDocument();
+  });
+
+  test("um contato que já é conversa aparece uma vez só", async () => {
+    listWhatsappContacts.mockResolvedValue({
+      available: true,
+      items: PHONE_CONTACTS,
+    });
+    renderStep();
+
+    await screen.findByText("Contatos do WhatsApp");
+    expect(screen.getAllByRole("checkbox", { name: "Tia Lú" })).toHaveLength(1);
+  });
+
+  test("a busca também lê os contatos com `search`", async () => {
+    const user = userEvent.setup();
+    renderStep();
+    await screen.findByText("Dudu ❤️");
+
+    await user.type(
+      screen.getByRole("searchbox", { name: "Buscar contatos e conversas" }),
+      "mãe",
+    );
+
+    await waitFor(() =>
+      expect(listWhatsappContacts).toHaveBeenLastCalledWith({
+        limit: 30,
+        search: "mãe",
+      }),
+    );
+  });
+
+  test("marcar um contato grava por telefone e a caixa só marca depois da resposta; tocar de novo desmarca", async () => {
+    const user = userEvent.setup();
+    listConversations.mockResolvedValue([]);
+    listWhatsappContacts.mockResolvedValue({
+      available: true,
+      items: PHONE_CONTACTS,
+    });
+    const pending = deferred<unknown>();
+    ignoreByPhone.mockReturnValueOnce(pending.promise);
+    renderStep();
+
+    const mae = await screen.findByRole("checkbox", { name: "Mãe" });
+    await user.click(mae);
+    expect(ignoreByPhone).toHaveBeenCalledWith("5511900000001", true, "ONBOARDING");
+    expect(mae).toHaveAttribute("aria-checked", "false");
+
+    pending.resolve({
+      contactId: "contact-mae",
+      externalContactId: "5511900000001",
+      ignored: true,
+      ignoredAt: null,
+    });
+    await waitFor(() => expect(mae).toHaveAttribute("aria-checked", "true"));
+
+    ignoreByPhone.mockResolvedValueOnce({
+      contactId: "contact-mae",
+      externalContactId: "5511900000001",
+      ignored: false,
+      ignoredAt: null,
+    });
+    await user.click(mae);
+    expect(ignoreByPhone).toHaveBeenLastCalledWith(
+      "5511900000001",
+      false,
+      "ONBOARDING",
+    );
+    await waitFor(() => expect(mae).toHaveAttribute("aria-checked", "false"));
+  });
+
+  test("quem já está ignorado aparece marcado", async () => {
+    listConversations.mockResolvedValue([]);
+    listWhatsappContacts.mockResolvedValue({
+      available: true,
+      items: PHONE_CONTACTS,
+    });
+    listIgnoredContacts.mockResolvedValue({
+      items: [
+        {
+          contactId: "contact-mae",
+          displayName: null,
+          externalContactId: "5511900000001",
+          ignoredAt: null,
+          origin: "SETTINGS",
+        },
+      ],
+      total: 1,
+    });
+    renderStep();
+
+    const mae = await screen.findByRole("checkbox", { name: "Mãe" });
+    await waitFor(() => expect(mae).toHaveAttribute("aria-checked", "true"));
+  });
+
+  test("sem a lista do aparelho, ficam as conversas e o número manual", async () => {
+    listWhatsappContacts.mockRejectedValue(new Error("rede"));
+    renderStep();
+
+    expect(await screen.findByText("Dudu ❤️")).toBeVisible();
+    expect(screen.queryByText("Contatos do WhatsApp")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Adicionar por telefone" }),
+    ).toBeVisible();
   });
 });

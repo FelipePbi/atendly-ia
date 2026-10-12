@@ -32,7 +32,7 @@ interface StubService {
   needsReview: boolean;
   reviewOrigin: null;
   description: null;
-  colorToken: null;
+  colorToken: string | null;
   bufferBeforeMinutes: number;
   bufferAfterMinutes: number;
   recurrenceIntervalDays: null;
@@ -122,7 +122,7 @@ function stubUpstream(): void {
             needsReview: false,
             reviewOrigin: null,
             description: null,
-            colorToken: null,
+            colorToken: (body.colorToken as string | undefined) ?? null,
             bufferBeforeMinutes: 0,
             bufferAfterMinutes: 0,
             recurrenceIntervalDays: null,
@@ -293,6 +293,7 @@ describe.skipIf(!RUN_INTEGRATION)(
           priceType: "FIXED",
           price: 50,
           active: true,
+          colorToken: "ROSE",
         },
       });
       expect(first.statusCode).toBe(201);
@@ -308,6 +309,7 @@ describe.skipIf(!RUN_INTEGRATION)(
           priceType: "STARTING_AT",
           price: 70,
           active: true,
+          colorToken: "SKY",
         },
       });
       expect(second.statusCode).toBe(201);
@@ -324,6 +326,63 @@ describe.skipIf(!RUN_INTEGRATION)(
       });
       expect(readA.json().data.service.id).toBe(firstId);
       expect(readB.json().data.service.id).toBe(firstId);
+    });
+  },
+);
+
+/**
+ * Decisão de 2026-10-12: criação manual pela API pública exige a cor; o
+ * onboarding cria sem perguntar e o Scheduling sorteia a cor da paleta.
+ */
+describe.skipIf(!RUN_INTEGRATION)(
+  "Cor do serviço: obrigatória em POST /v1/services, sorteada no onboarding",
+  () => {
+    it("POST /v1/services sem cor responde 400 VALIDATION_ERROR, sem chamar o Scheduling", async () => {
+      const owner = await business("color-required-post");
+      stubUpstream();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/services",
+        headers: browserMutation(owner),
+        payload: {
+          name: "Corte",
+          durationMinutes: 30,
+          priceType: "FIXED",
+          price: 50,
+          active: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe("VALIDATION_ERROR");
+      expect(services).toHaveLength(0);
+    });
+
+    it("PATCH /v1/onboarding cria o serviço sem cor no corpo: o Scheduling decide", async () => {
+      const owner = await business("color-onboarding");
+      stubUpstream();
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/v1/onboarding",
+        headers: browserMutation(owner),
+        payload: {
+          service: {
+            name: "Barba",
+            durationMinutes: 30,
+            priceType: "FIXED",
+            price: 40,
+            active: true,
+            colorToken: "ROSE",
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(services).toHaveLength(1);
+      // O corpo do onboarding não carrega cor: nem a que o cliente mandou.
+      expect(services[0]?.colorToken).toBeNull();
     });
   },
 );

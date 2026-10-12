@@ -234,7 +234,7 @@ function progressOf(): ImportProgress {
 }
 
 describe("no modo de conflitos a ReplaceAccountZone não é renderizada", () => {
-  test("a prévia tem a zona; 'Revisar conflitos' a tira da tela", async () => {
+  test("nem o resumo nem os conflitos têm a zona", async () => {
     queue = [serviceItem(0)];
     getImportState.mockResolvedValue({
       history: null,
@@ -250,9 +250,11 @@ describe("no modo de conflitos a ReplaceAccountZone não é renderizada", () => 
       </ShellConfigProvider>,
     );
 
-    // Controle: no resumo a zona existe, então a ausência abaixo prova algo.
-    expect(await screen.findByText(REPLACE_NOTE)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Conectar outra conta" })).toBeInTheDocument();
+    // A troca de conta saiu do resumo (validação de 2026-10-11): fica só nos
+    // estados de erro e de análise interrompida.
+    await screen.findByRole("button", { name: "Revisar conflitos" });
+    expect(screen.queryByText(REPLACE_NOTE)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Conectar outra conta" })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Revisar conflitos" }));
     await screen.findByText("Serviço 0");
@@ -262,7 +264,7 @@ describe("no modo de conflitos a ReplaceAccountZone não é renderizada", () => 
   });
 
   test.each<ImportsFrame>(["onboarding", "platform"])(
-    "a tela parada tem a zona; 'Revisar pendências' a tira da tela, na moldura %s",
+    "nem a tela parada nem 'Revisar pendências' têm a zona, na moldura %s",
     async (frame) => {
       queue = [serviceItem(0)];
       getImportProgress.mockResolvedValue(progressOf());
@@ -277,9 +279,15 @@ describe("no modo de conflitos a ReplaceAccountZone não é renderizada", () => 
         </ImportsFrameProvider>,
       );
 
-      // O andamento já leu: só então a zona da tela parada é a que fica.
+      // O andamento já leu: a tela de carregamento ainda tem a zona, a tela
+      // parada não (validação de 2026-10-11: a troca de conta saiu da tela
+      // "Importação quase concluída").
       const review = await screen.findByRole("button", { name: "Revisar pendências" });
-      expect(screen.getByText(REPLACE_NOTE)).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Importação quase concluída" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(REPLACE_NOTE)).toBeNull();
+      expect(screen.queryByRole("button", { name: "Conectar outra conta" })).toBeNull();
 
       await user.click(review);
       await screen.findByText("Serviço 0");

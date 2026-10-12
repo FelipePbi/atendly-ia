@@ -58,7 +58,7 @@ function serviceFixture(overrides: Partial<Service> = {}): Service {
     active: true,
     bufferAfterMinutes: 0,
     bufferBeforeMinutes: 0,
-    colorToken: null,
+    colorToken: "SKY",
     description: null,
     durationMinutes: 45,
     id: "s1",
@@ -243,6 +243,9 @@ describe("2. serviço novo", () => {
       "45",
     );
     await user.type(screen.getByPlaceholderText("R$ 0,00"), "60");
+    // Cor obrigatória na criação manual (decisão de 2026-10-12).
+    await user.click(screen.getByRole("button", { name: /^Cor na agenda/ }));
+    await user.click(screen.getByRole("radio", { name: "Ameixa" }));
     await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     await waitFor(() =>

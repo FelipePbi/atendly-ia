@@ -42,6 +42,8 @@ import type * as ShellConfigModule from "@/shared/layout/ShellConfig";
 import type { ShellConfig } from "@/shared/layout/ShellConfig";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
+import { expectNoA11yViolations } from "./support/a11y";
+
 const push = vi.fn();
 const replace = vi.fn();
 
@@ -418,6 +420,9 @@ describe("Goal095 prova 2: novo serviço (S3)", () => {
       await user.click(screen.getByRole("radio", { name: label }));
       expect(screen.getByRole("radio", { name: label })).toBeChecked();
       if (price !== null) await typePrice(user, "55");
+      // Cor obrigatória na criação manual (decisão de 2026-10-12).
+      await user.click(optionRow("Cor na agenda"));
+      await user.click(screen.getByRole("radio", { name: "Ameixa" }));
       await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
       await waitFor(() =>
@@ -427,7 +432,7 @@ describe("Goal095 prova 2: novo serviço (S3)", () => {
         active: true,
         bufferAfterMinutes: 0,
         bufferBeforeMinutes: 0,
-        colorToken: null,
+        colorToken: "SKY",
         description: null,
         durationMinutes: 40,
         name: "Manicure",
@@ -464,7 +469,7 @@ describe("Goal095 prova 2: novo serviço (S3)", () => {
   test("as cinco linhas de opção nascem fechadas e mostram o valor atual", async () => {
     await renderNewForm();
     const values: Record<(typeof OPTION_TITLES)[number], string> = {
-      "Cor na agenda": "Sem cor",
+      "Cor na agenda": "Escolha uma cor",
       "Descrição": "Opcional",
       "Instruções para a IA": "Nenhuma",
       "Intervalo antes e depois": "Nenhum",
@@ -520,13 +525,14 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     serviceFixture({
       bufferAfterMinutes: 15,
       bufferBeforeMinutes: 0,
+      colorToken: "ROSE",
       recurrenceIntervalDays: 35,
     });
 
   test("as linhas nascem fechadas e mostram o valor atual do serviço", async () => {
     await renderEditForm(edited(), "Não faço henna.");
     const values: Record<(typeof OPTION_TITLES)[number], string> = {
-      "Cor na agenda": "Sem cor",
+      "Cor na agenda": "Rosa-antigo",
       "Descrição": "Opcional",
       "Instruções para a IA": "Definidas",
       "Intervalo antes e depois": "Antes 0 · Depois 15",
@@ -641,7 +647,7 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
       active: true,
       bufferAfterMinutes: 15,
       bufferBeforeMinutes: 10,
-      colorToken: null,
+      colorToken: "ROSE",
       description: "Com lavagem",
       durationMinutes: 45,
       name: "Corte feminino",
@@ -657,7 +663,8 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     );
   });
 
-  test("'Cor na agenda' mostra 'sem cor' e as seis cores, na ordem e com os nomes do protótipo", async () => {
+  // Decisão de 2026-10-12: a cor é obrigatória, então não existe "Sem cor".
+  test("'Cor na agenda' mostra as seis cores, na ordem e com os nomes do protótipo, sem 'Sem cor'", async () => {
     const user = userEvent.setup();
     await renderEditForm(edited());
     await user.click(optionRow("Cor na agenda"));
@@ -665,7 +672,6 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     const group = screen.getByRole("radiogroup", { name: "Cor na agenda" });
     const radios = within(group).getAllByRole("radio");
     const names = [
-      "Sem cor",
       "Ameixa",
       "Terracota",
       "Oliva",
@@ -677,8 +683,9 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     names.forEach((name, index) => {
       expect(radios[index]).toHaveAccessibleName(name);
     });
-    expect(radios[0]).toBeChecked();
-    expect(screen.getByText("Seis cores sugeridas.")).toBeVisible();
+    expect(within(group).getByRole("radio", { name: "Rosa-antigo" })).toBeChecked();
+    expect(group).toHaveAttribute("aria-required", "true");
+    expect(screen.getByText("Escolha uma das seis cores.")).toBeVisible();
   });
 
   test.each([
@@ -787,7 +794,8 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
 
   test("a prévia 'Assim na agenda' mostra a hora, o traço neutro e a linha do serviço", async () => {
     const user = userEvent.setup();
-    const { container } = await renderEditForm(edited());
+    // Serviço anterior ao backfill de 2026-10-12, ainda sem cor: traço neutro.
+    const { container } = await renderEditForm({ ...edited(), colorToken: null });
     await user.click(optionRow("Cor na agenda"));
 
     const label = screen.getByText("Assim na agenda");
@@ -819,7 +827,7 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
 
   test("um serviço inativo abre com 'Serviço ativo' desmarcado e reativa pela caixa", async () => {
     const user = userEvent.setup();
-    await renderEditForm(serviceFixture({ active: false }));
+    await renderEditForm(serviceFixture({ active: false, colorToken: "ROSE" }));
     const active = screen.getByRole("checkbox", { name: /Serviço ativo/ });
     expect(active).not.toBeChecked();
     await user.click(active);
@@ -831,6 +839,62 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
         expect.objectContaining({ active: true }),
       ),
     );
+  });
+});
+
+/**
+ * Decisão de 2026-10-12: a cor é obrigatória na criação manual, sem cor
+ * pré-selecionada; o formulário não salva sem ela e mostra o erro no campo.
+ */
+describe("cor obrigatória no formulário de serviço", () => {
+  test("serviço novo sem cor não salva e mostra 'Escolha uma cor para o serviço.'", async () => {
+    const user = userEvent.setup();
+    const { container } = await renderNewForm();
+    expect(within(optionRow("Cor na agenda")).getByText("Escolha uma cor")).toBeVisible();
+
+    await user.type(screen.getByLabelText("Nome"), "Manicure");
+    await user.type(durationInput(), "40");
+    await typePrice(user, "55");
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
+
+    const error = await screen.findByText("Escolha uma cor para o serviço.", {
+      selector: "[role=alert]",
+    });
+    expect(error).toBeVisible();
+    expect(optionRow("Cor na agenda")).toHaveAttribute("aria-expanded", "true");
+    const group = screen.getByRole("radiogroup", { name: "Cor na agenda" });
+    expect(group).toHaveAttribute("aria-invalid", "true");
+    expect(group).toHaveAccessibleDescription("Escolha uma cor para o serviço.");
+    expect(within(group).queryByRole("radio", { checked: true })).toBeNull();
+    expect(serviceCatalogCreate).not.toHaveBeenCalled();
+    await expectNoA11yViolations(container);
+
+    serviceCatalogCreate.mockResolvedValue(serviceFixture({ id: "new-id" }));
+    await user.click(screen.getByRole("radio", { name: "Lavanda" }));
+    expect(screen.queryByText("Escolha uma cor para o serviço.")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
+    await waitFor(() =>
+      expect(serviceCatalogCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ colorToken: "VIOLET", name: "Manicure" }),
+      ),
+    );
+  });
+
+  test("sem preço e sem cor, os dois erros aparecem juntos e nada é enviado", async () => {
+    const user = userEvent.setup();
+    await renderNewForm();
+    await user.type(screen.getByLabelText("Nome"), "Manicure");
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
+
+    expect(
+      await screen.findByText(/^Informe o valor/, { selector: "[role=alert]" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Escolha uma cor para o serviço.", {
+        selector: "[role=alert]",
+      }),
+    ).toBeVisible();
+    expect(serviceCatalogCreate).not.toHaveBeenCalled();
   });
 });
 

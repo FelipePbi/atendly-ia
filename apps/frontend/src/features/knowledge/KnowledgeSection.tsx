@@ -8,7 +8,10 @@ import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Dialog } from "@/shared/ui/Dialog";
 import { Skeleton } from "@/shared/ui/States";
 
-import { KNOWLEDGE_TYPE_LABELS, KnowledgeDocumentForm } from "./KnowledgeDocumentForm";
+import {
+  KNOWLEDGE_TYPE_LABELS,
+  KnowledgeDocumentForm,
+} from "./KnowledgeDocumentForm";
 
 /**
  * Conhecimento do negócio editável (Goal024/WU-04, Goal012/§Conhecimento):
@@ -31,7 +34,9 @@ export function KnowledgeSection() {
   const [reload, setReload] = useState(0);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<KnowledgeDocument | null>(null);
-  const [deactivating, setDeactivating] = useState<KnowledgeDocument | null>(null);
+  const [deactivating, setDeactivating] = useState<KnowledgeDocument | null>(
+    null,
+  );
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -42,7 +47,9 @@ export function KnowledgeSection() {
       getProductServices().serviceCatalog.list(controller.signal),
     ])
       .then(([documentList, serviceList]) => {
-        setDocuments(documentList.filter((item) => item.type !== "BUSINESS_INFO"));
+        setDocuments(
+          documentList.filter((item) => item.type !== "BUSINESS_INFO"),
+        );
         setServices(serviceList.items);
       })
       .catch((caught: unknown) => {
@@ -59,7 +66,10 @@ export function KnowledgeSection() {
 
   function serviceName(serviceId: string | null): string {
     if (!serviceId) return "Geral";
-    return services.find((service) => service.id === serviceId)?.name ?? "Serviço não encontrado";
+    return (
+      services.find((service) => service.id === serviceId)?.name ??
+      "Serviço não encontrado"
+    );
   }
 
   function upsertDocument(document: KnowledgeDocument, previousId?: string) {
@@ -103,8 +113,8 @@ export function KnowledgeSection() {
           <h2>Conhecimento do negócio</h2>
           <p>
             Documentos que a IA usa para responder: perguntas frequentes,
-            orientações, cuidados, procedimentos e políticas — gerais ou
-            ligados a um serviço.
+            orientações, cuidados, procedimentos e políticas (gerais ou ligados
+            a um serviço).
           </p>
         </div>
         <button

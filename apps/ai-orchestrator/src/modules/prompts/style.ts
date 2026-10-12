@@ -27,9 +27,9 @@ const STYLE_PROMPT_INSTRUCTIONS: Record<AiConversationStyle, string[]> = {
 };
 
 const STYLE_GREETINGS: Record<AiConversationStyle, string> = {
-  PROFESSIONAL: "Olá, tudo bem? Como posso te ajudar hoje?",
-  BALANCED: "Oii, tudo bem? Como posso te ajudar hoje?",
-  CASUAL: "Oii, tudo bem? Como posso te ajudar hoje? 😊",
+  PROFESSIONAL: "Olá, tudo bem? Como posso te ajudar?",
+  BALANCED: "Oii, tudo bem? Como posso te ajudar?",
+  CASUAL: "Oii, tudo bem? Como posso te ajudar? 😊",
 };
 
 export function buildAiTonePromptSection(settings: AiTenantSettings): string {

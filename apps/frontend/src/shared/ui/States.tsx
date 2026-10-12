@@ -1,6 +1,7 @@
 import type { ComponentPropsWithoutRef } from "react";
 
 import { Icon, type IconName } from "@/shared/icons/Icon";
+import { useSkeletonSettled } from "@/shared/motion/SkeletonSettle";
 
 import { Button } from "./Button";
 
@@ -45,13 +46,23 @@ export function StatePanel({
   );
 }
 
+/**
+ * Dentro de `<SkeletonSettle>` (D-168), reserva o lugar desde o primeiro
+ * quadro e só vira esqueleto (classe `skeleton`, com o brilho) se a carga
+ * passar de ~150 ms; fora dele, é esqueleto desde o início.
+ */
 export function Skeleton({
   className = "",
   children,
   ...props
 }: ComponentPropsWithoutRef<"span">) {
+  const settled = useSkeletonSettled();
   return (
-    <span className={`skeleton ${className}`} aria-hidden="true" {...props}>
+    <span
+      className={`${settled ? "skeleton " : ""}${className}`}
+      aria-hidden="true"
+      {...props}
+    >
       {children}
     </span>
   );

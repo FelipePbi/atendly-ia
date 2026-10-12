@@ -31,6 +31,7 @@ const listTimeBlocks = vi.fn();
 const getAgendaViewPreference = vi.fn();
 const getSettings = vi.fn();
 const listCatalog = vi.fn();
+const getAppointment = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -40,6 +41,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
   useProductRuntime: () => ({ session: null }),
   getProductServices: () => ({
     calendar: {
+      getAppointment,
       getCalendar,
       listAppointmentEvents: () => Promise.resolve([]),
       listAppointmentNotifications: () => Promise.resolve([]),
@@ -198,7 +200,9 @@ describe("1 — a barra mostra mês e ano do dia focado", () => {
       await user.click(screen.getByRole("tab", { name: tab }));
       const title = document.querySelector(".agenda-date-title");
       expect(title).toHaveTextContent("Setembro 2026");
-      expect(screen.queryByText(/29 de setembro/i)).toBeNull();
+      // O título não traz a data completa. (O cabeçalho dos dias da Semana tem
+      // "mostrar terça, 29 de setembro" só para leitor de tela, WCAG 2.5.3.)
+      expect(title).not.toHaveTextContent(/29 de setembro/i);
       expect(screen.getByRole("button", { name: previous })).toBeVisible();
       expect(screen.getByRole("button", { name: next })).toBeVisible();
     }
@@ -505,7 +509,9 @@ describe("5 — 'Próximo agendamento' não aparece", () => {
 });
 
 describe("6 — o menu de criar", () => {
-  test("tem os quatro itens com seus destinos, e o botão solto 'Exceções do dia' não existe", async () => {
+  // Pedido de 2026-10-12 (D-169): bloqueio, compromisso pessoal e exceção
+  // do dia viraram uma linha só, "Bloquear horário".
+  test("tem os dois itens com seus destinos, e o botão solto 'Exceções do dia' não existe", async () => {
     const user = setup();
     renderBoard();
 
@@ -516,19 +522,14 @@ describe("6 — o menu de criar", () => {
       within(menu).getByRole("link", { name: "Agendamento" }),
     ).toHaveAttribute("href", "/agenda/novo");
     expect(
-      within(menu).getByRole("link", { name: "Compromisso pessoal" }),
-    ).toHaveAttribute("href", "/agenda/bloquear?type=PERSONAL");
-    expect(
-      within(menu).getByRole("link", { name: "Bloqueio" }),
-    ).toHaveAttribute("href", "/agenda/bloquear?type=BLOCK");
-    expect(
-      within(menu).getByRole("link", { name: "Exceção do dia" }),
-    ).toHaveAttribute("href", "/agenda/excecoes");
+      within(menu).getByRole("link", { name: "Bloquear horário" }),
+    ).toHaveAttribute("href", "/agenda/bloquear");
+    expect(within(menu).getAllByRole("link")).toHaveLength(2);
     expect(screen.queryByRole("link", { name: "Exceções do dia" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Exceções do dia" })).toBeNull();
   });
 
-  test("'Exceção do dia' some sem manageAvailability; os outros itens seguem a capacidade deles", async () => {
+  test("'Bloquear horário' some sem manageAvailability; Agendamento segue a capacidade dele", async () => {
     getCalendar.mockResolvedValue(
       calendarFixture({ manageAvailability: false }),
     );
@@ -542,13 +543,7 @@ describe("6 — o menu de criar", () => {
       within(menu).getByRole("link", { name: "Agendamento" }),
     ).toBeVisible();
     expect(
-      within(menu).queryByRole("link", { name: "Exceção do dia" }),
-    ).toBeNull();
-    expect(
-      within(menu).queryByRole("link", { name: "Bloqueio" }),
-    ).toBeNull();
-    expect(
-      within(menu).queryByRole("link", { name: "Compromisso pessoal" }),
+      within(menu).queryByRole("link", { name: "Bloquear horário" }),
     ).toBeNull();
   });
 
@@ -567,9 +562,10 @@ describe("6 — o menu de criar", () => {
 });
 
 describe("7 — seleção e painel de detalhe", () => {
-  test("a partir de 1024 px, tocar num atendimento seleciona para o painel, que abre com o texto do quadro", async () => {
+  test("a partir de 1024 px, tocar num atendimento seleciona para o painel, que abre com o corpo do quadro A5 (D-165)", async () => {
     window.innerWidth = 1366;
     listAppointments.mockResolvedValue([appointmentFixture()]);
+    getAppointment.mockResolvedValue(appointmentFixture());
     const user = setup();
     renderBoard();
 
@@ -587,13 +583,24 @@ describe("7 — seleção e painel de detalhe", () => {
     await user.click(row);
 
     expect(row).toHaveAttribute("aria-pressed", "true");
+    const detail = within(
+      screen.getByRole("complementary", { name: "Detalhe do agendamento" }),
+    );
     expect(
-      within(
-        screen.getByRole("complementary", { name: "Detalhe do agendamento" }),
-      ).getByRole("heading", { name: "Ana Paula" }),
+      await detail.findByRole("heading", { name: "Ana Paula" }),
     ).toBeVisible();
+    expect(detail.getByText("10:00")).toBeVisible();
+    expect(detail.getByRole("link", { name: "Remarcar" })).toHaveAttribute(
+      "href",
+      // A origem vai junto: o retorno volta ao dia do painel (D-167).
+      "/agenda/reagendar?id=apt-1&voltar=%2Fagenda%3Fdia%3D2026-09-29",
+    );
     expect(
       screen.queryByText("Selecione um atendimento para ver os detalhes"),
+    ).toBeNull();
+    expect(screen.queryByText("Ciclo do atendimento")).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Ver detalhes completos" }),
     ).toBeNull();
   });
 
@@ -603,7 +610,10 @@ describe("7 — seleção e painel de detalhe", () => {
     renderBoard();
 
     const link = await screen.findByRole("link", { name: /Ana Paula/ });
-    expect(link).toHaveAttribute("href", "/agenda/agendamento?id=apt-1");
+    expect(link).toHaveAttribute(
+      "href",
+      "/agenda/agendamento?id=apt-1&voltar=%2Fagenda%3Fdia%3D2026-09-29",
+    );
     expect(
       screen.queryByRole("complementary", { name: "Detalhe do agendamento" }),
     ).toBeNull();

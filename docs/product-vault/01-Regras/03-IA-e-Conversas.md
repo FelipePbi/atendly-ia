@@ -96,7 +96,7 @@ Se nova mensagem chegar enquanto uma resposta está sendo preparada, a IA deve r
 
 ## Envio em mensagens separadas
 
-**Decisão de produto (2026-10-01). Implementação pendente.**
+**Decisão de produto (2026-10-01). Implementada em 2026-10-11.**
 
 Para soar natural e não parecer um robô respondendo tudo de uma vez, a IA deve enviar respostas compostas como **mensagens curtas separadas**, na ordem em que uma pessoa as escreveria, com um intervalo breve entre elas e o indicador "digitando…" do WhatsApp antes de cada uma.
 
@@ -117,7 +117,21 @@ Diretrizes:
 - o intervalo é curto e proporcional ao tamanho da mensagem; não se confunde com mensagem de espera ("aguarde enquanto consulto" continua rejeitada — ver [[04-Referencia/02-Decisoes-Substituidas]]);
 - se a profissional assumir a conversa no meio da sequência, as mensagens ainda não enviadas são descartadas.
 
+**Regra vigente (2026-10-11).** A IA continua gerando uma resposta só; a divisão acontece no envio, para toda resposta da IA ao cliente (inclusive no teste de ativação). A resposta é dividida nos parágrafos (linha em branco), e uma abertura curta no início (“Oi!”, “Bom dia!”, “Oi, Ana!”: primeira frase terminada em ! ou ?, até 4 palavras) sai sozinha; lista nunca é dividida (fica com a linha que a introduz), link nunca é cortado e o emoji fica com a frase dele. No máximo 4 mensagens (o excedente vai junto na última), pausa de 1 segundo entre elas e, antes de cada parte depois da primeira, o “digitando…” por um tempo proporcional ao tamanho do texto (de 0,8 a 2 segundos) e nenhum texto é acrescentado; resposta de um parágrafo sai como uma mensagem. Na inbox e no histórico da IA a resposta continua uma mensagem só, marcada como enviada apenas depois da última parte. Não se aplica a mensagem da profissional, avisos, lembretes nem ao número da plataforma no teste de ativação. Mensagem nova do cliente no meio da sequência não interrompe as partes restantes; a profissional assumindo, sim.
+
 A landing page demonstra esse comportamento ([[05-Go-to-Market/03-Landing-Page]]); ela não deve ser publicada antes de o produto se comportar assim.
+
+### Assunto fora do negócio: a IA para em silêncio
+
+**Decisão de produto (2026-10-11).** A IA só atende assuntos do negócio (serviços, agenda, valores, dúvidas do atendimento). Um cumprimento pode ser respondido normalmente, mas assim que fica claro que a conversa é de outro assunto (conversa pessoal, alguém oferecendo os próprios serviços ou produtos, fornecedor, spam), a IA para na hora, **sem mandar nenhuma mensagem**, mesmo que a pessoa já seja cliente. A conversa fica com a profissional. A IA também nunca oferece nem agenda serviço que não está no catálogo; se o cliente pede um, ela diz que o negócio não faz e resume o que faz. Pedido de humano e reclamação continuam com o aviso de que a equipe vai responder.
+
+A IA também não inventa informação sobre os serviços: como funciona, prazo de manutenção, durabilidade, cuidados, resultado ou qual opção fica mais natural só aparecem se vierem do conhecimento do negócio, da instrução do serviço ou do intervalo de recorrência cadastrado. Sem isso, ela diz que a profissional explica no atendimento e segue com o que sabe. Valor e duração vêm sempre do catálogo, com o número exato.
+
+### Afunilar em vez de listar o catálogo
+
+**Decisão de produto (2026-10-11).** Quando o cliente pergunta quais serviços o negócio tem, a IA responde por categoria, sem listar cada serviço (“Fazemos aplicação de cílios e design de sobrancelha. Qual te interessa?”). Se o cliente pergunta por uma categoria, a IA cita as opções pelo nome curto, sem repetir a categoria (“Tem 5D, brasileiro, fox eyes e efeito sirena”). A lista completa só sai se o cliente pedir. Quando o cliente já disse qual serviço quer, mesmo com outras palavras ou erro de escrita (“com rena” para Henna), a IA segue com esse serviço em vez de listar opções de novo; só pergunta qual quando o pedido serve igualmente para mais de um serviço.
+
+Na oferta de horários a IA também afunila: com o serviço definido e sem dia dito pelo cliente, ela pergunta primeiro se há preferência de dia ou turno, em vez de despejar a agenda. Com um dia escolhido, oferece até 3 horários desse dia; se o dia estiver cheio, diz isso e oferece o próximo dia com horário livre. Para um período (“essa semana”, “depois de terça”), no máximo 2 dias com até 3 opções cada; para “o mais cedo possível”, só o primeiro dia livre. Quando o cliente pede horário sem dizer o serviço e já tem histórico (serviço falado ou agendado na conversa, memória ou agendamentos), a IA deduz o serviço e confirma junto da oferta (“Seria pra design de sobrancelha, certo? Na segunda (19/10) tenho às 8h…”); só cliente novo, sem registro, é perguntado antes. Todo dia vai com dia da semana e data, também na confirmação: “terça (20/10)”, e “hoje” e “amanhã” sempre acompanhados deles (“amanhã, terça (13/10), às 15h”); entre 0h e 5h a IA não usa “hoje” nem “amanhã”, porque de madrugada “amanhã” é ambíguo; se o cliente pede “amanhã” nesse horário sem dizer o dia da semana, a IA pergunta antes (“Pra hoje, segunda (12/10), ou terça (13/10)?”). O dia da semana que o cliente diz nunca é corrigido nem trocado. A oferta vem em texto corrido e hora curta (“na quarta (14/10) tenho às 15h ou 15h30”), sem um horário por linha, e sempre de uma consulta feita no próprio turno, nunca de horários citados antes na conversa. Termos internos como “bloco” e “duração total” não aparecem para o cliente quando é um serviço só. “Hoje” é sempre a data no fuso do negócio.
 
 ## Mudança de assunto
 

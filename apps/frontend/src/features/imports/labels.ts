@@ -60,8 +60,7 @@ const FAILED_REASON_LABELS: Record<string, string> = {
     "Este registro veio incompleto ou em um formato que a Avenly não reconhece.",
   IMPORT_AVAILABILITY_COMPANY_MISSING:
     "A Minha Agenda não informou o horário de funcionamento do seu negócio.",
-  IMPORT_ITEM_FAILED:
-    "Houve uma falha inesperada ao importar este item.",
+  IMPORT_ITEM_FAILED: "Houve uma falha inesperada ao importar este item.",
   AVAILABILITY_CHANGED_SINCE_ANALYSIS:
     "Seus horários de atendimento mudaram depois da análise, então nada foi alterado neles. Analise de novo para escolher entre os horários do Minha Agenda e os atuais.",
   AVAILABILITY_SOURCE_OVERLAP:
@@ -343,9 +342,14 @@ export function pendingMoreLabel(count: number): string {
   return `Mais ${importCountFormatter.format(count)} em Revisar pendências.`;
 }
 
-export const PENDING_ITEMS_READ_FAILED = "Não foi possível listar os itens agora.";
+export const PENDING_ITEMS_READ_FAILED =
+  "Não foi possível listar os itens agora.";
 export const PENDING_PANEL_NOTE =
   "Você pode revisar agora. O que continuar pendente não será importado quando você concluir.";
+
+/** Só falhas: nada a revisar nem a tentar de novo nesta importação. */
+export const PENDING_PANEL_NOTE_FAILED_ONLY =
+  "Você pode conferir quais registros ficaram de fora, mas não precisa fazer nada agora para seguir. Ao concluir, eles não entram na Avenly e você pode cadastrá-los depois, se quiser.";
 
 export function pendingNotProcessedLabel(count: number): string {
   return count === 1

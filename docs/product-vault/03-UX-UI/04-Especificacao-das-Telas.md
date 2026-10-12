@@ -89,14 +89,16 @@ Pode adicionar mais contexto e métricas simples.
 - seletor de data;
 - lista cronológica;
 - prioridade e default no mobile;
-- solução adequada a espaços estreitos, sem comprimir a grade das telas maiores.
+- solução adequada a espaços estreitos, sem comprimir a grade das telas maiores;
+- o atendimento aberto ao lado (painel ou detalhe) fica destacado na lista, não só pela cor.
 
 ### Agenda — visualização Semana
 
 - compromissos distribuídos entre os dias;
 - possibilidade de ser a visualização padrão em telas maiores;
 - filtros por status/serviço em telas maiores;
-- adaptação própria para mobile, tablet, notebook e desktop.
+- adaptação própria para mobile, tablet, notebook e desktop;
+- tocar no cabeçalho de um dia escolhe esse dia (coluna destacada) e o resumo abaixo da grade passa a mostrá-lo; `Abrir dia` no resumo é que leva ao Dia.
 
 ### Agenda — visualização Mês
 
@@ -108,7 +110,8 @@ Pode adicionar mais contexto e métricas simples.
 
 - seletor entre `Dia`, `Semana` e `Mês`;
 - os três modos representam a mesma Agenda, sem criar fluxos separados;
-- filtros simples, botão `+`, hold visual e estados dos atendimentos permanecem coerentes entre os modos.
+- filtros simples, botão `+`, hold visual e estados dos atendimentos permanecem coerentes entre os modos;
+- o voltar do detalhe de um atendimento reabre a Agenda no dia de onde a pessoa saiu (sem origem, no dia do atendimento), na visualização que ela usava.
 
 ### Personalização dos dias visíveis
 
@@ -130,8 +133,9 @@ Pode adicionar mais contexto e métricas simples.
 Escolha:
 
 - Agendamento
-- Compromisso
-- Bloqueio
+- Bloquear horário: uma tela só, direto no período. "Dia inteiro" fecha a data; com período, é pausa no atendimento ou, com a chave "É um compromisso pessoal", compromisso pessoal (D-169, revisão de 2026-10-12)
+
+O horário extra (disponibilidade fora do horário de sempre) não aparece aqui. Ele fica em Configurações > Agenda.
 
 ### Novo/editar agendamento
 
@@ -143,6 +147,16 @@ Escolha:
 - preço quando necessário;
 - observações;
 - notificar cliente quando alteração relevante.
+
+No novo agendamento (D-170, 2026-10-12), a tela revela uma etapa por vez: no começo só o Cliente; depois os Serviços; depois a Data (com o dia vindo da Agenda, ou hoje) e os Horários; com o horário, "Criar agendamento" e "Repetir este atendimento". O que já vem preenchido aparece de uma vez.
+
+Data e horário ficam num quadro só (Seletores-de-Data-e-Hora.dc.html, "No formulário"): no topo, o resumo grande repete o dia, o início e o fim, ao lado de quem, o quê e quanto tempo; embaixo, o calendário — que começa recolhido na semana do dia escolhido e abre o mês — e os horários livres, empilhados no celular e lado a lado no tablet e no desktop. Os horários oferecidos pela disponibilidade continuam sendo o caminho principal; "Outro horário" abre o tambor de horas e minutos, com aviso (nunca bloqueio) fora do horário de atendimento, e "Usar este horário" confirma.
+
+Serviços mostra os 5 mais usados — os que aparecem em mais atendimentos não cancelados dos últimos 90 dias; no empate, ou sem atendimentos, a ordem do catálogo —, mais "Ver outros serviços" (folha com os demais e busca por nome) e "Outro, sem cadastro".
+
+Criar, remarcar e cancelar não mostram a barra da Agenda (Dia/Semana/Mês, setas e "+ Novo"): só a barra do próprio fluxo.
+
+Repetir (D-171): quantos atendimentos (2 a 12) e o intervalo, com o do serviço sugerido. O botão vira "Revisar N agendamentos" e abre a lista de tudo o que será criado, com as datas com conflito ou sem horário em destaque e a opção de pular a data, antes de "Confirmar N agendamentos". Não existe mais tela separada de série de atendimentos.
 
 ### Detalhes do agendamento
 

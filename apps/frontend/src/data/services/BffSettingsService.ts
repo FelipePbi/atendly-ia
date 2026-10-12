@@ -4,6 +4,7 @@ import type {
   AgendaViewPreference,
   AiTone,
   AvailabilitySettings,
+  BusinessAddressParts,
   BusinessModality,
   ReminderPricePolicy,
   ReminderSettings,
@@ -19,6 +20,8 @@ export interface BusinessSettingsInput {
   modalities?: BusinessModality[];
   /** Chave ausente preserva o valor gravado; `null` apaga. */
   address?: string | null;
+  /** Partes do endereço; o BFF monta `address` a partir delas. */
+  addressParts?: BusinessAddressParts | null;
 }
 
 export interface AiSettingsInput {

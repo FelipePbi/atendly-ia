@@ -11,6 +11,9 @@ DELETE /instance/logout
 GET /health
 GET /instance/qr
 GET /instance/status
+# Contatos sincronizados do número conectado, para a escolha dos contatos
+# ignorados — EvolutionClient.getContacts (validação de 2026-10-11).
+GET /user/contacts
 POST /instance/connect
 POST /instance/create
 POST /instance/pair

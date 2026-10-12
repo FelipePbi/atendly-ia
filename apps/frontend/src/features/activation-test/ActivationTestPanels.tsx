@@ -7,6 +7,7 @@ import {
   BffHttpError,
   type WhatsAppStatusValue,
 } from "@/data";
+import { segmentExamples } from "@/features/onboarding/segmentExamples";
 import { Icon } from "@/shared/icons/Icon";
 import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
@@ -27,11 +28,7 @@ import {
 
 /** As cinco telas do teste. Um estado da execução, uma tela. */
 export type ActivationTestPanel =
-  | "intro"
-  | "progress"
-  | "paused"
-  | "failed"
-  | "succeeded";
+  "intro" | "progress" | "paused" | "failed" | "succeeded";
 
 /** Tela para a qual cada estado da execução leva. */
 export function activationTestPanelFor(
@@ -101,7 +98,7 @@ const FAILURE_ADVICE: Record<string, string> = {
     "Confira se o seu WhatsApp continua conectado e tente de novo.",
 };
 const FAILURE_ADVICE_FALLBACK =
-  "Tente de novo — pode ter sido uma falha momentânea. Seus serviços e horários foram conferidos antes de o teste começar.";
+  "Tente de novo. Pode ter sido uma falha momentânea. Seus serviços e horários foram conferidos antes de o teste começar.";
 
 function failureText(
   texts: Record<string, string>,
@@ -118,7 +115,72 @@ function failureText(
  * perguntas diferentes, com ritmos diferentes. Esta leitura para sozinha em
  * estado terminal — não fica consultando para sempre.
  */
-const PROGRESS_POLL_MS = 3_000;
+const PROGRESS_POLL_MS = 1_000;
+
+/**
+ * Ritmo da linha do tempo (validação de 2026-10-11): marcos que chegam juntos
+ * numa leitura entram um por vez, para a pessoa ver cada etapa concluir e a
+ * próxima começar. É só apresentação: nenhum marco aparece antes de a leitura
+ * dizer que ele foi alcançado.
+ */
+const MILESTONE_PACE_MS = 900;
+/** Pausa para o último check aparecer antes de a tela do resultado abrir. */
+const SETTLE_PAUSE_MS = 600;
+
+function reachedCount(run: ActivationTestRun): number {
+  let count = 0;
+  for (const milestone of run.milestones) {
+    if (!milestone.reached) break;
+    count += 1;
+  }
+  return count;
+}
+
+/**
+ * A execução como a tela deve mostrar agora: os marcos alcançados entram um a
+ * um, no ritmo de `MILESTONE_PACE_MS`. Enquanto a tela ainda não alcançou o
+ * que a leitura diz, uma execução terminada aparece "em andamento", e
+ * `caughtUp` diz quando a tela já mostrou tudo.
+ */
+export function usePacedActivationRun(
+  run: ActivationTestRun | null | undefined,
+): {
+  caughtUp: boolean;
+  shown: ActivationTestRun | null | undefined;
+} {
+  const target = run ? reachedCount(run) : 0;
+  const [revealed, setRevealed] = useState(target);
+  // Na primeira leitura de cada execução, o que já foi alcançado aparece de
+  // uma vez; só o que chega depois entra no ritmo.
+  const [seenRunId, setSeenRunId] = useState<string | null>(run?.id ?? null);
+  if (run && run.id !== seenRunId) {
+    setSeenRunId(run.id);
+    setRevealed(target);
+  }
+  // Uma execução nova pode ter menos marcos que a anterior: nunca mostra mais
+  // do que a leitura diz.
+  const count = Math.min(revealed, target);
+  useEffect(() => {
+    if (count >= target) return;
+    const timer = setTimeout(() => setRevealed(count + 1), MILESTONE_PACE_MS);
+    return () => clearTimeout(timer);
+  }, [count, target]);
+
+  if (!run) return { caughtUp: true, shown: run };
+  const caughtUp = count >= target;
+  if (caughtUp) return { caughtUp, shown: run };
+  return {
+    caughtUp,
+    shown: {
+      ...run,
+      state: "RUNNING",
+      milestones: run.milestones.map((milestone, index) => ({
+        ...milestone,
+        reached: index < count,
+      })),
+    },
+  };
+}
 
 export function LoadingNote() {
   return (
@@ -212,9 +274,7 @@ export function useAiActiveStatus(): {
 
     async function load() {
       try {
-        const result = await getProductServices().status.get(
-          controller.signal,
-        );
+        const result = await getProductServices().status.get(controller.signal);
         if (!active) return;
         setState(result.ai.state);
         setWhatsappStatus(result.whatsapp.status);
@@ -270,7 +330,11 @@ export function aiActiveCopy(view: StatusView): {
  * Cada item só aparece concluído quando o marco veio `reached: true` da
  * leitura — e o servidor só devolve isso quando há fato gravado atrás dele.
  */
-export function ActivationTestMilestoneList({ run }: { run: ActivationTestRun }) {
+export function ActivationTestMilestoneList({
+  run,
+}: {
+  run: ActivationTestRun;
+}) {
   return (
     <ul className="onboarding-points" aria-live="polite">
       {run.milestones.map((milestone) => (
@@ -278,7 +342,7 @@ export function ActivationTestMilestoneList({ run }: { run: ActivationTestRun })
           <Icon name={milestone.reached ? "check" : "clock"} />
           <span>
             {MILESTONE_LABELS[milestone.milestone]}
-            {milestone.reached ? "" : " — aguardando"}
+            {milestone.reached ? "" : " (aguardando)"}
           </span>
         </li>
       ))}
@@ -432,7 +496,9 @@ export async function readFinishedActivationTest(): Promise<
 > {
   const run = await getProductServices().activationTest.get();
   if (!run) {
-    return { error: "Nenhum teste em andamento. Inicie o teste para continuar." };
+    return {
+      error: "Nenhum teste em andamento. Inicie o teste para continuar.",
+    };
   }
   if (!run.terminal) {
     return { error: "O teste ainda está em andamento. Aguarde o fim." };
@@ -487,7 +553,17 @@ export function ActivationTestIntro() {
  * pergunta não nomeia serviço: o sistema só o escolhe quando a execução
  * começa, e a tela não pode afirmar o que ainda não sabe.
  */
-export function ActivationTestOnboardingIntro() {
+export function ActivationTestOnboardingIntro({
+  businessCategory,
+  serviceName,
+}: {
+  businessCategory?: string | null;
+  serviceName?: string | null;
+} = {}) {
+  // Mesma primeira mensagem do cliente simulado, no jeito do segmento e com o
+  // serviço real quando já existe.
+  const examples = segmentExamples(businessCategory);
+  const service = serviceName?.trim() || "o atendimento";
   return (
     <div className="activation-test-intro">
       <div className="activation-test-preview">
@@ -496,11 +572,11 @@ export function ActivationTestOnboardingIntro() {
           <span>agora</span>
         </div>
         <p className="activation-test-bubble">
-          Esta é uma conversa de teste da Avenly. Você só precisa observar: a
-          IA vai conversar sozinha com um cliente simulado e marcar um
-          atendimento de teste, que é removido no final.
+          Esta é uma conversa de teste da Avenly. Você só precisa observar: a IA
+          vai conversar sozinha com um cliente simulado e marcar um atendimento
+          de teste, que é removido no final.
         </p>
-        <p className="activation-test-bubble">Oi! Quanto custa o atendimento?</p>
+        <p className="activation-test-bubble">{examples.askPrice(service)}</p>
       </div>
       <ul className="activation-test-checks">
         <li>
@@ -528,10 +604,7 @@ export function ActivationTestOnboardingIntro() {
 
 /** O que cada linha da linha do tempo diz sobre o seu marco. */
 export type ActivationTestTimelineState =
-  | "done"
-  | "current"
-  | "failed"
-  | "pending";
+  "done" | "current" | "failed" | "pending";
 
 /**
  * O estado de cada marco, lido só de `run.milestones` e `run.state`.
@@ -654,7 +727,9 @@ export function ActivationTestTimeline({
           <span className="activation-timeline-text">
             <span className="activation-timeline-label">
               {row.label}
-              <span className="sr-only"> — {TIMELINE_STATE_TEXT[row.state]}</span>
+              <span className="sr-only">
+                : {TIMELINE_STATE_TEXT[row.state]}
+              </span>
             </span>
             {row.state === "failed" && detail && (
               <span className="activation-timeline-detail">{detail}</span>
@@ -710,10 +785,15 @@ export function ActivationTestOnboardingProgress({
     settled.current = onSettled;
   });
 
+  // A tela só sai da linha do tempo depois de mostrar, um a um, os marcos
+  // que a leitura trouxe, e com uma pausa curta para o último check aparecer.
+  const { caughtUp, shown } = usePacedActivationRun(run);
   const leaves = !!run && activationTestPanelFor(run) !== "progress";
   useEffect(() => {
-    if (run && leaves) settled.current?.(run);
-  }, [leaves, run]);
+    if (!run || !leaves || !caughtUp) return;
+    const timer = setTimeout(() => settled.current?.(run), SETTLE_PAUSE_MS);
+    return () => clearTimeout(timer);
+  }, [caughtUp, leaves, run]);
 
   if (error) return <ErrorNote message={error} />;
   if (run === undefined) return <LoadingNote />;
@@ -725,7 +805,7 @@ export function ActivationTestOnboardingProgress({
 
   return (
     <div aria-live="polite">
-      <ActivationTestTimeline animated cleanup run={run} />
+      <ActivationTestTimeline animated cleanup run={shown ?? run} />
     </div>
   );
 }
@@ -865,7 +945,9 @@ export function ActivationTestSucceeded() {
       <ul className="onboarding-points">
         <li>
           <Icon name="check" />
-          <span>Sua IA conversou com o cliente de teste e marcou o horário.</span>
+          <span>
+            Sua IA conversou com o cliente de teste e marcou o horário.
+          </span>
         </li>
         <li>
           <Icon name={icon} />
@@ -919,8 +1001,20 @@ export function ActivationTestOnboardingSucceeded({
             <span className="completion-ring is-late" />
           </>
         )}
+        {/* O teste passou: um check de sucesso que se desenha no disco
+            (validação de 2026-10-11), no lugar do anel neutro. */}
         <span className="completion-disc">
-          <span className="completion-disc-mark" />
+          <svg
+            className="completion-check"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="5"
+            viewBox="0 0 48 48"
+          >
+            <path d="M13 25l7.5 7.5L35 17" pathLength={100} />
+          </svg>
         </span>
       </div>
       <div className="completion-text">
@@ -948,11 +1042,14 @@ export function ActivationTestOnboardingSucceeded({
 
 /** Corpo de cada tela do teste, o mesmo para todo consumidor. */
 export function ActivationTestPanelBody({
+  example,
   panel,
   onboarding = false,
   onSettled,
   title,
 }: {
+  /** Segmento e serviço real para a prévia da conversa (só no onboarding). */
+  example?: { businessCategory?: string | null; serviceName?: string | null };
   panel: ActivationTestPanel;
   onboarding?: boolean;
   /** Só o progresso do onboarding a usa: a execução já não está em andamento. */
@@ -981,5 +1078,9 @@ export function ActivationTestPanelBody({
       <ActivationTestSucceeded />
     );
   }
-  return onboarding ? <ActivationTestOnboardingIntro /> : <ActivationTestIntro />;
+  return onboarding ? (
+    <ActivationTestOnboardingIntro {...example} />
+  ) : (
+    <ActivationTestIntro />
+  );
 }

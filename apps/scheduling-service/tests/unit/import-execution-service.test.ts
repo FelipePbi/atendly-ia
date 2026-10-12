@@ -281,6 +281,36 @@ describe("ImportExecutionService: processamento por item com checkpoint", () => 
     expect(item.serviceId).toBe(service.id);
   });
 
+  // Decisão de 2026-10-12: serviço importado recebe cor aleatória da paleta,
+  // sem repetir enquanto houver cor livre no negócio.
+  it("todo serviço importado recebe uma cor da paleta, sem repetir", async () => {
+    const { database, preview, execution } = setup();
+    const snapshot = buildSnapshot({
+      services: category("SERVICE", [
+        { externalId: "900", raw: sourceService({ id: 900, name: "Corte" }) },
+        { externalId: "901", raw: sourceService({ id: 901, name: "Escova" }) },
+        { externalId: "902", raw: sourceService({ id: 902, name: "Barba" }) },
+      ]),
+    });
+    const { sessionId, reader } = await analyzed(database, preview, snapshot);
+
+    await execution.execute(
+      { tenantId, sessionId, userId: "user-1" },
+      reader,
+      snapshotInput,
+      { previewVersion: 1 },
+    );
+
+    const colors = database.tables.service.rows.map((row) => row.colorToken);
+    expect(colors).toHaveLength(3);
+    for (const color of colors) {
+      expect(["ROSE", "AMBER", "EMERALD", "SKY", "VIOLET", "SLATE"]).toContain(
+        color,
+      );
+    }
+    expect(new Set(colors).size).toBe(3);
+  });
+
   it("marca o agendamento cujo cliente não foi importado e segue com os demais", async () => {
     const { database, preview, execution } = setup();
     const known = sourceCustomer({ id: 500 });

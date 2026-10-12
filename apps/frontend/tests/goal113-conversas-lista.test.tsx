@@ -302,7 +302,7 @@ describe("abas e contador de atenção", () => {
     );
     expect(
       await screen.findByText(
-        "Ainda não dá para saber se são clientes ou pessoais. A IA só responde quando a intenção fica clara — ou você move a conversa.",
+        "Ainda não dá para saber se são clientes ou pessoais. A IA só responde quando a intenção fica clara ou quando você move a conversa.",
       ),
     ).toBeVisible();
 

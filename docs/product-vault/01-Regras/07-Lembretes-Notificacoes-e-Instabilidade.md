@@ -88,6 +88,8 @@ Eventos adequados:
 
 Novo agendamento pela IA pode gerar notificação conforme configuração do usuário, com default silencioso.
 
+Abrir a central (gaveta ou tela) marca como lidas as notificações não lidas que ela mostra. Enquanto a central está aberta, elas mantêm o destaque de novas. Ao fechá-la ou sair da tela, o contador de não lidas já reflete a leitura. Ler não resolve uma condição: um problema ainda aberto, como o WhatsApp desconectado, continua avisado.
+
 ## Alertas persistentes
 
 Problemas que impedem a operação podem gerar banner persistente, como:

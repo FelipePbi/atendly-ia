@@ -1,17 +1,17 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { CalendarServiceDefinition } from "../calendar/calendar-provider.js";
+import {
+  nextServiceColorForTenant,
+  SERVICE_COLOR_TOKENS,
+  type ServiceColorToken,
+} from "./service-color.js";
+
+export type { ServiceColorToken } from "./service-color.js";
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 export type PriceType = "FIXED" | "STARTING_AT" | "ON_REQUEST" | "NOT_INFORMED";
 export type ServiceReviewOrigin = "IMPORT" | "MANUAL";
-export type ServiceColorToken =
-  | "ROSE"
-  | "AMBER"
-  | "EMERALD"
-  | "SKY"
-  | "VIOLET"
-  | "SLATE";
 
 const PRICE_TYPES: readonly PriceType[] = [
   "FIXED",
@@ -20,14 +20,8 @@ const PRICE_TYPES: readonly PriceType[] = [
   "NOT_INFORMED",
 ];
 const PRICED_TYPES = new Set<PriceType>(["FIXED", "STARTING_AT"]);
-const COLOR_TOKENS: readonly ServiceColorToken[] = [
-  "ROSE",
-  "AMBER",
-  "EMERALD",
-  "SKY",
-  "VIOLET",
-  "SLATE",
-];
+/** Janela do "mais usados" do novo agendamento (D-170). */
+export const SERVICE_USAGE_DAYS = 90;
 
 export interface CreateAvenlyServiceInput {
   name: string;
@@ -37,6 +31,12 @@ export interface CreateAvenlyServiceInput {
   price?: number | null;
   active?: boolean;
   description?: string | null;
+  /**
+   * Ausente na criação, o serviço recebe uma cor aleatória da paleta
+   * (`pickServiceColor`, decisão de 2026-10-12): é o caminho do onboarding e
+   * da importação. A exigência de escolha na criação manual fica na API
+   * pública (BFF). Na edição, a cor pode ser trocada, nunca removida.
+   */
   colorToken?: ServiceColorToken | null;
   bufferBeforeMinutes?: number | null;
   bufferAfterMinutes?: number | null;
@@ -100,6 +100,38 @@ export class AvenlyServiceService {
     });
   }
 
+  /**
+   * Uso de cada serviço (D-170, pedido de 2026-10-12): em quantos
+   * atendimentos não cancelados dos últimos `days` dias, até agora, ele
+   * aparece. Conta uma vez por atendimento, mesmo com o serviço repetido.
+   * Serviço sem uso fica de fora do mapa (quem lê assume zero).
+   */
+  async usageCounts(
+    input: { days?: number; now?: Date } = {},
+  ): Promise<Map<string, number>> {
+    const now = input.now ?? new Date();
+    const since = new Date(
+      now.getTime() - (input.days ?? SERVICE_USAGE_DAYS) * 86_400_000,
+    );
+    const appointments = await this.database.appointment.findMany({
+      where: {
+        tenantId: this.tenantId,
+        startAt: { gte: since, lte: now },
+        status: { not: "CANCELLED" },
+      },
+      select: { items: { select: { serviceId: true } } },
+    });
+    const counts = new Map<string, number>();
+    for (const appointment of appointments) {
+      for (const serviceId of new Set(
+        appointment.items.map((item) => item.serviceId),
+      )) {
+        counts.set(serviceId, (counts.get(serviceId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }
+
   /** Apenas o que a IA e a agenda podem oferecer para um novo agendamento. */
   async listOperational() {
     return this.database.service.findMany({
@@ -118,12 +150,22 @@ export class AvenlyServiceService {
 
   async create(input: CreateAvenlyServiceInput) {
     const data = serviceData(input);
+    const colorToken =
+      data.colorToken ??
+      (await nextServiceColorForTenant(this.database, this.tenantId));
     return this.database.service.create({
-      data: { tenantId: this.tenantId, ...data },
+      data: { tenantId: this.tenantId, ...data, colorToken },
     });
   }
 
   async update(serviceId: string, input: UpdateAvenlyServiceInput) {
+    if (input.colorToken === null) {
+      throw new AppError(
+        "INVALID_SERVICE_COLOR",
+        "Service color can be changed but not removed.",
+        400,
+      );
+    }
     const current = await this.requireService(serviceId);
     const priceType = input.priceType ?? (current.priceType);
     const price = !PRICED_TYPES.has(priceType)
@@ -332,7 +374,7 @@ function normalizeColorToken(
   value: ServiceColorToken | null | undefined,
 ): ServiceColorToken | null {
   if (value === undefined || value === null) return null;
-  if (!COLOR_TOKENS.includes(value)) {
+  if (!SERVICE_COLOR_TOKENS.includes(value)) {
     throw new AppError(
       "INVALID_SERVICE_COLOR",
       "Service color token is not recognised.",

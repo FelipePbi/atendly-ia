@@ -262,14 +262,59 @@ export const ACTIVATION_TEST_TOOL_NAMES = {
  * o que garante que o marco aponta para o agendamento que a IA criou, nao para
  * um que o teste tenha criado por fora.
  */
+/**
+ * O que a ferramenta devolveu. A tool real grava `{ ok, data }`
+ * (`StructuredToolResult`); o conteúdo útil está em `data`. Um resultado já
+ * sem o envelope é aceito como está.
+ */
+function toolPayload(result: unknown): Record<string, unknown> | null {
+  if (typeof result !== "object" || result === null) return null;
+  const record = result as Record<string, unknown>;
+  if ("ok" in record && typeof record.data === "object" && record.data !== null) {
+    return record.data as Record<string, unknown>;
+  }
+  return record;
+}
+
 export function appointmentIdFromToolCall(
   toolCall: ActivationTestAiToolCall,
 ): string | null {
   if (toolCall.name !== ACTIVATION_TEST_TOOL_NAMES.APPOINTMENT) return null;
-  const result = toolCall.result;
-  if (typeof result !== "object" || result === null) return null;
-  const appointment = (result as Record<string, unknown>).appointment;
+  const payload = toolPayload(toolCall.result);
+  if (!payload) return null;
+  const appointment = payload.appointment;
   if (typeof appointment !== "object" || appointment === null) return null;
   const id = (appointment as Record<string, unknown>).id;
   return typeof id === "string" && id.trim() ? id : null;
+}
+
+/**
+ * A IA parou na fase `prepare` da ferramenta de agendamento: segurou o
+ * horario e espera a confirmacao do cliente (`requiresConfirmation`).
+ */
+export function awaitsConfirmation(toolCall: ActivationTestAiToolCall): boolean {
+  if (toolCall.name !== ACTIVATION_TEST_TOOL_NAMES.APPOINTMENT) return false;
+  const payload = toolPayload(toolCall.result);
+  if (!payload || payload.appointment) return false;
+  return (
+    payload.requiresConfirmation === true ||
+    (typeof payload.pendingAction === "object" && payload.pendingAction !== null)
+  );
+}
+
+/**
+ * Primeiro horario que a IA consultou ("14h40", "9h"), para o cliente
+ * simulado escolher um horario dito, e nao responder "pode ser" a uma oferta
+ * de varios.
+ */
+export function firstOfferedSlot(toolCall: ActivationTestAiToolCall): string | null {
+  const payload = toolPayload(toolCall.result);
+  const slots = payload?.slots;
+  if (!Array.isArray(slots) || slots.length === 0) return null;
+  const first = slots[0] as Record<string, unknown>;
+  const start = typeof first.startTime === "string" ? first.startTime : null;
+  const match = start ? /^(\d{2}):(\d{2})/u.exec(start) : null;
+  if (!match) return null;
+  const hours = Number(match[1]);
+  return match[2] === "00" ? `${hours}h` : `${hours}h${match[2]}`;
 }

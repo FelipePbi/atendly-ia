@@ -1,18 +1,21 @@
 "use client";
 
 import clsx from "clsx";
-import { useEffect, useMemo, useState } from "react";
+import { type ComponentProps, useEffect, useMemo, useState } from "react";
 
 import type { AvailabilityException, TimeBlock } from "@/data";
 import { ChatSheetShell } from "@/features/conversations/ConversationActionsSheet";
+import { useSheetClose } from "@/shared/motion/sheetClose";
+import { runViewTransition } from "@/shared/motion/viewTransition";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
+import { recalledAgendaWindow, rememberAgendaWindow } from "./agendaMemory";
+import { prefetchAgendaWindows } from "./agendaWindows";
 import {
   addDays,
   addMonths,
   type AgendaEntry,
   buildAgendaEntries,
-  endOfMonth,
   isFullDayClosure,
   isoDate,
   startOfMonth,
@@ -38,12 +41,12 @@ function marksFrom(entries: AgendaEntry[]): MonthMarks {
   return marks;
 }
 
+/** Seis semanas sempre (42 dias): a folha não muda de altura entre meses de 5 e de 6 linhas. */
+const GRID_DAYS = 42;
+
 function monthGrid(month: Date): Date[] {
   const start = startOfWeek(startOfMonth(month));
-  const end = addDays(startOfWeek(endOfMonth(month)), 6);
-  const days: Date[] = [];
-  for (let day = start; day <= end; day = addDays(day, 1)) days.push(day);
-  return days;
+  return Array.from({ length: GRID_DAYS }, (_, index) => addDays(start, index));
 }
 
 function monthTitle(month: Date): string {
@@ -81,6 +84,7 @@ export function AgendaCalendarSheet({
   focusedDate,
   onClose,
   onPick,
+  source,
   timezone,
 }: {
   /** Bloqueio e exceção só existem na fonte Avenly, como na Agenda. */
@@ -88,18 +92,39 @@ export function AgendaCalendarSheet({
   focusedDate: Date;
   onClose: () => void;
   onPick: (date: Date) => void;
+  /** A fonte do calendário: a chave da memória da aba (D-167). */
+  source?: string | null;
   timezone?: string;
 }) {
   const [month, setMonth] = useState(() => startOfMonth(focusedDate));
-  // Os pontos valem só para a grade que os leu: trocar de mês os apaga até a nova leitura chegar.
+  const days = useMemo(() => monthGrid(month), [month]);
+  const startDate = isoDate(days[0]);
+  const endDate = isoDate(days[days.length - 1]);
+  // Os pontos valem só para a grade que os leu: trocar de mês mostra os da
+  // memória da aba (D-167, D-168) ou nenhum, até a nova leitura chegar.
+  const sourceKey = source ?? (avenly ? "AVENLY" : null);
+  const remembered = useMemo(
+    () =>
+      sourceKey ? recalledAgendaWindow(sourceKey, startDate, endDate) : null,
+    [endDate, sourceKey, startDate],
+  );
   const [loaded, setLoaded] = useState<{ marks: MonthMarks; window: string }>({
     marks: NO_MARKS,
     window: "",
   });
-  const days = useMemo(() => monthGrid(month), [month]);
-  const startDate = isoDate(days[0]);
-  const endDate = isoDate(days[days.length - 1]);
-  const marks = loaded.window === startDate ? loaded.marks : NO_MARKS;
+  const marks =
+    loaded.window === startDate
+      ? loaded.marks
+      : remembered
+        ? marksFrom(
+            buildAgendaEntries({
+              appointments: remembered.appointments,
+              exceptions: remembered.exceptions,
+              timeBlocks: remembered.timeBlocks,
+              timezone,
+            }),
+          )
+        : NO_MARKS;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -118,21 +143,57 @@ export function AgendaCalendarSheet({
         if (controller.signal.aborted) return;
         setLoaded({
           marks: marksFrom(
-            buildAgendaEntries({ appointments, exceptions, timeBlocks, timezone }),
+            buildAgendaEntries({
+              appointments,
+              exceptions,
+              timeBlocks,
+              timezone,
+            }),
           ),
           window: startDate,
         });
+        if (!sourceKey) return;
+        rememberAgendaWindow({
+          appointments,
+          endDate,
+          exceptions,
+          source: sourceKey,
+          startDate,
+          timeBlocks,
+        });
+        // Os meses vizinhos ficam prontos para as setas da folha.
+        prefetchAgendaWindows(
+          services,
+          sourceKey,
+          [-1, 1].map((step) => {
+            const grid = monthGrid(addMonths(startOfMonth(days[20]), step));
+            return {
+              endDate: isoDate(grid[grid.length - 1]),
+              startDate: isoDate(grid[0]),
+            };
+          }),
+          controller.signal,
+        );
       })
       .catch(() => {
         /* Sem pontos, e a folha continua navegável. */
       });
     return () => controller.abort();
-  }, [avenly, endDate, startDate, timezone]);
+  }, [avenly, days, endDate, sourceKey, startDate, timezone]);
 
   const today = isoDate(new Date());
   const focused = isoDate(focusedDate);
   const currentMonth = month.getMonth();
   const title = monthTitle(month);
+
+  // O passo de mês desliza a grade na direção do passo (pedido do usuário,
+  // 2026-10-12); sem View Transitions, a grade só troca.
+  function stepMonth(direction: -1 | 1) {
+    void runViewTransition(
+      () => setMonth((value) => addMonths(value, direction)),
+      { types: [direction === 1 ? "step-next" : "step-prev"] },
+    );
+  }
 
   return (
     <ChatSheetShell
@@ -144,10 +205,20 @@ export function AgendaCalendarSheet({
         <button
           aria-label="Ver mês anterior"
           className="agenda-calendar-step"
-          onClick={() => setMonth((value) => addMonths(value, -1))}
+          onClick={() => stepMonth(-1)}
           type="button"
         >
-          <svg aria-hidden="true" fill="none" height="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" viewBox="0 0 24 24" width="18">
+          <svg
+            aria-hidden="true"
+            fill="none"
+            height="18"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.75"
+            viewBox="0 0 24 24"
+            width="18"
+          >
             <path d="M15 5l-7 7 7 7" />
           </svg>
         </button>
@@ -157,10 +228,20 @@ export function AgendaCalendarSheet({
         <button
           aria-label="Ver próximo mês"
           className="agenda-calendar-step"
-          onClick={() => setMonth((value) => addMonths(value, 1))}
+          onClick={() => stepMonth(1)}
           type="button"
         >
-          <svg aria-hidden="true" fill="none" height="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" viewBox="0 0 24 24" width="18">
+          <svg
+            aria-hidden="true"
+            fill="none"
+            height="18"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.75"
+            viewBox="0 0 24 24"
+            width="18"
+          >
             <path d="M9 5l7 7-7 7" />
           </svg>
         </button>
@@ -172,54 +253,108 @@ export function AgendaCalendarSheet({
           </span>
         ))}
       </div>
-      <div className="agenda-calendar-days">
-        {days.map((day) => {
-          const iso = isoDate(day);
-          const outside = day.getMonth() !== currentMonth;
-          const before = outside && day < month;
-          const appointment = !outside && marks.appointments.has(iso);
-          const closed = !outside && marks.closed.has(iso);
-          return (
-            <button
-              aria-current={iso === today ? "date" : undefined}
-              aria-label={dayName(day, appointment, closed)}
-              aria-pressed={iso === focused}
-              className={clsx(
-                "agenda-calendar-day",
-                outside && "is-outside",
-                !outside && iso < today && "is-past",
-                closed && "is-closed",
-                iso === today && "is-today",
-                iso === focused && "is-selected",
-              )}
-              key={iso}
-              onClick={() => onPick(day)}
-              type="button"
-            >
-              <span>{day.getDate()}</span>
-              {/* O quadro guarda a linha do ponto antes do mês e a dispensa depois. */}
-              {(!outside || before) && (
-                <span
-                  className={clsx(
-                    "agenda-calendar-dot",
-                    appointment && "has-appointment",
-                  )}
-                />
-              )}
-            </button>
-          );
-        })}
-      </div>
+      <CalendarDays
+        currentMonth={currentMonth}
+        days={days}
+        focused={focused}
+        marks={marks}
+        month={month}
+        onPick={onPick}
+        today={today}
+      />
       <div className="agenda-calendar-foot">
         <span>Um ponto = dia com atendimentos</span>
-        <button
+        <PickButton
           className="agenda-calendar-today"
-          onClick={() => onPick(new Date())}
-          type="button"
+          date={new Date()}
+          onPick={onPick}
         >
           Ir para hoje
-        </button>
+        </PickButton>
       </div>
     </ChatSheetShell>
+  );
+}
+
+/** Escolher um dia fecha a folha com a saída animada e move a Agenda no mesmo quadro. */
+function PickButton({
+  children,
+  date,
+  onPick,
+  ...props
+}: Omit<ComponentProps<"button">, "onClick" | "type"> & {
+  date: Date;
+  onPick: (date: Date) => void;
+}) {
+  const closeSheet = useSheetClose();
+  return (
+    <button
+      {...props}
+      onClick={() =>
+        closeSheet ? closeSheet(() => onPick(date)) : onPick(date)
+      }
+      type="button"
+    >
+      {children}
+    </button>
+  );
+}
+
+function CalendarDays({
+  currentMonth,
+  days,
+  focused,
+  marks,
+  month,
+  onPick,
+  today,
+}: {
+  currentMonth: number;
+  days: Date[];
+  focused: string;
+  marks: MonthMarks;
+  month: Date;
+  onPick: (date: Date) => void;
+  today: string;
+}) {
+  return (
+    <div className="agenda-calendar-days">
+      {days.map((day) => {
+        const iso = isoDate(day);
+        const outside = day.getMonth() !== currentMonth;
+        const before = outside && day < month;
+        const appointment = !outside && marks.appointments.has(iso);
+        const closed = !outside && marks.closed.has(iso);
+        return (
+          <PickButton
+            aria-current={iso === today ? "date" : undefined}
+            aria-label={dayName(day, appointment, closed)}
+            aria-pressed={iso === focused}
+            className={clsx(
+              "agenda-calendar-day",
+              outside && "is-outside",
+              !outside && iso < today && "is-past",
+              closed && "is-closed",
+              iso === today && "is-today",
+              iso === focused && "is-selected",
+            )}
+            date={day}
+            key={iso}
+            onPick={onPick}
+          >
+            <span>{day.getDate()}</span>
+            {/* O quadro guarda a linha do ponto antes do mês e a dispensa depois. */}
+            {(!outside || before) && (
+              <span
+                className={clsx(
+                  "agenda-calendar-dot",
+                  appointment && "has-appointment",
+                )}
+              />
+            )}
+          </PickButton>
+        );
+      })}
+    </div>
   );
 }

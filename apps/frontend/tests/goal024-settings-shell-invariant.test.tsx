@@ -129,7 +129,18 @@ function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState 
       timezone: "America/Sao_Paulo",
     },
     business: {
-      address: "Rua Um, 100",
+      // Endereço completo em partes: com ON_SITE, salvar só chega à
+      // confirmação de fuso se o endereço estiver preenchido.
+      address: "Rua Um, 100 - Centro, São Paulo - SP, CEP 01310-100",
+      addressParts: {
+        city: "São Paulo",
+        complement: null,
+        district: "Centro",
+        number: "100",
+        postalCode: "01310100",
+        state: "SP",
+        street: "Rua Um",
+      },
       category: "Beleza",
       contextProjectionStatus: "PROJECTED",
       currency: "BRL",

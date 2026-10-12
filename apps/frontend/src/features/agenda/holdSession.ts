@@ -31,6 +31,12 @@ export interface HoldSession {
   markLost: () => void;
   /** Abandono explícito do horário: libera agora, sem esperar o TTL. */
   release: () => void;
+  /**
+   * Libera e devolve a promessa da liberação assentada: quem vai reservar o
+   * mesmo horário por outro caminho (a revisão da repetição, D-171) espera
+   * por ela, para não bater na reserva da própria tela.
+   */
+  releaseSettled: () => Promise<void>;
   reserve: (input: CreateHoldInput) => Promise<void>;
 }
 
@@ -38,7 +44,7 @@ export const HOLD_LOST_MESSAGE =
   "A reserva deste horário venceu antes da confirmação. Nada foi agendado: escolha o horário de novo.";
 
 export const HOLD_EXPIRED_NOTICE =
-  "A reserva deste horário venceu. O horário não está mais garantido — escolha o horário de novo.";
+  "A reserva deste horário venceu. O horário não está mais garantido. Escolha o horário de novo.";
 
 export function isHoldLostError(caught: unknown): boolean {
   return schedulingRefusalCode(caught) === "APPOINTMENT_HOLD_EXPIRED";
@@ -98,20 +104,33 @@ export function useHoldSession(): HoldSession {
   const liveHold = useRef<AppointmentHold | null>(null);
   // Descarta resposta de uma reserva que já foi substituída por outra.
   const attempt = useRef(0);
+  // Reserva anterior ainda em voo (pedido e, se substituída, a liberação do
+  // que ela criou). A próxima só é pedida depois que esta assenta.
+  const settled = useRef<Promise<void>>(Promise.resolve());
 
-  const releaseLive = useCallback(() => {
+  const releaseLive = useCallback((): Promise<void> => {
     const current = liveHold.current;
     liveHold.current = null;
-    if (!current) return;
+    if (!current) return Promise.resolve();
     // Melhor esforço: se a liberação falhar, o TTL do banco fecha o caso —
     // o que não pode acontecer é a tela travar por causa disso.
-    void getProductServices()
+    return getProductServices()
       .calendar.releaseHold(current.id)
-      .catch(() => undefined);
+      .then(
+        () => undefined,
+        () => undefined,
+      );
   }, []);
 
   // Abandonar o fluxo (sair da tela) devolve o horário na hora.
-  useEffect(() => () => releaseLive(), [releaseLive]);
+  useEffect(
+    () => () => {
+      // Uma reserva ainda em voo também é devolvida quando responder.
+      attempt.current += 1;
+      void releaseLive();
+    },
+    [releaseLive],
+  );
 
   // Vencimento pelo prazo do servidor: a tela para de prometer o horário
   // sozinha, sem esperar uma recusa na confirmação.
@@ -130,10 +149,18 @@ export function useHoldSession(): HoldSession {
 
   const release = useCallback(() => {
     attempt.current += 1;
-    releaseLive();
+    // A próxima reserva também espera esta liberação assentar.
+    settled.current = Promise.all([settled.current, releaseLive()]).then(
+      () => undefined,
+    );
     setHold(null);
     setPhase("none");
   }, [releaseLive]);
+
+  const releaseSettled = useCallback(() => {
+    release();
+    return settled.current;
+  }, [release]);
 
   const markLost = useCallback(() => {
     attempt.current += 1;
@@ -145,28 +172,47 @@ export function useHoldSession(): HoldSession {
   const reserve = useCallback(
     async (input: CreateHoldInput) => {
       const current = (attempt.current += 1);
-      // Trocar de horário libera o anterior antes de pedir o novo.
-      releaseLive();
+      // Trocar de horário libera o anterior e **espera** a liberação antes de
+      // pedir o novo. Bug de 2026-10-12: a liberação ia sem esperar, o pedido
+      // de 13:30 chegava ao Scheduling antes dela e batia na reserva da
+      // própria tela em 13:00 (13:00–14:15), e o horário livre era recusado
+      // como ocupado. O mesmo vale para uma reserva anterior ainda em voo.
+      const previous = settled.current;
+      const releasing = releaseLive();
       setHold(null);
       setPhase("reserving");
-      let created: AppointmentHold;
-      try {
-        created = await getProductServices().calendar.createHold(
+      const work = (async () => {
+        await previous;
+        await releasing;
+        return getProductServices().calendar.createHold(
           input,
           newIdempotencyKey(),
         );
+      })();
+      const superseded = work.then(
+        (created) =>
+          current === attempt.current
+            ? undefined
+            : getProductServices()
+                .calendar.releaseHold(created.id)
+                .then(
+                  () => undefined,
+                  () => undefined,
+                ),
+        () => undefined,
+      );
+      settled.current = superseded;
+      let created: AppointmentHold;
+      try {
+        created = await work;
       } catch (caught) {
         if (current !== attempt.current) return;
         setHold(null);
         setPhase("none");
         throw caught;
       }
-      if (current !== attempt.current) {
-        void getProductServices()
-          .calendar.releaseHold(created.id)
-          .catch(() => undefined);
-        return;
-      }
+      // Substituída enquanto voava: `superseded` já devolve o que ela criou.
+      if (current !== attempt.current) return;
       const usable = created.status === "ACTIVE";
       liveHold.current = usable ? created : null;
       setHold(created);
@@ -181,6 +227,7 @@ export function useHoldSession(): HoldSession {
     markLost,
     phase,
     release,
+    releaseSettled,
     reserve,
   };
 }

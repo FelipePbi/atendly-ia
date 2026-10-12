@@ -47,7 +47,8 @@ export function OtherInfoSection() {
     setBusy(true);
     setMessage(null);
     try {
-      const document = await getProductServices().knowledge.saveOtherInfo(value);
+      const document =
+        await getProductServices().knowledge.saveOtherInfo(value);
       setSaved(document);
       setContent(value);
       setMessage("Informações salvas.");
@@ -64,9 +65,9 @@ export function OtherInfoSection() {
         <div>
           <h2>Outras informações importantes</h2>
           <p>
-            Um campo livre para o que não se encaixa nos documentos acima. A
-            IA usa este texto com prioridade menor que um documento
-            específico ou uma regra de serviço.
+            Um campo livre para o que não se encaixa nos documentos acima. A IA
+            usa este texto com prioridade menor que um documento específico ou
+            uma regra de serviço.
           </p>
         </div>
       </div>

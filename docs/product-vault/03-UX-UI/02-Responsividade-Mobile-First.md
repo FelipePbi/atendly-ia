@@ -63,6 +63,10 @@ Fluxos complexos usam telas full-screen em vez de modais pequenos.
 
 `Mais` abre lista de destinos, não um painel cheio de cards.
 
+### Orientação
+
+No celular, a Avenly é só vertical (decisão de 2026-10-12). Instalada na tela inicial, o manifest pede retrato. No navegador, que não deixa a página travar a rotação, o celular deitado mostra o aviso "Gire o celular" cobrindo a tela. Não desenhar layout de celular na horizontal. Tablet e desktop não são afetados.
+
 ## Tablet
 
 Comportamento base semelhante ao mobile.

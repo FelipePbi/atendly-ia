@@ -11,6 +11,7 @@ import {
 } from "@/features/activation-test/ActivationTestPanels";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
+import { useOnboardingRuntime } from "../OnboardingRuntime";
 import { type OnboardingScenario, onboardingScenarios } from "../scenarios";
 import type { OnboardingStepContext } from "./shared";
 
@@ -47,10 +48,19 @@ export function activationTestScenarioFor(
  * leitura mostra que a execução terminou ou pausou, a etapa vai, com
  * `replace`, para a tela do estado — a de progresso não fica no histórico.
  */
-function ActivationTestStepBody({ scenario }: { scenario: OnboardingScenario }) {
+function ActivationTestStepBody({
+  scenario,
+}: {
+  scenario: OnboardingScenario;
+}) {
   const router = useRouter();
+  const { draft } = useOnboardingRuntime();
   return (
     <ActivationTestPanelBody
+      example={{
+        businessCategory: draft.businessCategory,
+        serviceName: draft.serviceName,
+      }}
       onboarding
       onSettled={(run) =>
         router.replace(`/onboarding/${activationTestScenarioFor(run)}`)

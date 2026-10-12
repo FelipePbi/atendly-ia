@@ -18,7 +18,7 @@
  * - o cliente: "cliente desde", Ver perfil, Próximo e Último com serviços e
  *   valor só com `finalValue`; estado próprio sem `customerId`; carregamento e
  *   erro com "Tentar de novo";
- * - o resumo da IA só nasce no botão;
+ * - sem resumo da IA (saiu em 2026-10-12);
  * - "Nesta conversa": Assumir conversa, Criar agendamento e Marcar como
  *   resolvida.
  */
@@ -683,7 +683,7 @@ describe("o cliente na folha", () => {
 
     expect(
       await within(dialog).findByRole("link", { name: "Ver perfil" }),
-    ).toHaveAttribute("href", "/clientes/detalhes?id=cust-1");
+    ).toHaveAttribute("href", "/clientes/detalhes?id=cust-1&voltar=%2Fconversas%2Fconv-1");
     expect(getCustomer).toHaveBeenCalledWith("cust-1", expect.anything());
     expect(listAppointments).toHaveBeenCalledWith(
       {
@@ -780,31 +780,34 @@ describe("o cliente na folha", () => {
 });
 
 describe("o resumo da IA", () => {
-  test("abrir a folha não gera resumo; o botão gera", async () => {
+  // Decisao de 2026-10-12: o resumo da IA saiu da folha do cliente na
+  // conversa (o perfil do cliente continua com o dele).
+  test("a folha do cliente na conversa não tem resumo da IA", async () => {
     getCustomer.mockResolvedValue(customerFixture());
-    generateSummary.mockResolvedValue({
-      customerId: "cust-1",
-      generatedAt: "2026-10-04T12:00:00.000Z",
-      summary: "Prefere horários da manhã.",
-    });
     await renderThread(conversationFixture());
     const user = userEvent.setup();
     const dialog = await openSheetByName(user);
-    const button = await within(dialog).findByRole("button", {
-      name: "Gerar resumo",
-    });
+    await within(dialog).findByRole("link", { name: "Ver perfil" });
 
+    expect(within(dialog).queryByRole("region", { name: "Resumo da IA" })).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Gerar resumo" })).toBeNull();
     expect(generateSummary).not.toHaveBeenCalled();
-    await user.click(button);
+  });
+});
 
-    expect(generateSummary).toHaveBeenCalledTimes(1);
-    expect(generateSummary).toHaveBeenCalledWith("cust-1");
-    expect(
-      await within(dialog).findByText("Prefere horários da manhã."),
-    ).toBeVisible();
-    expect(
-      within(dialog).getByRole("button", { name: "Gerar novamente" }),
-    ).toBeVisible();
+describe("atalho para os agendamentos do cliente", () => {
+  // Pedido de 2026-10-12: ir direto da folha para a lista de agendamentos.
+  test("Ver agendamentos abre o perfil na aba Atendimentos", async () => {
+    getCustomer.mockResolvedValue(customerFixture());
+    await renderThread(conversationFixture());
+    const user = userEvent.setup();
+    const dialog = await openSheetByName(user);
+    const link = await within(dialog).findByRole("link", { name: "Ver agendamentos" });
+
+    expect(link).toHaveAttribute(
+      "href",
+      "/clientes/detalhes?id=cust-1&aba=atendimentos&voltar=%2Fconversas%2Fconv-1",
+    );
   });
 });
 

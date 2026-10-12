@@ -35,6 +35,7 @@ import {
   SIDEBAR_DESTINATIONS,
 } from "./navigation";
 import type { ShellConfig } from "./ShellConfig";
+import { useStatusBannerSnooze } from "./statusBannerSnooze";
 import { useWideLayout } from "./useWideLayout";
 
 export type { PlatformSection, ShellContextualAction, ShellModule } from "./navigation";
@@ -116,9 +117,25 @@ function AppShellChrome({
     status.accountDeletion?.status === "SCHEDULED"
       ? status.accountDeletion.dueAt
       : null;
+  const [whatsappBannerHidden, hideWhatsappBanner] = useStatusBannerSnooze(
+    "whatsapp-disconnected",
+  );
+  const [aiBannerHidden, hideAiBanner] =
+    useStatusBannerSnooze("ai-unavailable");
+  const showWhatsappBanner =
+    !deletionDueAt &&
+    whatsappDisconnected &&
+    !whatsappInBand &&
+    !whatsappBannerHidden;
+  const showAiBanner = !deletionDueAt && aiUnavailable && !aiBannerHidden;
+  // O aviso ocultado sai da árvore: o foco não pode ficar num botão que sumiu.
+  const hideBanner = (hide: () => void) => () => {
+    hide();
+    mainRef.current?.focus();
+  };
 
   useEffect(() => {
-    document.title = title ? `${title} — Avenly` : "Avenly";
+    document.title = title ? `${title} · Avenly` : "Avenly";
   }, [title]);
 
   useEffect(() => {
@@ -283,21 +300,30 @@ function AppShellChrome({
               linkLabel="Ver exclusão da conta"
             />
           )}
-          {!deletionDueAt && whatsappDisconnected && !whatsappInBand && (
-            <PersistentStatusBanner
-              text="Reconecte o WhatsApp para a IA voltar a responder."
-              title="Atendimento automático parado"
-              href="/configuracoes/whatsapp"
-              linkLabel="Reconectar WhatsApp"
-            />
-          )}
-          {!deletionDueAt && aiUnavailable && (
-            <PersistentStatusBanner
-              text="A IA não está respondendo. As conversas seguem para atendimento humano."
-              title="IA indisponível"
-              href="/configuracoes/ia"
-              linkLabel="Ver configurações da IA"
-            />
+          {/* Avisos que se ocultam por 1h flutuam sobre a tela, sem empurrar o
+              layout (pedido de 2026-10-12). A exclusão de conta, que não se
+              oculta, continua no fluxo acima. */}
+          {(showWhatsappBanner || showAiBanner) && (
+            <div className="shell-status-layer">
+              {showWhatsappBanner && (
+                <PersistentStatusBanner
+                  text="Reconecte o WhatsApp para a IA voltar a responder."
+                  title="Atendimento automático parado"
+                  href="/configuracoes/whatsapp"
+                  linkLabel="Reconectar WhatsApp"
+                  onHide={hideBanner(hideWhatsappBanner)}
+                />
+              )}
+              {showAiBanner && (
+                <PersistentStatusBanner
+                  text="A IA não está respondendo. As conversas seguem para atendimento humano."
+                  title="IA indisponível"
+                  href="/configuracoes/ia"
+                  linkLabel="Ver configurações da IA"
+                  onHide={hideBanner(hideAiBanner)}
+                />
+              )}
+            </div>
           )}
           {children}
         </main>
@@ -402,24 +428,40 @@ function accountDeletionBannerCopy(days: number): string {
 function PersistentStatusBanner({
   href,
   linkLabel,
+  onHide,
   text,
   title,
 }: {
   href: string;
   linkLabel: string;
+  /** Sem `onHide`, o aviso não se oculta (exclusão de conta agendada). */
+  onHide?: () => void;
   text: string;
   title: string;
 }) {
   return (
-    <div className="alert alert-error shell-status-banner" role="alert">
+    <div
+      className={clsx(
+        "alert alert-error shell-status-banner",
+        onHide && "is-hideable",
+      )}
+      role="alert"
+    >
       <Icon name="alert" />
-      <div>
+      <div className="shell-status-copy">
         <p className="alert-title">{title}</p>
         <p className="alert-text">{text}</p>
       </div>
-      <Link className="btn btn-secondary" href={href}>
-        {linkLabel}
-      </Link>
+      <div className="shell-status-actions">
+        <Link className="btn btn-secondary shell-status-link" href={href}>
+          {linkLabel}
+        </Link>
+        {onHide && (
+          <button className="shell-status-hide" onClick={onHide} type="button">
+            Ocultar por 1h
+          </button>
+        )}
+      </div>
     </div>
   );
 }

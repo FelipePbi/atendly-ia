@@ -10,7 +10,6 @@ import {
   type Conversation,
   type CustomerAppointmentSummary,
   type CustomerDetail,
-  type CustomerSummary,
 } from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
@@ -69,6 +68,7 @@ export function ConversationCustomerSheet({
           customerId={customerId}
           fallbackPhone={conversation.externalContactId}
           person={person}
+          returnTo={`/conversas/${conversation.id}`}
         />
       ) : (
         <>
@@ -122,10 +122,13 @@ function CustomerSection({
   customerId,
   fallbackPhone,
   person,
+  returnTo,
 }: {
   customerId: string;
   fallbackPhone: string;
   person: string;
+  /** Para onde o perfil volta: a propria conversa (pedido de 2026-10-12). */
+  returnTo: string;
 }) {
   const [load, setLoad] = useState<CustomerLoad>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -229,7 +232,7 @@ function CustomerSection({
         action={
           <Link
             className="customer-sheet-profile"
-            href={`/clientes/detalhes?id=${customer.id}`}
+            href={customerProfileHref(customer.id, returnTo)}
           >
             Ver perfil
           </Link>
@@ -237,7 +240,6 @@ function CustomerSection({
         person={person}
         subtitle={subtitle}
       />
-      <AiSummary customerId={customer.id} />
       {(next || last) && (
         <div className="customer-sheet-visits">
           {next && (
@@ -291,58 +293,15 @@ function CustomerSection({
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function AiSummary({ customerId }: { customerId: string }) {
-  const [summary, setSummary] = useState<CustomerSummary | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function generate() {
-    setBusy(true);
-    setError(null);
-    try {
-      setSummary(
-        await getProductServices().customers.generateSummary(customerId),
-      );
-    } catch (caught: unknown) {
-      setError(requestMessage(caught, "Não foi possível gerar o resumo."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section aria-label="Resumo da IA" className="customer-sheet-summary">
-      <span className="customer-sheet-summary-label">
-        <span aria-hidden="true" className="customer-sheet-summary-dot" />
-        Resumo da IA
-      </span>
-      {summary ? (
-        <p className="customer-sheet-summary-text">{summary.summary}</p>
-      ) : (
-        <p className="customer-sheet-summary-text is-empty">
-          {busy
-            ? "Gerando resumo…"
-            : "Gerado sob demanda, só com observações, tags e preferências autorizadas para a IA."}
-        </p>
-      )}
-      {error && (
-        <p className="chat-sheet-error" role="alert">
-          {error}
-        </p>
-      )}
-      <button
-        className="customer-sheet-summary-action"
-        disabled={busy}
-        onClick={() => void generate()}
-        type="button"
+      {/* Atalho para a lista de agendamentos do cliente (pedido de
+          2026-10-12): abre o perfil direto na aba Atendimentos. */}
+      <Link
+        className="customer-sheet-profile customer-sheet-appointments"
+        href={customerProfileHref(customer.id, returnTo, "atendimentos")}
       >
-        {busy ? "Gerando…" : summary ? "Gerar novamente" : "Gerar resumo"}
-      </button>
-    </section>
+        Ver agendamentos
+      </Link>
+    </div>
   );
 }
 
@@ -410,4 +369,19 @@ function money(value: number): string {
 function requestMessage(error: unknown, fallback: string): string {
   if (!(error instanceof BffHttpError)) return fallback;
   return `${fallback} Referência: ${error.requestId}`;
+}
+
+/**
+ * Perfil do cliente aberto pela conversa: `voltar` leva de volta a ela, e
+ * `aba` abre direto na aba pedida (pedido de 2026-10-12).
+ */
+export function customerProfileHref(
+  customerId: string,
+  returnTo: string,
+  tab?: "atendimentos",
+): string {
+  const params = new URLSearchParams({ id: customerId });
+  if (tab) params.set("aba", tab);
+  params.set("voltar", returnTo);
+  return `/clientes/detalhes?${params.toString()}`;
 }

@@ -230,8 +230,26 @@
   gap: 10px;
 }
 .conversation-search-panel .conversation-search {
-  flex: 1 1 220px;
+  /* 180 px: "Ignorados" cabe na mesma linha até 360 px de largura. */
+  flex: 1 1 180px;
   max-width: 460px;
+}
+/* "Ignorados" ao lado da busca (validação de 2026-10-12): o ícone empilhava
+   sobre o texto e o botão ficava mais alto que o campo. Agora ícone e texto
+   na mesma linha, esticado na altura do campo (52 px no celular, 48 no
+   desktop). */
+.conversation-search-panel .conversation-lens {
+  min-height: 48px;
+  padding: 0 14px;
+  display: inline-flex;
+  flex: none;
+  align-self: stretch;
+  align-items: center;
+  gap: 6px;
+}
+.conversation-search-panel .conversation-lens .icon {
+  width: 18px;
+  height: 18px;
 }
 .is-inbox .conversation-tabs {
   padding: 18px var(--inbox-gutter) 0;
@@ -1091,9 +1109,11 @@
 @media (max-width: 767px) {
   /* O quadro do celular põe a fileira 2 px sob a barra de status (padding 60
      contra 62 de barra); o app reproduz o mesmo corte. */
+  /* Respiro proprio no topo: sem notch, env() vale 0 e o cabecalho colava
+     na borda da tela (validacao de 2026-10-12). Com notch, a area segura
+     soma ao respiro. */
   .chat-header {
-    margin-top: -2px;
-    padding-top: env(safe-area-inset-top, 0px);
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1560,6 +1580,16 @@ button.message-image-tile:focus-visible {
   font-size: 12px;
   text-align: center;
 }
+@media (max-width: 767px) {
+  /* Uma linha so no celular: a fonte encolhe com a largura (360 a 430 px)
+     em vez de quebrar a frase em duas (validacao de 2026-10-12). */
+  .chat-composer-notice {
+    font-size: clamp(10px, 2.85vw, 12px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
 .composer-form {
   display: flex;
   align-items: center;
@@ -2000,6 +2030,13 @@ button.message-image-tile:focus-visible {
 .chat-sheet-row.is-last {
   border-bottom: 0;
 }
+/* Fechado, o bloco de "Marcar como pessoal" tambem estica a linha na
+   largura toda, como as outras opcoes (validacao de 2026-10-12: o fundo do
+   hover parava no fim do texto). */
+.chat-sheet-personal {
+  display: flex;
+  flex-direction: column;
+}
 .chat-sheet-personal.is-open {
   margin: 0 -8px;
   padding: 14px 12px 6px;
@@ -2334,7 +2371,8 @@ button.message-image-tile:focus-visible {
 .customer-sheet-summary-action:active:not(:disabled) {
   color: #0b484c;
 }
-.customer-sheet-retry {
+.customer-sheet-retry,
+.customer-sheet-appointments {
   align-self: flex-start;
 }
 .customer-sheet-summary-action {

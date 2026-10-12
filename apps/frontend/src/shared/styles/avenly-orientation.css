@@ -1,0 +1,84 @@
+/*
+ * Pedido de 2026-10-12: no celular, travar a orientação em retrato.
+ * O navegador não trava a rotação; este aviso (OrientationGuard, no layout
+ * raiz) cobre a tela só com o telefone deitado. A condição pega telefone na
+ * horizontal (altura até 500px com toque) e deixa de fora tablet e desktop
+ * (altura maior ou ponteiro fino). As larguras do gate (360x740 a 1440x900)
+ * nunca caem nela.
+ */
+.orientation-guard {
+  display: none;
+}
+
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  .orientation-guard {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483647;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: max(16px, env(safe-area-inset-top, 0px))
+      max(24px, env(safe-area-inset-right, 0px))
+      max(16px, env(safe-area-inset-bottom, 0px))
+      max(24px, env(safe-area-inset-left, 0px));
+    background: var(--bg);
+    color: var(--fg);
+    text-align: center;
+    overscroll-behavior: contain;
+    touch-action: none;
+  }
+  /* Conteúdo de trás fora da tela, do foco e da árvore acessível. */
+  body > :not(.orientation-guard) {
+    visibility: hidden;
+  }
+  .orientation-guard-mark {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    margin-bottom: 8px;
+    border-radius: 16px;
+    background: var(--accent);
+    color: var(--at-color-on-primary);
+  }
+  .orientation-guard-mark .brand-mark {
+    width: 36px;
+    height: 36px;
+  }
+  .orientation-guard-title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--at-font-size-2xl);
+    font-weight: var(--at-font-weight-medium);
+    line-height: var(--at-line-height-snug);
+  }
+  .orientation-guard-text {
+    margin: 0;
+    color: var(--fg-soft);
+    font-size: var(--at-font-size-md);
+  }
+}
+
+/*
+ * O símbolo gira de deitado para em pé, três vezes e para (menos de 5s, sem
+ * movimento contínuo). Com movimento reduzido, fica parado.
+ */
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) and (prefers-reduced-motion: no-preference) {
+  .orientation-guard-mark {
+    animation: orientation-guard-turn 1.6s ease-in-out 3;
+  }
+}
+
+@keyframes orientation-guard-turn {
+  0%,
+  20% {
+    transform: rotate(-90deg);
+  }
+  50%,
+  100% {
+    transform: rotate(0deg);
+  }
+}

@@ -441,7 +441,7 @@ describe("toda ação de hoje continua alcançável", () => {
     });
     expect(
       await within(dialog).findByRole("link", { name: "Ver perfil" }),
-    ).toHaveAttribute("href", "/clientes/detalhes?id=cust-7");
+    ).toHaveAttribute("href", "/clientes/detalhes?id=cust-7&voltar=%2Fconversas%2Fconv-1");
   });
 });
 

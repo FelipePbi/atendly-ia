@@ -9,6 +9,40 @@ import {
   minutesToTime,
   timeToMinutes,
 } from "./occupancy";
+import {
+  classifyFreeRefusal,
+  type ConflictAvailability,
+  hoursLabel,
+  stepLabel,
+} from "./SlotConflictNotice";
+
+/**
+ * Motivo de uma recusa sem ocupante, com o mesmo critério do aviso do Novo
+ * agendamento (SlotConflictNotice). Antes dizia sempre "fora da grade de
+ * atendimento", mesmo com o horário dentro do expediente (2026-10-12).
+ */
+export function freeRefusalText({
+  availability,
+  interval,
+}: {
+  availability?: ConflictAvailability | null;
+  interval: { date: string; durationMinutes: number; startTime: string };
+}): string {
+  const refusal = classifyFreeRefusal({
+    availability,
+    date: interval.date,
+    durationMinutes: interval.durationMinutes,
+    startTime: interval.startTime,
+  });
+  const lead = "Nenhum evento da agenda cobre este intervalo";
+  if (refusal.kind === "outside") {
+    return `${lead}, mas ele fica fora do seu horário de atendimento: ${hoursLabel(refusal.intervals)}.`;
+  }
+  if (refusal.kind === "off-grid") {
+    return `${lead}, mas ${minutesToTime(timeToMinutes(interval.startTime))} não está entre os horários que a sua agenda oferece (${stepLabel(refusal.granularityMinutes)}).`;
+  }
+  return `${lead}, mas a agenda não liberou o horário agora. Ele pode estar reservado numa confirmação em andamento.`;
+}
 
 /**
  * O que ocupa um intervalo, lido do read model da própria agenda.
@@ -34,6 +68,7 @@ export function occupyingEntries(
 }
 
 export function ConflictPanel({
+  availability,
   busy,
   entries,
   interval,
@@ -44,6 +79,8 @@ export function ConflictPanel({
   reason,
   reasonError,
 }: {
+  /** Expediente e granularidade (Configurações > Agenda), para dizer o motivo real. */
+  availability?: ConflictAvailability | null;
   busy: boolean;
   /** `null` enquanto a leitura da ocupação não respondeu ou falhou. */
   entries: AgendaEntry[] | null;
@@ -59,7 +96,10 @@ export function ConflictPanel({
   const range = `${minutesToTime(start)}–${minutesToTime(start + interval.durationMinutes)}`;
 
   return (
-    <section aria-labelledby="agenda-conflict-title" className="agenda-conflict">
+    <section
+      aria-labelledby="agenda-conflict-title"
+      className="agenda-conflict"
+    >
       <p className="eyebrow">Conflito de horário</p>
       <h2 id="agenda-conflict-title">
         O intervalo {range} não está livre nesta agenda
@@ -72,10 +112,7 @@ export function ConflictPanel({
           horário mesmo assim.
         </p>
       ) : entries.length === 0 ? (
-        <p className="muted">
-          Nenhum evento da agenda cobre este intervalo: o horário foi recusado
-          por estar fora da grade de atendimento do negócio.
-        </p>
+        <p className="muted">{freeRefusalText({ availability, interval })}</p>
       ) : (
         <ul className="agenda-conflict-list">
           {entries.map((entry) => {

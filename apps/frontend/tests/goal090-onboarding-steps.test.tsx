@@ -26,6 +26,8 @@ import { OnboardingRuntimeProvider } from "@/features/onboarding/OnboardingRunti
 import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
 import type { OnboardingScenario } from "@/features/onboarding/scenarios";
 
+import { addressField, fillAddress } from "./support/address";
+
 const push = vi.fn();
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -410,15 +412,31 @@ describe("6. regressão de gravação: o corpo de cada PATCH e POST não mudou",
       "endereco",
       stateFixture(businessState(["ON_SITE"])),
     );
-    await user.type(
-      await screen.findByLabelText("Endereço do seu espaço"),
-      "  Rua das Flores, 10  ",
-    );
+    // Espaços nas pontas saem, complemento vazio vira null e "Sem número"
+    // vira `number: null`.
+    await fillAddress(user, {
+      city: "  São Paulo ",
+      complement: "   ",
+      district: " Centro ",
+      number: null,
+      postalCode: "01310-100",
+      state: "SP",
+      street: "  Rua das Flores  ",
+    });
+    expect(addressField("Número")).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Continuar" }));
     await waitFor(() =>
       expect(updateOnboarding).toHaveBeenCalledWith({
         business: {
-          address: "Rua das Flores, 10",
+          addressParts: {
+            city: "São Paulo",
+            complement: null,
+            district: "Centro",
+            number: null,
+            postalCode: "01310100",
+            state: "SP",
+            street: "Rua das Flores",
+          },
           category: "Beleza",
           modalities: ["ON_SITE"],
           name: "Studio Aurora",
@@ -495,19 +513,24 @@ describe("6. regressão de gravação: o corpo de cada PATCH e POST não mudou",
     );
   });
 
-  test("Adicionar em servicos-adicionais cria o serviço com o mesmo corpo", async () => {
-    createServiceCatalog.mockResolvedValue(
-      serviceFixture({
-        durationMinutes: 60,
-        id: "svc-9",
-        name: "Barba",
-        price: 40,
-      }),
-    );
+  // Decisão de 2026-10-12: o adicional vai por PATCH /v1/onboarding (sem
+  // `id`), que não exige cor — o servidor sorteia uma da paleta.
+  test("Adicionar em servicos-adicionais cria o serviço pelo onboarding, sem cor", async () => {
+    const barba = serviceFixture({
+      durationMinutes: 60,
+      id: "svc-9",
+      name: "Barba",
+      price: 40,
+    });
     const user = await renderStep(
       "servicos-adicionais",
       stateFixture({ service: serviceFixture({ name: "Corte" }) }),
     );
+    listServiceCatalog.mockResolvedValue({
+      editable: true,
+      items: [barba],
+      source: "AVENLY",
+    });
     await user.click(
       await screen.findByRole("button", { name: "Adicionar outro serviço" }),
     );
@@ -516,15 +539,17 @@ describe("6. regressão de gravação: o corpo de cada PATCH e POST não mudou",
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
     await waitFor(() =>
-      expect(createServiceCatalog).toHaveBeenCalledWith({
-        active: true,
-        durationMinutes: 60,
-        name: "Barba",
-        price: 40,
-        priceType: "FIXED",
+      expect(updateOnboarding).toHaveBeenCalledWith({
+        service: {
+          active: true,
+          durationMinutes: 60,
+          name: "Barba",
+          price: 40,
+          priceType: "FIXED",
+        },
       }),
     );
     expect(await screen.findByText("Barba")).toBeVisible();
-    expect(updateOnboarding).not.toHaveBeenCalled();
+    expect(createServiceCatalog).not.toHaveBeenCalled();
   });
 });

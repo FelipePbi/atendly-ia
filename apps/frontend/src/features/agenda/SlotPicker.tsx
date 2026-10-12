@@ -1,6 +1,7 @@
 "use client";
 
 import { type AvailabilitySlot } from "@/data";
+import { DateField, TimeField } from "@/shared/ui/pickers/PickerFields";
 
 import { HOLD_EXPIRED_NOTICE, type HoldSession } from "./holdSession";
 import { isoDate } from "./occupancy";
@@ -48,12 +49,11 @@ export function SlotPicker({
       <div className="agenda-form-grid">
         <label className="field">
           <span>Data</span>
-          <input
+          <DateField
             min={minDate ?? isoDate(new Date())}
             required
-            type="date"
             value={date}
-            onChange={(event) => onDateChange(event.target.value)}
+            onValueChange={(value) => onDateChange(value)}
           />
         </label>
       </div>
@@ -85,10 +85,9 @@ export function SlotPicker({
       <div className="agenda-manual-time">
         <label className="field">
           <span>Outro horário, fora dos oferecidos</span>
-          <input
+          <TimeField
             disabled={disabled}
-            onChange={(event) => onManualTimeChange(event.target.value)}
-            type="time"
+            onValueChange={(value) => onManualTimeChange(value)}
             value={manualTime}
           />
         </label>

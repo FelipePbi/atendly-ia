@@ -178,13 +178,13 @@ describe("4.7: a linha do tempo é a leitura, nada mais", () => {
       "Limpando dados de teste",
     ]);
     expect(rows.map((row) => row.text)).toEqual([
-      "Mensagem enviada — concluído",
-      "Serviço identificado — concluído",
-      "Preço informado — concluído",
-      "Agenda consultada — em andamento",
-      "Horário selecionado — ainda não começou",
-      "Agendamento confirmado — ainda não começou",
-      "Limpando dados de teste — ainda não começou",
+      "Mensagem enviada: concluído",
+      "Serviço identificado: concluído",
+      "Preço informado: concluído",
+      "Agenda consultada: em andamento",
+      "Horário selecionado: ainda não começou",
+      "Agendamento confirmado: ainda não começou",
+      "Limpando dados de teste: ainda não começou",
     ]);
     expect(rows.map((row) => row.current)).toEqual([
       false,
@@ -214,7 +214,7 @@ describe("4.7: a linha do tempo é a leitura, nada mais", () => {
 
     expect(rows[0]).toMatchObject({
       current: true,
-      text: "Mensagem enviada — em andamento",
+      text: "Mensagem enviada: em andamento",
     });
     expect(rows.filter((row) => row.current)).toHaveLength(1);
   });
@@ -227,7 +227,7 @@ describe("4.7: a linha do tempo é a leitura, nada mais", () => {
     expect(rows.slice(0, 6).every((row) => row.text.endsWith("concluído"))).toBe(
       true,
     );
-    expect(rows[6].text).toBe("Limpando dados de teste — ainda não começou");
+    expect(rows[6].text).toBe("Limpando dados de teste: ainda não começou");
   });
 
   test("a linha atual é o primeiro marco não alcançado, não o último alcançado nem o que o tempo indica", () => {
@@ -297,7 +297,7 @@ describe("4.7: cabeçalho e rodapé do quadro", () => {
     expect(open).toHaveAttribute("href", "whatsapp://send");
     expect(
       actions.getByText(
-        "Pode sair do app — o teste continua e a tela se atualiza sozinha.",
+        "Pode sair do app: o teste continua e a tela se atualiza sozinha.",
       ),
     ).toBeVisible();
     const skip = actions.getByRole("button", { name: "Continuar depois" });
@@ -374,7 +374,7 @@ describe("4.7: a tela se atualiza sozinha", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  test("a leitura continua a cada 3 s enquanto RUNNING, e a nova leitura que termina leva à tela do estado", async () => {
+  test("a leitura continua a cada 1 s enquanto RUNNING, e a nova leitura que termina leva à tela do estado", async () => {
     vi.useFakeTimers();
     try {
       getActivationTest
@@ -389,11 +389,21 @@ describe("4.7: a tela se atualiza sozinha", () => {
       expect(getActivationTest).toHaveBeenCalledTimes(1);
       expect(replace).not.toHaveBeenCalled();
 
-      await vi.advanceTimersByTimeAsync(3_000);
+      await vi.advanceTimersByTimeAsync(1_000);
       for (let turn = 0; turn < 5; turn += 1) {
         await vi.advanceTimersByTimeAsync(0);
       }
       expect(getActivationTest).toHaveBeenCalledTimes(2);
+      // Os três marcos que faltavam entram um a um (900 ms cada) e só então,
+      // depois de uma pausa curta, a tela do resultado abre (validação de
+      // 2026-10-11).
+      expect(replace).not.toHaveBeenCalled();
+      for (let step = 0; step < 5; step += 1) {
+        await vi.advanceTimersByTimeAsync(900);
+        for (let turn = 0; turn < 5; turn += 1) {
+          await vi.advanceTimersByTimeAsync(0);
+        }
+      }
       expect(replace).toHaveBeenCalledWith("/onboarding/teste-real-sucesso");
 
       // Terminou: a leitura para.
@@ -411,7 +421,7 @@ describe("Configurações › IA continua como era", () => {
     const { container } = render(<ActivationTestPanelBody panel="progress" />);
 
     expect(await screen.findByText("Mensagem enviada")).toBeVisible();
-    expect(screen.getByText("Preço informado — aguardando")).toBeVisible();
+    expect(screen.getByText("Preço informado (aguardando)")).toBeVisible();
     expect(
       screen.getByText(/O teste continua no servidor: você pode fechar esta tela/),
     ).toBeVisible();
@@ -471,20 +481,25 @@ describe("movimento da linha do tempo", () => {
     },
   );
 
-  test("com prefers-reduced-motion nada se move e o anel fica visível", () => {
+  test("a etapa atual pulsa e o check estala mesmo com movimento reduzido; só a entrada das linhas para", () => {
+    // Validação de 2026-10-11: o teste leva minutos e só o movimento diz em
+    // que etapa ele está. O pulso vence a regra global de movimento reduzido.
     const block = css.match(
       /@media \(prefers-reduced-motion: reduce\) \{\s*\.activation-timeline\.is-animated[\s\S]*?\n\}\n/,
     );
     expect(block).not.toBeNull();
     const text = block?.[0] ?? "";
     expect(text).toContain(".activation-timeline.is-animated .activation-timeline-row");
-    expect(text).toContain(
-      ".activation-timeline-row.is-current .activation-timeline-marker::before",
+    expect(text).not.toContain("is-current");
+    expect(css).toMatch(
+      /\.activation-timeline-row\.is-current \.activation-timeline-marker::before \{[^}]*animation-iteration-count:\s*infinite\s*!important/,
     );
-    expect(text).toMatch(/animation:\s*none/);
-    // Parar a animação deixa o anel no estado base, visível: nenhuma regra o
-    // esconde com movimento reduzido.
-    expect(text).not.toMatch(/opacity:\s*0/);
+    expect(css).toMatch(
+      /\.activation-timeline-row\.is-current \.activation-timeline-pulse \{[^}]*animation:\s*activation-timeline-dot/,
+    );
+    expect(css).toMatch(
+      /\.activation-timeline-row\.is-done \.activation-timeline-marker \{[^}]*animation:\s*activation-timeline-check/,
+    );
   });
 
   test("as linhas só entram animadas na 4.7, com os atrasos do quadro", async () => {

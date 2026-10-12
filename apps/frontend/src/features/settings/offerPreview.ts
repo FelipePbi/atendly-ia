@@ -20,13 +20,19 @@ function localWallClock(now: Date, timeZone: string) {
   const part = (type: string) =>
     Number(parts.find((entry) => entry.type === type)?.value);
   return Math.floor(
-    Date.UTC(part("year"), part("month") - 1, part("day"), part("hour"), part("minute")) /
-      60_000,
+    Date.UTC(
+      part("year"),
+      part("month") - 1,
+      part("day"),
+      part("hour"),
+      part("minute"),
+    ) / 60_000,
   );
 }
 
 function clockLabel(minutes: number): string {
-  const inDay = ((minutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+  const inDay =
+    ((minutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
   const hours = String(Math.floor(inDay / 60)).padStart(2, "0");
   const rest = String(inDay % 60).padStart(2, "0");
   return `${hours}:${rest}`;

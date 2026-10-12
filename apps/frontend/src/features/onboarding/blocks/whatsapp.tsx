@@ -106,22 +106,21 @@ const PERSONAL_NUMBER_POINTS: Array<{
 function WhatsappConclusion({ text, title }: { text: string; title: string }) {
   return (
     <div className="onboarding-completion is-inactive">
+      {/* Configuração concluída: o check de sucesso no disco, o mesmo da
+          conclusão do teste real (validação de 2026-10-11), no tom neutro da
+          IA ainda inativa. */}
       <div aria-hidden="true" className="completion-art">
         <span className="completion-disc">
-          <span className="completion-disc-mark" />
-        </span>
-        <span className="completion-badge">
           <svg
+            className="completion-check"
             fill="none"
-            height="18"
             stroke="currentColor"
             strokeLinecap="round"
             strokeLinejoin="round"
-            strokeWidth="3"
-            viewBox="0 0 24 24"
-            width="18"
+            strokeWidth="5"
+            viewBox="0 0 48 48"
           >
-            <path d="M5 12.5l4.5 4.5L19 7.5" />
+            <path d="M13 25l7.5 7.5L35 17" pathLength={100} />
           </svg>
         </span>
       </div>
@@ -255,7 +254,12 @@ export function whatsappStepBody(
           </span>
           <span>
             <span>{point.lead}</span>
-            {point.tail && <> <span>{point.tail}</span></>}
+            {point.tail && (
+              <>
+                {" "}
+                <span>{point.tail}</span>
+              </>
+            )}
           </span>
         </li>
       ))}

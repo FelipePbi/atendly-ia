@@ -225,8 +225,8 @@ export function WhatsAppConnectedSettings({
         title="Trocar número?"
       >
         <p className="settings-modal-copy">
-          Clientes, agenda e conversas continuam. O número atual é
-          desconectado, e a IA para de atender até você conectar o novo.
+          Clientes, agenda e conversas continuam. O número atual é desconectado,
+          e a IA para de atender até você conectar o novo.
         </p>
         <div className="modal-actions">
           <button

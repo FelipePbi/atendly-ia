@@ -5,6 +5,10 @@ import type { ChannelInboundMessage } from "../../src/modules/channel/domain/Cha
 import { InboundMessageProcessor } from "../../src/modules/channel/InboundMessageProcessor.js";
 import type { GraphRuntimePort } from "../../src/modules/graph/graph-runtime.js";
 import type { OutboundGate } from "../../src/modules/graph/message-graph.js";
+import {
+  AI_REPLY_PART_GAP_MS,
+  type AiReplyPartProgressPort,
+} from "../../src/modules/outbox/ai-reply-dispatch.js";
 
 function baseMessage(
   overrides: Partial<ChannelInboundMessage> = {},
@@ -29,7 +33,12 @@ function baseMessage(
   };
 }
 
-function buildSubject(options: { outboundGate?: OutboundGate } = {}) {
+function buildSubject(
+  options: {
+    outboundGate?: OutboundGate;
+    replyDispatch?: { progress?: AiReplyPartProgressPort; sleep?: (ms: number) => Promise<void> };
+  } = {},
+) {
   let inboundCounter = 0;
   const automation = {
     handleIncomingText: vi.fn().mockResolvedValue({
@@ -100,7 +109,12 @@ function buildSubject(options: { outboundGate?: OutboundGate } = {}) {
       idempotency,
       handoff,
       undefined,
-      { debounce: false, runtime, outboundGate: options.outboundGate },
+      {
+        debounce: false,
+        runtime,
+        outboundGate: options.outboundGate,
+        replyDispatch: options.replyDispatch,
+      },
     ),
   };
 }
@@ -220,5 +234,130 @@ describe("outbound delivery state", () => {
       }),
     );
     expect(subject.provider.sendText).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("resposta da IA em varias mensagens (2026-10-11)", () => {
+  const multiPart = {
+    text: "Oi! A Aplicação 5D custa R$ 190 💖\n\nSe quiser, posso te ajudar a agendar também.",
+    conversationId: "conversation-1",
+    messageRecordId: "outbound-1",
+    correlationId: "ai-operation-1",
+  };
+
+  function memoryProgress() {
+    const state = { partsSent: 0 };
+    const progress: AiReplyPartProgressPort = {
+      readPartsSent: async () => state.partsSent,
+      recordPartsSent: async ({ partsSent }) => {
+        state.partsSent = partsSent;
+      },
+    };
+    return { state, progress };
+  }
+
+  it("envia as partes em ordem, espera entre elas e so marca SENT depois da ultima", async () => {
+    const sleep = vi.fn(async () => undefined);
+    const { progress } = memoryProgress();
+    const subject = buildSubject({ replyDispatch: { progress, sleep } });
+    subject.automation.handleIncomingText.mockResolvedValue(multiPart);
+    const order: string[] = [];
+    subject.provider.sendText.mockImplementation(async (input: { text: string; correlationId?: string }) => {
+      order.push(`send:${input.text}`);
+      return { provider: "evolution-go", messageId: input.correlationId, raw: { id: input.correlationId } };
+    });
+    subject.automation.markOutboundDelivery.mockImplementation(async (input: { state: string }) => {
+      order.push(`mark:${input.state}`);
+    });
+
+    const result = await subject.processor.handleInboundMessage(baseMessage());
+
+    expect(result.action).toBe("replied");
+    expect(order).toEqual([
+      "send:Oi!",
+      "send:A Aplicação 5D custa R$ 190 💖",
+      "send:Se quiser, posso te ajudar a agendar também.",
+      "mark:SENT",
+    ]);
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(AI_REPLY_PART_GAP_MS);
+    expect(subject.provider.sendText.mock.calls[0][0]).toMatchObject({
+      quotedMessageId: "message-1",
+      correlationId: "ai-operation-1-p1",
+    });
+    expect(subject.automation.markOutboundDelivery).toHaveBeenCalledWith({
+      messageRecordId: "outbound-1",
+      state: "SENT",
+      providerMessageId: "ai-operation-1",
+      rawPayload: { id: "ai-operation-1" },
+    });
+  });
+
+  it("falha retentavel no meio: linha FAILED, retry retoma da parte pendente sem duplicar", async () => {
+    const { state, progress } = memoryProgress();
+    const subject = buildSubject({
+      replyDispatch: { progress, sleep: async () => undefined },
+    });
+    subject.automation.handleIncomingText.mockResolvedValue(multiPart);
+    subject.provider.sendText.mockImplementation(async (input: { correlationId?: string }) => ({
+      provider: "evolution-go",
+      messageId: input.correlationId,
+      raw: null,
+    }));
+    subject.provider.sendText
+      .mockResolvedValueOnce({ provider: "evolution-go", messageId: "ai-operation-1-p1", raw: null })
+      .mockRejectedValueOnce(
+        Object.assign(new TypeError("fetch failed"), {
+          cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
+        }),
+      );
+
+    await expect(subject.processor.handleInboundMessage(baseMessage())).rejects.toThrow(
+      "fetch failed",
+    );
+    expect(state.partsSent).toBe(1);
+    expect(subject.automation.markOutboundDelivery).toHaveBeenLastCalledWith({
+      messageRecordId: "outbound-1",
+      state: "FAILED",
+      detail: "transport_unreachable_econnrefused",
+    });
+
+    // O inbox retenta o mesmo evento: o grafo retoma em sendResponse.
+    const retried = await subject.processor.handleInboundMessage(baseMessage());
+
+    expect(retried.action).toBe("replied");
+    const ids = subject.provider.sendText.mock.calls.map(([input]) => input.correlationId);
+    expect(ids).toEqual([
+      "ai-operation-1-p1",
+      "ai-operation-1-p2",
+      "ai-operation-1-p2",
+      "ai-operation-1",
+    ]);
+    expect(subject.automation.handleIncomingText).toHaveBeenCalledTimes(1);
+    expect(subject.automation.markOutboundDelivery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ state: "SENT", providerMessageId: "ai-operation-1" }),
+    );
+  });
+
+  it("humano assumindo no meio da sequencia descarta as partes restantes", async () => {
+    const subject = buildSubject({ replyDispatch: { sleep: async () => undefined } });
+    subject.automation.handleIncomingText.mockResolvedValue(multiPart);
+    let pausedChecks = 0;
+    // guard, agent e persist veem a IA ativa; a checagem entre partes ve a pausa.
+    subject.handoff.isBotPaused.mockImplementation(async () => {
+      pausedChecks += 1;
+      return pausedChecks > 3;
+    });
+
+    const result = await subject.processor.handleInboundMessage(baseMessage());
+
+    expect(result).toMatchObject({ ok: true, action: "superseded" });
+    expect(subject.provider.sendText).toHaveBeenCalledTimes(1);
+    expect(subject.automation.markOutboundDelivery).toHaveBeenCalledTimes(1);
+    expect(subject.automation.markOutboundDelivery).toHaveBeenCalledWith({
+      messageRecordId: "outbound-1",
+      state: "FAILED",
+      detail: "paused_before_send_after_part_1_of_3",
+    });
   });
 });

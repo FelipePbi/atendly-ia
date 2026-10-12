@@ -119,8 +119,8 @@ export function SystemScreen({ scenario }: { scenario: SystemScenario }) {
           <article className="system-side-card">
             <h2>Precisa atender agora?</h2>
             <p>
-              Quando a agenda ou o WhatsApp não puderem confirmar uma
-              operação, assuma o atendimento e não prometa um horário ainda.
+              Quando a agenda ou o WhatsApp não puderem confirmar uma operação,
+              assuma o atendimento e não prometa um horário ainda.
             </p>
           </article>
         </aside>

@@ -3,7 +3,10 @@ import type { FastifyRequest } from "fastify";
 import type { SchedulingClient } from "../clients/scheduling/index.js";
 import { internalContext } from "../modules/tenant/context.js";
 import { normalizeStoredAiConversationStyle } from "./ai-conversation-style.js";
-import { businessContextProjectionState } from "./business-profile.js";
+import {
+  businessAddressPartsDto,
+  businessContextProjectionState,
+} from "./business-profile.js";
 import { CALENDAR_SOURCE } from "./calendar-source.js";
 import { phoneFromWhatsappJid } from "./phone.js";
 import { getPrisma } from "./prisma.js";
@@ -54,6 +57,7 @@ export async function onboardingState(
           timezone: profile.timezone,
           modalities: profile.modalities,
           address: profile.address,
+          addressParts: businessAddressPartsDto(profile.addressParts),
           contextVersion: profile.businessContextVersion,
           contextProjectedVersion: profile.businessContextProjectedVersion,
           contextProjectionStatus: businessContextProjectionState(profile),

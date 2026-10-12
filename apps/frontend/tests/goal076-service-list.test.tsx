@@ -235,7 +235,9 @@ describe("§4.3 nome acessível, filete e somente leitura", () => {
 describe("§4.4 ativar e desativar", () => {
   test("a caixa Serviço ativo da edição chama o PATCH com active trocado", async () => {
     const user = userEvent.setup();
-    const service = serviceFixture({ active: true, id: "s1", name: "Corte" });
+    const service = serviceFixture({ active: true, id: "s1", name: "Corte",
+      colorToken: "SKY",
+    });
     serviceCatalogList.mockResolvedValue({
       editable: true,
       items: [service],

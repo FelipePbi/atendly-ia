@@ -86,12 +86,12 @@ describe("prompt montado: sem persona, identidade transparente e versao por esti
     // `npx vitest run tests/prompts/system.test.ts` apos a mudanca, nao
     // calculados a mao.
     expect(derivePromptVersion("PROFESSIONAL")).toBe(
-      "prompt-v9-professional-e8b8f5f465",
+      "prompt-v11-professional-332928fcfc",
     );
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v9-balanced-964442aace",
+      "prompt-v11-balanced-8019d3ccdd",
     );
-    expect(derivePromptVersion("CASUAL")).toBe("prompt-v9-casual-b378fa2f5c");
+    expect(derivePromptVersion("CASUAL")).toBe("prompt-v11-casual-cc5dab8130");
   });
 
   it("o prompt montado embute exatamente a versao retornada para o estilo usado", () => {
@@ -149,7 +149,7 @@ describe("prompt montado: modo sugestao (Goal012/WU-04)", () => {
 
   it("a secao do modo sugestao entra no hash estavel: mudar o template de sugestao muda a versao do prompt normal tambem", () => {
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v9-balanced-964442aace",
+      "prompt-v11-balanced-8019d3ccdd",
     );
   });
 
@@ -205,7 +205,7 @@ describe("prompt montado: audio transcrito (Goal013/WU-03)", () => {
     // poder chegar como voz virada em texto; o hash abaixo muda sozinho se
     // alguem mexer na secao sem decidir isso de novo.
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v9-balanced-964442aace",
+      "prompt-v11-balanced-8019d3ccdd",
     );
   });
 });
@@ -381,7 +381,7 @@ describe("prompt montado: resposta ao lembrete (Goal021/WU-008)", () => {
 
   it("a secao de resposta ao lembrete entra no hash estavel: o bump para v5 e a versao conscientemente atualizada por causa dela", () => {
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v9-balanced-964442aace",
+      "prompt-v11-balanced-8019d3ccdd",
     );
   });
 });
@@ -456,12 +456,12 @@ describe("prompt montado: instrucoes privadas por servico (Goal078)", () => {
 
   it("a versao sobe para v9 e o hash cobre o texto estatico da secao (regressao: mudar a secao sem bump consciente sinaliza aqui)", () => {
     expect(derivePromptVersion("PROFESSIONAL")).toBe(
-      "prompt-v9-professional-e8b8f5f465",
+      "prompt-v11-professional-332928fcfc",
     );
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v9-balanced-964442aace",
+      "prompt-v11-balanced-8019d3ccdd",
     );
-    expect(derivePromptVersion("CASUAL")).toBe("prompt-v9-casual-b378fa2f5c");
+    expect(derivePromptVersion("CASUAL")).toBe("prompt-v11-casual-cc5dab8130");
   });
 });
 

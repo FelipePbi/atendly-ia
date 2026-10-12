@@ -507,10 +507,19 @@ describe("1. composição: coluna da Agenda de 1024 px em diante, tela empurrada
       // As leituras do Dia aconteceram, uma vez cada.
       for (const read of COLUMN_READS) expect(read).toHaveBeenCalled();
       expect(listAppointments).toHaveBeenCalledTimes(1);
-      // A barra comum da Agenda (D-108) fica ao lado, com "Dia" marcado.
-      expect(
-        within(container).getByRole("link", { name: /Novo/ }),
-      ).toHaveAttribute("href", "/agenda/novo");
+      // A barra comum da Agenda (D-108) fica só no detalhe: cancelar e
+      // remarcar são fluxos e não a mostram (pedido de 2026-10-12, D-170).
+      const newLink = within(container).queryByRole("link", { name: /Novo/ });
+      if (route.name === "/agenda/agendamento") {
+        expect(newLink).toHaveAttribute("href", "/agenda/novo");
+      } else {
+        expect(newLink).toBeNull();
+        expect(
+          within(container).queryByRole("navigation", {
+            name: "Visualização da agenda",
+          }),
+        ).toBeNull();
+      }
     },
   );
 
@@ -798,7 +807,7 @@ describe("6. remarcar (A9)", () => {
 
     await screen.findByRole("radio", { name: "10:00" });
     expect(boxValue("Horário atual")).toHaveTextContent(/· 10:00$/);
-    expect(boxValue("Novo horário")).toHaveTextContent("—");
+    expect(boxValue("Novo horário")).toHaveTextContent("-");
 
     await user.click(screen.getByRole("radio", { name: "09:00" }));
     await waitFor(() =>

@@ -226,7 +226,10 @@ function greetingWord(hour: number): string {
   return "Boa noite";
 }
 
-function homeGreeting(timezone: string, name: string | null | undefined): string {
+function homeGreeting(
+  timezone: string,
+  name: string | null | undefined,
+): string {
   const word = greetingWord(currentHourInTimeZone(timezone));
   const firstName = name?.trim().split(/\s+/)[0];
   return firstName ? `${word}, ${firstName}` : word;
@@ -490,7 +493,10 @@ function OperationalBand({
       role={state.alert && !controls.resumeFailure ? "alert" : undefined}
     >
       {active ? (
-        <span className="ia-dot is-active operational-ring" aria-hidden="true" />
+        <span
+          className="ia-dot is-active operational-ring"
+          aria-hidden="true"
+        />
       ) : hollow ? (
         <span className="operational-ring-off" aria-hidden="true" />
       ) : (
@@ -799,7 +805,9 @@ function ServicePendency({ service }: { service: ServiceToReview }) {
       </svg>
       <div className="pendency-text" id={textId}>
         <strong>{service.name}</strong> está sem duração
-        <span className="pendency-sub">A IA não consegue marcar esse serviço</span>
+        <span className="pendency-sub">
+          A IA não consegue marcar esse serviço
+        </span>
       </div>
       <Link
         aria-describedby={textId}
@@ -871,11 +879,7 @@ function PauseConfirmation({
         >
           Pausar IA
         </button>
-        <button
-          className="pause-sheet-cancel"
-          onClick={onCancel}
-          type="button"
-        >
+        <button className="pause-sheet-cancel" onClick={onCancel} type="button">
           Continuar atendendo
         </button>
       </div>
@@ -904,7 +908,9 @@ function RealDashboard({
   const weekAppointments = calendarUnavailable
     ? null
     : (scheduling?.appointmentsThisWeek ?? 0);
-  const weekAiAppointments = aiUnavailable ? null : (ai?.aiAppointmentsThisWeek ?? 0);
+  const weekAiAppointments = aiUnavailable
+    ? null
+    : (ai?.aiAppointmentsThisWeek ?? 0);
   const weekHandoffs = aiUnavailable
     ? null
     : (ai?.conversationsTakenOverThisWeek ?? 0);
@@ -922,7 +928,9 @@ function RealDashboard({
    * checklist, é um estado diferente de "IA pausada").
    */
   const checklistVisible =
-    status.phase !== "loading" && status.aiView !== "active" && !checklistComplete;
+    status.phase !== "loading" &&
+    status.aiView !== "active" &&
+    !checklistComplete;
   const greeting = homeGreeting(timezone, session?.user.name);
   const todayLong = new Intl.DateTimeFormat("pt-BR", {
     day: "numeric",
@@ -994,7 +1002,10 @@ function RealDashboard({
   const servicesToReview = catalog.filter((service) => service.needsReview);
   const serviceColors = serviceColorMap(catalog);
   const attention = (ai?.conversationsNeedingAttention ?? [])
-    .map((conversation) => ({ conversation, state: conversationState(conversation) }))
+    .map((conversation) => ({
+      conversation,
+      state: conversationState(conversation),
+    }))
     .filter(
       (
         entry,
@@ -1205,19 +1216,21 @@ function RealDashboard({
             <div className="week-stats">
               <div className="week-stat">
                 <span className="week-stat-value">
-                  {weekAppointments ?? "—"}
+                  {weekAppointments ?? "-"}
                 </span>
                 <span className="week-stat-label">agendamentos</span>
               </div>
               <div className="week-stat">
                 <span className="week-stat-value">
-                  {weekAiAppointments ?? "—"}
+                  {weekAiAppointments ?? "-"}
                 </span>
                 <span className="week-stat-label">marcados pela IA</span>
               </div>
               <div className="week-stat">
-                <span className="week-stat-value">{weekHandoffs ?? "—"}</span>
-                <span className="week-stat-label">conversas que você assumiu</span>
+                <span className="week-stat-value">{weekHandoffs ?? "-"}</span>
+                <span className="week-stat-label">
+                  conversas que você assumiu
+                </span>
               </div>
             </div>
           </article>
@@ -1311,7 +1324,9 @@ function buildChecklistItems({
 
 /** "Falta conectar o WhatsApp e fazer o teste": só os passos pendentes, na ordem do checklist. */
 function missingStepsPhrase(items: ChecklistItem[]): string {
-  const missing = items.filter((item) => !item.done).map((item) => item.missing);
+  const missing = items
+    .filter((item) => !item.done)
+    .map((item) => item.missing);
   if (missing.length === 0) return "";
   const last = missing.at(-1);
   const list =

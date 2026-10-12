@@ -7,7 +7,10 @@ import { useEffect, useState } from "react";
 import type { RetentionSettings, SettingsState } from "@/data";
 import { Icon, type IconName } from "@/shared/icons/Icon";
 import { formatBrazilianPhone } from "@/shared/phone";
-import { getProductServices, useProductRuntime } from "@/shared/runtime/ProductRuntime";
+import {
+  getProductServices,
+  useProductRuntime,
+} from "@/shared/runtime/ProductRuntime";
 import {
   aiCardView,
   useSystemStatus,
@@ -56,7 +59,8 @@ function useHubReadings(): HubReadings {
   useEffect(() => {
     const controller = new AbortController();
     const services = getProductServices();
-    const keep = <K extends keyof HubReadings>(key: K) =>
+    const keep =
+      <K extends keyof HubReadings>(key: K) =>
       (value: HubReadings[K]) =>
         setReadings((current) => ({ ...current, [key]: value }));
     const ignore = () => undefined;
@@ -168,7 +172,9 @@ function hubGroups(
           title: "Importação",
         },
         {
-          detail: readings.retention ? retentionDetail(readings.retention) : null,
+          detail: readings.retention
+            ? retentionDetail(readings.retention)
+            : null,
           href: "/configuracoes/conversas",
           icon: "nav-chat",
           title: "Conversas",
@@ -278,7 +284,8 @@ function HubBody({
                         className={clsx(
                           "hub-row-detail",
                           row.detailTone === "review" && "is-review",
-                          row.href === "/configuracoes/whatsapp" && "is-numeric",
+                          row.href === "/configuracoes/whatsapp" &&
+                            "is-numeric",
                         )}
                       >
                         {row.detail}

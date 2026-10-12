@@ -24,10 +24,22 @@ export const weekdayLabels = [
   "Sábado",
 ];
 
-export const weekdayShortLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+export const weekdayShortLabels = [
+  "Dom",
+  "Seg",
+  "Ter",
+  "Qua",
+  "Qui",
+  "Sex",
+  "Sáb",
+];
 
-export function servicesDetail(items: { active: boolean; needsReview: boolean }[]) {
-  const active = items.filter((item) => item.active && !item.needsReview).length;
+export function servicesDetail(
+  items: { active: boolean; needsReview: boolean }[],
+) {
+  const active = items.filter(
+    (item) => item.active && !item.needsReview,
+  ).length;
   const review = items.filter((item) => item.needsReview).length;
   const base = `${active} ${active === 1 ? "ativo" : "ativos"}`;
   if (review === 0) return { review: false, text: base };
@@ -53,7 +65,9 @@ export function importDetail(
     } catch {
       date = "";
     }
-    return date ? `Concluída em ${date} · Minha Agenda` : "Concluída · Minha Agenda";
+    return date
+      ? `Concluída em ${date} · Minha Agenda`
+      : "Concluída · Minha Agenda";
   }
   if (state.session) return "Continuar importação";
   return "Importar do Minha Agenda";

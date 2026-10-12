@@ -226,3 +226,57 @@ describe("EvolutionInboundMapper", () => {
     expect(mapEvolutionInbound(null)).toBeNull();
   });
 });
+
+describe("EvolutionInboundMapper: LID e mensagem do proprio numero", () => {
+  // Validacao de 2026-10-12: mensagens que a profissional mandou pelo celular
+  // chegaram com Chat em LID e PushName dela; viraram tres conversas
+  // "Camili Krauser" separadas da conversa ja existente com o numero.
+  function payload(info: Record<string, unknown>) {
+    return {
+      event: "Message",
+      instanceId: "instance-1",
+      data: {
+        Info: { IsGroup: false, ID: "id-1", Type: "text", ...info },
+        Message: { conversation: "Vê dia 5" },
+      },
+    };
+  }
+
+  it("mensagem enviada pelo proprio numero usa o telefone de RecipientAlt e nao o nome do dono", () => {
+    const message = mapEvolutionInbound(
+      payload({
+        Chat: "253922946117749@lid",
+        Sender: "213193603465431@lid",
+        IsFromMe: true,
+        PushName: "Camili Krauser",
+        RecipientAlt: "555596513889@s.whatsapp.net",
+      }),
+    );
+    expect(message).toMatchObject({
+      chatId: "253922946117749@lid",
+      customerPhone: "555596513889",
+      fromMe: true,
+    });
+    expect(message?.customerName).toBeUndefined();
+  });
+
+  it("mensagem recebida de contato em LID usa o telefone de SenderAlt", () => {
+    const message = mapEvolutionInbound(
+      payload({
+        Chat: "260506979930294@lid",
+        Sender: "260506979930294@lid",
+        SenderAlt: "555597206854@s.whatsapp.net",
+        IsFromMe: false,
+        PushName: "Yasmin",
+      }),
+    );
+    expect(message).toMatchObject({ customerPhone: "555597206854", customerName: "Yasmin" });
+  });
+
+  it("sem o telefone alternativo, continua com o LID", () => {
+    const message = mapEvolutionInbound(
+      payload({ Chat: "260506979930294@lid", IsFromMe: true }),
+    );
+    expect(message?.customerPhone).toBe("260506979930294");
+  });
+});

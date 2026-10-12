@@ -94,7 +94,12 @@ function PracticalExample({
   now: Date;
   timeZone: string;
 }) {
-  const preview = offerPreview({ granularityMinutes, minLeadMinutes, now, timeZone });
+  const preview = offerPreview({
+    granularityMinutes,
+    minLeadMinutes,
+    now,
+    timeZone,
+  });
   return (
     <section aria-label="Na prática" className="rules-example">
       <span className="rules-example-title">
@@ -143,7 +148,9 @@ export function OfferRulesSettings({
   const [now] = useState(() => new Date());
 
   const timeZone =
-    availability?.timezone ?? settings.business?.timezone ?? "America/Sao_Paulo";
+    availability?.timezone ??
+    settings.business?.timezone ??
+    "America/Sao_Paulo";
 
   async function save() {
     setBusy(true);
@@ -163,7 +170,8 @@ export function OfferRulesSettings({
       })),
     };
     try {
-      const updated = await getProductServices().settings.updateAvailability(input);
+      const updated =
+        await getProductServices().settings.updateAvailability(input);
       onSaved({ ...settings, availability: updated });
       setMessage("Regras da Agenda salvas.");
     } catch {

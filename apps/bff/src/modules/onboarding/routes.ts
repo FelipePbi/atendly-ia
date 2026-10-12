@@ -3,12 +3,14 @@ import { z } from "zod";
 
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
+import { Prisma } from "../../generated/prisma/client.js";
 import {
   type AiConversationStyle,
   aiConversationStyleSchema,
   parseBodyWithAiConversationStyle,
 } from "../../lib/ai-conversation-style.js";
 import {
+  businessAddressPartsSchema,
   businessAddressSchema,
   businessContextPayload,
   businessModalitySchema,
@@ -43,6 +45,7 @@ const patchSchema = z
         // por omissao (Goal018/WU-01).
         modalities: z.array(businessModalitySchema).optional(),
         address: businessAddressSchema.optional(),
+        addressParts: businessAddressPartsSchema.optional(),
       })
       .optional(),
     calendar: z
@@ -130,7 +133,7 @@ export async function registerV1OnboardingRoutes(
         const currentProfile = await prisma.businessProfile.findUnique({
           where: { tenantId: tenant.tenantId },
         });
-        const { modalities, address } = resolveBusinessProfileFields(
+        const { modalities, address, addressParts } = resolveBusinessProfileFields(
           currentProfile,
           body.business,
         );
@@ -148,6 +151,7 @@ export async function registerV1OnboardingRoutes(
               timezone: body.business.timezone,
               modalities,
               address,
+              addressParts: addressParts ?? Prisma.DbNull,
             },
             update: {
               businessName: body.business.name,
@@ -155,6 +159,7 @@ export async function registerV1OnboardingRoutes(
               timezone: body.business.timezone,
               modalities,
               address,
+              addressParts: addressParts ?? Prisma.DbNull,
               businessContextVersion: { increment: 1 },
             },
           }),

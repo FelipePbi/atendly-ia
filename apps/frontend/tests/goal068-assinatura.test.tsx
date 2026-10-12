@@ -111,7 +111,7 @@ describe("Brand — assinatura animada", () => {
     render(<Brand signature="entry" />);
 
     const svg = screen
-      .getByRole("link", { name: "Avenly — Início" })
+      .getByRole("link", { name: "Avenly, Início" })
       .querySelector("svg.brand-mark");
 
     expect(svg).toHaveClass("brand-mark--entry");
@@ -133,7 +133,7 @@ describe("Brand — assinatura animada", () => {
 
     render(<Brand signature="entry" />);
     const svg = screen
-      .getByRole("link", { name: "Avenly — Início" })
+      .getByRole("link", { name: "Avenly, Início" })
       .querySelector("svg.brand-mark");
 
     expect(svg).not.toHaveClass("brand-mark--entry");
@@ -144,7 +144,7 @@ describe("Brand — assinatura animada", () => {
     render(<Brand signature="check" />);
 
     const svg = screen
-      .getByRole("link", { name: "Avenly — Início" })
+      .getByRole("link", { name: "Avenly, Início" })
       .querySelector("svg.brand-mark");
 
     expect(svg).toHaveClass("brand-mark--check");
@@ -166,7 +166,7 @@ describe("Brand — assinatura animada", () => {
 
     render(<Brand signature="check" />);
     const svg = screen
-      .getByRole("link", { name: "Avenly — Início" })
+      .getByRole("link", { name: "Avenly, Início" })
       .querySelector("svg.brand-mark");
 
     expect(svg).not.toHaveClass("brand-mark--check");
@@ -178,7 +178,7 @@ describe("Brand — assinatura animada", () => {
 
     render(<Brand signature="check" />);
     const svg = screen
-      .getByRole("link", { name: "Avenly — Início" })
+      .getByRole("link", { name: "Avenly, Início" })
       .querySelector("svg.brand-mark");
 
     expect(svg).toHaveClass("brand-mark--check");
@@ -189,7 +189,7 @@ describe("Brand — assinatura animada", () => {
 
     render(<Brand signature="entry" />);
     const svg = screen
-      .getByRole("link", { name: "Avenly — Início" })
+      .getByRole("link", { name: "Avenly, Início" })
       .querySelector("svg.brand-mark");
 
     expect(svg).not.toHaveClass("brand-mark--entry");
@@ -204,7 +204,7 @@ describe("Brand — assinatura animada", () => {
 
     render(<Brand signature="entry" />);
     const svg = screen
-      .getByRole("link", { name: "Avenly — Início" })
+      .getByRole("link", { name: "Avenly, Início" })
       .querySelector("svg.brand-mark");
 
     expect(svg).not.toHaveClass("brand-mark--entry");
@@ -214,7 +214,7 @@ describe("Brand — assinatura animada", () => {
   test("sem signature, o símbolo é estático (uso atual em telas internas)", () => {
     render(<Brand />);
     const svg = screen
-      .getByRole("link", { name: "Avenly — Início" })
+      .getByRole("link", { name: "Avenly, Início" })
       .querySelector("svg.brand-mark");
 
     expect(svg?.getAttribute("class")).toBe("brand-mark");

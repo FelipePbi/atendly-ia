@@ -9,6 +9,15 @@
 
 import { afterEach } from "vitest";
 
+import { claimSessionMemory } from "@/shared/runtime/sessionMemory";
+
+// A memória da aba (D-167) vive o arquivo inteiro: o que um teste leu não
+// pode semear o seguinte.
+afterEach(() => {
+  claimSessionMemory(null);
+  claimSessionMemory("test");
+});
+
 const hasDom = typeof document !== "undefined";
 
 if (hasDom) {
@@ -21,5 +30,13 @@ if (hasDom) {
   // and a query that should find one node finds two.
   afterEach(() => {
     cleanup();
+    // O storage do jsdom vive o arquivo inteiro: uma escolha lembrada num
+    // teste (a visualização da Agenda, por exemplo) mudaria o ponto de
+    // partida do seguinte.
+    try {
+      window.localStorage.clear();
+    } catch {
+      /* Teste que trocou o storage por um que recusa: nada a limpar. */
+    }
   });
 }

@@ -4,6 +4,7 @@ import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import {
   type WhatsAppConnection,
   type whatsappConnectResultSchema,
+  type WhatsappContactList,
   type whatsappDisconnectResultSchema,
   type whatsappQrResultSchema,
 } from "../mappers/publicApiSchemas";
@@ -27,6 +28,22 @@ export class BffWhatsAppService {
     return this.http.request({
       path: "/v1/whatsapp",
       schema: routeSchema<WhatsAppConnection | null>("GET", "/v1/whatsapp"),
+      signal,
+    });
+  }
+
+  /**
+   * Contatos do número conectado (validação de 2026-10-11), lidos na hora da
+   * Evolution e nunca gravados: só para escolher quem a IA ignora.
+   */
+  contacts(
+    query: { search?: string; limit?: number } = {},
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      path: "/v1/whatsapp/contacts",
+      query: { limit: query.limit, search: query.search || undefined },
+      schema: routeSchema<WhatsappContactList>("GET", "/v1/whatsapp/contacts"),
       signal,
     });
   }

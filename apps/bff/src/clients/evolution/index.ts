@@ -49,6 +49,16 @@ const statusDataSchema = z
   })
   .loose();
 
+const contactDataSchema = z
+  .object({
+    Jid: z.string().optional(),
+    FirstName: z.string().optional(),
+    FullName: z.string().optional(),
+    PushName: z.string().optional(),
+    BusinessName: z.string().optional(),
+  })
+  .loose();
+
 const envelope = <T extends z.ZodType>(data: T) =>
   z
     .object({
@@ -73,7 +83,9 @@ export class EvolutionClient {
   );
 
   webhookUrl(): string {
-    const baseUrl = env.AI_ORCHESTRATOR_BASE_URL.replace(/\/$/, "");
+    const baseUrl = (
+      env.EVOLUTION_WEBHOOK_BASE_URL || env.AI_ORCHESTRATOR_BASE_URL
+    ).replace(/\/$/, "");
     const token = encodeURIComponent(requireEnv("EVOLUTION_WEBHOOK_SECRET"));
     return `${baseUrl}/webhooks/evolution?token=${token}`;
   }
@@ -190,6 +202,22 @@ export class EvolutionClient {
       displayName: stringValue(data.name) ?? stringValue(data.Name) ?? null,
       statusText: stringValue(data.status) ?? stringValue(data.Status) ?? null,
     };
+  }
+
+  /**
+   * Contatos sincronizados do aparelho pelo WhatsApp (whatsmeow
+   * `Store.Contacts`). Só para a escolha dos contatos ignorados: o BFF filtra e
+   * devolve, e nada é gravado.
+   */
+  async getContacts(instanceToken: string, requestId?: string) {
+    const response = await this.http.request({
+      method: "GET",
+      path: "/user/contacts",
+      headers: { apikey: instanceToken },
+      requestId,
+      schema: envelope(z.array(contactDataSchema).nullable()),
+    });
+    return response.data ?? [];
   }
 
   logoutInstance(instanceToken: string, requestId?: string) {

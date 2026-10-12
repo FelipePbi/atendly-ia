@@ -40,8 +40,7 @@ export function hiddenWeekdaysLimitReason(error: unknown): string | null {
     return null;
   }
   const details = error.details as
-    | { fieldErrors?: Record<string, unknown> }
-    | undefined;
+    { fieldErrors?: Record<string, unknown> } | undefined;
   return details?.fieldErrors?.hiddenWeekdays
     ? HIDDEN_WEEKDAYS_LIMIT_REASON
     : null;
@@ -100,7 +99,9 @@ export function CalendarSettings({ settings }: { settings: SettingsState }) {
   const availabilityRoute = settings.calendar.source === "AVENLY";
 
   const [hiddenDays, setHiddenDays] = useState<Set<number>>(new Set());
-  const [initialView, setInitialView] = useState<AgendaInitialView | null>(null);
+  const [initialView, setInitialView] = useState<AgendaInitialView | null>(
+    null,
+  );
   const [viewReading, setViewReading] = useState(true);
   const [viewReadError, setViewReadError] = useState(false);
   const [reminders, setReminders] = useState<ReminderSettings | null>(null);
@@ -170,13 +171,14 @@ export function CalendarSettings({ settings }: { settings: SettingsState }) {
     setViewBusy(true);
     setSheetMessage(null);
     try {
-      const preference = await getProductServices().settings.updateAgendaViewPreference({
-        hiddenWeekdays:
-          sheet === "days"
-            ? [...draftHiddenDays].sort((a, b) => a - b)
-            : [...hiddenDays].sort((a, b) => a - b),
-        initialView: sheet === "view" ? draftInitialView : initialView,
-      });
+      const preference =
+        await getProductServices().settings.updateAgendaViewPreference({
+          hiddenWeekdays:
+            sheet === "days"
+              ? [...draftHiddenDays].sort((a, b) => a - b)
+              : [...hiddenDays].sort((a, b) => a - b),
+          initialView: sheet === "view" ? draftInitialView : initialView,
+        });
       setHiddenDays(new Set(preference.hiddenWeekdays));
       setInitialView(preference.initialView);
       setSavedMessage("Preferências da Agenda salvas.");
@@ -200,9 +202,21 @@ export function CalendarSettings({ settings }: { settings: SettingsState }) {
         {availabilityRoute && (
           <AgendaGroup title="Quando você atende">
             <AgendaRow
-              detail={availability ? availabilityGridSummary(availability.rules) : null}
+              detail={
+                availability
+                  ? availabilityGridSummary(availability.rules)
+                  : null
+              }
               href="/configuracoes/disponibilidade"
               title="Dias e horários"
+            />
+            {/* Disponibilidade extra por data (D-169): abre horário fora
+                do de sempre, não é bloqueio, por isso fica aqui e não no
+                "+ Novo" da Agenda. */}
+            <AgendaRow
+              detail="Atender numa data fora do horário de sempre"
+              href="/agenda/excecoes"
+              title="Horário extra"
             />
           </AgendaGroup>
         )}
@@ -215,7 +229,9 @@ export function CalendarSettings({ settings }: { settings: SettingsState }) {
           <AgendaRow
             detail={
               availability
-                ? changePolicySummary(availability.customerChangeMinNoticeMinutes)
+                ? changePolicySummary(
+                    availability.customerChangeMinNoticeMinutes,
+                  )
                 : null
             }
             href="/configuracoes/agenda/regras"
@@ -244,7 +260,9 @@ export function CalendarSettings({ settings }: { settings: SettingsState }) {
               Ocultar um dia só muda o que você vê. Para não atender em um dia,
               ajuste em{" "}
               {availabilityRoute ? (
-                <Link href="/configuracoes/disponibilidade">Dias e horários</Link>
+                <Link href="/configuracoes/disponibilidade">
+                  Dias e horários
+                </Link>
               ) : (
                 <strong>Dias e horários</strong>
               )}
@@ -266,8 +284,8 @@ export function CalendarSettings({ settings }: { settings: SettingsState }) {
       >
         {viewReadError && (
           <p className="field-help" role="alert">
-            Não foi possível carregar as preferências da Agenda agora.
-            Atualize a página e tente de novo.
+            Não foi possível carregar as preferências da Agenda agora. Atualize
+            a página e tente de novo.
           </p>
         )}
         {sheet === "days" && (

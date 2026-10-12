@@ -234,7 +234,9 @@ describe("Dia, Semana e Mês alternáveis", () => {
 
     await user.click(dayTab);
 
-    expect(screen.queryByLabelText("Carregando agenda")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Carregando agenda"),
+    ).not.toBeInTheDocument();
     expect((await screen.findAllByText("Ana Paula")).length).toBeGreaterThan(0);
   });
 });
@@ -269,9 +271,9 @@ describe("ocupação honesta da grade", () => {
     expect(appointmentRow).toHaveTextContent("Corte feminino · 1 h");
     expect(screen.getAllByText(/^intervalo · /)).toHaveLength(1);
     expect(screen.getByText("intervalo · 10 min")).toBeVisible();
-    expect(screen.getByText("Almoço").closest(".agenda-day-row")).toHaveTextContent(
-      "bloqueio · 1 h",
-    );
+    expect(
+      screen.getByText("Almoço").closest(".agenda-day-row"),
+    ).toHaveTextContent("bloqueio · 1 h");
     expect(
       screen.getByText("Dentista").closest(".agenda-day-row"),
     ).toHaveTextContent("compromisso pessoal · 1 h");
@@ -443,7 +445,7 @@ describe("Dia em ordem cronológica", () => {
 });
 
 describe("carregando, vazio e erro recuperável", () => {
-  test("mostra o esqueleto de carregamento antes da resposta", () => {
+  test("mostra o esqueleto de carregamento antes da resposta", async () => {
     getCalendar.mockReturnValue(new Promise(() => undefined));
     listAppointments.mockReturnValue(new Promise(() => undefined));
     listTimeBlocks.mockReturnValue(new Promise(() => undefined));
@@ -451,7 +453,10 @@ describe("carregando, vazio e erro recuperável", () => {
 
     renderBoard();
 
-    expect(screen.getByLabelText("Carregando agenda")).toBeInTheDocument();
+    // O esqueleto só aparece se a carga passar de ~150 ms (D-168).
+    expect(
+      await screen.findByLabelText("Carregando agenda"),
+    ).toBeInTheDocument();
   });
 
   test("dia sem eventos mostra o vazio, não uma grade fabricada", async () => {
@@ -480,7 +485,14 @@ describe("carregando, vazio e erro recuperável", () => {
 
     renderBoard();
 
-    expect(await screen.findByText("falha de rede")).toBeVisible();
+    // Falha de rede mostra a mensagem do produto, nunca o erro tecnico
+    // cru (2026-10-12: "Internal server error." aparecia na Agenda).
+    expect(
+      await screen.findByText(
+        /Não foi possível carregar a agenda\. Tente novamente em instantes\./,
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText("falha de rede")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Tentar novamente" }));
 
     expect(

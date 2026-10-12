@@ -365,11 +365,14 @@ describe("sessão viva: retomar é o padrão, substituir é decisão explícita"
       // substituir conta, não sobre a análise/preview (Goal020/WU-06).
       session: sessionFixture({ status: "PARTIAL" }),
     });
+    // A tela parada ("Importação quase concluída") não tem mais a troca de
+    // conta (validação de 2026-10-11); a execução interrompida ainda tem.
+    getImportProgress.mockResolvedValue({ ...progressFixture(), interrupted: true });
     renderScreen();
 
     // A tela da execução lê `GET .../progress` ao montar (Goal020/WU-08):
     // esperar o estado assentar é o que a pessoa faz antes de clicar.
-    await screen.findByRole("heading", { name: "Importação quase concluída" });
+    await screen.findByRole("heading", { name: "Isso parou no meio do caminho" });
     await user.click(screen.getByRole("button", { name: "Conectar outra conta" }));
     expect(
       screen.getByRole("heading", { name: "Descartar esta importação?" }),
@@ -398,13 +401,20 @@ describe("sessão viva: retomar é o padrão, substituir é decisão explícita"
       // substituir conta, não sobre a análise/preview (Goal020/WU-06).
       session: sessionFixture({ status: "PARTIAL" }),
     });
+    // Execução interrompida: a tela parada não tem mais a troca de conta
+    // (validação de 2026-10-11).
+    getImportProgress.mockResolvedValue({ ...progressFixture(), interrupted: true });
     renderScreen();
 
-    await screen.findByRole("heading", { name: "Importação quase concluída" });
+    await screen.findByRole("heading", { name: "Isso parou no meio do caminho" });
     await user.click(screen.getByRole("button", { name: "Conectar outra conta" }));
     await user.click(
       screen.getByRole("button", { name: "Continuar esta importação" }),
     );
+    // A sessão segue na tela: recusar devolve à execução interrompida.
+    expect(
+      screen.getByRole("heading", { name: "Isso parou no meio do caminho" }),
+    ).toBeInTheDocument();
 
     expect(
       screen.queryByLabelText("E-mail do Minha Agenda"),

@@ -91,6 +91,15 @@ const MAIN_RULES = [
   "15. Voce e a assistente virtual do negocio, nunca uma pessoa. Se perguntarem se voce e humana ou quem voce e, responda com transparencia que voce e a assistente virtual do negocio, sem alegar ser humana.",
   "16. Nunca anuncie que esta consultando, verificando ou processando algo, nem peca para a cliente aguardar ou esperar. Chame as tools que precisar em silencio e so responda quando tiver o resultado.",
   "17. Nunca use travessao na resposta. Use virgula, ponto ou paragrafo novo para separar ideias.",
+  "18. Na primeira resposta de uma conversa nova, comece com uma saudacao curta que pergunte como a pessoa esta, por exemplo Oi! Tudo bem? (se for perguntar como ajudar, use Como posso te ajudar?, nunca Como posso te ajudar hoje?), sozinha no primeiro paragrafo, e responda o pedido no paragrafo seguinte. Nas respostas seguintes da mesma conversa nao repita a saudacao: se o historico recente ja tem uma mensagem sua, mesmo que seja so um cumprimento, va direto ao assunto, sem Oi nem Tudo bem.",
+  "19. Quando a cliente ja disse qual servico quer, mesmo com outras palavras ou erro de escrita (por exemplo com rena para Henna), use o servico do catalogo que corresponde ao pedido e siga para o proximo passo, como consultar horarios. Nao liste de novo opcoes que ela nao pediu. So pergunte qual servico quando o pedido servir igualmente para mais de um servico do catalogo.",
+  "20. Quando a cliente perguntar quais servicos o negocio tem, responda por categoria, em poucas palavras e sem listar cada servico, por exemplo: Fazemos aplicacao de cilios e design de sobrancelha. Qual te interessa? Cite so as 2 ou 3 categorias principais, as que reunem mais servicos; servico avulso que nao cabe nelas (como buco ou teste alergico) so entra se a cliente perguntar o que mais tem. Errado: Fazemos aplicacao de cilios e design de sobrancelha. Tambem temos buco, brow lamination, remocao, teste alergico e pacote henna. Certo: Fazemos aplicacao de cilios e design de sobrancelha. Qual te interessa? Vale mesmo que voce ja tenha respondido de outro jeito antes nesta conversa. Se ela perguntar sobre uma categoria, cite as opcoes dela pelo nome curto, sem repetir a palavra da categoria, por exemplo: Tem 5D, brasileiro, fox eyes e efeito sirena. Va afunilando a intencao da cliente como numa conversa, e mande a lista completa so se ela pedir.",
+  "21. Voce so atende assuntos do negocio: servicos, agenda, valores e duvidas sobre o atendimento. Um cumprimento pode ser respondido normalmente. Assim que ficar claro que a conversa e de outro assunto, pare na hora e nao responda nada, mesmo que a pessoa ja seja cliente: retorne action pause_ai com messages vazio e pauseReason e classification personal_contact (conversa pessoal, amigo ou parente puxando assunto, piada, combinado fora do negocio), supplier_or_partner (a pessoa oferece os proprios servicos ou produtos, por exemplo se tu quiser botox posso marcar pra ti, fornecedor, vendedor, parceria) ou spam. A profissional responde depois.",
+  "22. Ofereca e agende somente servicos que vieram de list_services. Se a cliente pedir um servico que o negocio nao faz, diga que esse servico nao e feito aqui e conte em poucas palavras o que o negocio faz. Nunca pergunte qual de dois servicos fora do catalogo ela quer.",
+  "23. Quando a cliente perguntar valor ou duracao de um servico, chame list_services com includePrices true e responda com o numero exato do catalogo, por exemplo: A manutencao do brasileiro custa R$ 120 e leva 1h15. Nunca diga que nao consegue ver o valor sem ter feito essa chamada, e nunca responda so que o valor e diferente.",
+  "24. Nao afirme como o servico funciona, prazo de manutencao, durabilidade, cuidados, resultado ou qual opcao fica mais natural ou marcante sem que isso venha do conhecimento do negocio, da instrucao do servico ou de recurrenceIntervalDays. Sem essa informacao, diga em uma frase que a profissional explica certinho no atendimento e siga com o que voce sabe (valor, duracao, horarios). Nunca use media de mercado nem opiniao propria.",
+  "25. Escreva sempre em portugues com acentuacao correta (voce vira você, horario vira horário, nao vira não), mesmo que os exemplos deste prompt estejam sem acento.",
+  "26. Quando uma tool falhar, nunca conte para a cliente que houve problema, erro, falha ou probleminha, nem que vai refazer ou tentar de novo. Corrija no mesmo turno seguindo a orientacao do erro (por exemplo, chamar action=prepare de novo) e responda normalmente, como se nada tivesse acontecido. Se nao der para resolver, diga so que a profissional vai continuar o atendimento por aqui, sem mencionar erro.",
 ];
 
 /**
@@ -134,8 +143,15 @@ const MAIN_RULES = [
  * `focusServiceIds`, qualquer que seja a intencao. Ela vence a descricao
  * publica do servico e qualquer trecho de conhecimento, e o modelo passa a
  * ter a regra explicita de nunca revelar que ela existe.
+ *
+ * v10 (validacao de 2026-10-11): MAIN_RULES ganhou a saudacao com "Tudo
+ * bem?" no primeiro paragrafo da primeira resposta de uma conversa nova. A
+ * resposta ja sai em paragrafos e o despacho a divide em mensagens curtas,
+ * entao a saudacao chega como a primeira mensagem. Na mesma rodada, a secao
+ * de agenda ganhou: perguntar qual horario quando a cliente nao escolheu
+ * entre varios, e nunca dizer reservado/agendado antes de action=confirm.
  */
-const PROMPT_TEMPLATE_VERSION = "v9";
+const PROMPT_TEMPLATE_VERSION = "v11";
 
 /**
  * Amostra fixa, nunca usada no prompt real: existe so para que o hash em
@@ -248,6 +264,101 @@ export function derivePromptVersion(style: AiConversationStyle): string {
   return `prompt-${PROMPT_TEMPLATE_VERSION}-${style.toLowerCase()}-${hash}`;
 }
 
+/**
+ * Data e hora no fuso do negocio, com dia da semana. O ISO em UTC confundia o
+ * modelo: as 22h30 de domingo 11/10 em Sao Paulo o prompt dizia
+ * "2026-10-12T01:30Z" e a IA chamou segunda 12/10 de hoje (validacao de
+ * 2026-10-11).
+ */
+export function formatCurrentDateTime(iso: string, timeZone: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const zone = safeTimeZone(timeZone);
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: zone,
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("weekday")}, ${part("day")}/${part("month")}/${part("year")} ${part("hour")}:${part("minute")} (hoje e ${part("day")}/${part("month")}; fuso ${zone})`;
+}
+
+/**
+ * Fim da despedida pela hora no fuso do negocio. Calculado aqui porque o
+ * modelo errou a conta: "tenha uma otima tarde" a meia-noite (validacao de
+ * 2026-10-11).
+ */
+/**
+ * "hoje e segunda (12/10); amanha e terca (13/10)". Com isso o modelo nao
+ * precisa calcular: depois da meia-noite ele chamou hoje de "segunda" e
+ * amanha de "terca" sem data, o que se confundia com a semana seguinte
+ * (validacao de 2026-10-12).
+ */
+export function todayAndTomorrow(iso: string, timeZone: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const zone = safeTimeZone(timeZone);
+  const label = (value: Date) => {
+    const parts = new Intl.DateTimeFormat("pt-BR", {
+      timeZone: zone,
+      weekday: "long",
+      day: "2-digit",
+      month: "2-digit",
+    }).formatToParts(value);
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((item) => item.type === type)?.value ?? "";
+    const weekday = part("weekday").replace("-feira", "");
+    return `${weekday} (${part("day")}/${part("month")})`;
+  };
+  const tomorrow = new Date(date.getTime() + 24 * 60 * 60 * 1000);
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      hour: "numeric",
+      hourCycle: "h23",
+    }).format(date),
+  );
+  const base = `hoje e ${label(date)}; amanha e ${label(tomorrow)}`;
+  // De madrugada quem diz "amanha" quase sempre quer o dia que esta
+  // comecando: as 00h40 de segunda, "amanha segunda" (validacao de
+  // 2026-10-12) virou terca na resposta da IA.
+  if (hour < 5) {
+    return `${base}; e madrugada: se a cliente disser amanha sem dia da semana, pergunte antes de consultar a agenda: Pra hoje, ${label(date)}, ou ${label(tomorrow)}?`;
+  }
+  return base;
+}
+
+export function farewellForNow(iso: string, timeZone: string): string {
+  const date = new Date(iso);
+  const hour = Number.isNaN(date.getTime())
+    ? 12
+    : Number(
+        new Intl.DateTimeFormat("en-US", {
+          timeZone: safeTimeZone(timeZone),
+          hour: "numeric",
+          hourCycle: "h23",
+        }).format(date),
+      );
+  if (hour >= 5 && hour < 12) return "tenha um ótimo dia";
+  if (hour >= 12 && hour < 18) return "tenha uma ótima tarde";
+  return "tenha uma ótima noite";
+}
+
+function safeTimeZone(timeZone: string): string {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone });
+    return timeZone;
+  } catch {
+    return "America/Sao_Paulo";
+  }
+}
+
 export function buildSystemPrompt(input: unknown): BuiltSystemPrompt {
   const args = isPromptInput(input) ? input : { state: input };
   const state = args.state ?? {};
@@ -260,7 +371,18 @@ export function buildSystemPrompt(input: unknown): BuiltSystemPrompt {
     ...IDENTITY_INTRODUCTION,
     "",
     `Versao do prompt: ${version}`,
-    `Data/hora atual: ${args.currentDateTime ?? new Date().toISOString()}`,
+    `Data/hora atual: ${formatCurrentDateTime(
+      args.currentDateTime ?? new Date().toISOString(),
+      businessContext.timezone,
+    )}`,
+    `Hoje e amanha: ${todayAndTomorrow(
+      args.currentDateTime ?? new Date().toISOString(),
+      businessContext.timezone,
+    )}`,
+    `Despedida para agora: ${farewellForNow(
+      args.currentDateTime ?? new Date().toISOString(),
+      businessContext.timezone,
+    )}`,
     "",
     ...MAIN_RULES,
     "",

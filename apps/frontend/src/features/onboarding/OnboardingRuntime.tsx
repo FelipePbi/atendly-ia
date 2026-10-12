@@ -18,11 +18,17 @@ import type {
   OnboardingState,
 } from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import {
+  type AddressDraft,
+  addressDraftFrom,
+  EMPTY_ADDRESS_DRAFT,
+} from "@/shared/ui/AddressFields";
+import { BrandLoader, BrandMark } from "@/shared/ui/Brand";
 
 import { activationTestScenarioFor } from "./blocks/activation-test";
 
 export type OnboardingDraft = {
-  businessAddress: string;
+  businessAddress: AddressDraft;
   businessCategory: string;
   businessModalities: BusinessModality[];
   businessName: string;
@@ -54,12 +60,13 @@ type OnboardingRuntimeValue = {
   error: string | null;
   loading: boolean;
   refresh: () => Promise<OnboardingState>;
+  retry: () => void;
   setDraft: React.Dispatch<React.SetStateAction<OnboardingDraft>>;
   state: OnboardingState | null;
 };
 
 const initialDraft: OnboardingDraft = {
-  businessAddress: "",
+  businessAddress: EMPTY_ADDRESS_DRAFT,
   businessCategory: "",
   businessModalities: [],
   businessName: "",
@@ -91,6 +98,13 @@ export function OnboardingRuntimeProvider({
   const [state, setState] = useState<OnboardingState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  function retry() {
+    setError(null);
+    setLoading(true);
+    setAttempt((current) => current + 1);
+  }
 
   async function refresh() {
     const nextState = await getProductServices().onboarding.get();
@@ -117,10 +131,10 @@ export function OnboardingRuntimeProvider({
     return () => {
       active = false;
     };
-  }, []);
+  }, [attempt]);
 
   const value = useMemo(
-    () => ({ draft, error, loading, refresh, setDraft, state }),
+    () => ({ draft, error, loading, refresh, retry, setDraft, state }),
     [draft, error, loading, state],
   );
   return (
@@ -138,8 +152,9 @@ export function useOnboardingRuntime() {
 
 export function OnboardingResume() {
   const router = useRouter();
-  const { error, loading, state } = useOnboardingRuntime();
+  const { error, loading, retry, state } = useOnboardingRuntime();
   const [resumeError, setResumeError] = useState<string | null>(null);
+  const [resumeAttempt, setResumeAttempt] = useState(0);
 
   useEffect(() => {
     if (!state) return;
@@ -193,10 +208,20 @@ export function OnboardingResume() {
     return () => {
       active = false;
     };
-  }, [router, state]);
+  }, [resumeAttempt, router, state]);
 
-  if (error) return <RuntimeMessage message={error} />;
-  if (resumeError) return <RuntimeMessage message={resumeError} />;
+  if (error) return <RuntimeMessage message={error} onRetry={retry} />;
+  if (resumeError) {
+    return (
+      <RuntimeMessage
+        message={resumeError}
+        onRetry={() => {
+          setResumeError(null);
+          setResumeAttempt((current) => current + 1);
+        }}
+      />
+    );
+  }
   return (
     <RuntimeMessage
       message={loading ? "Carregando configuração..." : "Continuando..."}
@@ -296,7 +321,9 @@ function draftFromState(
   );
   return {
     ...current,
-    businessAddress: state.business?.address ?? current.businessAddress,
+    businessAddress: state.business?.addressParts
+      ? addressDraftFrom(state.business.addressParts)
+      : current.businessAddress,
     businessCategory: state.business?.category ?? current.businessCategory,
     businessModalities:
       state.business?.modalities ?? current.businessModalities,
@@ -351,13 +378,27 @@ function mostFrequentInterval(
   return best && { endTime: best.endTime, startTime: best.startTime };
 }
 
-function RuntimeMessage({ message }: { message: string }) {
+export function RuntimeMessage({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry?: () => void;
+}) {
+  if (!onRetry) return <BrandLoader label={message} />;
   return (
     <main className="onboarding-shell">
       <section className="onboarding-main">
-        <div className="analysis-panel" aria-live="polite">
-          <span className="spinner" aria-hidden="true" />
+        <div className="analysis-panel" role="alert">
+          <span className="analysis-panel-mark">
+            <BrandMark />
+          </span>
           <p>{message}</p>
+          {onRetry ? (
+            <button className="btn btn-primary" type="button" onClick={onRetry}>
+              Tentar novamente
+            </button>
+          ) : null}
         </div>
       </section>
     </main>

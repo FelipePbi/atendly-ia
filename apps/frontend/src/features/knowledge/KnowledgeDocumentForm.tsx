@@ -159,9 +159,9 @@ export function KnowledgeDocumentForm({
         </label>
         {mode === "edit" && (
           <p className="settings-modal-copy is-wide">
-            Publicar aqui cria uma versão nova deste documento; a versão
-            vigente não é apagada. O conteúdo salvo não é reexibido: escreva
-            o texto completo da nova versão, não só o que mudou.
+            Publicar aqui cria uma versão nova deste documento; a versão vigente
+            não é apagada. O conteúdo salvo não é reexibido: escreva o texto
+            completo da nova versão, não só o que mudou.
           </p>
         )}
         {error && (
@@ -193,7 +193,10 @@ export function KnowledgeDocumentForm({
 
 function requestError(caught: unknown): string {
   if (caught instanceof BffHttpError) {
-    if (caught.status === 502 && upstreamCode(caught) === "KNOWLEDGE_INDEX_UNAVAILABLE") {
+    if (
+      caught.status === 502 &&
+      upstreamCode(caught) === "KNOWLEDGE_INDEX_UNAVAILABLE"
+    ) {
       return "Não foi possível indexar o conteúdo agora. Nada foi salvo.";
     }
     return `Não foi possível salvar este documento. Referência: ${caught.requestId}`;

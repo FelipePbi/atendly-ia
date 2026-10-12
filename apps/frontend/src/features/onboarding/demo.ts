@@ -1,4 +1,5 @@
 import type { OnboardingDraft } from "./OnboardingRuntime";
+import { GENERIC_EXAMPLES, segmentExamples } from "./segmentExamples";
 
 /** Só o que a demonstração lê do rascunho: nada de agenda real nem de BFF. */
 export type DemoDraft = Pick<
@@ -12,7 +13,9 @@ export type DemoDraft = Pick<
   | "servicePriceType"
   | "startTime"
   | "timezone"
->;
+> &
+  // Segmento do negócio: só muda o jeito de falar do exemplo.
+  Partial<Pick<OnboardingDraft, "businessCategory">>;
 
 export type DemoItem = {
   /** Só nos eventos do sistema: o ícone da linha (quadro 3.1). */
@@ -97,7 +100,11 @@ export type DemoTone = "BALANCED" | "CASUAL" | "PROFESSIONAL";
 export function demoToneSample(
   draft: Pick<
     DemoDraft,
-    "serviceDuration" | "serviceName" | "servicePrice" | "servicePriceType"
+    | "businessCategory"
+    | "serviceDuration"
+    | "serviceName"
+    | "servicePrice"
+    | "servicePriceType"
   >,
   tone: DemoTone,
 ): string {
@@ -111,7 +118,9 @@ export function demoToneSample(
     return `${reply}${minutes ? ` O atendimento leva ${minutes} minutos.` : ""} Deseja agendar um horário?`;
   }
   if (tone === "CASUAL") {
-    return `Oi! ${reply}${minutes ? ` Leva ${minutes} min 😄` : ""} Bora marcar um horário? 🙌`;
+    const examples = segmentExamples(draft.businessCategory);
+    const closing = examples === GENERIC_EXAMPLES ? "🙌" : examples.emoji;
+    return `Oi! ${reply}${minutes ? ` Leva ${minutes} min 😄` : ""} Bora marcar um horário? ${closing}`;
   }
   return `${reply}${minutes ? ` Leva ${minutes} min.` : ""} Quer marcar um horário? 😊`;
 }
@@ -142,7 +151,9 @@ function minutesOf(time: string): number | null {
 export function formatDemoHour(totalMinutes: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  return minutes === 0 ? `${hours}h` : `${hours}h${String(minutes).padStart(2, "0")}`;
+  return minutes === 0
+    ? `${hours}h`
+    : `${hours}h${String(minutes).padStart(2, "0")}`;
 }
 
 /** "14h, 15h30 ou 17h". */
@@ -234,7 +245,9 @@ function hourArticle(totalMinutes: number): "à" | "às" {
 
 /** O período "à tarde" só vale quando todo horário oferecido cai entre 12h e 18h. */
 function allInAfternoon(slotMinutes: number[]): boolean {
-  return slotMinutes.every((minutes) => minutes >= 12 * 60 && minutes < 18 * 60);
+  return slotMinutes.every(
+    (minutes) => minutes >= 12 * 60 && minutes < 18 * 60,
+  );
 }
 
 /**
@@ -265,9 +278,12 @@ export function buildDemoConversation(
   const name = draft.serviceName;
   const count = slots.length;
   const weekday = weekdayName(next.weekday);
+  // O serviço é o real do negócio; o jeito de o cliente falar e o emoji
+  // seguem o segmento (validação de 2026-10-11).
+  const examples = segmentExamples(draft.businessCategory);
 
   const items: DemoItem[] = [
-    { kind: "client", text: `Oi! Quanto custa ${name}?` },
+    { kind: "client", text: examples.askPrice(name) },
     { icon: "check", kind: "event", text: `Serviço identificado · ${name}` },
     {
       kind: "ai",
@@ -275,9 +291,11 @@ export function buildDemoConversation(
     },
     {
       kind: "client",
-      text: allInAfternoon(slotMinutes)
-        ? `Quero sim! Tem ${weekday} à tarde?`
-        : `Quero sim! Tem horário ${weekdayShort(next.weekday)}?`,
+      text: examples.accept(
+        allInAfternoon(slotMinutes)
+          ? `Tem ${weekday} à tarde?`
+          : `Tem horário ${weekdayShort(next.weekday)}?`,
+      ),
     },
     {
       icon: "check",
@@ -296,7 +314,7 @@ export function buildDemoConversation(
       kind: "ai",
       text: `${capitalizeFirst(name)}, ${dateLabel}, ${chosenAt} ${chosen}. Posso confirmar?`,
     },
-    { kind: "client", text: "Pode!" },
+    { kind: "client", text: examples.confirm },
     {
       icon: "calendar",
       kind: "event",
@@ -304,7 +322,7 @@ export function buildDemoConversation(
     },
     {
       kind: "ai",
-      text: `Confirmado! Te espero ${weekday} ${chosenAt} ${chosen} 😊`,
+      text: `Confirmado! Te espero ${weekday} ${chosenAt} ${chosen} ${examples.emoji}`,
     },
   ];
 

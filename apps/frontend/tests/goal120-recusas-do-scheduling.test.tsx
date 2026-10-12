@@ -31,15 +31,15 @@ import {
   schedulingRefusalDetails,
 } from "@/data/http/schedulingRefusal";
 import { AppointmentForm } from "@/features/agenda/AppointmentForm";
-import { AvailabilityExceptions } from "@/features/agenda/AvailabilityExceptions";
+import { BlockForm } from "@/features/agenda/BlockForm";
 import { BlockSeriesForm } from "@/features/agenda/BlockSeriesForm";
 import { HOLD_LOST_MESSAGE } from "@/features/agenda/holdSession";
 import { OccurrenceActions } from "@/features/agenda/OccurrenceActions";
-import { RescheduleFlow } from "@/features/agenda/RescheduleFlow";
 import {
-  SeriesConfirm,
+  RepeatReviewSheet,
   seriesFailure,
-} from "@/features/agenda/SeriesConfirm";
+} from "@/features/agenda/RepeatReview";
+import { RescheduleFlow } from "@/features/agenda/RescheduleFlow";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
 const replace = vi.fn();
@@ -63,13 +63,14 @@ const listCustomers = vi.fn();
 const listServices = vi.fn();
 const listTimeBlocks = vi.fn();
 const releaseHold = vi.fn();
-const rescheduleAppointment = vi.fn<
-  (
-    id: string,
-    input: RescheduleAppointmentInput,
-    idempotencyKey: string,
-  ) => Promise<Appointment>
->();
+const rescheduleAppointment =
+  vi.fn<
+    (
+      id: string,
+      input: RescheduleAppointmentInput,
+      idempotencyKey: string,
+    ) => Promise<Appointment>
+  >();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
@@ -144,7 +145,9 @@ function customerFixture(overrides: Partial<Customer> = {}): Customer {
   };
 }
 
-function holdFixture(overrides: Partial<AppointmentHold> = {}): AppointmentHold {
+function holdFixture(
+  overrides: Partial<AppointmentHold> = {},
+): AppointmentHold {
   return {
     contactRef: null,
     customerId: "cus-ana",
@@ -347,9 +350,9 @@ describe("o leitor da recusa do Scheduling", () => {
   });
 
   test("o detalhe é sempre um objeto: upstreamDetails ausente, nulo, lista ou texto viram {}", () => {
-    expect(schedulingRefusalDetails(upstreamRefusal("SLOT_UNAVAILABLE"))).toEqual(
-      {},
-    );
+    expect(
+      schedulingRefusalDetails(upstreamRefusal("SLOT_UNAVAILABLE")),
+    ).toEqual({});
     for (const upstreamDetails of [null, ["x"], "texto", 3]) {
       expect(
         schedulingRefusalDetails(
@@ -571,7 +574,9 @@ describe("remarcação: o envelope real abre o ConflictPanel e o motivo manda", 
       screen.getByLabelText("Motivo da sobreposição"),
       "  Cliente antiga, combinado por telefone  ",
     );
-    await user.click(screen.getByRole("button", { name: "Sobrepor mesmo assim" }));
+    await user.click(
+      screen.getByRole("button", { name: "Sobrepor mesmo assim" }),
+    );
 
     await waitFor(() => expect(rescheduleAppointment).toHaveBeenCalledTimes(1));
     const [id, input] = rescheduleAppointment.mock.calls[0];
@@ -611,7 +616,9 @@ describe("remarcação: o envelope real abre o ConflictPanel e o motivo manda", 
       screen.getByLabelText("Motivo da sobreposição"),
       "  Encaixe combinado  ",
     );
-    await user.click(screen.getByRole("button", { name: "Sobrepor mesmo assim" }));
+    await user.click(
+      screen.getByRole("button", { name: "Sobrepor mesmo assim" }),
+    );
 
     await waitFor(() => expect(rescheduleAppointment).toHaveBeenCalledTimes(2));
     const [, input] = rescheduleAppointment.mock.calls[1];
@@ -674,17 +681,21 @@ describe("exceção do dia: o envelope real abre a decisão com motivo", () => {
       });
     const user = userEvent.setup();
 
-    withShell(<AvailabilityExceptions />);
+    // Desde 2026-10-12 (D-169) o dia fechado nasce em "Bloquear horário".
+    window.history.pushState(
+      {},
+      "",
+      `/agenda/bloquear?type=CLOSED&date=${ISO_TODAY}`,
+    );
+    withShell(<BlockForm />);
 
-    await screen.findByRole("heading", { name: "Tipo" });
-    await user.click(screen.getByRole("radio", { name: /^Indisponibilidade/ }));
     await user.click(
-      screen.getByRole("button", { name: "Confirmar indisponibilidade" }),
+      await screen.findByRole("button", { name: "Confirmar fechamento" }),
     );
 
     expect(
       await screen.findByText(
-        "Esta indisponibilidade cobre atendimento já confirmado",
+        "Este fechamento cobre atendimento já confirmado",
       ),
     ).toBeVisible();
     expect(screen.getByText("Ana Paula")).toBeVisible();
@@ -696,7 +707,7 @@ describe("exceção do dia: o envelope real abre a decisão com motivo", () => {
     );
     expect(
       await screen.findByText(
-        "Descreva o motivo da decisão. Sem motivo, a indisponibilidade não é enviada.",
+        "Descreva o motivo da decisão. Sem motivo, o fechamento não é enviado.",
       ),
     ).toBeVisible();
     expect(createUnavailability).toHaveBeenCalledTimes(1);
@@ -740,7 +751,9 @@ describe("série de bloqueio: o envelope real abre o SeriesConflictPanel com ups
     await user.click(screen.getByRole("button", { name: "Criar série" }));
 
     expect(
-      await screen.findByText("2 ocorrência(s) cobrem um atendimento confirmado"),
+      await screen.findByText(
+        "2 ocorrência(s) cobrem um atendimento confirmado",
+      ),
     ).toBeVisible();
     expect(screen.getByText("28 de setembro de 2026")).toBeVisible();
     expect(screen.getByText("5 de outubro de 2026")).toBeVisible();
@@ -777,10 +790,14 @@ describe("série de bloqueio: o envelope real abre o SeriesConflictPanel com ups
     );
 
     expect(
-      await screen.findByText("1 ocorrência(s) cobrem um atendimento confirmado"),
+      await screen.findByText(
+        "1 ocorrência(s) cobrem um atendimento confirmado",
+      ),
     ).toBeVisible();
     expect(screen.getByText("28 de setembro de 2026")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Pular estas ocorrências" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Pular estas ocorrências" }),
+    ).toBeVisible();
     expect(screen.queryByText(ENGLISH_SCHEDULING_MESSAGE)).toBeNull();
   });
 });
@@ -795,7 +812,7 @@ describe("confirmação da série: o código do embrulho dá a mensagem certa", 
     );
 
     expect(failure.message).toBe(
-      "A reserva da 2ª ocorrência (28 de setembro de 2026) venceu antes da confirmação. Nada foi agendado: pré-visualize a série de novo.",
+      "A reserva do 2º atendimento (28 de setembro de 2026) venceu antes da confirmação. Nada foi agendado: revise os agendamentos de novo.",
     );
     expect(failure.alternatives).toEqual([]);
   });
@@ -812,7 +829,7 @@ describe("confirmação da série: o código do embrulho dá a mensagem certa", 
     );
 
     expect(failure.message).toBe(
-      "O horário da 2ª ocorrência (28 de setembro de 2026) foi tomado depois da pré-visualização. Nada foi agendado: pré-visualize a série de novo.",
+      "O horário do 2º atendimento (28 de setembro de 2026) foi tomado depois da revisão. Nada foi agendado: revise os agendamentos de novo.",
     );
     expect(failure.alternatives).toEqual([
       { date: "2026-09-29", endTime: "10:00", startTime: "09:00" },
@@ -824,13 +841,11 @@ describe("confirmação da série: o código do embrulho dá a mensagem certa", 
       seriesFailure(upstreamRefusal("APPOINTMENT_SERIES_TOO_LONG", { cap: 12 }))
         .message,
     ).toBe(
-      "Esta agenda aceita no máximo 12 ocorrências por série. Nada foi agendado.",
+      "Esta agenda aceita no máximo 12 atendimentos repetidos de uma vez. Nada foi agendado.",
     );
     expect(
       seriesFailure(upstreamRefusal("APPOINTMENT_SERIES_TOO_LONG")).message,
-    ).toBe(
-      "A série passou do limite de ocorrências desta agenda. Nada foi agendado.",
-    );
+    ).toBe("A repetição passou do limite desta agenda. Nada foi agendado.");
   });
 
   test("a tela mostra a mensagem e as alternativas, nunca o texto em inglês do Scheduling", async () => {
@@ -845,8 +860,12 @@ describe("confirmação da série: o código do embrulho dá a mensagem certa", 
     );
     const user = userEvent.setup();
 
+    // A revisão da repetição no novo agendamento (D-171) substituiu a
+    // confirmação da tela de série.
     render(
-      <SeriesConfirm
+      <RepeatReviewSheet
+        customer={{ customerId: "cus-ana" }}
+        customerLabel="Ana Paula"
         intervalDays={7}
         occurrences={[
           {
@@ -870,20 +889,26 @@ describe("confirmação da série: o código do embrulho dá a mensagem certa", 
             unavailable: false,
           },
         ]}
+        onBack={vi.fn()}
         onConfirmed={vi.fn()}
-        onGiveUp={vi.fn()}
-        onRestart={vi.fn()}
+        onRetry={vi.fn()}
         serviceIds={["svc-corte"]}
+        serviceLabel="Corte feminino"
+        unitPrice={null}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Confirmar série" }));
+    await user.click(
+      screen.getByRole("button", { name: "Confirmar 2 agendamentos" }),
+    );
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(
-      "O horário da 2ª ocorrência (28 de setembro de 2026) foi tomado depois da pré-visualização.",
+      "O horário do 2º atendimento (28 de setembro de 2026) foi tomado depois da revisão.",
     );
     expect(
-      within(alert.parentElement as HTMLElement).getByText(/29 de setembro de 2026 às 09:00/),
+      within(alert.parentElement as HTMLElement).getByText(
+        /29 de setembro de 2026 às 09:00/,
+      ),
     ).toBeVisible();
     expect(screen.queryByText(ENGLISH_SCHEDULING_MESSAGE)).toBeNull();
   });

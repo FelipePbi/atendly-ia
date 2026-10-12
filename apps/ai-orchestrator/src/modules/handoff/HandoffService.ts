@@ -1,4 +1,5 @@
 import type { PrismaClient } from "../../generated/prisma/client.js";
+import { aiReplyCorrelationIdOf } from "../outbox/ai-reply-dispatch.js";
 
 export const BOT_OFF_PAUSE_UNTIL = new Date("9999-12-31T23:59:59.000Z");
 
@@ -193,8 +194,23 @@ export class HandoffService {
         },
       },
     });
+    if (message) return message.direction === "OUTBOUND";
 
-    return message?.direction === "OUTBOUND";
+    // Eco de parte da resposta da IA em varias mensagens (2026-10-11): as
+    // partes anteriores a ultima saem como `<correlationId>-p<n>` e a linha so
+    // ganha `externalMessageId` depois da ultima. O eco casa pela
+    // `correlationId` da linha — sem isso, parte da IA viraria atividade manual
+    // e pausaria a propria IA.
+    if (!messageId.startsWith("ai-")) return false;
+    const reply = await this.prisma.message.findUnique({
+      where: {
+        tenantId_channelId_correlationId: {
+          ...this.scope,
+          correlationId: aiReplyCorrelationIdOf(messageId),
+        },
+      },
+    });
+    return reply?.direction === "OUTBOUND";
   }
 
   async pauseForHuman(input: HandoffPauseInput): Promise<void> {

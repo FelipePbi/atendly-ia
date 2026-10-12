@@ -192,7 +192,10 @@ describe("dias ocultos somem de Semana e Mês, nunca do Dia", () => {
     renderBoard();
 
     const weekSection = await screen.findByLabelText("Mapa da semana");
-    const dayHeadButtons = within(weekSection).getAllByRole("button");
+    // Só os cabeçalhos: as horas vazias da grade também são botões ("Novo às …").
+    const dayHeadButtons = within(weekSection).getAllByRole("button", {
+      name: /, mostrar /,
+    });
     expect(dayHeadButtons.length).toBe(6);
     expect(within(weekSection).queryByText("DOM")).not.toBeInTheDocument();
   });

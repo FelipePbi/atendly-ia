@@ -103,6 +103,11 @@ const envSchema = z.object({
   AI_AMBIGUOUS_WAIT_SECONDS: intEnv(120),
   AI_AMBIGUOUS_MAX_WAIT_SECONDS: intEnv(300),
   AI_BUFFER_BETWEEN_SERVICES_MINUTES: intEnv(0),
+  // Validacao local com o WhatsApp real: lista de numeros (so digitos, com
+  // DDI, separados por virgula) que a IA pode responder. Os demais contatos
+  // seguem gravados na inbox, mas a IA nao responde, como contato ignorado.
+  // Vazio (producao): sem filtro.
+  AI_REPLY_ONLY_PHONES: stringEnv(""),
   // Sessao de conversa: inatividade **do contato** que expira a sessao
   // (~24 h). E fronteira configuravel e testada; mudar este valor muda o
   // relogio da sessao, nunca em silencio (D-009).

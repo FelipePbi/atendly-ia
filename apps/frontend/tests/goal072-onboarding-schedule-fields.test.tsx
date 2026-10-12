@@ -178,9 +178,7 @@ describe("preço: máscara e mesmo valor gravado (§6.7)", () => {
         priceType: "FIXED",
       },
     });
-    expect(brl(await screen.findByLabelText("Preço em reais"))).toBe(
-      "90,00",
-    );
+    expect(brl(await screen.findByLabelText("Preço em reais"))).toBe("90,00");
   });
 
   test("erro de servidor em service.price aparece no campo do preço", async () => {
@@ -215,10 +213,11 @@ describe("preço: máscara e mesmo valor gravado (§6.7)", () => {
 
 // O resumo tem o trecho dos dias em <strong>: o texto inteiro vive no <p>.
 function summary(text: string): HTMLElement {
-  return screen.getByText((_, node) =>
-    node?.tagName === "P" &&
-    node.classList.contains("days-summary") &&
-    node.textContent === text,
+  return screen.getByText(
+    (_, node) =>
+      node?.tagName === "P" &&
+      node.classList.contains("days-summary") &&
+      node.textContent === text,
   );
 }
 
@@ -241,9 +240,7 @@ describe("dias: sete pílulas e resumo em texto (§6.8)", () => {
     const boxes = within(group).getAllByRole("checkbox");
     expect(boxes).toHaveLength(7);
     for (const name of fullNames) {
-      expect(
-        within(group).getByRole("checkbox", { name }),
-      ).toBeInTheDocument();
+      expect(within(group).getByRole("checkbox", { name })).toBeInTheDocument();
     }
   });
 
@@ -251,14 +248,10 @@ describe("dias: sete pílulas e resumo em texto (§6.8)", () => {
     const user = await renderStep("dias-de-atendimento");
     await screen.findByRole("group", { name: "Dias de atendimento" });
     // Rascunho inicial: segunda a sexta.
-    expect(
-      summary("Segunda a sexta · 5 dias por semana"),
-    ).toBeVisible();
+    expect(summary("Segunda a sexta · 5 dias por semana")).toBeVisible();
 
     await user.click(screen.getByRole("checkbox", { name: "Sábado" }));
-    expect(
-      summary("Segunda a sábado · 6 dias por semana"),
-    ).toBeVisible();
+    expect(summary("Segunda a sábado · 6 dias por semana")).toBeVisible();
 
     await user.click(screen.getByRole("checkbox", { name: "Terça" }));
     await user.click(screen.getByRole("checkbox", { name: "Quinta" }));
@@ -302,9 +295,15 @@ describe("horas: intervalo em texto e barra decorativa (§6.9)", () => {
     for (const mark of ["0h", "6h", "12h", "18h", "24h"]) {
       expect(bar).toHaveTextContent(mark);
     }
+    // O campo é o seletor de hora compartilhado: digitável e com o tambor
+    // a um toque (Seletores-de-Data-e-Hora.dc.html).
+    expect(screen.getByLabelText("Começa")).toHaveAttribute(
+      "inputmode",
+      "numeric",
+    );
     expect(
-      screen.getByLabelText("Começa").getAttribute("type"),
-    ).toBe("time");
+      screen.getAllByRole("button", { name: "Escolher horário" }),
+    ).toHaveLength(2);
   });
 
   test("o texto acompanha a edição do horário", async () => {

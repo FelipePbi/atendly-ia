@@ -12,8 +12,11 @@ import { type PushedBarMenuItem } from "@/shared/layout/PushedBar";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
 
-import { formatMoney } from "./AppointmentFlowShell";
-import { appointmentHasStarted, requestError, statusLabel } from "./occupancy";
+import {
+  recalledAppointmentNotifications,
+  rememberAppointmentNotifications,
+} from "./agendaMemory";
+import { appointmentHasStarted, requestError } from "./occupancy";
 
 type Busy = "complete" | "confirm-presence" | "final-value" | "no-show" | null;
 
@@ -121,26 +124,43 @@ function normalizedStatus(status: string): string {
  */
 export function useAppointmentNotifications(
   appointmentId: string | null,
-): AppointmentNotification[] {
-  const [notifications, setNotifications] = useState<AppointmentNotification[]>(
-    [],
+): AppointmentNotification[] | null {
+  // `null` enquanto a leitura não voltou; falha conta como nenhuma.
+  // Os avisos vistos por último nesta aba aparecem na hora (D-168); a
+  // leitura abaixo os substitui no lugar.
+  const [notifications, setNotifications] = useState<
+    AppointmentNotification[] | null
+  >(() =>
+    appointmentId ? recalledAppointmentNotifications(appointmentId) : null,
   );
+  // Outro atendimento: recomeça pelo lembrado dele, ou pela linha reservada.
+  const [forId, setForId] = useState(appointmentId);
+  if (forId !== appointmentId) {
+    setForId(appointmentId);
+    setNotifications(
+      appointmentId ? recalledAppointmentNotifications(appointmentId) : null,
+    );
+  }
   useEffect(() => {
     if (!appointmentId) return;
     const controller = new AbortController();
     getProductServices()
       .calendar.listAppointmentNotifications(appointmentId, controller.signal)
-      .then(setNotifications)
-      .catch(() => undefined);
+      .then((result) => {
+        setNotifications(result);
+        rememberAppointmentNotifications(appointmentId, result);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setNotifications([]);
+      });
     return () => controller.abort();
   }, [appointmentId]);
-  return visibleNotifications(notifications);
+  return notifications ? visibleNotifications(notifications) : null;
 }
 
 /**
  * As chamadas do ciclo do atendimento e quando cada uma é permitida, num
- * lugar só: a lista do Dia (`LifecycleActions`) e o menu "•••" do detalhe
- * (`useLifecycleMenu`) fazem exatamente as mesmas chamadas.
+ * lugar só, para o menu "•••" do detalhe (`useLifecycleMenu`).
  */
 function useLifecycleOperations(
   appointment: Appointment | null,
@@ -190,16 +210,13 @@ function useLifecycleOperations(
     canSetFinalValue,
     error,
     setError,
-    status,
     complete: () =>
       run("complete", "Não foi possível concluir o atendimento.", (id) =>
         calendar().completeAppointment(id),
       ),
     confirmPresence: () =>
-      run(
-        "confirm-presence",
-        "Não foi possível confirmar a presença.",
-        (id) => calendar().confirmAppointmentPresence(id),
+      run("confirm-presence", "Não foi possível confirmar a presença.", (id) =>
+        calendar().confirmAppointmentPresence(id),
       ),
     markNoShow: (note: string) =>
       run("no-show", "Não foi possível marcar a falta.", (id) =>
@@ -223,243 +240,13 @@ function useLifecycleOperations(
 }
 
 /**
- * Estado, presença e valor final são eixos independentes (Goal008): concluir
- * não confirma presença, confirmar presença não fecha valor, e nenhum dos
- * três infere o outro. Cada linha aqui representa um eixo — nunca uma ação
- * genérica de "editar agendamento".
- */
-export function LifecycleActions({
-  appointment,
-  onUpdated,
-}: {
-  appointment: Appointment;
-  onUpdated: (lifecycle: AppointmentLifecycle) => void;
-}) {
-  const operations = useLifecycleOperations(appointment, onUpdated);
-  const {
-    busy,
-    canComplete,
-    canConfirmPresence,
-    canMarkNoShow,
-    canSetFinalValue,
-    error,
-    status,
-  } = operations;
-  const [noShowOpen, setNoShowOpen] = useState(false);
-  const [noShowNote, setNoShowNote] = useState("");
-  const [finalValueOpen, setFinalValueOpen] = useState(false);
-  const [finalValueInput, setFinalValueInput] = useState("");
-  const visible = useAppointmentNotifications(appointment.id);
-  const reminders = visible.filter(
-    (notification) => notification.kind === "REMINDER",
-  );
-  const changeNotices = visible.filter(
-    (notification) => notification.kind === "CHANGE_NOTICE",
-  );
-
-  async function complete() {
-    await operations.complete();
-  }
-
-  async function submitNoShow(event: FormEvent) {
-    event.preventDefault();
-    if (await operations.markNoShow(noShowNote)) {
-      setNoShowOpen(false);
-      setNoShowNote("");
-    }
-  }
-
-  async function confirmPresence() {
-    await operations.confirmPresence();
-  }
-
-  async function submitFinalValue(event: FormEvent) {
-    event.preventDefault();
-    if (await operations.setFinalValue(finalValueInput)) {
-      setFinalValueOpen(false);
-      setFinalValueInput("");
-    }
-  }
-
-  return (
-    <div className="agenda-lifecycle">
-      {error && (
-        <p className="form-error" role="alert">
-          {error}
-        </p>
-      )}
-
-      <div className="agenda-lifecycle-row">
-        <div>
-          <strong>Estado</strong>
-          <span>
-            {status === "COMPLETED" && appointment.completionOrigin === "AUTO"
-              ? "Concluído automaticamente"
-              : statusLabel(appointment.status)}
-          </span>
-        </div>
-        <div className="agenda-lifecycle-actions">
-          {canComplete && (
-            <Button
-              loading={busy === "complete"}
-              onClick={() => void complete()}
-              type="button"
-              variant="secondary"
-            >
-              Concluir atendimento
-            </Button>
-          )}
-          {canMarkNoShow && (
-            <Button
-              onClick={() => setNoShowOpen((value) => !value)}
-              type="button"
-              variant="secondary"
-            >
-              Marcar falta
-            </Button>
-          )}
-        </div>
-      </div>
-      {noShowOpen && (
-        <form
-          className="agenda-lifecycle-form"
-          onSubmit={(event) => void submitNoShow(event)}
-        >
-          <label className="field">
-            <span>Observação da falta (opcional)</span>
-            <textarea
-              onChange={(event) => setNoShowNote(event.target.value)}
-              rows={3}
-              value={noShowNote}
-            />
-          </label>
-          <div className="agenda-form-footer">
-            <Button
-              onClick={() => setNoShowOpen(false)}
-              type="button"
-              variant="secondary"
-            >
-              Voltar
-            </Button>
-            <Button loading={busy === "no-show"} type="submit" variant="danger">
-              Confirmar falta
-            </Button>
-          </div>
-        </form>
-      )}
-
-      <div className="agenda-lifecycle-row">
-        <div>
-          <strong>Presença</strong>
-          <span>
-            {appointment.presenceConfirmedAt
-              ? "Presença confirmada"
-              : "Aguardando confirmação"}
-          </span>
-        </div>
-        {canConfirmPresence && (
-          <Button
-            loading={busy === "confirm-presence"}
-            onClick={() => void confirmPresence()}
-            type="button"
-            variant="secondary"
-          >
-            Confirmar presença
-          </Button>
-        )}
-      </div>
-
-      {/* Estado do lembrete **desta ocorrência**, lido das intenções que a
-          própria mutação criou — não da configuração do negócio, que só diz
-          com quanta antecedência ele sairia. Sem nenhuma intenção (negócio
-          sem lembrete configurado, atendimento passado, importação antiga),
-          nenhum estado de lembrete é afirmado. */}
-      {reminders.length > 0 && (
-        <div className="agenda-lifecycle-row">
-          <div>
-            <strong>Lembrete</strong>
-            {reminders.map((notification) => (
-              <span key={notification.id}>
-                {reminderLineLabel(notification, reminders.length)} ·{" "}
-                {notificationStateLabel(notification)}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Aviso de alteração pedido em cancelar ou remarcar: eixo próprio, e
-          não uma variação do lembrete. Um lembrete já enviado não é desfeito
-          por remarcação posterior — os dois convivem no detalhe. */}
-      {changeNotices.length > 0 && (
-        <div className="agenda-lifecycle-row">
-          <div>
-            <strong>Aviso de alteração</strong>
-            {changeNotices.map((notification) => (
-              <span key={notification.id}>
-                {notificationStateLabel(notification)}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="agenda-lifecycle-row">
-        <div>
-          <strong>Valor final</strong>
-          <span>
-            {appointment.finalValue === null
-              ? "Ainda não registrado"
-              : formatMoney(appointment.finalValue)}
-          </span>
-        </div>
-        {canSetFinalValue && (
-          <Button
-            onClick={() => setFinalValueOpen((value) => !value)}
-            type="button"
-            variant="secondary"
-          >
-            Registrar valor final
-          </Button>
-        )}
-      </div>
-      {finalValueOpen && (
-        <form
-          className="agenda-lifecycle-form"
-          onSubmit={(event) => void submitFinalValue(event)}
-        >
-          <label className="field">
-            <span>Valor efetivamente cobrado (R$)</span>
-            <input
-              inputMode="decimal"
-              onChange={(event) => setFinalValueInput(event.target.value)}
-              required
-              value={finalValueInput}
-            />
-          </label>
-          <div className="agenda-form-footer">
-            <Button
-              onClick={() => setFinalValueOpen(false)}
-              type="button"
-              variant="secondary"
-            >
-              Voltar
-            </Button>
-            <Button loading={busy === "final-value"} type="submit">
-              Salvar valor final
-            </Button>
-          </div>
-        </form>
-      )}
-    </div>
-  );
-}
-
-/**
- * As mesmas ações de `LifecycleActions`, para o menu "•••" do detalhe (A5,
- * D-110 (c)): Concluir e Confirmar presença chamam direto; Não compareceu e
- * Registrar valor final abrem o formulário que já pediam. Cada item só existe
- * quando a ação é permitida — agendamento cancelado não oferece nenhum.
+ * As ações do ciclo do atendimento no menu "•••" do detalhe (A5, D-110 (c);
+ * rota e painel do Dia, D-165). Estado, presença e valor final são eixos
+ * independentes (Goal008): concluir não confirma presença, confirmar presença
+ * não fecha valor. Concluir e Confirmar presença chamam direto; Não
+ * compareceu e Registrar valor final abrem o formulário que pedem. Cada item
+ * só existe quando a ação é permitida — agendamento cancelado não oferece
+ * nenhum.
  */
 export function useLifecycleMenu({
   appointment,
@@ -639,6 +426,9 @@ export function AppointmentReminder({
   appointmentId: string;
 }) {
   const visible = useAppointmentNotifications(appointmentId);
+  // Enquanto lê, reserva o bloco de uma linha (pedido de 2026-10-12): o
+  // lembrete que chega não empurra Observações e Histórico para baixo.
+  if (visible === null) return <AppointmentReminderReserved />;
   const reminders = visible.filter(
     (notification) => notification.kind === "REMINDER",
   );
@@ -647,7 +437,7 @@ export function AppointmentReminder({
   );
   if (reminders.length === 0 && changeNotices.length === 0) return null;
   return (
-    <section className="agenda-appt-block">
+    <section className="agenda-appt-block agenda-reveal">
       <h2 className="agenda-appt-label">Lembrete</h2>
       {reminders.map((notification) => (
         <p className="agenda-appt-text" key={notification.id}>
@@ -662,5 +452,21 @@ export function AppointmentReminder({
         </p>
       ))}
     </section>
+  );
+}
+
+/**
+ * O lugar do bloco de lembrete enquanto ele carrega: invisível e sem
+ * esqueleto, na altura do bloco real (revisão de D-168, 2026-10-12).
+ */
+function AppointmentReminderReserved() {
+  return (
+    <div
+      aria-hidden="true"
+      className="agenda-appt-block agenda-appt-reminder-reserved"
+    >
+      <span className="agenda-appt-label">Lembrete</span>
+      <p className="agenda-appt-text">Na véspera, pelo WhatsApp, às 18:00</p>
+    </div>
   );
 }

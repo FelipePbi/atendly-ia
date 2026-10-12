@@ -23,15 +23,24 @@ No mobile, `Dia` é a visualização principal e padrão, mas o usuário também
 
 Em tablets, notebooks e desktops, as três visualizações permanecem disponíveis. Em telas maiores, `Semana` pode ser a visualização padrão por facilitar a leitura dos compromissos distribuídos entre os dias.
 
+A última visualização escolhida pelo usuário (`Dia`, `Semana` ou `Mês`) fica lembrada no aparelho e vale na próxima abertura da Agenda; os padrões acima valem enquanto não houver escolha lembrada.
+
 `Mês` oferece uma visão macro para entender rapidamente a distribuição dos agendamentos ao longo do mês.
 
 ## Identidade visual do serviço
 
-Um serviço pode ter uma identidade visual opcional para facilitar o reconhecimento dos seus eventos na Agenda. No MVP, essa configuração pode ser representada por uma cor escolhida pelo usuário.
+Todo serviço tem uma identidade visual para facilitar o reconhecimento dos seus eventos na Agenda. No MVP, ela é uma cor da paleta de serviços.
+
+Regra da cor (decisão de 2026-10-12):
+
+- na criação manual (tela Serviços), a cor é obrigatória e não vem pré-selecionada: sem escolher, o serviço não é salvo;
+- no onboarding (`Primeiro serviço` e `Serviços adicionais`) e na importação do Minha Agenda, a cor não é perguntada: o serviço recebe uma cor aleatória da paleta, de preferência uma ainda não usada pelo negócio;
+- serviços antigos sem cor receberam uma cor aleatória uma única vez;
+- a cor pode ser trocada depois na tela Serviços, mas não removida.
 
 A forma de aplicar essa identidade não é fixa. O design pode usar acento, borda, faixa, marcador, ponto, superfície tonal ou outro padrão visual consistente, desde que preserve legibilidade e evite poluição visual.
 
-Quando o serviço não tiver uma identidade visual configurada, o evento usa o padrão visual da Agenda.
+Se, por exceção, um serviço estiver sem cor, o evento usa o padrão visual da Agenda.
 
 A identidade do serviço não substitui o tipo nem o estado do evento. Atendimento, compromisso pessoal, bloqueio, hold `Em confirmação` e os demais estados do agendamento devem continuar claramente distinguíveis, sem depender apenas da cor do serviço.
 
@@ -74,6 +83,16 @@ Pausas como almoço não são um conceito especial: são representadas por bloqu
 - registrar compromissos pessoais que bloqueiam horários.
 
 Feriados não são tratados automaticamente no MVP.
+
+Na interface (D-169, 2026-10-12), tirar horário da agenda é uma ação só: **Bloquear horário**, no `+ Novo` da Agenda, ao lado de `Agendamento`. É uma tela só, direto no período (revisão do mesmo dia: a pergunta do tipo saiu porque os três pareciam a mesma coisa):
+
+- **Pausa no atendimento**: o padrão para um período. É o bloqueio operacional, que impede novos agendamentos no intervalo. Pode se repetir em dias fixos.
+- **Compromisso pessoal**: o mesmo período com a chave "É um compromisso pessoal" ligada. Ocupa o horário sem cliente. Também pode se repetir.
+- **Dia fechado**: a chave "Dia inteiro" ligada. É a indisponibilidade por data, do dia inteiro. Não se repete. Se cobrir atendimento confirmado, só segue com o motivo da decisão, e o atendimento existente não é alterado. Período parcial fechado não é mais criado por esta tela: período é sempre bloqueio.
+
+Os três continuam sendo coisas distintas na agenda, e cada um mantém o próprio registro.
+
+A **disponibilidade extra** (horário extra numa data fora do horário de sempre) não é bloqueio. Ela fica em Configurações > Agenda > `Horário extra`, ao lado de `Dias e horários`, onde também se removem os dias fechados.
 
 ## Regras de oferta de horário
 
@@ -202,6 +221,8 @@ Um serviço pode ser configurado como recorrente, por exemplo:
 - outro serviço: a cada 1 mês.
 
 Essa recorrência é uma referência padrão, não uma obrigação absoluta.
+
+No agendamento manual, repetir é parte do próprio novo agendamento ("Repetir este atendimento", D-171): o intervalo do serviço é a sugestão, todas as datas são revisadas antes de confirmar e a data com conflito pode ser pulada; o que for confirmado é criado de uma vez.
 
 Exemplo de cliente:
 

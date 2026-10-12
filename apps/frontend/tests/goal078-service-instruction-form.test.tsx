@@ -44,7 +44,7 @@ function serviceFixture(overrides: Partial<Service> = {}): Service {
     active: true,
     bufferAfterMinutes: 0,
     bufferBeforeMinutes: 0,
-    colorToken: null,
+    colorToken: "SKY",
     description: null,
     durationMinutes: 45,
     id: "s1",
@@ -98,9 +98,11 @@ async function renderNewForm() {
     </ShellConfigProvider>,
   );
   await screen.findByLabelText("Nome");
-  await userEvent
-    .setup()
-    .click(screen.getByRole("button", { name: /^Instruções para a IA/ }));
+  const user = userEvent.setup();
+  // Cor obrigatória na criação manual (decisão de 2026-10-12).
+  await user.click(screen.getByRole("button", { name: /^Cor na agenda/ }));
+  await user.click(screen.getByRole("radio", { name: "Ameixa" }));
+  await user.click(screen.getByRole("button", { name: /^Instruções para a IA/ }));
   return screen.getByLabelText<HTMLTextAreaElement>("Instruções para a IA");
 }
 

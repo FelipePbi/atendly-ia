@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 
-import type { Conversation } from "@/data";
+import type { Conversation, WhatsappContact } from "@/data";
 import { BffHttpError } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { formatBrazilianPhone } from "@/shared/phone";
@@ -10,6 +10,8 @@ import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
 /** Espera da busca antes de ler de novo: digitar não pede uma leitura por tecla. */
 const SEARCH_DEBOUNCE_MS = 250;
+/** Contatos do WhatsApp mostrados por leitura (validação de 2026-10-11). */
+const CONTACTS_LIMIT = 30;
 
 type KnownConversation = { externalContactId: string; ignored: boolean };
 
@@ -52,7 +54,9 @@ function CheckMark({ size }: { size: number }) {
 
 /**
  * Corpo próprio do onboarding para os contatos ignorados (quadro 4.5): busca,
- * as conversas lidas sem o filtro `ignored` e a linha "Adicionar por telefone".
+ * as conversas lidas sem o filtro `ignored`, os contatos do WhatsApp do número
+ * conectado (validação de 2026-10-11: na primeira vez ainda não há conversas)
+ * e a linha "Adicionar por telefone".
  * Cada linha é uma caixa de marcar que reflete o `ignored` lido; tocar grava na
  * hora com `PUT /v1/conversations/:id/ignore` e a caixa só muda depois da
  * resposta.
@@ -80,6 +84,13 @@ export function OnboardingIgnoredContacts({
   const [phoneBusy, setPhoneBusy] = useState(false);
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [markedPhones, setMarkedPhones] = useState<string[]>([]);
+  // Contatos do aparelho, lidos na hora (nunca gravados), e os números já
+  // ignorados, para a caixa de cada contato refletir o estado gravado.
+  const [contacts, setContacts] = useState<WhatsappContact[] | null>(null);
+  const [ignoredPhones, setIgnoredPhones] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [contactPending, setContactPending] = useState<string | null>(null);
   const phoneInput = useRef<HTMLInputElement>(null);
   const idPrefix = useId();
 
@@ -118,14 +129,61 @@ export function OnboardingIgnoredContacts({
   }, [query]);
 
   useEffect(() => {
+    let active = true;
+    // Lido dentro da promessa: qualquer falha, até síncrona, cai no `catch`
+    // e a etapa segue com as conversas e o número manual.
+    Promise.resolve()
+      .then(() =>
+        getProductServices().whatsapp.contacts({
+          limit: CONTACTS_LIMIT,
+          search: query,
+        }),
+      )
+      .then((list) => {
+        if (active) setContacts(list.available ? list.items : []);
+      })
+      .catch(() => {
+        // Sem a lista do aparelho, ficam as conversas e o número manual.
+        if (active) setContacts([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [query]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.resolve()
+      .then(() =>
+        getProductServices().conversations.listIgnoredContacts({ limit: 100 }),
+      )
+      .then((list) => {
+        if (!active) return;
+        setIgnoredPhones(
+          new Set(list.items.map((entry) => entry.externalContactId)),
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (phoneOpen) phoneInput.current?.focus();
   }, [phoneOpen]);
 
   const visibleContacts = new Set(
     (conversations ?? []).map((conversation) => conversation.externalContactId),
   );
-  const phoneRows = markedPhones.filter((id) => !visibleContacts.has(id));
-  const ignoredContacts = new Set<string>(markedPhones);
+  const contactRows = (contacts ?? []).filter(
+    (contact) => !visibleContacts.has(contact.phone),
+  );
+  const contactPhones = new Set(contactRows.map((contact) => contact.phone));
+  const phoneRows = markedPhones.filter(
+    (id) => !visibleContacts.has(id) && !contactPhones.has(id),
+  );
+  const ignoredContacts = new Set<string>([...markedPhones, ...ignoredPhones]);
   for (const entry of Object.values(known)) {
     if (entry.ignored) ignoredContacts.add(entry.externalContactId);
   }
@@ -164,6 +222,47 @@ export function OnboardingIgnoredContacts({
       setMarkError("Não foi possível marcar este contato. Tente novamente.");
     } finally {
       setPendingId(null);
+    }
+  }
+
+  async function toggleContact(contact: WhatsappContact) {
+    if (contactPending) return;
+    const next = !ignoredContacts.has(contact.phone);
+    setContactPending(contact.phone);
+    setMarkError(null);
+    try {
+      const saved = await getProductServices().conversations.ignoreByPhone(
+        contact.phone,
+        next,
+        "ONBOARDING",
+      );
+      const id = saved.externalContactId;
+      setIgnoredPhones((current) => {
+        const updated = new Set(current);
+        for (const phone of [id, contact.phone]) {
+          if (next) updated.add(phone);
+          else updated.delete(phone);
+        }
+        return updated;
+      });
+      if (!next) {
+        setMarkedPhones((current) =>
+          current.filter((phone) => phone !== id && phone !== contact.phone),
+        );
+      }
+      setKnown((current) => {
+        const updated = { ...current };
+        for (const [conversationId, entry] of Object.entries(current)) {
+          if (entry.externalContactId === id) {
+            updated[conversationId] = { ...entry, ignored: next };
+          }
+        }
+        return updated;
+      });
+    } catch {
+      setMarkError("Não foi possível marcar este contato. Tente novamente.");
+    } finally {
+      setContactPending(null);
     }
   }
 
@@ -227,8 +326,8 @@ export function OnboardingIgnoredContacts({
           <path d="M20 20l-4.2-4.2" />
         </svg>
         <input
-          aria-label="Buscar nas suas conversas"
-          placeholder="Buscar nas suas conversas"
+          aria-label="Buscar contatos e conversas"
+          placeholder="Buscar contatos e conversas"
           type="search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
@@ -251,16 +350,18 @@ export function OnboardingIgnoredContacts({
         </div>
       )}
       <div className="ignored-card">
-        {conversations === null && !listError && (
-          <p className="ignored-status">Carregando conversas...</p>
+        {(conversations === null || contacts === null) && !listError && (
+          <p className="ignored-status">Buscando seus contatos...</p>
         )}
         {conversations !== null &&
+          contacts !== null &&
           rows.length === 0 &&
+          contactRows.length === 0 &&
           phoneRows.length === 0 && (
             <p className="ignored-status">
               {query
-                ? "Nenhuma conversa encontrada."
-                : "Nenhuma conversa disponível ainda para escolher."}
+                ? "Ninguém encontrado. Confira o nome ou adicione pelo telefone."
+                : "Nenhum contato disponível ainda. Adicione pelo telefone."}
             </p>
           )}
         {(rows.length > 0 || phoneRows.length > 0) && (
@@ -340,6 +441,59 @@ export function OnboardingIgnoredContacts({
               );
             })}
           </ul>
+        )}
+        {contactRows.length > 0 && (
+          <>
+            <p className="ignored-section">Contatos do WhatsApp</p>
+            <ul className="ignored-list">
+              {contactRows.map((contact) => {
+                const name =
+                  contact.name ??
+                  formatBrazilianPhone(contact.phone, "plus") ??
+                  contact.phone;
+                const checked = ignoredContacts.has(contact.phone);
+                const nameId = `${idPrefix}-contact-${contact.phone}`;
+                const phoneId = `${idPrefix}-contact-${contact.phone}-phone`;
+                return (
+                  <li key={`contact-${contact.phone}`}>
+                    <button
+                      aria-busy={contactPending === contact.phone || undefined}
+                      aria-checked={checked}
+                      aria-describedby={contact.name ? phoneId : undefined}
+                      aria-labelledby={nameId}
+                      className="ignored-row"
+                      role="checkbox"
+                      type="button"
+                      onClick={() => void toggleContact(contact)}
+                    >
+                      <span aria-hidden="true" className="ignored-avatar">
+                        {(contact.name && initialsOf(contact.name)) || (
+                          <Icon name="user" />
+                        )}
+                      </span>
+                      <span className="ignored-text">
+                        <span className="ignored-name" id={nameId}>
+                          {name}
+                        </span>
+                        {contact.name && (
+                          <span className="ignored-preview" id={phoneId}>
+                            {formatBrazilianPhone(contact.phone, "plus") ??
+                              contact.phone}
+                          </span>
+                        )}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className={`ignored-box${checked ? " is-checked" : ""}`}
+                      >
+                        {checked && <CheckMark size={14} />}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
         )}
         <button
           aria-expanded={phoneOpen}

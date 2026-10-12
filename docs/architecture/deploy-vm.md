@@ -37,6 +37,26 @@ O `validate:core` audita o `docker-compose.prod.yml` em
 laço explícitas, nenhum host de desenvolvimento nem segredo literal, e
 contexto de build e Dockerfile existentes.
 
+## CI/CD
+
+O job `deploy` de `.github/workflows/validate.yml` dispara o deploy no
+Coolify. Ele só roda em push na `main` e só depois de `core`, `go-windows` e
+`integration` passarem. PR e `workflow_dispatch` nunca publicam.
+
+Configuração no GitHub (Settings → Secrets and variables → Actions):
+
+| Tipo | Nome | Valor |
+| --- | --- | --- |
+| Variable | `DEPLOY_ENABLED` | `true` quando a VM existir; ausente, o job fica pulado |
+| Secret | `COOLIFY_DEPLOY_WEBHOOK` | URL de deploy do recurso no Coolify (`https://<coolify>/api/v1/deploy?uuid=<uuid>`) |
+| Secret | `COOLIFY_API_TOKEN` | token de API do Coolify com permissão de deploy |
+
+No Coolify, desligue o auto-deploy por push do recurso. Senão ele publica
+antes do CI terminar, inclusive commit que vai reprovar.
+
+O job só aciona o deploy, não espera o fim dele. O resultado do build e da
+subida fica no painel do Coolify.
+
 ## Cuidados
 
 - `NEXT_PUBLIC_BFF_URL` é lida no `next build`. Trocar `API_URL` exige rebuild

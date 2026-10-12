@@ -179,7 +179,7 @@ function AudioAttachment({
       )}
       {attachment.tooLarge && (
         <p className="message-attachment-note">
-          Áudio maior do que o limite do WhatsApp — os bytes não estão
+          Áudio maior do que o limite do WhatsApp: os bytes não estão
           disponíveis.
         </p>
       )}
@@ -380,7 +380,7 @@ function MediaAttachment({
       )}
       {attachment.tooLarge && (
         <p className="message-attachment-note">
-          Arquivo maior do que o limite do WhatsApp — os bytes não estão
+          Arquivo maior do que o limite do WhatsApp: os bytes não estão
           disponíveis.
         </p>
       )}

@@ -7,7 +7,7 @@ import {
   weekdayIndex,
 } from "../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../shared/errors/app-error.js";
-import { createTimeBlockRow } from "./time-blocks.js";
+import { createTimeBlockRow, TIME_BLOCK_SERIES_SUMMARY } from "./time-blocks.js";
 import {
   calendarDaysBetween,
   databaseNow,
@@ -414,6 +414,7 @@ export async function moveBlockOccurrence(
           instantToLocalDateTime(input.startAt, input.timeZone).date,
         ),
       },
+      include: TIME_BLOCK_SERIES_SUMMARY,
     });
   });
 }

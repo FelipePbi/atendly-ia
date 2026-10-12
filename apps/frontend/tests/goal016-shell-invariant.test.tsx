@@ -9,10 +9,10 @@
  * interação abaixo lança essa mesma exceção, derrubando o teste — não há
  * necessidade de capturá-la explicitamente.
  *
- * Nove telas cobrem lista, as três visualizações e cada fluxo entregue pelo
+ * Oito telas cobrem lista, as três visualizações e cada fluxo entregue pelo
  * Goal016: `AgendaBoard` (lista + Dia/Semana/Mês), `AppointmentForm` (novo
  * agendamento), `BlockForm` (bloqueio/compromisso), `BlockSeriesForm` (série de
- * bloqueio), `SeriesPreview` (série de atendimento), `AvailabilityExceptions`
+ * bloqueio), `AvailabilityExceptions`
  * (exceções de disponibilidade), `AppointmentDetail` (detalhe + ciclo de vida +
  * histórico), `RescheduleFlow` (remarcação) e `CancelFlow` (cancelamento).
  */
@@ -39,7 +39,6 @@ import { BlockForm } from "@/features/agenda/BlockForm";
 import { BlockSeriesForm } from "@/features/agenda/BlockSeriesForm";
 import { CancelFlow } from "@/features/agenda/CancelFlow";
 import { RescheduleFlow } from "@/features/agenda/RescheduleFlow";
-import { SeriesPreview } from "@/features/agenda/SeriesPreview";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
 const push = vi.fn();
@@ -117,7 +116,9 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 
 const ISO_TODAY = "2026-09-14";
 
-function calendarFixture(overrides: Partial<CalendarState> = {}): CalendarState {
+function calendarFixture(
+  overrides: Partial<CalendarState> = {},
+): CalendarState {
   return {
     capabilities: {
       createAppointments: true,
@@ -158,12 +159,24 @@ function customerFixture(overrides: Partial<Customer> = {}): Customer {
   };
 }
 
-function customerListFixture(overrides: Partial<CustomerList> = {}): CustomerList {
-  return { items: [], managedExternally: false, source: "AVENLY", ...overrides };
+function customerListFixture(
+  overrides: Partial<CustomerList> = {},
+): CustomerList {
+  return {
+    items: [],
+    managedExternally: false,
+    source: "AVENLY",
+    ...overrides,
+  };
 }
 
 function serviceListFixture(overrides: Partial<ServiceList> = {}): ServiceList {
-  return { editable: true, items: [serviceFixture()], source: "AVENLY", ...overrides };
+  return {
+    editable: true,
+    items: [serviceFixture()],
+    source: "AVENLY",
+    ...overrides,
+  };
 }
 
 function appointmentFixture(overrides: Partial<Appointment> = {}): Appointment {
@@ -216,7 +229,9 @@ function timeBlockFixture(overrides: Partial<TimeBlock> = {}): TimeBlock {
   };
 }
 
-function eventFixture(overrides: Partial<AppointmentEvent> = {}): AppointmentEvent {
+function eventFixture(
+  overrides: Partial<AppointmentEvent> = {},
+): AppointmentEvent {
   return {
     actor: null,
     after: null,
@@ -285,7 +300,9 @@ describe("ShellConfigProvider + Agenda (lista e visualizações) não excede a p
 
     renderWithShell(<AgendaBoard />);
 
-    expect(await screen.findByRole("heading", { name: "Agenda" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Agenda" }),
+    ).toBeVisible();
     await user.click(screen.getByRole("tab", { name: "Semana" }));
     expect(await screen.findByLabelText("Mapa da semana")).toBeVisible();
     await user.click(screen.getByRole("tab", { name: "Mês" }));
@@ -319,14 +336,23 @@ describe("ShellConfigProvider + Bloquear horário não excede a profundidade de 
     renderWithShell(<BlockForm />);
 
     await screen.findByRole("heading", { name: "Bloquear horário" });
-    const personal = screen.getByRole("radio", { name: /^Compromisso pessoal/ });
-    const block = screen.getByRole("radio", { name: /^Bloqueio operacional/ });
+    // Desde a tela única de 2026-10-12 (D-169) o tipo são duas chaves: "Dia
+    // inteiro" e, em "Título e motivo", "É um compromisso pessoal".
+    await user.click(screen.getByRole("button", { name: "Título e motivo" }));
+    const personal = screen.getByRole("switch", {
+      name: "É um compromisso pessoal",
+    });
     await user.click(personal);
-    await user.click(block);
     await user.click(personal);
-    await user.click(block);
+    await user.click(personal);
+    const allDay = screen.getByRole("switch", { name: "Dia inteiro" });
+    await user.click(allDay);
+    await user.click(allDay);
 
-    expect(block).toBeChecked();
+    expect(allDay).not.toBeChecked();
+    expect(
+      screen.getByRole("switch", { name: "É um compromisso pessoal" }),
+    ).toBeChecked();
   });
 });
 
@@ -350,35 +376,23 @@ describe("ShellConfigProvider + Série de bloqueio não excede a profundidade de
   });
 });
 
-describe("ShellConfigProvider + Série de atendimento (pré-visualização) não excede a profundidade de atualização", () => {
-  test("responde a digitação contínua do nome do cliente", async () => {
-    getCalendar.mockResolvedValue(calendarFixture());
-    const user = userEvent.setup();
-
-    renderWithShell(<SeriesPreview />);
-
-    const nameField = await screen.findByLabelText("Nome do cliente");
-    await user.type(nameField, "Bruna Lima");
-    expect(nameField).toHaveValue("Bruna Lima");
-  });
-});
-
-describe("ShellConfigProvider + Exceções de disponibilidade não excede a profundidade de atualização", () => {
-  test("alterna repetidamente entre disponibilidade extra e indisponibilidade", async () => {
+describe("ShellConfigProvider + Horário extra não excede a profundidade de atualização", () => {
+  // Desde D-169 (2026-10-12) a tela só libera horário extra; o dia fechado
+  // foi para "Bloquear horário".
+  test("edita repetidamente o intervalo do horário extra", async () => {
     getCalendar.mockResolvedValue(calendarFixture());
     const user = userEvent.setup();
 
     renderWithShell(<AvailabilityExceptions />);
 
-    await screen.findByRole("heading", { name: "Exceções de disponibilidade" });
-    const extra = screen.getByRole("radio", { name: /^Disponibilidade extra/ });
-    const unavailable = screen.getByRole("radio", { name: /^Indisponibilidade/ });
-    await user.click(unavailable);
-    await user.click(extra);
-    await user.click(unavailable);
-    await user.click(extra);
+    await screen.findByRole("heading", { name: "Horário extra" });
+    const start = await screen.findByLabelText("Início");
+    await user.clear(start);
+    await user.type(start, "10:00");
+    await user.clear(start);
+    await user.type(start, "11:00");
 
-    expect(extra).toBeChecked();
+    expect(start).toHaveValue("11:00");
   });
 });
 
@@ -397,7 +411,9 @@ describe("ShellConfigProvider + Detalhe do agendamento (ciclo de vida e históri
     // O formulário de falta abre pelo menu "•••" e fecha por "Voltar".
     for (let round = 0; round < 4; round += 1) {
       await user.click(menu);
-      await user.click(await screen.findByRole("menuitem", { name: "Não compareceu" }));
+      await user.click(
+        await screen.findByRole("menuitem", { name: "Não compareceu" }),
+      );
       await user.click(await screen.findByRole("button", { name: "Voltar" }));
     }
 
@@ -416,7 +432,9 @@ describe("ShellConfigProvider + Reagendar não excede a profundidade de atualiza
 
     renderWithShell(<RescheduleFlow appointmentId="apt-1" />);
 
-    await user.click(await screen.findByRole("button", { name: "Outro horário" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Outro horário" }),
+    );
     const manualTime = await screen.findByLabelText(
       "Outro horário, fora dos oferecidos",
     );

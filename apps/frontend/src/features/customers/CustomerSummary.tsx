@@ -49,8 +49,8 @@ export function CustomerSummary({ customerId, stats }: CustomerSummaryProps) {
             <p className="resume-ai-text">{summary.summary}</p>
             <p className="resume-ai-hint">
               Considerou apenas material autorizado: {summary.sources.memory}{" "}
-              item(ns) de preferência, {summary.sources.notes} observação(ões)
-              e {summary.sources.tags} tag(s) autorizadas, além de{" "}
+              item(ns) de preferência, {summary.sources.notes} observação(ões) e{" "}
+              {summary.sources.tags} tag(s) autorizadas, além de{" "}
               {summary.sources.upcomingAppointments} atendimento(s) futuro(s).
             </p>
           </>
@@ -152,7 +152,7 @@ function weekdayLabel(value: string): string {
 }
 
 function intervalWeeksLabel(averageIntervalDays: number | null): string {
-  if (averageIntervalDays === null) return "—";
+  if (averageIntervalDays === null) return "-";
   const weeks = Math.round(averageIntervalDays / 7);
   return `${weeks} sem`;
 }

@@ -304,6 +304,8 @@ export const SEED = Object.freeze({
     durationMinutes: 60,
     priceType: "FIXED",
     price: 120,
+    // Criação manual exige cor (decisão de 2026-10-12).
+    colorToken: "AMBER",
   }),
   availabilityDays: Object.freeze([0, 1, 2, 3, 4, 5, 6]),
   availabilityStartTime: "00:00",

@@ -1,6 +1,7 @@
 import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import type {
   AiTone,
+  BusinessAddressParts,
   BusinessModality,
   CalendarSource,
   OnboardingState,
@@ -25,6 +26,8 @@ export interface OnboardingPatch {
     modalities?: BusinessModality[];
     /** Chave ausente preserva o valor gravado; `null` apaga. */
     address?: string | null;
+    /** Partes do endereço; o BFF monta `address` a partir delas. */
+    addressParts?: BusinessAddressParts | null;
   };
   calendar?: {
     source: CalendarSource;

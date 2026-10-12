@@ -6,10 +6,9 @@ import { type Customer, type CustomerList } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { displayPhone } from "@/shared/phone";
 
-import { addDays, isoDate, parseDate } from "./occupancy";
+import { parseDate } from "./occupancy";
 
 const SUGGESTED_CUSTOMERS = 5;
-const DATE_STRIP_DAYS = 6;
 
 export function durationLabel(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;
@@ -40,17 +39,31 @@ function initials(label: string): string {
   return `${first}${last}`.toUpperCase();
 }
 
-function normalize(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
+export function normalize(value: string): string {
+  return value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+/** Chips de serviço visíveis antes de "Ver outros serviços" (D-170). */
+export const MOST_USED_SERVICES = 5;
+
+/**
+ * Mais usados primeiro (D-170): `usageCount` decrescente, que é o número de
+ * atendimentos não cancelados dos últimos 90 dias; empate, ou negócio sem
+ * atendimentos, fica na ordem do catálogo (a ordenação é estável).
+ */
+export function servicesByUsage<T extends { usageCount?: number }>(
+  items: readonly T[],
+): T[] {
+  return [...items].sort(
+    (left, right) => (right.usageCount ?? 0) - (left.usageCount ?? 0),
+  );
 }
 
 export function CustomerField({
   customers,
   name,
   onChoose,
+  onCommitName,
   onName,
   onPhone,
   onSwap,
@@ -60,6 +73,12 @@ export function CustomerField({
   customers: CustomerList | null;
   name: string;
   onChoose: (customer: Customer) => void;
+  /**
+   * Nome digitado assumido como cliente novo: ao sair do campo (`false`) ou
+   * pelo botão "Cadastrar" (`true`, uma escolha). É o que revela Serviços
+   * para um cliente novo (D-170): digitar não revela nada no meio da busca.
+   */
+  onCommitName?: (fromChoice: boolean) => void;
   onName: (value: string) => void;
   onPhone: (value: string) => void;
   onSwap: () => void;
@@ -78,10 +97,16 @@ export function CustomerField({
         )
       : registered
   ).slice(0, SUGGESTED_CUSTOMERS);
-  const exact = registered.some((item) => normalize(item.name ?? "") === needle);
+  const exact = registered.some(
+    (item) => normalize(item.name ?? "") === needle,
+  );
 
   return (
-    <div aria-labelledby={labelId} className="agenda-new-block" role="group">
+    <div
+      aria-labelledby={labelId}
+      className="agenda-new-block agenda-new-customer-field"
+      role="group"
+    >
       <span className="label" id={labelId}>
         Cliente
       </span>
@@ -111,6 +136,9 @@ export function CustomerField({
             aria-label="Nome do cliente"
             autoComplete="off"
             className="input"
+            onBlur={() => {
+              if (query) onCommitName?.(false);
+            }}
             onChange={(event) => onName(event.target.value)}
             placeholder={
               registered.length > 0
@@ -120,12 +148,24 @@ export function CustomerField({
             value={name}
           />
           {matches.length > 0 && (
-            <ul className="agenda-new-options">
+            // Sem busca, as sugestões são atalho: de 768 px em diante só
+            // aparecem com o campo em foco (pedido de 2026-10-12, D-170), para
+            // a lista não ocupar a tela antes de a pessoa buscar.
+            <ul
+              className={
+                query
+                  ? "agenda-new-options"
+                  : "agenda-new-options is-suggestions"
+              }
+            >
               {matches.map((item) => (
                 <li key={item.id}>
                   <button
                     className="agenda-new-option"
                     onClick={() => onChoose(item)}
+                    // O foco fica no campo até o clique: a sugestão não
+                    // some no meio dele (Safari não foca botão ao clicar).
+                    onMouseDown={(event) => event.preventDefault()}
                     type="button"
                   >
                     <span aria-hidden="true" className="agenda-new-avatar">
@@ -141,10 +181,14 @@ export function CustomerField({
             </ul>
           )}
           {query && !exact && (
-            <p className="agenda-new-hint">
-              <Icon name="plus" /> Cadastrar “{query}” como novo cliente ao
-              criar.
-            </p>
+            <button
+              className="agenda-new-hint"
+              onClick={() => onCommitName?.(true)}
+              onMouseDown={(event) => event.preventDefault()}
+              type="button"
+            >
+              <Icon name="plus" /> Cadastrar “{query}” como novo cliente
+            </button>
           )}
           {query && (
             <label className="field">
@@ -158,92 +202,6 @@ export function CustomerField({
             </label>
           )}
         </>
-      )}
-    </div>
-  );
-}
-
-export function DateStrip({
-  date,
-  onChange,
-  onTogglePicker,
-  openWeekdays,
-  pickerOpen,
-}: {
-  date: string;
-  openWeekdays: Set<number> | null;
-  onChange: (value: string) => void;
-  onTogglePicker: () => void;
-  pickerOpen: boolean;
-}) {
-  const today = new Date();
-  const days = Array.from({ length: DATE_STRIP_DAYS }, (_, index) =>
-    isoDate(addDays(today, index)),
-  );
-  const custom = !days.includes(date);
-  return (
-    <div className="agenda-new-block">
-      <span className="label" id="agenda-new-date-label">
-        Data
-      </span>
-      <div
-        aria-labelledby="agenda-new-date-label"
-        className="agenda-new-days"
-        role="group"
-      >
-        {days.map((day, index) => {
-          const parsed = parseDate(day);
-          return (
-            <button
-              aria-label={new Intl.DateTimeFormat("pt-BR", {
-                day: "numeric",
-                month: "long",
-                weekday: "long",
-              }).format(parsed)}
-              aria-pressed={date === day}
-              className="agenda-new-day"
-              data-closed={
-                openWeekdays && !openWeekdays.has(parsed.getDay())
-                  ? "true"
-                  : undefined
-              }
-              data-today={index === 0 ? "true" : undefined}
-              key={day}
-              onClick={() => onChange(day)}
-              type="button"
-            >
-              <span>{weekdayShort(day)}</span>
-              <strong>{parsed.getDate()}</strong>
-            </button>
-          );
-        })}
-        <button
-          aria-expanded={pickerOpen || custom}
-          aria-label="Escolher outra data"
-          className="agenda-new-day"
-          onClick={onTogglePicker}
-          type="button"
-        >
-          <span>…</span>
-          <strong>
-            <Icon name="calendar" />
-          </strong>
-        </button>
-      </div>
-      {(pickerOpen || custom) && (
-        <label className="field">
-          <span className="label">Outra data</span>
-          <input
-            className="input"
-            min={isoDate(today)}
-            onChange={(event) => {
-              if (event.target.value) onChange(event.target.value);
-            }}
-            required
-            type="date"
-            value={date}
-          />
-        </label>
       )}
     </div>
   );

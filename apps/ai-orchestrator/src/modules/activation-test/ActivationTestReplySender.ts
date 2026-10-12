@@ -8,6 +8,11 @@ import { AppError, toErrorMessage } from "../../lib/errors.js";
 import { EvolutionProvider } from "../channel/adapters/evolution/EvolutionProvider.js";
 import { ChannelConnectionService } from "../channel/ChannelConnectionService.js";
 import type { WhatsAppProvider } from "../channel/ports/WhatsAppProvider.js";
+import {
+  type AiReplyDispatchOutcome,
+  type AiReplyPartProgressPort,
+  dispatchAiReply,
+} from "../outbox/ai-reply-dispatch.js";
 import { classifySendFailure } from "../outbox/outbox-policy.js";
 import { OutboxStore } from "../outbox/OutboxStore.js";
 
@@ -79,6 +84,8 @@ const defaultProviderFactory: TenantProviderFactory = (input) =>
 export class TenantChannelReplySender implements ActivationTestReplyPort {
   private readonly channels: ChannelConnectionService;
   private readonly outbox: Pick<OutboxStore, "markSent" | "markUndelivered">;
+  private readonly progress?: AiReplyPartProgressPort;
+  private readonly sleep?: (ms: number) => Promise<void>;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -87,10 +94,16 @@ export class TenantChannelReplySender implements ActivationTestReplyPort {
     deps: {
       channels?: ChannelConnectionService;
       outbox?: Pick<OutboxStore, "markSent" | "markUndelivered">;
+      /** Progresso do despacho em partes; padrao e o outbox real. */
+      progress?: AiReplyPartProgressPort;
+      sleep?: (ms: number) => Promise<void>;
     } = {},
   ) {
     this.channels = deps.channels ?? new ChannelConnectionService(prisma);
-    this.outbox = deps.outbox ?? new OutboxStore(prisma);
+    const store = new OutboxStore(prisma);
+    this.outbox = deps.outbox ?? store;
+    this.progress = deps.progress ?? (deps.outbox ? undefined : store);
+    this.sleep = deps.sleep;
   }
 
   /**
@@ -104,7 +117,7 @@ export class TenantChannelReplySender implements ActivationTestReplyPort {
   async sendAiReply(
     input: ActivationTestReplyInput,
   ): Promise<ActivationTestReplyDelivery> {
-    let sent: Awaited<ReturnType<WhatsAppProvider["sendText"]>>;
+    let sent: AiReplyDispatchOutcome;
     try {
       const provider = await this.tenantProvider(input);
       this.logger.info(
@@ -117,12 +130,11 @@ export class TenantChannelReplySender implements ActivationTestReplyPort {
         },
         "Activation test sending the AI reply through the tenant channel",
       );
-      sent = await provider.sendText({
-        to: input.to,
-        text: input.text,
-        quotedMessageId: input.quotedMessageId,
-        correlationId: input.correlationId,
-        requestId: input.requestId,
+      // Mesmo despacho da resposta da IA no produto: varias mensagens curtas,
+      // linha unica, SENT so depois da ultima parte (2026-10-11).
+      sent = await dispatchAiReply(provider, input, {
+        progress: this.progress,
+        sleep: this.sleep,
       });
     } catch (error) {
       const classification = classifySendFailure(error);
@@ -146,7 +158,18 @@ export class TenantChannelReplySender implements ActivationTestReplyPort {
       return { state: classification.state, detail: classification.detail };
     }
 
-    const providerMessageId = sent.messageId ?? input.correlationId;
+    if (sent.status === "stopped") {
+      // Sem `shouldStop` aqui; o ramo existe para o tipo ficar fechado.
+      const detail = `${sent.reason}_after_part_${sent.partsSent}_of_${sent.totalParts}`;
+      await this.outbox.markUndelivered({
+        messageRecordId: input.messageRecordId,
+        state: "FAILED",
+        detail,
+      });
+      return { state: "FAILED", detail };
+    }
+
+    const providerMessageId = sent.providerMessageId ?? input.correlationId;
     await this.outbox.markSent({
       messageRecordId: input.messageRecordId,
       providerMessageId,

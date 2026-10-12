@@ -236,6 +236,7 @@ const availableSlotsSchema = z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
+    days: z.number().int().min(1).max(14).optional(),
   })
   .strict()
   .refine((args) => Boolean(args.serviceId || args.serviceIds?.length), {
@@ -511,7 +512,7 @@ export class AssistantToolRegistry {
         {
           name: "list_services",
           description:
-            "Lista servicos reais da fonte oficial do tenant via Scheduling Service. Inclua precos somente quando a cliente perguntou por valores.",
+            "Lista servicos reais da fonte oficial do tenant via Scheduling Service. Use includePrices true sempre que a cliente perguntar valor ou preco; sem isso o resultado nao traz preco.",
           schema: listServicesSchema,
         },
       ),
@@ -521,7 +522,7 @@ export class AssistantToolRegistry {
         {
           name: "get_availability",
           description:
-            "Busca disponibilidade real para um ou mais serviceIds retornados por list_services. Multiplos servicos usam bloco continuo.",
+            "Busca disponibilidade real para um ou mais serviceIds retornados por list_services. Multiplos servicos usam bloco continuo. startDate (AAAA-MM-DD) e days (1 a 14) delimitam o periodo que a cliente pediu: amanha e startDate de amanha com days 1; essa semana e startDate de hoje com days ate domingo; sem periodo pedido, omita os dois. Devolve horarios espalhados por ate 5 dias, do comeco ao fim de cada dia.",
           schema: availableSlotsSchema,
         },
       ),
@@ -563,7 +564,7 @@ export class AssistantToolRegistry {
         {
           name: "list_services",
           description:
-            "Lista servicos reais da fonte oficial do tenant via Scheduling Service. Inclua precos somente quando a cliente perguntou por valores. recurrenceIntervalDays, quando presente, e o intervalo em dias que permite OFERECER recorrencia para esse servico; oferecer nunca cria a serie sozinho, que continua exigindo prepare_recurring_appointments e confirm_recurring_appointments. Quando recurrenceIntervalDays for nulo, o servico nao tem cadencia cadastrada e nenhum intervalo deve ser inventado.",
+            "Lista servicos reais da fonte oficial do tenant via Scheduling Service. Use includePrices true sempre que a cliente perguntar valor ou preco; sem isso o resultado nao traz preco. recurrenceIntervalDays, quando presente, e o intervalo em dias que permite OFERECER recorrencia para esse servico; oferecer nunca cria a serie sozinho, que continua exigindo prepare_recurring_appointments e confirm_recurring_appointments. Quando recurrenceIntervalDays for nulo, o servico nao tem cadencia cadastrada e nenhum intervalo deve ser inventado.",
           schema: listServicesSchema,
         },
       ),
@@ -573,7 +574,7 @@ export class AssistantToolRegistry {
         {
           name: "get_availability",
           description:
-            "Busca disponibilidade real para um ou mais serviceIds retornados por list_services. Multiplos servicos usam bloco continuo.",
+            "Busca disponibilidade real para um ou mais serviceIds retornados por list_services. Multiplos servicos usam bloco continuo. startDate (AAAA-MM-DD) e days (1 a 14) delimitam o periodo que a cliente pediu: amanha e startDate de amanha com days 1; essa semana e startDate de hoje com days ate domingo; sem periodo pedido, omita os dois. Devolve horarios espalhados por ate 5 dias, do comeco ao fim de cada dia.",
           schema: availableSlotsSchema,
         },
       ),
@@ -873,6 +874,7 @@ export class AssistantToolRegistry {
       args.startDate,
       context.businessContext,
       schedulingContext(context),
+      args.days ? { days: args.days } : undefined,
     );
     await this.rememberAvailabilityLookup(context.conversationId, {
       service: serviceResult.services[0],
@@ -1123,6 +1125,50 @@ export class AssistantToolRegistry {
     );
   }
 
+  /**
+   * Ultima mensagem da cliente e a ultima mensagem enviada a ela antes disso,
+   * para conferir se a escolha de horario foi dita (`slotChoiceIsAmbiguous`).
+   */
+  private async slotChoiceInConversation(
+    context: ToolExecutionContext,
+  ): Promise<{ offer: string; reply: string } | null> {
+    // A trava e um cuidado a mais: sem conseguir ler as mensagens, o
+    // agendamento segue pelas regras de sempre em vez de falhar.
+    try {
+      return await this.readSlotChoice(context);
+    } catch {
+      return null;
+    }
+  }
+
+  private async readSlotChoice(
+    context: ToolExecutionContext,
+  ): Promise<{ offer: string; reply: string } | null> {
+    if (typeof this.prisma.message?.findFirst !== "function") return null;
+    const reply = await this.prisma.message.findFirst({
+      where: {
+        tenantId: context.tenantId,
+        conversationId: context.conversationId,
+        direction: "INBOUND",
+      },
+      orderBy: { createdAt: "desc" },
+      select: { body: true, createdAt: true },
+    });
+    if (!reply) return null;
+    const offer = await this.prisma.message.findFirst({
+      where: {
+        tenantId: context.tenantId,
+        conversationId: context.conversationId,
+        direction: "OUTBOUND",
+        createdAt: { lt: reply.createdAt },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { body: true },
+    });
+    if (!offer) return null;
+    return { offer: offer.body, reply: reply.body };
+  }
+
   private async prepareSchedule(
     args: {
       serviceId?: string | null;
@@ -1134,6 +1180,19 @@ export class AssistantToolRegistry {
     },
     context: ToolExecutionContext,
   ) {
+    // Trava de codigo, nao so de prompt (validacao de 2026-10-11): com mais de
+    // um horario oferecido, "pode ser" nao escolhe nenhum. A IA precisa
+    // perguntar qual, em vez de preparar um horario que a cliente nao disse.
+    const choice = await this.slotChoiceInConversation(context);
+    if (choice && slotChoiceIsAmbiguous(choice.offer, choice.reply, args.startTime)) {
+      return {
+        ok: false as const,
+        code: "SLOT_CHOICE_REQUIRED",
+        error:
+          "A cliente nao disse qual dos horarios oferecidos prefere. Pergunte qual deles ela quer, repetindo as opcoes, antes de preparar o agendamento.",
+      };
+    }
+
     const serviceResult = await this.resolveScheduleServices({
       conversationId: context.conversationId,
       serviceId: args.serviceId,
@@ -1338,7 +1397,10 @@ export class AssistantToolRegistry {
     const draft = await this.draftReadyForEffect(
       "schedule",
       context,
-      "Nao ha agendamento pendente para confirmar.",
+      // Validacao de 2026-10-11: a IA perguntou "Posso confirmar?" sem ter
+      // preparado, a confirmacao foi recusada e ela respondeu "tive um
+      // probleminha, vou refazer" sem refazer nada.
+      "Nao ha agendamento pendente para confirmar. Antes de qualquer coisa chame list_customer_appointments: se esse horario ja esta agendado, ele ja foi confirmado antes, nao marque de novo e responda a mensagem atual da cliente como assunto novo. So se a cliente acabou de escolher um horario que nao esta agendado, chame create_appointment com action=prepare e pergunte em uma frase curta, por exemplo: Só confirmando: posso marcar design de sobrancelha na sexta (16/10) às 18h? Nao diga que teve problema nem que vai refazer.",
     );
     if (!draft.ok) return draft;
     const pending = draft.pending;
@@ -2471,4 +2533,50 @@ function isAvailabilityLookup(value: unknown): value is AvailabilityLookup {
     ) &&
     typeof lookup.checkedAt === "string"
   );
+}
+
+/** "14h", "14h40", "14:40", "9h" → "14:00", "14:40", "14:40", "09:00". */
+function timesIn(text: string): Set<string> {
+  const found = new Set<string>();
+  for (const match of text.matchAll(/\b(\d{1,2})\s*(?:h|:)\s*(\d{2})?\b/giu)) {
+    const hours = Number(match[1]);
+    const minutes = Number(match[2] ?? "0");
+    if (hours > 23 || minutes > 59) continue;
+    found.add(`${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`);
+  }
+  return found;
+}
+
+// "o primeiro", "o das 14h", "mais cedo", "o ultimo"...: escolha dita sem
+// repetir o horario.
+const SLOT_REFERENCE =
+  /\b(primeir[oa]|segund[oa]|terceir[oa]|ultim[oa]|mais cedo|mais tarde)\b/iu;
+
+/**
+ * A cliente respondeu a uma oferta de dois ou mais horarios sem dizer qual
+ * quer ("pode ser", "sim", "ok")? Vale escolha dita por horario ("14h40") ou
+ * por posicao ("o primeiro", "mais cedo"). Com um horario so oferecido, "pode
+ * ser" e escolha.
+ */
+export function slotChoiceIsAmbiguous(
+  offer: string,
+  reply: string,
+  chosenStartTime: string,
+): boolean {
+  const offered = timesIn(offer);
+  if (offered.size < 2) return false;
+  const said = timesIn(reply);
+  if (said.size > 0) return false;
+  // Sem acento antes de testar: "último" e "ultimo" valem igual.
+  const folded = reply.normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  if (SLOT_REFERENCE.test(folded)) return false;
+  // "as 14", "às 14", "14": hora sem "h" que bate com um horario oferecido
+  // tambem e escolha (validacao de 2026-10-12: "as 14" foi recusado com
+  // SLOT_CHOICE_REQUIRED e a IA ofereceu os mesmos horarios de novo).
+  for (const match of folded.matchAll(/(?<![\d/:])(\d{1,2})(?![\d/:]|\s*(?:min|reais|%))/gu)) {
+    const hours = String(Number(match[1])).padStart(2, "0");
+    if ([...offered].some((time) => time.startsWith(`${hours}:`))) return false;
+  }
+  // O horario escolhido nem estava entre os oferecidos: nao e esta a duvida.
+  return offered.has(chosenStartTime);
 }

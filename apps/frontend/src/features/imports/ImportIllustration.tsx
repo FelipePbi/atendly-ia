@@ -4,13 +4,21 @@ function ImportCardBars({ bars }: { bars: number[] }) {
   return (
     <>
       {bars.map((width) => (
-        <span className="import-bar" key={width} style={{ width: `${width}%` }} />
+        <span
+          className="import-bar"
+          key={width}
+          style={{ width: `${width}%` }}
+        />
       ))}
     </>
   );
 }
 
-export function ImportIllustration({ bars = DEFAULT_BARS }: { bars?: number[] }) {
+export function ImportIllustration({
+  bars = DEFAULT_BARS,
+}: {
+  bars?: number[];
+}) {
   return (
     <div aria-hidden="true" className="import-illustration">
       <div className="import-card">

@@ -147,6 +147,11 @@ model BusinessProfile {
   /// Nulo enquanto o negocio nao tem local proprio. So exigido (nao vazio)
   /// quando `modalities` contem ON_SITE; retirar ON_SITE nao apaga o valor.
   address               String?
+  /// Endereco em partes (CEP, UF, cidade, bairro, rua, numero, complemento).
+  /// `address` continua sendo o texto unico que a IA le, montado a partir
+  /// destas partes quando elas existem. Nulo em endereco anterior ao
+  /// formulario dividido.
+  addressParts          Json?
   /// Contador simples incrementado a cada mudanca de dado de negocio (nome,
   /// categoria, timezone, modalidade, endereco) — nunca timestamp, que empata
   /// sob relogio grosso.

@@ -16,7 +16,9 @@ export interface ServiceInput {
   price?: number | null;
   priceType: "FIXED" | "STARTING_AT" | "ON_REQUEST" | "NOT_INFORMED";
   description?: string | null;
-  colorToken?: ServiceColorToken | null;
+  // Obrigatória na criação manual (decisão de 2026-10-12); na edição pode ser
+  // trocada, nunca removida.
+  colorToken: ServiceColorToken;
   bufferBeforeMinutes?: number | null;
   bufferAfterMinutes?: number | null;
   recurrenceIntervalDays?: number | null;

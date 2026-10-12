@@ -156,7 +156,8 @@ export function onboardingError(error: unknown): string {
   return "Algo deu errado do nosso lado e esta etapa não foi salva. Tente de novo em alguns instantes.";
 }
 
-type ValidatableControl = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+type ValidatableControl =
+  HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
 let generatedFieldIdCounter = 0;
 
@@ -211,13 +212,18 @@ function clearFieldError(root: HTMLElement, element: HTMLElement) {
   const errorId = `${ensureElementId(element)}-error`;
   element.removeAttribute("aria-invalid");
   const tokens = describedByTokens(element, errorId);
-  if (tokens.length > 0) element.setAttribute("aria-describedby", tokens.join(" "));
+  if (tokens.length > 0)
+    element.setAttribute("aria-describedby", tokens.join(" "));
   else element.removeAttribute("aria-describedby");
   element.closest<HTMLElement>(".field")?.classList.remove("field-error");
   root.querySelector(`#${CSS.escape(errorId)}`)?.remove();
 }
 
-function markFieldError(root: HTMLElement, element: HTMLElement, message: string) {
+function markFieldError(
+  root: HTMLElement,
+  element: HTMLElement,
+  message: string,
+) {
   const errorId = `${ensureElementId(element)}-error`;
   element.setAttribute("aria-invalid", "true");
   element.setAttribute(
@@ -239,10 +245,7 @@ function markFieldError(root: HTMLElement, element: HTMLElement, message: string
       element.closest("[data-error-anchor]") ??
       element.closest("label") ??
       element
-    ).insertAdjacentElement(
-      "afterend",
-      messageEl,
-    );
+    ).insertAdjacentElement("afterend", messageEl);
   }
   messageEl.textContent = message;
 }
@@ -285,7 +288,9 @@ function focusTargetOf(element: HTMLElement): HTMLElement | null {
  */
 export function applyInlineValidation(root: HTMLElement): boolean {
   const elements = Array.from(
-    root.querySelectorAll<HTMLElement>(`input, select, textarea, ${GROUP_SELECTOR}`),
+    root.querySelectorAll<HTMLElement>(
+      `input, select, textarea, ${GROUP_SELECTOR}`,
+    ),
   ).filter((element) => {
     const scope = element.closest(SCOPE_SELECTOR);
     if (scope && scope !== root && root.contains(scope)) return false;
@@ -319,11 +324,15 @@ export function applyInlineValidation(root: HTMLElement): boolean {
  * `details.field`). Cada campo declara o caminho em `data-server-field`
  * (ex.: `service.price`); dentro da seção recusada, vale o campo cujo nome
  * aparece na mensagem, ou o primeiro da seção na etapa. O texto é o da tela
- * (`data-error-message`), nunca a mensagem crua do servidor. Devolve `false`
+ * (`data-server-error-message`, ou `data-error-message` na falta dele), nunca
+ * a mensagem crua do servidor. Devolve `false`
  * quando nenhum campo da etapa corresponde, para o chamador cair no aviso
  * geral.
  */
-export function applyServerFieldErrors(root: HTMLElement, error: unknown): boolean {
+export function applyServerFieldErrors(
+  root: HTMLElement,
+  error: unknown,
+): boolean {
   if (!(error instanceof BffHttpError)) return false;
   const details = error.details as
     | { field?: unknown; fieldErrors?: Record<string, string[] | undefined> }
@@ -337,7 +346,10 @@ export function applyServerFieldErrors(root: HTMLElement, error: unknown): boole
     error.code === "BUSINESS_ADDRESS_REQUIRED" &&
     typeof details?.field === "string"
   ) {
-    refused.push({ section: "business", messages: [`business.${details.field}`] });
+    refused.push({
+      section: "business",
+      messages: [`business.${details.field}`],
+    });
   }
 
   const controls = Array.from(
@@ -349,7 +361,9 @@ export function applyServerFieldErrors(root: HTMLElement, error: unknown): boole
       (control.dataset.serverField ?? "").startsWith(`${section}.`),
     );
     const named = inSection.find((control) => {
-      const field = (control.dataset.serverField ?? "").slice(section.length + 1);
+      const field = (control.dataset.serverField ?? "").slice(
+        section.length + 1,
+      );
       return messages.some((message) => message.includes(field));
     });
     const target = named ?? inSection[0];
@@ -358,7 +372,9 @@ export function applyServerFieldErrors(root: HTMLElement, error: unknown): boole
     markFieldError(
       root,
       target,
-      target.dataset.errorMessage ?? "Revise esta informação.",
+      target.dataset.serverErrorMessage ??
+        target.dataset.errorMessage ??
+        "Revise esta informação.",
     );
   }
   firstInvalid?.focus();

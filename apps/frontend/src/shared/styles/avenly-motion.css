@@ -1,0 +1,551 @@
+/* ==========================================================================
+   Movimento Avenly — base reutilizável (pedido do usuário, 2026-10-12:
+   "transição suave e animada, sem nada exagerado, algo fluido").
+
+   A linguagem é a da página Movimento do design system (Movimento.dc.html):
+   poucos tempos, duas curvas, deslocamentos pequenos. Entrar é mais lento que
+   sair; o que muda de contexto se move, o que só muda de estado troca de cor.
+   Nada acima de 320 ms, nada elástico, nada de `transition: all`.
+
+   Os tempos e as curvas são os tokens de `tokens.css`:
+     --at-duration-instant 120 ms  pressionar, marcar
+     --at-duration-fast    160 ms  hover, foco, cor; toda SAÍDA
+     --at-duration-base    200 ms  componente que entra (lista, skeleton → conteúdo)
+     --at-duration-moderate 240 ms troca de contexto (abas, painel, tela)
+     --at-duration-slow    320 ms  bottom sheet entrando
+     --at-ease-standard    cubic-bezier(.2,.7,.2,1)  tudo que entra ou se move
+     --at-ease-exit        cubic-bezier(.4,0,1,1)    só saídas, sempre mais curtas
+
+   Três camadas, da mais barata para a mais rica:
+     1. utilitários de entrada ao montar (`.motion-enter*`): só CSS, valem em
+        qualquer navegador;
+     2. View Transitions nativas (`document.startViewTransition`), disparadas
+        por `runViewTransition` (src/shared/motion): a tela antiga e a nova são
+        fotografadas e só os GRUPOS NOMEADOS abaixo animam; o resto da página
+        (casca, sidebar, barra inferior) troca no mesmo quadro, parado. Sem
+        suporte, a atualização acontece na hora, sem animação;
+     3. a direção vem de classes em `<html>` que `runViewTransition` põe e
+        tira: `vt-nav-forward`, `vt-nav-back`, `vt-nav-fade`, `vt-step-next`,
+        `vt-step-prev`, `vt-sheet-close`.
+
+   `prefers-reduced-motion: reduce` desliga tudo (regra do produto): além do
+   bloqueio global de `tokens.css`, cada animação daqui é zerada
+   explicitamente no fim deste arquivo, e `runViewTransition` nem chama a API.
+   ========================================================================== */
+
+:root {
+  --motion-shift-xs: 4px;
+  --motion-shift-sm: 8px;
+  --motion-shift-md: 16px;
+  --motion-shift-lg: 32px;
+  --motion-scale-press: 0.98;
+  --motion-scale-dialog: 0.96;
+}
+
+/* --- Quadros-chave -------------------------------------------------------- */
+@keyframes motion-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes motion-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes motion-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-shift-sm));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes motion-sink-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(var(--motion-shift-sm));
+  }
+}
+@keyframes motion-slide-in-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(var(--motion-shift-md));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes motion-slide-in-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(calc(-1 * var(--motion-shift-md)));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes motion-slide-out-to-left {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(calc(-1 * var(--motion-shift-md)));
+  }
+}
+@keyframes motion-slide-out-to-right {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(var(--motion-shift-md));
+  }
+}
+@keyframes motion-sheet-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(var(--motion-shift-lg));
+  }
+}
+@keyframes motion-dialog-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: scale(var(--motion-scale-dialog));
+  }
+}
+
+/* --- 1. Utilitários de entrada ao montar ---------------------------------
+   Para o conteúdo que substitui um skeleton ou que nasce numa troca de
+   visualização: fade com 8 px de subida, 200 ms. Não aplicar em ancestral de
+   elemento `position: fixed` (o transform viraria o bloco contentor dele). */
+.motion-enter {
+  animation: motion-rise-in var(--at-duration-base) var(--at-ease-standard) both;
+}
+.motion-enter-fade {
+  animation: motion-fade-in var(--at-duration-fast) var(--at-ease-standard) both;
+}
+.motion-enter.is-fast {
+  animation-duration: var(--at-duration-fast);
+}
+/* Tela empurrada no celular, sem View Transitions: entra da direita. */
+.motion-enter-forward {
+  animation: motion-slide-in-from-right var(--at-duration-moderate)
+    var(--at-ease-standard) both;
+}
+.motion-enter-back {
+  animation: motion-slide-in-from-left var(--at-duration-moderate)
+    var(--at-ease-standard) both;
+}
+/* Pressionar: 120 ms, scale .98 (Movimento.dc.html). */
+.motion-press {
+  transition: transform var(--at-duration-instant) ease;
+}
+.motion-press:active {
+  transform: scale(var(--motion-scale-press));
+}
+
+/* Aba: só a cor troca de estado (160 ms); o indicador viaja por View
+   Transition quando a troca roda dentro de `runViewTransition`. */
+.tab {
+  transition: color var(--at-duration-fast) var(--at-ease-standard);
+}
+
+/* --- 2. View Transitions nativas ----------------------------------------- */
+/* A camada da transição não captura o clique: a página continua respondendo
+   enquanto anima. */
+::view-transition {
+  pointer-events: none;
+}
+/* O root não anima: a casca fica parada e só os grupos nomeados se movem.
+   A foto antiga some e a nova aparece no primeiro quadro. */
+::view-transition-group(root) {
+  animation: none;
+}
+::view-transition-old(root) {
+  display: none;
+}
+::view-transition-new(root) {
+  animation: none;
+}
+
+/* Conteúdo da rota (o `template.tsx` da seção envolve a página em
+   `.motion-page`): no celular e no tablet a tela nova empurra a antiga —
+   16 px, entra em 240 ms, sai em 160 ms; voltar é o espelho. Sem direção, o
+   conteúdo só troca com fade e 8 px de subida. */
+.motion-page {
+  view-transition-name: page-content;
+}
+::view-transition-group(page-content) {
+  animation: none;
+}
+::view-transition-image-pair(page-content) {
+  isolation: auto;
+}
+/* Fora de uma navegação (fechar uma folha, trocar de dia), a página fica
+   parada: a foto nova cobre a antiga no primeiro quadro. */
+::view-transition-old(page-content),
+::view-transition-new(page-content) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html.vt-nav-fade::view-transition-old(page-content),
+html.vt-nav-forward::view-transition-old(page-content),
+html.vt-nav-back::view-transition-old(page-content) {
+  animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both;
+}
+html.vt-nav-fade::view-transition-new(page-content),
+html.vt-nav-forward::view-transition-new(page-content),
+html.vt-nav-back::view-transition-new(page-content) {
+  animation: motion-rise-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+}
+@media (max-width: 1023px) {
+  html.vt-nav-forward::view-transition-old(page-content) {
+    animation: motion-slide-out-to-left var(--at-duration-fast)
+      var(--at-ease-exit) both;
+  }
+  html.vt-nav-forward::view-transition-new(page-content) {
+    animation: motion-slide-in-from-right var(--at-duration-moderate)
+      var(--at-ease-standard) both;
+  }
+  html.vt-nav-back::view-transition-old(page-content) {
+    animation: motion-slide-out-to-right var(--at-duration-fast)
+      var(--at-ease-exit) both;
+  }
+  html.vt-nav-back::view-transition-new(page-content) {
+    animation: motion-slide-in-from-left var(--at-duration-moderate)
+      var(--at-ease-standard) both;
+  }
+}
+
+/* Folha modal (ChatSheetShell): entra pelos keyframes `at-sheet`/`at-dialog`
+   de sempre; sai em 160 ms pela View Transition que `ChatSheetShell` dispara
+   ao fechar — 32 px para baixo no celular, scale .96 de 768 px em diante — e
+   o escurecido some junto. */
+.chat-sheet-wrap {
+  view-transition-name: sheet-backdrop;
+}
+.chat-sheet {
+  view-transition-name: sheet;
+}
+::view-transition-group(sheet-backdrop),
+::view-transition-group(sheet) {
+  animation: none;
+}
+::view-transition-image-pair(sheet-backdrop),
+::view-transition-image-pair(sheet) {
+  isolation: auto;
+}
+::view-transition-old(sheet-backdrop) {
+  animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both;
+  mix-blend-mode: normal;
+}
+::view-transition-old(sheet) {
+  animation: motion-sheet-out var(--at-duration-fast) var(--at-ease-exit) both;
+  mix-blend-mode: normal;
+}
+/* A folha que já está na tela quando outra transição roda fica parada. */
+::view-transition-new(sheet-backdrop),
+::view-transition-new(sheet) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+@media (min-width: 768px) {
+  ::view-transition-old(sheet) {
+    animation: motion-dialog-out var(--at-duration-fast) var(--at-ease-exit)
+      both;
+  }
+}
+
+/* Passo de mês no mini calendário (A3) e, na fase 2, dia/semana/mês da
+   Agenda: o conteúdo que muda desliza 16 px na direção do passo; sem passo,
+   só troca com fade. */
+.agenda-calendar-days {
+  view-transition-name: agenda-calendar-days;
+}
+.motion-stepped {
+  view-transition-name: agenda-content;
+}
+::view-transition-group(agenda-calendar-days),
+::view-transition-group(agenda-content) {
+  animation: none;
+}
+::view-transition-image-pair(agenda-calendar-days),
+::view-transition-image-pair(agenda-content) {
+  isolation: auto;
+}
+::view-transition-old(agenda-calendar-days),
+::view-transition-old(agenda-content) {
+  animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both;
+  mix-blend-mode: normal;
+}
+::view-transition-new(agenda-calendar-days),
+::view-transition-new(agenda-content) {
+  animation: motion-fade-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+  mix-blend-mode: normal;
+}
+html.vt-step-next::view-transition-old(agenda-calendar-days),
+html.vt-step-next::view-transition-old(agenda-content) {
+  animation: motion-slide-out-to-left var(--at-duration-fast)
+    var(--at-ease-exit) both;
+}
+html.vt-step-next::view-transition-new(agenda-calendar-days),
+html.vt-step-next::view-transition-new(agenda-content) {
+  animation: motion-slide-in-from-right var(--at-duration-moderate)
+    var(--at-ease-standard) both;
+}
+html.vt-step-prev::view-transition-old(agenda-calendar-days),
+html.vt-step-prev::view-transition-old(agenda-content) {
+  animation: motion-slide-out-to-right var(--at-duration-fast)
+    var(--at-ease-exit) both;
+}
+html.vt-step-prev::view-transition-new(agenda-calendar-days),
+html.vt-step-prev::view-transition-new(agenda-content) {
+  animation: motion-slide-in-from-left var(--at-duration-moderate)
+    var(--at-ease-standard) both;
+}
+
+/* Painel de detalhe do Dia (D-165), a partir de 1024 px: trocar o atendimento
+   escolhido troca o painel com fade — sai em 160 ms, entra em 240 ms. */
+.agenda-day-detail {
+  view-transition-name: agenda-panel;
+}
+::view-transition-group(agenda-panel) {
+  animation: none;
+}
+::view-transition-image-pair(agenda-panel) {
+  isolation: auto;
+}
+::view-transition-old(agenda-panel) {
+  animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both;
+  mix-blend-mode: normal;
+}
+::view-transition-new(agenda-panel) {
+  animation: motion-fade-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+  mix-blend-mode: normal;
+}
+
+/* Numa troca de TELA, o conteúdo, o painel e o indicador das abas viajam
+   dentro da foto da página (`page-content`), não por conta própria: as
+   classes de navegação entram em <html> antes da primeira foto. */
+html.vt-nav-forward .motion-stepped,
+html.vt-nav-back .motion-stepped,
+html.vt-nav-fade .motion-stepped,
+html.vt-nav-forward .agenda-day-detail,
+html.vt-nav-back .agenda-day-detail,
+html.vt-nav-fade .agenda-day-detail,
+html.vt-nav-forward .agenda-view-tabs .tab.is-active::after,
+html.vt-nav-back .agenda-view-tabs .tab.is-active::after,
+html.vt-nav-fade .agenda-view-tabs .tab.is-active::after {
+  view-transition-name: none;
+}
+
+/* Indicador das abas Dia/Semana/Mês: com a troca dentro de
+   `runViewTransition` (fase 2), o traço viaja para a aba escolhida em 240 ms
+   em vez de sumir e reaparecer. */
+.agenda-view-tabs .tab.is-active::after {
+  view-transition-name: agenda-tab-indicator;
+}
+::view-transition-group(agenda-tab-indicator) {
+  animation-duration: var(--at-duration-moderate);
+  animation-timing-function: var(--at-ease-standard);
+}
+::view-transition-old(agenda-tab-indicator) {
+  display: none;
+}
+::view-transition-new(agenda-tab-indicator) {
+  animation: none;
+}
+
+/* --- Agenda: entrada do conteúdo ----------------------------------------
+   O que nasce numa troca de visualização ou depois do skeleton entra com
+   fade e 8 px de subida. Só o bloco que muda — a barra de comando, a faixa
+   da semana e o botão "+ Novo" (fixo no celular) ficam parados. Quando a
+   mesma troca roda dentro de uma View Transition, a entrada por CSS cede a
+   vez: a foto nova já cobre o movimento. */
+.agenda-page .agenda-day-list,
+.agenda-page .agenda-day-empty,
+.agenda-page .week-map,
+.agenda-page .month-map {
+  animation: motion-rise-in var(--at-duration-base) var(--at-ease-standard) both;
+}
+html.is-view-transition .agenda-page .agenda-day-list,
+html.is-view-transition .agenda-page .agenda-day-empty,
+html.is-view-transition .agenda-page .week-map,
+html.is-view-transition .agenda-page .month-map,
+html.is-view-transition .motion-enter,
+html.is-view-transition .motion-enter-fade,
+html.is-view-transition .motion-enter-forward,
+html.is-view-transition .motion-enter-back {
+  animation-delay: -1s;
+}
+
+/* Troca de visão ou de período com a janela ainda na rede: o conteúdo atual
+   fica na tela (`aria-busy`) e uma linha fina corre no topo da área — nunca o
+   esqueleto da grade (pedido do usuário, 2026-10-12). */
+@keyframes motion-waiting-bar {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(400%);
+  }
+}
+.agenda-content {
+  position: relative;
+}
+.agenda-content.is-waiting::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  width: 25%;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: motion-waiting-bar 1s var(--at-ease-linear) infinite;
+  pointer-events: none;
+}
+
+/* --- Apresentação depois do splash da marca ------------------------------
+   Primeiro carregamento (F5, URL digitada): a tela monta por baixo do splash
+   e só aparece quando a primeira leitura dela terminou (`src/shared/motion/
+   splash.ts`). Nessa hora a raiz da tela recebe `is-presenting` por ~700 ms
+   e os blocos marcados entram escalonados — barra (1), grade/lista (2),
+   painel (3) —, cada um com fade e 8 px de subida em 240 ms, separados por
+   120 ms. É só no primeiro carregamento: trocar de dia ou de visão não
+   repete. Um bloco com `position: fixed` dentro (o "+ Novo" flutuante, na
+   barra da Agenda) só esmaece, porque o transform o deslocaria. */
+.is-presenting [data-present],
+.is-presenting > .pushed-bar,
+.is-presenting > .pushed-bar ~ *,
+.is-presenting .list-detail-flat .pushed-bar,
+.is-presenting .list-detail-flat .pushed-bar ~ *,
+.is-presenting .list-detail > .list-detail-panel,
+.agenda-flow-page.is-presenting > * {
+  --present-tier: 1;
+  animation: motion-rise-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+  animation-delay: calc((var(--present-tier) - 1) * var(--at-duration-instant));
+}
+.is-presenting [data-present="1"] {
+  animation-name: motion-fade-in;
+}
+/* Na Agenda, a grade é o primeiro bloco do conteúdo (lista do Dia, Semana,
+   Mês) e o painel é o que vem ao lado (detalhe do Dia) ou abaixo (resumo da
+   Semana). */
+.is-presenting .agenda-day-layout > .agenda-day-panel,
+.is-presenting .agenda-content > .week-map,
+.is-presenting .agenda-content > .month-map {
+  --present-tier: 1;
+  animation: motion-rise-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+  animation-delay: calc((var(--present-tier) - 1) * var(--at-duration-instant));
+}
+.is-presenting .agenda-content > .agenda-day-summary-card {
+  animation: motion-rise-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+  animation-delay: calc((var(--present-tier) - 1) * var(--at-duration-instant));
+}
+.is-presenting [data-present="2"],
+.is-presenting > .pushed-bar ~ *,
+.is-presenting .list-detail-flat .pushed-bar ~ *,
+.agenda-flow-page.is-presenting > :not(.agenda-flow-header),
+.is-presenting .agenda-day-layout > .agenda-day-panel,
+.is-presenting .agenda-content > .week-map,
+.is-presenting .agenda-content > .month-map {
+  --present-tier: 2;
+}
+.is-presenting [data-present="3"],
+.is-presenting .list-detail > .list-detail-panel,
+.is-presenting .agenda-content > .agenda-day-summary-card {
+  --present-tier: 3;
+}
+/* O bloco que entra pela apresentação já traz o seu movimento: o que está
+   dentro dele (lista do Dia, Semana, Mês, corpo do detalhe) não anima de
+   novo por conta própria. */
+.is-presenting .agenda-day-list,
+.is-presenting .agenda-day-empty,
+.is-presenting .agenda-reveal {
+  animation: none;
+}
+
+/* --- Movimento reduzido --------------------------------------------------
+   Sem movimento: o conteúdo troca no mesmo quadro. `tokens.css` já zera
+   duração de toda animação e transição; aqui o desligamento é explícito para
+   as regras deste arquivo e para as View Transitions, cujos pseudo-elementos
+   o bloqueio global (`*`) não alcança. */
+@media (prefers-reduced-motion: reduce) {
+  .motion-enter,
+  .motion-enter-fade,
+  .motion-enter-forward,
+  .motion-enter-back,
+  .agenda-page .agenda-day-list,
+  .agenda-page .agenda-day-empty,
+  .agenda-page .week-map,
+  .agenda-page .month-map {
+    animation: none;
+  }
+  .motion-press,
+  .tab {
+    transition: none;
+  }
+  /* A apresentação depois do splash não acontece: a tela aparece inteira no
+     mesmo quadro (o código nem liga `is-presenting`; aqui é a garantia). */
+  .is-presenting [data-present],
+  .is-presenting > .pushed-bar,
+  .is-presenting > .pushed-bar ~ *,
+  .is-presenting .list-detail-flat .pushed-bar,
+  .is-presenting .list-detail-flat .pushed-bar ~ *,
+  .is-presenting .list-detail > .list-detail-panel,
+  .agenda-flow-page.is-presenting > *,
+  .is-presenting .agenda-day-layout > .agenda-day-panel,
+  .is-presenting .agenda-content > .week-map,
+  .is-presenting .agenda-content > .month-map,
+  .is-presenting .agenda-content > .agenda-day-summary-card {
+    animation: none;
+  }
+  /* A linha de espera fica parada, ocupando a largura toda. */
+  .agenda-content.is-waiting::before {
+    width: 100%;
+    animation: none;
+  }
+  .motion-press:active {
+    transform: none;
+  }
+  ::view-transition-group(*),
+  ::view-transition-image-pair(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

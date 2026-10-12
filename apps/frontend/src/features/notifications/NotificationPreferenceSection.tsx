@@ -34,9 +34,10 @@ export function NotificationPreferenceSection() {
     setBusy(true);
     setMessage(null);
     try {
-      const preferences = await getProductServices().notifications.updatePreferences({
-        aiAppointmentCreated: next,
-      });
+      const preferences =
+        await getProductServices().notifications.updatePreferences({
+          aiAppointmentCreated: next,
+        });
       setEnabled(preferences.aiAppointmentCreated);
       setMessage(
         preferences.aiAppointmentCreated

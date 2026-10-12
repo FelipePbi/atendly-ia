@@ -270,12 +270,16 @@ function upstreamError(value: unknown): {
         details: details.details,
       };
     }
+    // Formato plano da IA (`{ ok, error, code, details, requestId }`): o
+    // código fica ao lado da mensagem, não dentro dela. Sem lê-lo aqui, toda
+    // recusa nomeada da IA chegava à tela como `UPSTREAM_ERROR` genérico.
     if (typeof record.error === "string") {
       return {
-        code: "UPSTREAM_ERROR",
+        code: typeof record.code === "string" ? record.code : "UPSTREAM_ERROR",
         message: record.error,
         requestId:
           typeof record.requestId === "string" ? record.requestId : undefined,
+        details: record.details,
       };
     }
   }

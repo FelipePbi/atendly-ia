@@ -192,7 +192,7 @@ describe("as cinco recusas têm copy própria e distinta", () => {
   test.each([
     [
       "CONTACT_IGNORED",
-      "Este contato está marcado para a IA não usar — sugestões não estão disponíveis.",
+      "Este contato está marcado para a IA não usar. Sugestões não estão disponíveis.",
     ],
     ["SESSION_PERSONAL", "Conversas pessoais não recebem sugestão da IA."],
     [

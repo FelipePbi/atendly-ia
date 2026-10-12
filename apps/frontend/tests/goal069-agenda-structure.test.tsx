@@ -101,7 +101,9 @@ describe("/agenda troca cabeçalho técnico e botões soltos por uma barra únic
     expect(screen.getAllByRole("button", { name: "Novo" })).toHaveLength(1);
   });
 
-  test("o menu '+ Novo' lista os três tipos, cada um com seu destino", async () => {
+  // Pedido de 2026-10-12 (D-169): bloqueio, compromisso pessoal e exceção
+  // do dia viraram uma linha só, "Bloquear horário".
+  test("o menu '+ Novo' lista Agendamento e Bloquear horário, cada um com seu destino", async () => {
     const user = userEvent.setup();
     renderPage(<AgendaPage />);
     await screen.findByText("Nenhum atendimento neste dia.");
@@ -113,11 +115,9 @@ describe("/agenda troca cabeçalho técnico e botões soltos por uma barra únic
       within(menu).getByRole("link", { name: "Agendamento" }),
     ).toHaveAttribute("href", "/agenda/novo");
     expect(
-      within(menu).getByRole("link", { name: "Compromisso pessoal" }),
-    ).toHaveAttribute("href", "/agenda/bloquear?type=PERSONAL");
-    expect(
-      within(menu).getByRole("link", { name: "Bloqueio" }),
-    ).toHaveAttribute("href", "/agenda/bloquear?type=BLOCK");
+      within(menu).getByRole("link", { name: "Bloquear horário" }),
+    ).toHaveAttribute("href", "/agenda/bloquear");
+    expect(within(menu).getAllByRole("link")).toHaveLength(2);
   });
 
   test("Escape fecha o menu e devolve o foco ao botão 'Novo'", async () => {
@@ -156,7 +156,7 @@ describe("/agenda troca cabeçalho técnico e botões soltos por uma barra únic
       within(menu).queryByRole("link", { name: "Agendamento" }),
     ).toBeNull();
     expect(
-      within(menu).getByRole("link", { name: "Compromisso pessoal" }),
+      within(menu).getByRole("link", { name: "Bloquear horário" }),
     ).toBeVisible();
   });
 
@@ -178,17 +178,18 @@ describe("/agenda troca cabeçalho técnico e botões soltos por uma barra únic
     expect(screen.queryByRole("button", { name: "Novo" })).toBeNull();
   });
 
-  test("'Exceção do dia' continua alcançável pelo menu e some sem manageAvailability", async () => {
+  test("fechar o dia continua alcançável pelo menu e some sem manageAvailability", async () => {
     // Goal092: o botão solto "Exceções do dia" virou o item "Exceção do dia"
-    // do menu "Novo".
+    // do menu "Novo"; desde D-169 (2026-10-12) fechar o dia é um tipo de
+    // "Bloquear horário".
     const user = userEvent.setup();
     const first = renderPage(<AgendaPage />);
     await user.click(await screen.findByRole("button", { name: "Novo" }));
     expect(
       within(screen.getByRole("dialog", { name: SHEET })).getByRole("link", {
-        name: "Exceção do dia",
+        name: "Bloquear horário",
       }),
-    ).toHaveAttribute("href", "/agenda/excecoes");
+    ).toHaveAttribute("href", "/agenda/bloquear");
     first.unmount();
 
     getCalendar.mockResolvedValue(
@@ -206,7 +207,7 @@ describe("/agenda troca cabeçalho técnico e botões soltos por uma barra únic
     await user.click(await screen.findByRole("button", { name: "Novo" }));
     expect(
       within(screen.getByRole("dialog", { name: SHEET })).queryByRole("link", {
-        name: "Exceção do dia",
+        name: "Bloquear horário",
       }),
     ).toBeNull();
   });
@@ -225,13 +226,20 @@ describe("/agenda troca cabeçalho técnico e botões soltos por uma barra únic
 });
 
 describe("BlockForm aceita o tipo inicial pela URL (Goal069 §1)", () => {
-  test("?type=PERSONAL abre com Compromisso pessoal selecionado", async () => {
+  // Desde a tela única de 2026-10-12 (D-169), `?type=` pré-configura as duas
+  // chaves: PERSONAL liga "É um compromisso pessoal" (com "Título e motivo"
+  // aberto), CLOSED liga "Dia inteiro"; BLOCK ou nada é a pausa no
+  // atendimento, com as duas desligadas.
+  test("?type=PERSONAL abre com a chave de compromisso pessoal ligada", async () => {
     window.history.pushState({}, "", "/agenda/bloquear?type=PERSONAL");
     renderPage(<BlockTimePage />);
 
     expect(
-      await screen.findByRole("radio", { name: /Compromisso pessoal/ }),
+      await screen.findByRole("switch", { name: "É um compromisso pessoal" }),
     ).toBeChecked();
+    expect(
+      screen.getByRole("button", { name: "Confirmar compromisso" }),
+    ).toBeVisible();
   });
 
   test("sem type na URL, abre em Bloqueio operacional (o padrão de hoje)", async () => {
@@ -239,8 +247,11 @@ describe("BlockForm aceita o tipo inicial pela URL (Goal069 §1)", () => {
     renderPage(<BlockTimePage />);
 
     expect(
-      await screen.findByRole("radio", { name: /Bloqueio operacional/ }),
-    ).toBeChecked();
+      await screen.findByRole("button", { name: "Confirmar bloqueio" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("switch", { name: "Dia inteiro" }),
+    ).not.toBeChecked();
   });
 
   test("?type=BLOCK abre em Bloqueio operacional explicitamente", async () => {
@@ -248,7 +259,10 @@ describe("BlockForm aceita o tipo inicial pela URL (Goal069 §1)", () => {
     renderPage(<BlockTimePage />);
 
     expect(
-      await screen.findByRole("radio", { name: /Bloqueio operacional/ }),
-    ).toBeChecked();
+      await screen.findByRole("button", { name: "Confirmar bloqueio" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("switch", { name: "Dia inteiro" }),
+    ).not.toBeChecked();
   });
 });

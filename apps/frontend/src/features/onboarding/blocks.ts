@@ -150,7 +150,11 @@ export function chapterProgress(scenario: OnboardingScenario): Array<{
           : "upcoming";
     return {
       fill:
-        status === "done" ? 1 : status === "current" ? chapterFraction(scenario) : 0,
+        status === "done"
+          ? 1
+          : status === "current"
+            ? chapterFraction(scenario)
+            : 0,
       id,
       label: onboardingBlockLabels[id],
       status,
@@ -164,7 +168,10 @@ export function progressPercent(scenario: OnboardingScenario): number {
   // não volta atrás. `teste-real-interferencia` fica no ponto do progresso,
   // porque a execução continua sendo aquela.
   if (scenario === "teste-real-sucesso") return 100;
-  if (scenario === "teste-real-falha" || scenario === "teste-real-interferencia") {
+  if (
+    scenario === "teste-real-falha" ||
+    scenario === "teste-real-interferencia"
+  ) {
     return progressPercent("teste-real-progresso");
   }
   // Desvio condicional: usa a posição do passo real que sempre o antecede.
@@ -173,7 +180,6 @@ export function progressPercent(scenario: OnboardingScenario): number {
     return progressPercent("sistema-atual");
   }
   const index = onboardingFlow.indexOf(scenario);
-  const position =
-    index >= 0 ? index : onboardingFlow.indexOf("sistema-atual");
+  const position = index >= 0 ? index : onboardingFlow.indexOf("sistema-atual");
   return Math.round(((position + 1) / onboardingFlow.length) * 100);
 }

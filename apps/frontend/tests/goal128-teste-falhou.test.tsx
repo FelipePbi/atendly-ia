@@ -127,7 +127,7 @@ const onboardingState: OnboardingState = {
 };
 
 const GENERIC_ADVICE =
-  "Tente de novo — pode ter sido uma falha momentânea. Seus serviços e horários foram conferidos antes de o teste começar.";
+  "Tente de novo. Pode ter sido uma falha momentânea. Seus serviços e horários foram conferidos antes de o teste começar.";
 const NOT_DELIVERED_ADVICE =
   "Confira se o seu WhatsApp continua conectado e tente de novo.";
 
@@ -202,7 +202,7 @@ describe("4.8: a linha do tempo até onde deu certo", () => {
     );
     expect(
       container.querySelector(".activation-timeline-row.is-failed"),
-    ).toHaveTextContent("Agenda consultada — não concluído");
+    ).toHaveTextContent("Agenda consultada: não concluído");
   });
 
   test("só a linha que falhou tem segunda linha", async () => {

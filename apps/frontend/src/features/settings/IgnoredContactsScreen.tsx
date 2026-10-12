@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import type { Conversation, IgnoredContactEntry, SettingsState } from "@/data";
+import type {
+  Conversation,
+  IgnoredContactEntry,
+  SettingsState,
+  WhatsappContact,
+} from "@/data";
 import { BffHttpError } from "@/data";
 import { schedulingRefusalCode } from "@/data/http/schedulingRefusal";
 import { Icon } from "@/shared/icons/Icon";
@@ -29,7 +34,12 @@ type ListStatus = "loading" | "ready" | "no-channel" | "error";
 type Pending = { id: string; kind: "add" | "ignore" | "remove" };
 type SearchResults =
   | { query: string; status: "loading" }
-  | { items: Conversation[]; query: string; status: "ready" }
+  | {
+      contacts: WhatsappContact[];
+      items: Conversation[];
+      query: string;
+      status: "ready";
+    }
   | { query: string; status: "error" };
 
 function firstLetter(value: string | null | undefined): string {
@@ -138,14 +148,28 @@ export function IgnoredContactsScreen({
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setResults({ query, status: "loading" });
-      getProductServices()
-        .conversations.list(
+      const services = getProductServices();
+      // Contatos do WhatsApp do número conectado entram junto das conversas
+      // (validação de 2026-10-11); sem eles, a busca segue só nas conversas.
+      const contacts = Promise.resolve()
+        .then(() =>
+          services.whatsapp.contacts(
+            { limit: SEARCH_LIMIT, search: query },
+            controller.signal,
+          ),
+        )
+        .then((list) => (list.available ? list.items : []))
+        .catch(() => [] as WhatsappContact[]);
+      Promise.all([
+        services.conversations.list(
           { ignored: false, limit: SEARCH_LIMIT, search: query },
           controller.signal,
-        )
-        .then((list) => {
+        ),
+        contacts,
+      ])
+        .then(([list, found]) => {
           if (controller.signal.aborted) return;
-          setResults({ items: list, query, status: "ready" });
+          setResults({ contacts: found, items: list, query, status: "ready" });
         })
         .catch(() => {
           if (controller.signal.aborted) return;
@@ -234,6 +258,25 @@ export function IgnoredContactsScreen({
     }
   }
 
+  async function ignoreContact(contact: WhatsappContact, name: string) {
+    if (pending) return;
+    setPending({ id: contact.phone, kind: "ignore" });
+    setMarkError(null);
+    setNotice("");
+    try {
+      await getProductServices().conversations.ignoreByPhone(
+        contact.phone,
+        true,
+        "SETTINGS",
+      );
+      entered(name);
+    } catch {
+      setMarkError("Não foi possível marcar este contato. Tente novamente.");
+    } finally {
+      setPending(null);
+    }
+  }
+
   async function addPhone() {
     if (pending) return;
     setPending({ id: query, kind: "add" });
@@ -258,6 +301,19 @@ export function IgnoredContactsScreen({
   }
 
   const matched = results?.query === query ? results : null;
+  // Contatos do aparelho que já não aparecem como conversa nem na lista.
+  const listed = new Set(items.map((entry) => entry.externalContactId));
+  const contactMatches =
+    matched?.status === "ready"
+      ? matched.contacts.filter(
+          (contact) =>
+            !listed.has(contact.phone) &&
+            !matched.items.some(
+              (conversation) =>
+                conversation.externalContactId === contact.phone,
+            ),
+        )
+      : [];
   const showBlock = query !== "" && (matched !== null || phoneLike);
 
   return (
@@ -301,11 +357,11 @@ export function IgnoredContactsScreen({
               <span className="wa-ignored-search-field">
                 {search === "" && (
                   <span aria-hidden="true" className="wa-ignored-search-hint">
-                    Buscar nas suas conversas ou digitar um número
+                    Buscar contatos ou digitar um número
                   </span>
                 )}
                 <input
-                  aria-label="Buscar nas suas conversas ou digitar um número"
+                  aria-label="Buscar contatos ou digitar um número"
                   type="search"
                   value={search}
                   onChange={(event) => {
@@ -318,13 +374,16 @@ export function IgnoredContactsScreen({
             {showBlock && (
               <div className="wa-ignored-card">
                 {matched === null || matched.status === "loading" ? (
-                  <p className="wa-ignored-hint">Buscando conversas...</p>
+                  <p className="wa-ignored-hint">Buscando contatos...</p>
                 ) : matched.status === "error" ? (
                   <p className="wa-ignored-hint" role="alert">
                     Não foi possível buscar suas conversas agora.
                   </p>
-                ) : matched.items.length === 0 ? (
-                  <p className="wa-ignored-hint">Nenhuma conversa encontrada.</p>
+                ) : matched.items.length === 0 &&
+                  contactMatches.length === 0 ? (
+                  <p className="wa-ignored-hint">
+                    Ninguém encontrado. Confira o nome ou digite o número.
+                  </p>
                 ) : (
                   <ul className="wa-ignored-rows">
                     {matched.items.map((conversation) => {
@@ -335,7 +394,9 @@ export function IgnoredContactsScreen({
                       const busy = pending?.id === conversation.id;
                       return (
                         <li className="wa-ignored-row" key={conversation.id}>
-                          <Avatar letter={firstLetter(conversation.customerName)} />
+                          <Avatar
+                            letter={firstLetter(conversation.customerName)}
+                          />
                           <div className="wa-ignored-text">
                             <span className="wa-ignored-name">{name}</span>
                             {!nameIsPhone && (
@@ -352,6 +413,36 @@ export function IgnoredContactsScreen({
                             onClick={() =>
                               void ignoreConversation(conversation, name)
                             }
+                          >
+                            {busy ? "Ignorando..." : "Ignorar"}
+                          </button>
+                        </li>
+                      );
+                    })}
+                    {contactMatches.map((contact) => {
+                      const phone = phoneLabel(contact.phone);
+                      const name = contact.name ?? phone;
+                      const busy = pending?.id === contact.phone;
+                      return (
+                        <li
+                          className="wa-ignored-row"
+                          key={`contact-${contact.phone}`}
+                        >
+                          <Avatar letter={firstLetter(contact.name)} />
+                          <div className="wa-ignored-text">
+                            <span className="wa-ignored-name">{name}</span>
+                            <span className="wa-ignored-caption is-phone">
+                              {contact.name
+                                ? `${phone} · Contato do WhatsApp`
+                                : "Contato do WhatsApp"}
+                            </span>
+                          </div>
+                          <button
+                            aria-label={`Ignorar ${name}`}
+                            className="wa-ignored-action is-neutral"
+                            disabled={pending !== null}
+                            type="button"
+                            onClick={() => void ignoreContact(contact, name)}
                           >
                             {busy ? "Ignorando..." : "Ignorar"}
                           </button>

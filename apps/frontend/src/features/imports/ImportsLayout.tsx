@@ -118,14 +118,10 @@ export function ReplaceAccountZone({ onReplace }: { onReplace: () => void }) {
     <div className="imports-danger-zone">
       <p className="imports-note">
         Prefere conectar outra conta do Minha Agenda? A importação atual será
-        descartada — isso não pode ser desfeito.
+        descartada. Isso não pode ser desfeito.
       </p>
       <div className="imports-actions">
-        <button
-          className="btn btn-secondary"
-          type="button"
-          onClick={onReplace}
-        >
+        <button className="btn btn-secondary" type="button" onClick={onReplace}>
           Conectar outra conta
         </button>
       </div>

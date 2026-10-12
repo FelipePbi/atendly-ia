@@ -95,7 +95,7 @@ Seleção múltipla:
 - Domicílio
 - Online
 
-Se local próprio, pedir endereço.
+Se local próprio, pedir endereço em campos separados: CEP, rua, número, complemento (opcional), bairro, cidade e estado. O número é obrigatório, salvo quando a pessoa marca "Sem número". Configurações › Negócio usa o mesmo formulário.
 
 Área de atendimento a domicílio pode ser configurada depois.
 
@@ -168,6 +168,10 @@ Mostrar conversa e eventos discretos como:
 
 No mobile esses eventos entram no próprio fluxo da demonstração.
 
+Abertura: o título aparece sozinho no centro e some, a descrição aparece no centro e some, e os dois ficam fixos no topo; só então a conversa começa, com "digitando…" antes de cada mensagem. "Continuar" só aparece depois da última mensagem. A sequência roda também com movimento reduzido.
+
+Toda conversa de exemplo (boas-vindas, demonstração, estilos da IA, prévia do teste real) usa o serviço real do negócio quando ele existe e fala do jeito do segmento escolhido (ex.: Barbearia "Fala! Quanto tá…", Unhas com 💅). Sem serviço, usa um serviço típico do segmento; sem segmento, o exemplo genérico.
+
 ## 8. Estilo
 
 Depois da demonstração:
@@ -192,6 +196,8 @@ Explicar conexão e permitir:
 - `Fazer isso depois`
 
 Se pular, onboarding é considerado concluído, mas IA fica inativa.
+
+Depois de conectar, a etapa opcional de contatos ignorados mostra as conversas que já chegaram na Avenly e os contatos do WhatsApp do número conectado (lidos na hora, nunca gravados), além de "Adicionar por telefone". Na primeira vez quase não há conversas, por isso os contatos do aparelho são a fonte principal. Configurações › WhatsApp › Contatos ignorados busca nas mesmas duas fontes.
 
 ## 10. Conclusão sem WhatsApp
 

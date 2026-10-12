@@ -28,7 +28,7 @@ export function RouteAnnouncer() {
     routeTitles.find(([pattern]) => pattern.test(pathname))?.[1] ?? "Avenly";
 
   useEffect(() => {
-    document.title = title === "Avenly" ? title : `${title} — Avenly`;
+    document.title = title === "Avenly" ? title : `${title} · Avenly`;
   }, [title]);
 
   return (

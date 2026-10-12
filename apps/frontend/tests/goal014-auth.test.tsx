@@ -54,7 +54,7 @@ describe("login e cadastro — integração real com erro junto ao campo", () =>
 
     expect(
       await screen.findByText(
-        "E-mail ou senha não conferem. Confira e tente de novo — ou recupere a senha.",
+        "E-mail ou senha não conferem. Confira e tente de novo ou recupere a senha.",
       ),
     ).toBeVisible();
     expect(screen.getByLabelText(/^Senha/)).toHaveAttribute(

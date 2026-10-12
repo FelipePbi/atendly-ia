@@ -49,6 +49,7 @@ const listIgnoredContacts = vi.fn();
 const listConversations = vi.fn();
 const ignoreByPhone = vi.fn();
 const setIgnored = vi.fn();
+const listWhatsappContacts = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
@@ -58,6 +59,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       listIgnoredContacts,
       setIgnored,
     },
+    whatsapp: { contacts: listWhatsappContacts },
   }),
 }));
 
@@ -139,6 +141,7 @@ beforeEach(() => {
     ignoredAt: null,
   });
   setIgnored.mockResolvedValue(conversation({ ignored: true }));
+  listWhatsappContacts.mockResolvedValue({ available: true, items: [] });
 });
 
 afterEach(() => {
@@ -255,7 +258,7 @@ describe("Goal140 a lista", () => {
     expect(screen.queryByText(/Remover não apaga nada/)).not.toBeInTheDocument();
     expect(
       screen.getByRole("searchbox", {
-        name: "Buscar nas suas conversas ou digitar um número",
+        name: "Buscar contatos ou digitar um número",
       }),
     ).toBeVisible();
   });
@@ -485,7 +488,7 @@ describe("Goal140 a busca", () => {
   async function typeSearch(text: string) {
     await userEvent.type(
       await screen.findByRole("searchbox", {
-        name: "Buscar nas suas conversas ou digitar um número",
+        name: "Buscar contatos ou digitar um número",
       }),
       text,
     );
@@ -535,12 +538,12 @@ describe("Goal140 a busca", () => {
     expect(listConversations.mock.calls[1]?.[0]).toMatchObject({ search: "mari" });
   });
 
-  test("sem resultado: Nenhuma conversa encontrada, sem Adicionar", async () => {
+  test("sem resultado: Ninguém encontrado, sem Adicionar", async () => {
     renderScreen();
 
     await typeSearch("zzz");
 
-    expect(await screen.findByText("Nenhuma conversa encontrada.")).toBeVisible();
+    expect(await screen.findByText("Ninguém encontrado. Confira o nome ou digite o número.")).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Adicionar" }),
     ).not.toBeInTheDocument();
@@ -591,7 +594,7 @@ describe("Goal140 a busca", () => {
     await screen.findByText("Mãe");
 
     await typeSearch("11 9999-000");
-    await screen.findByText("Nenhuma conversa encontrada.");
+    await screen.findByText("Ninguém encontrado. Confira o nome ou digite o número.");
     expect(
       screen.queryByRole("button", { name: "Adicionar" }),
     ).not.toBeInTheDocument();
@@ -805,5 +808,62 @@ describe("Goal140 a linha do W1", () => {
     expect(signal.aborted).toBe(false);
     view.unmount();
     expect(signal.aborted).toBe(true);
+  });
+});
+
+/**
+ * Contatos do WhatsApp do número conectado na busca (validação de
+ * 2026-10-11): quem ainda não conversou pela Avenly também pode ser ignorado.
+ */
+describe("a busca nos contatos do WhatsApp", () => {
+  test("mostra o contato do aparelho e Ignorar grava por telefone com SETTINGS", async () => {
+    listWhatsappContacts.mockResolvedValue({
+      available: true,
+      items: [
+        { name: "Felipe Borges", phone: "5511912345678" },
+        // Já está na lista: não aparece de novo na busca.
+        { name: "Mãe", phone: MAE.externalContactId },
+      ],
+    });
+    ignoreByPhone.mockResolvedValue({
+      contactId: "contact-felipe",
+      externalContactId: "5511912345678",
+      ignored: true,
+      ignoredAt: null,
+    });
+    renderScreen();
+    await screen.findByText(/Mãe/);
+
+    await userEvent.type(
+      screen.getByRole("searchbox", { name: "Buscar contatos ou digitar um número" }),
+      "Felipe",
+    );
+
+    const row = await rowOf("Felipe Borges");
+    expect(row).toHaveTextContent("Contato do WhatsApp");
+    expect(listWhatsappContacts).toHaveBeenLastCalledWith(
+      { limit: 20, search: "Felipe" },
+      expect.any(AbortSignal),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Ignorar Felipe Borges" }),
+    );
+    expect(ignoreByPhone).toHaveBeenCalledWith("5511912345678", true, "SETTINGS");
+    expect(await screen.findByText("Felipe Borges entrou na lista.")).toBeVisible();
+  });
+
+  test("sem a lista do aparelho, a busca segue nas conversas", async () => {
+    listWhatsappContacts.mockRejectedValue(new Error("rede"));
+    renderScreen();
+    await screen.findByText(/Mãe/);
+
+    await userEvent.type(
+      screen.getByRole("searchbox", { name: "Buscar contatos ou digitar um número" }),
+      "Felipe",
+    );
+
+    expect(
+      await screen.findByText("Ninguém encontrado. Confira o nome ou digite o número."),
+    ).toBeVisible();
   });
 });

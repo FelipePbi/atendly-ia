@@ -148,9 +148,15 @@ export function statusLabel(status: string): string {
 }
 
 export function requestError(caught: unknown, fallback: string): string {
-  if (caught instanceof BffHttpError) return caught.message;
-  if (caught instanceof Error && caught.message) return caught.message;
-  return fallback;
+  // Falha do servidor (5xx) ou de rede nunca chega crua na tela: "Internal
+  // server error." aparecia como descricao do erro da Agenda (validacao de
+  // 2026-10-12). So a recusa explicada pelo produto (4xx) mostra a mensagem.
+  if (caught instanceof BffHttpError) {
+    return caught.status >= 500
+      ? `${fallback} Tente novamente em instantes.`
+      : caught.message;
+  }
+  return `${fallback} Tente novamente em instantes.`;
 }
 
 /** Rótulo próprio de cada kind — nunca um texto genérico de "bloco" (Goal016). */
@@ -393,7 +399,9 @@ export function isFullDayClosure(entry: AgendaEntry): boolean {
  * Datas com pelo menos um agendamento ativo (Goal069 AG-01) — a faixa da
  * semana marca ponto só nelas, nunca em bloqueio, buffer ou exceção.
  */
-export function datesWithActiveAppointment(entries: AgendaEntry[]): Set<string> {
+export function datesWithActiveAppointment(
+  entries: AgendaEntry[],
+): Set<string> {
   const dates = new Set<string>();
   for (const entry of entries) {
     if (
@@ -535,11 +543,8 @@ export function outsideHoursRanges(
   if (!rules) return [];
   const open = rules
     .filter((rule) => rule.active && rule.dayOfWeek === dayOfWeek)
-    .map((rule) => [
-      timeToMinutes(rule.startTime),
-      timeToMinutes(rule.endTime),
-    ])
-    .sort((left, right) => (left[0]) - (right[0]));
+    .map((rule) => [timeToMinutes(rule.startTime), timeToMinutes(rule.endTime)])
+    .sort((left, right) => left[0] - right[0]);
   if (open.length === 0) return [];
   const ranges: Array<[number, number]> = [];
   let cursor = windowStart;
@@ -584,5 +589,8 @@ export function daySummaryHeading(date: string, isToday: boolean): string {
     .format(parsed)
     .replace(/-feira$/, "");
   if (isToday) return `Hoje, ${weekday} ${parsed.getDate()}`;
-  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${parsed.getDate()}`;
+  // Com virgula, como "Hoje, segunda 12" e o quadro A2 ("Domingo, 21"):
+  // sem ela o dia aberto mostrava "Terca 13" e o fechado "Terca, 13"
+  // (validacao de 2026-10-12).
+  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}, ${parsed.getDate()}`;
 }

@@ -16,6 +16,7 @@ import { AudioTranscriptionService } from "../media/audio-transcription.js";
 import { PrismaMessageAttachmentStore } from "../media/message-attachment-store.js";
 import { OpenAiTranscriptionProvider } from "../media/openai-transcription-provider.js";
 import { CustomerMemoryService } from "../memory/customer-memory-service.js";
+import { OutboxStore } from "../outbox/OutboxStore.js";
 import { SchedulingClient } from "../scheduling-service/client.js";
 import { SessionService } from "../session/SessionService.js";
 import { AssistantToolRegistry } from "../tools/assistant-tools.js";
@@ -104,6 +105,8 @@ export function buildInboundMessageProcessor(input: InboundProcessorInput) {
       customerMemory,
       serviceInstructions,
       transcription,
+      // Progresso do despacho em partes: o retry nao reenvia parte enviada.
+      replyDispatch: { progress: new OutboxStore(input.prisma) },
     },
   );
 }

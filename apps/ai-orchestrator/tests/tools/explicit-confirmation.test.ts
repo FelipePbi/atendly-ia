@@ -365,6 +365,36 @@ describe("confirmar sem rascunho e recusado", () => {
     }
   });
 
+  // Validação de 2026-10-11/12: depois de um agendamento já confirmado, um
+  // "oi" da cliente fez a IA tentar confirmar de novo; a recusa dizia que nada
+  // tinha sido marcado e a IA ofereceu marcar o mesmo horário. A recusa agora
+  // manda conferir a agenda antes e dá o formato da pergunta de confirmação.
+  it("confirmar de novo um agendamento ja confirmado orienta a listar a agenda, sem dizer que nada foi marcado", async () => {
+    const { registry, effects } = subject();
+
+    await registry.execute(prepareScheduleCall, context(firstTurn));
+    const confirmed = await registry.execute(confirmScheduleCall, context(secondTurn));
+    expect(confirmed.ok).toBe(true);
+
+    const again = await registry.execute(
+      { ...confirmScheduleCall, id: "call-confirm-schedule-de-novo" },
+      context("channel-1:message-3"),
+    );
+
+    expect(again).toMatchObject({
+      ok: false,
+      error: { code: "NO_PENDING_CONFIRMATION" },
+    });
+    const message = again.ok ? "" : again.error.message;
+    expect(message).toContain("list_customer_appointments");
+    expect(message.indexOf("list_customer_appointments")).toBeLessThan(
+      message.indexOf("action=prepare"),
+    );
+    expect(message).toContain("Só confirmando: posso marcar");
+    expect(message).not.toMatch(/nada foi marcado/i);
+    expect(effects.createAppointment).toHaveLength(1);
+  });
+
   it("recusa confirmar a serie com reserva que nao veio do rascunho desta conversa", async () => {
     const { registry, effects } = subject();
 

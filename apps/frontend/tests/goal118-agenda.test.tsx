@@ -232,7 +232,7 @@ describe("A2 — dia vazio num dia em que o negócio não atende", () => {
     expect(screen.queryByText(/você não atende/)).toBeNull();
     expect(screen.queryByText(/A IA não marca horários/)).toBeNull();
     expect(document.querySelector(".agenda-day-summary")).toHaveTextContent(
-      "Quarta 30",
+      "Quarta, 30",
     );
     expect(document.querySelector(".agenda-day-summary")).toHaveTextContent(
       "0 atendimentos",
@@ -293,7 +293,10 @@ describe("A2 — dia vazio num dia em que o negócio não atende", () => {
 });
 
 describe("A4 — a folha 'O que você quer adicionar?'", () => {
-  test("Novo abre uma folha com nome acessível, quatro linhas com título e descrição, e foco dentro", async () => {
+  // Pedido de 2026-10-12 (D-169): bloqueio, compromisso pessoal e exceção
+  // do dia viraram uma linha só, "Bloquear horário"; o horário extra foi
+  // para Configurações > Agenda.
+  test("Novo abre uma folha com nome acessível, duas linhas com título e descrição, e foco dentro", async () => {
     const user = setup();
     await renderBoard();
 
@@ -307,19 +310,9 @@ describe("A4 — a folha 'O que você quer adicionar?'", () => {
     const rows: Array<[string, string, string]> = [
       ["Agendamento", "Atendimento para um cliente", "/agenda/novo"],
       [
-        "Compromisso pessoal",
-        "Ocupa a agenda sem cliente — a IA não marca por cima",
-        "/agenda/bloquear?type=PERSONAL",
-      ],
-      [
-        "Bloqueio",
-        "Horário indisponível, uma vez ou toda semana",
-        "/agenda/bloquear?type=BLOCK",
-      ],
-      [
-        "Exceção do dia",
-        "Atender ou fechar um dia fora do horário de sempre",
-        "/agenda/excecoes",
+        "Bloquear horário",
+        "Pausa, compromisso ou dia fechado",
+        "/agenda/bloquear",
       ],
     ];
     const links = within(sheet).getAllByRole("link");
@@ -335,7 +328,7 @@ describe("A4 — a folha 'O que você quer adicionar?'", () => {
     await expectNoA11yViolations(sheet);
   });
 
-  test("Agendamento só com createAppointments; os outros três só com manageAvailability", async () => {
+  test("Agendamento só com createAppointments; Bloquear horário só com manageAvailability", async () => {
     getCalendar.mockResolvedValue(
       calendarFixture({ createAppointments: true, manageAvailability: false }),
     );
@@ -359,11 +352,7 @@ describe("A4 — a folha 'O que você quer adicionar?'", () => {
       within(sheet)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual([
-      expect.stringContaining("Compromisso pessoal"),
-      expect.stringContaining("Bloqueio"),
-      expect.stringContaining("Exceção do dia"),
-    ]);
+    ).toEqual([expect.stringContaining("Bloquear horário")]);
     expect(
       within(sheet).queryByRole("link", { name: "Agendamento" }),
     ).toBeNull();
@@ -423,7 +412,7 @@ describe("A4 — a folha 'O que você quer adicionar?'", () => {
     await renderBoard();
     await user.click(screen.getByRole("button", { name: "Novo" }));
 
-    await user.click(screen.getByRole("link", { name: "Bloqueio" }));
+    await user.click(screen.getByRole("link", { name: "Bloquear horário" }));
 
     expect(screen.queryByRole("dialog")).toBeNull();
   });
@@ -520,8 +509,9 @@ function seedMonthData() {
   );
 }
 
-const SEPTEMBER_GRID = { endDate: "2026-10-04", startDate: "2026-08-31" };
-const OCTOBER_GRID = { endDate: "2026-11-01", startDate: "2026-09-28" };
+// A grade tem sempre seis semanas (42 dias), então a janela lida também.
+const SEPTEMBER_GRID = { endDate: "2026-10-11", startDate: "2026-08-31" };
+const OCTOBER_GRID = { endDate: "2026-11-08", startDate: "2026-09-28" };
 
 function titleButton(month = "Setembro") {
   return screen.getByRole("button", {
@@ -656,7 +646,7 @@ describe("A3 — o mini-calendário aberto pelo título", () => {
     );
     await waitFor(() =>
       expect(document.querySelector(".agenda-day-summary")).toHaveTextContent(
-        "Terça 15",
+        "Terça, 15",
       ),
     );
   });
@@ -718,7 +708,7 @@ describe("A3 — o mini-calendário aberto pelo título", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     await waitFor(() =>
       expect(document.querySelector(".agenda-day-summary")).toHaveTextContent(
-        "Quarta 30",
+        "Quarta, 30",
       ),
     );
   });

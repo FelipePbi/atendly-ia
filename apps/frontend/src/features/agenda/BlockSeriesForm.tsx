@@ -12,7 +12,9 @@ import {
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
+import { DateField, TimeField } from "@/shared/ui/pickers/PickerFields";
 
+import { recalledCalendar, rememberCalendar } from "./agendaMemory";
 import {
   AppointmentFlowShell,
   ReadOnlyState,
@@ -43,7 +45,11 @@ const KINDS: Array<{ kind: TimeBlockKind; title: string }> = [
  * tela escolhe exatamente uma das duas, nunca as duas nem nenhuma.
  */
 export function BlockSeriesForm() {
-  const [calendar, setCalendar] = useState<CalendarState | null>(null);
+  // O calendário que a Agenda já leu nesta aba entra na hora (D-167); a
+  // leitura abaixo revalida. Sem ele, a tela carrega como antes (D-168).
+  const [calendar, setCalendar] = useState<CalendarState | null>(
+    recalledCalendar,
+  );
   const [kind, setKind] = useState<TimeBlockKind>("BLOCK");
   const [title, setTitle] = useState("");
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>([]);
@@ -59,7 +65,7 @@ export function BlockSeriesForm() {
     reason: string;
     reasonError: string | null;
   } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(calendar === null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,7 +73,10 @@ export function BlockSeriesForm() {
     const controller = new AbortController();
     getProductServices()
       .calendar.getCalendar(controller.signal)
-      .then(setCalendar)
+      .then((result) => {
+        setCalendar(result);
+        rememberCalendar(result);
+      })
       .catch((caught: unknown) => {
         if (!controller.signal.aborted)
           setError(requestError(caught, "Não foi possível carregar a agenda."));
@@ -164,7 +173,10 @@ export function BlockSeriesForm() {
     if (!conflict || busy) return;
     const reason = conflict.reason.trim();
     if (!reason) {
-      setConflict({ ...conflict, reasonError: "Informe o motivo da sobreposição." });
+      setConflict({
+        ...conflict,
+        reasonError: "Informe o motivo da sobreposição.",
+      });
       return;
     }
     setBusy(true);
@@ -206,7 +218,10 @@ export function BlockSeriesForm() {
             <p className="eyebrow">Série criada</p>
             <h2>{created.title ?? timeBlockKindLabel(created.kind)}</h2>
             <div className="agenda-summary-list">
-              <SummaryRow label="Tipo" value={timeBlockKindLabel(created.kind)} />
+              <SummaryRow
+                label="Tipo"
+                value={timeBlockKindLabel(created.kind)}
+              />
               <SummaryRow
                 label="Dias"
                 value={created.daysOfWeek
@@ -222,7 +237,7 @@ export function BlockSeriesForm() {
                 value={
                   created.seriesEndDate
                     ? `Até ${formatDate(created.seriesEndDate)}`
-                    : `${created.occurrenceCount ?? "—"} ocorrências`
+                    : `${created.occurrenceCount ?? "-"} ocorrências`
                 }
               />
             </div>
@@ -246,7 +261,10 @@ export function BlockSeriesForm() {
         />
       ) : (
         <div className="agenda-flow-layout">
-          <form className="agenda-form-card" onSubmit={(event) => void submit(event)}>
+          <form
+            className="agenda-form-card"
+            onSubmit={(event) => void submit(event)}
+          >
             <h2>Tipo</h2>
             <fieldset>
               <legend className="sr-only">Tipo de série</legend>
@@ -310,30 +328,27 @@ export function BlockSeriesForm() {
               </label>
               <label className="field">
                 <span>Início</span>
-                <input
+                <TimeField
                   required
-                  type="time"
                   value={startTime}
-                  onChange={(event) => setStartTime(event.target.value)}
+                  onValueChange={(value) => setStartTime(value)}
                 />
               </label>
               <label className="field">
                 <span>Fim</span>
-                <input
+                <TimeField
                   required
-                  type="time"
                   value={endTime}
-                  onChange={(event) => setEndTime(event.target.value)}
+                  onValueChange={(value) => setEndTime(value)}
                 />
               </label>
               <label className="field">
                 <span>Início da série</span>
-                <input
+                <DateField
                   min={isoDate(new Date())}
                   required
-                  type="date"
                   value={seriesStartDate}
-                  onChange={(event) => setSeriesStartDate(event.target.value)}
+                  onValueChange={(value) => setSeriesStartDate(value)}
                 />
               </label>
             </div>
@@ -352,13 +367,12 @@ export function BlockSeriesForm() {
                     />{" "}
                     Até uma data
                   </label>
-                  <input
+                  <DateField
                     aria-label="Data final da série"
                     disabled={termination !== "date"}
                     min={seriesStartDate}
-                    type="date"
                     value={seriesEndDate}
-                    onChange={(event) => setSeriesEndDate(event.target.value)}
+                    onValueChange={(value) => setSeriesEndDate(value)}
                   />
                 </div>
                 <div className="field">
@@ -404,7 +418,7 @@ export function BlockSeriesForm() {
               value={
                 daysOfWeek.length
                   ? daysOfWeek.map((day) => WEEKDAY_LABELS[day]).join(", ")
-                  : "—"
+                  : "-"
               }
             />
             <SummaryRow label="Horário" value={`${startTime}–${endTime}`} />
@@ -501,7 +515,12 @@ export function SeriesConflictPanel({
         >
           Ajustar a série
         </Button>
-        <Button loading={busy} onClick={onSkip} type="button" variant="secondary">
+        <Button
+          loading={busy}
+          onClick={onSkip}
+          type="button"
+          variant="secondary"
+        >
           Pular estas ocorrências
         </Button>
         <Button loading={busy} onClick={onForce} type="button" variant="danger">

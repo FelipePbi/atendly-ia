@@ -48,7 +48,11 @@ export function AuthorizationControl({
 
   if (variant === "tag") {
     return (
-      <label className={authorized ? "customer-check is-tag is-on" : "customer-check is-tag"}>
+      <label
+        className={
+          authorized ? "customer-check is-tag is-on" : "customer-check is-tag"
+        }
+      >
         <input
           aria-label={`IA pode usar a tag ${subject ?? ""}`.trim()}
           checked={authorized}
@@ -66,7 +70,11 @@ export function AuthorizationControl({
   }
 
   return (
-    <label className={authorized ? "customer-check is-note is-on" : "customer-check is-note"}>
+    <label
+      className={
+        authorized ? "customer-check is-note is-on" : "customer-check is-note"
+      }
+    >
       <input
         aria-describedby={hintId}
         aria-labelledby={titleId}

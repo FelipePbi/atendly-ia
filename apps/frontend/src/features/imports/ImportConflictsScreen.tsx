@@ -101,7 +101,9 @@ export function ImportConflictsScreen({
   const [shown] = useState(() =>
     CATEGORY_ORDER.flatMap((category) => {
       if (initialCategory && category !== initialCategory) return [];
-      const entry = categories.find((candidate) => candidate.category === category);
+      const entry = categories.find(
+        (candidate) => candidate.category === category,
+      );
       return entry ? [entry] : [];
     }),
   );
@@ -134,7 +136,8 @@ export function ImportConflictsScreen({
             controller.signal,
           ),
         ).then((page) => {
-          if (!page || !Array.isArray(page.items)) throw new Error("invalid page");
+          if (!page || !Array.isArray(page.items))
+            throw new Error("invalid page");
           return page;
         }),
       ),
@@ -163,7 +166,9 @@ export function ImportConflictsScreen({
   }, []);
 
   const loading = reads === null;
-  const orderedItems = shown.flatMap((entry) => reads?.[entry.category]?.items ?? []);
+  const orderedItems = shown.flatMap(
+    (entry) => reads?.[entry.category]?.items ?? [],
+  );
   const firstUndecided = orderedItems.find((item) => !records[item.id]);
   const openId =
     picked &&
@@ -188,7 +193,11 @@ export function ImportConflictsScreen({
       const page = await getProductServices().migration.listImportItems(
         sessionId,
         category,
-        { status: "NEEDS_REVIEW", limit: PAGE_SIZE, offset: undecidedLoaded(category) },
+        {
+          status: "NEEDS_REVIEW",
+          limit: PAGE_SIZE,
+          offset: undecidedLoaded(category),
+        },
         controllerRef.current?.signal,
       );
       if (controllerRef.current?.signal.aborted) return;
@@ -200,7 +209,10 @@ export function ImportConflictsScreen({
           ...current,
           [category]: {
             decidedSince: 0,
-            items: [...read.items, ...page.items.filter((item) => !known.has(item.id))],
+            items: [
+              ...read.items,
+              ...page.items.filter((item) => !known.has(item.id)),
+            ],
             total: page.total,
           },
         };
@@ -229,9 +241,13 @@ export function ImportConflictsScreen({
     }
     // O próximo cartão sem decisão, na ordem, abre sozinho; no fim da lista,
     // o primeiro que sobrou.
-    const index = orderedItems.findIndex((candidate) => candidate.id === item.id);
+    const index = orderedItems.findIndex(
+      (candidate) => candidate.id === item.id,
+    );
     const following =
-      orderedItems.slice(index + 1).find((candidate) => !nextRecords[candidate.id]) ??
+      orderedItems
+        .slice(index + 1)
+        .find((candidate) => !nextRecords[candidate.id]) ??
       orderedItems.find((candidate) => !nextRecords[candidate.id]);
     setPicked(following?.id ?? null);
   }
@@ -351,12 +367,17 @@ function itemTitle(item: ImportItem): string {
 }
 
 function serviceValues(
-  values: Pick<ImportServiceCandidate, "durationMinutes" | "price" | "priceType">,
+  values: Pick<
+    ImportServiceCandidate,
+    "durationMinutes" | "price" | "priceType"
+  >,
 ): string {
   return `${formatServiceDuration(values.durationMinutes)} · ${formatServicePrice(values)}`;
 }
 
-function proposedValues(proposed: ImportProposedService | null | undefined): string {
+function proposedValues(
+  proposed: ImportProposedService | null | undefined,
+): string {
   return proposed ? serviceValues(proposed) : "Valores não informados";
 }
 
@@ -440,7 +461,11 @@ function ConflictCard({
           )}
           <span className="imports-conflict-result" role="status">
             <CheckMark />
-            {conflictResultLabel(item.category, record.decision, record.targetName)}
+            {conflictResultLabel(
+              item.category,
+              record.decision,
+              record.targetName,
+            )}
           </span>
         </div>
       </li>
@@ -458,7 +483,9 @@ function ConflictCard({
         >
           <span className="imports-conflict-closed-text">
             <span className="imports-conflict-name">{title}</span>{" "}
-            <span className="imports-conflict-reason is-closed">{shortReason}</span>
+            <span className="imports-conflict-reason is-closed">
+              {shortReason}
+            </span>
           </span>
           <ChevronDown />
         </button>
@@ -526,7 +553,9 @@ function ConflictCard({
       type="button"
       onClick={() => void submit("exclude-text", "EXCLUDE")}
     >
-      {submittingKey === "exclude-text" ? "Enviando..." : "Não importar este item"}
+      {submittingKey === "exclude-text"
+        ? "Enviando..."
+        : "Não importar este item"}
     </button>
   );
   const choiceRow = (candidate: ImportItemCandidate, value?: string) => (
@@ -662,7 +691,11 @@ function ConflictCard({
         </div>
         <div className="imports-conflict-actions">
           {decisionButton("exclude", "EXCLUDE", "Manter meus horários")}
-          {decisionButton("include", "INCLUDE", "Usar os horários da Minha Agenda")}
+          {decisionButton(
+            "include",
+            "INCLUDE",
+            "Usar os horários da Minha Agenda",
+          )}
         </div>
       </>
     );
@@ -675,14 +708,18 @@ function ConflictCard({
     body = (
       <>
         <p className="imports-conflict-question">
-          {matchGone ? SUGGESTED_RECORD_GONE : conflictReasonLabel(item.reasonCode)}
+          {matchGone
+            ? SUGGESTED_RECORD_GONE
+            : conflictReasonLabel(item.reasonCode)}
         </p>
         <div className="imports-conflict-actions">
           {matchGone
             ? decisionButton(
                 "new",
                 "CREATE_NEW",
-                item.category === "SERVICE" ? "Criar outro serviço" : "Manter separadas",
+                item.category === "SERVICE"
+                  ? "Criar outro serviço"
+                  : "Manter separadas",
               )
             : decisionButton("include", "INCLUDE", "Importar mesmo assim")}
           {decisionButton("exclude", "EXCLUDE", "Não importar")}
@@ -719,7 +756,9 @@ function pieceName(
   count: number,
 ): string | undefined {
   if (count > 1) return candidate.name;
-  const label = (item.label ?? item.externalId).trim().toLocaleLowerCase("pt-BR");
+  const label = (item.label ?? item.externalId)
+    .trim()
+    .toLocaleLowerCase("pt-BR");
   return candidate.name.trim().toLocaleLowerCase("pt-BR") === label
     ? undefined
     : candidate.name;

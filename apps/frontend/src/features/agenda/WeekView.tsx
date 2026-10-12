@@ -1,8 +1,12 @@
 "use client";
 
 import clsx from "clsx";
+import Link from "next/link";
 import { type CSSProperties, useEffect, useState } from "react";
 
+import { type TimeBlock } from "@/data";
+
+import { agendaDayHref, appointmentHref } from "./agendaLinks";
 import {
   addDays,
   type AgendaEntry,
@@ -19,6 +23,11 @@ import {
   serviceLegend,
 } from "./occupancy";
 import { entryPlacement, layoutDayEntries } from "./timeGrid";
+import {
+  abbreviateClientName,
+  LIGHT_INK,
+  weekBarLabelInk,
+} from "./weekBarLabel";
 
 const WEEKDAY_LABELS = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
 const MAP_START_HOUR = 8;
@@ -54,6 +63,26 @@ function weekRangeLabel(days: Date[]): string {
   return `${first.getDate()} de ${monthName(first)} – ${last.getDate()} de ${monthName(last)}`;
 }
 
+function gridHours(startHour: number, endHour: number): number[] {
+  return Array.from(
+    { length: endHour - startHour },
+    (_, index) => startHour + index,
+  );
+}
+
+function longDayLabel(day: Date): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "numeric",
+    month: "long",
+    weekday: "long",
+  }).format(day);
+}
+
+/** "quinta, 15 de outubro": o nome do cabeçalho diz o dia que ele mostra. */
+function shortDayLabel(day: Date): string {
+  return longDayLabel(day).replace("-feira", "");
+}
+
 function useNow(): Date {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -67,14 +96,29 @@ export function WeekView({
   availabilityRules = null,
   entries,
   hiddenWeekdays = [],
+  onCreateAt,
+  onSelectBlock,
   onSelectDay,
+  selectedBlockId = null,
+  selectedDate = null,
   serviceColors,
   start,
 }: {
   availabilityRules?: AvailabilityRuleLike[] | null;
   entries: AgendaEntry[];
   hiddenWeekdays?: number[];
+  /** Hora vazia da grade abre o "Novo" da Agenda nesse dia e hora; ausente sem permissão de criar. */
+  onCreateAt?: (date: string, time: string) => void;
+  /** Bloqueio e compromisso pessoal abrem as ações da ocorrência, como no Dia. */
+  onSelectBlock?: (block: TimeBlock) => void;
+  /**
+   * O cabeçalho de um dia o escolhe para o resumo abaixo da grade, sem sair
+   * da Semana (pedido de 2026-10-12); "Abrir dia" no resumo é que leva ao Dia.
+   */
   onSelectDay: (date: Date) => void;
+  selectedBlockId?: string | null;
+  /** O dia escolhido: coluna com fundo suave e número cheio, com `aria-pressed`. */
+  selectedDate?: string | null;
   /** serviceId para colorToken, lido do catálogo; vazio deixa o traço neutro. */
   serviceColors?: ServiceColorMap;
   start: string;
@@ -103,7 +147,11 @@ export function WeekView({
   } as CSSProperties;
 
   return (
-    <section aria-label="Mapa da semana" className="week-map" style={windowStyle}>
+    <section
+      aria-label="Mapa da semana"
+      className="week-map"
+      style={windowStyle}
+    >
       <div className="week-map-summary">
         <span className="week-map-range">{weekRangeLabel(days)}</span>
         <span className="week-map-count">
@@ -134,10 +182,21 @@ export function WeekView({
               startHour * 60,
               endHour * 60,
             );
+            const isSelected = iso === selectedDate;
             return (
-              <div className="week-map-day" key={iso}>
+              <div
+                className={clsx("week-map-day", isSelected && "is-selected")}
+                key={iso}
+              >
+                {/* Nome acessivel comeca pelo texto visivel ("QUI 15"),
+                    WCAG 2.5.3: quem usa comando de voz diz o que ve. */}
                 <button
-                  className={clsx("week-map-head", isToday && "is-today")}
+                  aria-pressed={isSelected}
+                  className={clsx(
+                    "week-map-head",
+                    isToday && "is-today",
+                    isSelected && "is-selected",
+                  )}
                   onClick={() => onSelectDay(day)}
                   type="button"
                 >
@@ -145,6 +204,9 @@ export function WeekView({
                     {WEEKDAY_LABELS[(day.getDay() + 6) % 7]}
                   </span>
                   <span className="week-map-date">{day.getDate()}</span>
+                  <span className="sr-only">
+                    {`, mostrar ${shortDayLabel(day)}`}
+                  </span>
                 </button>
                 <div className="week-map-column">
                   {outside.map(([from, to]) => (
@@ -161,6 +223,25 @@ export function WeekView({
                       }
                     />
                   ))}
+                  {/* Uma hora vazia é um botão por baixo das barras: a barra
+                   * por cima recebe o clique dela, o resto da hora abre o
+                   * "Novo" (validação de 2026-10-12: clicar na grade não fazia nada). */}
+                  {onCreateAt &&
+                    gridHours(startHour, endHour).map((hour) => {
+                      const time = `${String(hour).padStart(2, "0")}:00`;
+                      return (
+                        <button
+                          aria-label={`Novo às ${time}, ${longDayLabel(day)}`}
+                          className="week-map-slot"
+                          key={hour}
+                          onClick={() => onCreateAt(iso, time)}
+                          style={
+                            { "--start": hour - startHour } as CSSProperties
+                          }
+                          type="button"
+                        />
+                      );
+                    })}
                   {layoutDayEntries(dayEntries).map(({ entry, lane }) => (
                     <WeekEntryBar
                       colors={colors}
@@ -168,6 +249,8 @@ export function WeekView({
                       isPast={isToday && entry.endMinutes <= nowMinutes}
                       key={entry.key}
                       lane={lane}
+                      onSelectBlock={onSelectBlock}
+                      selectedBlockId={selectedBlockId}
                       startHour={startHour}
                     />
                   ))}
@@ -221,12 +304,16 @@ function WeekEntryBar({
   entry,
   isPast,
   lane,
+  onSelectBlock,
+  selectedBlockId,
   startHour,
 }: {
   colors: ServiceColorMap;
   entry: AgendaEntry;
   isPast: boolean;
   lane: { index: number; total: number };
+  onSelectBlock?: (block: TimeBlock) => void;
+  selectedBlockId: string | null;
   startHour: number;
 }) {
   const presentation = describeEntry(entry);
@@ -245,7 +332,9 @@ function WeekEntryBar({
     .join(", ")}`;
 
   const appointment = entry.kind === "appointment" ? entry.appointment : null;
-  const tokens = appointment ? appointmentServiceColors(appointment, colors) : [];
+  const tokens = appointment
+    ? appointmentServiceColors(appointment, colors)
+    : [];
   const serviceText = appointment
     ? appointment.services.map((service) => service.name).join(" + ") ||
       appointment.title ||
@@ -261,15 +350,13 @@ function WeekEntryBar({
         }`
       : presentation.detail);
 
-  return (
-    <div
-      aria-label={label}
-      className={clsx("week-bar", `is-${entry.kind}`, {
-        "is-no-show": presentation.isNoShow,
-        "is-past": isPast,
-      })}
-      style={entryPlacement(entry, startHour, lane)}
-    >
+  const className = clsx("week-bar", `is-${entry.kind}`, {
+    "is-no-show": presentation.isNoShow,
+    "is-past": isPast,
+  });
+  const style = entryPlacement(entry, startHour, lane);
+  const content = (
+    <>
       {appointment && (
         <>
           <i
@@ -284,6 +371,20 @@ function WeekEntryBar({
             <span className="week-bar-name">{presentation.title}</span>
             <span className="week-bar-sub is-inline">{subText}</span>
           </span>
+          {/* Celular (pedido de 2026-10-12): o nome abreviado, na cor que
+           * contrasta com o traço; só visual, o nome acessível é o `label`. */}
+          <span
+            aria-hidden="true"
+            className={clsx(
+              "week-bar-label",
+              weekBarLabelInk(tokens, isPast) === LIGHT_INK && "is-light",
+            )}
+            style={{ color: weekBarLabelInk(tokens, isPast) }}
+          >
+            {appointment.customer?.name?.trim()
+              ? abbreviateClientName(appointment.customer.name)
+              : presentation.title}
+          </span>
         </>
       )}
       {!appointment && (
@@ -292,6 +393,43 @@ function WeekEntryBar({
           <span className="week-bar-sub">{subText}</span>
         </span>
       )}
+    </>
+  );
+
+  // O cartão abre o mesmo detalhe do Dia e do Mês (validação de 2026-10-12:
+  // clicar no atendimento na Semana não fazia nada).
+  if (appointment) {
+    return (
+      <Link
+        aria-label={label}
+        className={className}
+        href={appointmentHref(appointment.id, agendaDayHref(appointment.date))}
+        style={style}
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  const block = entry.timeBlock;
+  if (block && onSelectBlock) {
+    return (
+      <button
+        aria-label={label}
+        aria-pressed={block.id === selectedBlockId}
+        className={className}
+        onClick={() => onSelectBlock(block)}
+        style={style}
+        type="button"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div aria-label={label} className={className} style={style}>
+      {content}
     </div>
   );
 }

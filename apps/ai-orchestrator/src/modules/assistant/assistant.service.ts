@@ -13,6 +13,7 @@ import {
   toErrorMessage,
 } from "../../lib/errors.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
+import type { RecordedInboundText } from "../channel/InboundMessageProcessor.js";
 import { deriveTurnId } from "../graph/graph-state.js";
 import {
   audioNotUnderstoodReply,
@@ -49,7 +50,7 @@ import {
 } from "../model/model-provider.js";
 import type { ServiceInstructionPromptItem } from "../prompts/service-instructions.js";
 import { buildStyleGreeting } from "../prompts/style.js";
-import { buildSystemPrompt } from "../prompts/system.js";
+import { buildSystemPrompt, farewellForNow } from "../prompts/system.js";
 import type { CategorySuggestionPort } from "../session/SessionService.js";
 import {
   AI_CONVERSATION_STYLES,
@@ -104,6 +105,12 @@ export interface AssistantReply {
   messageRecordId: string;
   /** Operation-id da tentativa de saida, ja persistido com estado PENDING. */
   correlationId?: string;
+  /**
+   * A IA decidiu parar sem responder: o contato nao e cliente (ver
+   * `isSilentPause`). Nao existe linha de saida; `text` e
+   * `messageRecordId` vem vazios.
+   */
+  silent?: boolean;
 }
 
 export interface GenerateSuggestionsInput {
@@ -160,6 +167,12 @@ export interface AssistantGraphSession {
   aiRunId?: string;
   immediateDecision?: AiDecision;
   lastResponseText?: string;
+  /** Ver `confirmationWithoutDraftNudge`: no maximo um aviso por turno. */
+  confirmationNudged?: boolean;
+  /** Ver `describedToolCallNudge`: no maximo um aviso por turno. */
+  toolCallNudged?: boolean;
+  /** Ver `claimWithoutEffectNudge`: no maximo um aviso por turno. */
+  claimNudged?: boolean;
 }
 
 export interface AssistantGraphAgentStep {
@@ -294,15 +307,15 @@ interface StoredConversationState extends Record<string, unknown> {
  */
 const PRODUCT_OWN_FIXED_TEXTS = {
   handoffToTeam:
-    "Vou chamar uma pessoa da equipe pra te responder com atencao por aqui, ta?",
+    "Vou chamar uma pessoa da equipe pra te responder com atenção por aqui, tá?",
   iterationLimitFallback:
     "Vou chamar a profissional para continuar seu atendimento.",
   incompleteBusinessContextHandoff:
-    "Vou deixar essa conversa para a profissional responder, ta?",
+    "Vou deixar essa conversa para a profissional responder, tá?",
   humanRequestedOrSensitiveComplaint:
-    "Sinto muito por isso. Vou chamar uma pessoa da equipe pra te atender com atencao por aqui, ta?",
+    "Sinto muito por isso. Vou chamar uma pessoa da equipe pra te atender com atenção por aqui, tá?",
   supplierOrPartner:
-    "Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, ta bom?",
+    "Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, tá bom?",
   personalContact:
     "Vou deixar essa mensagem para ela responder pessoalmente.",
   genericReplyFallback: "Certo, vou te ajudar por aqui.",
@@ -311,7 +324,7 @@ const PRODUCT_OWN_FIXED_TEXTS = {
    * gravou (QA A-01 / Goal057): ver `guardCommitmentClaim`.
    */
   commitmentNotRecorded:
-    "Ainda nao ficou registrado na agenda. Posso confirmar agora pra voce?",
+    "Ainda não ficou registrado na agenda. Posso confirmar agora pra você?",
 } as const;
 
 /**
@@ -539,7 +552,7 @@ export class AssistantService {
 
   async recordInboundText(
     input: IncomingAssistantMessage,
-  ): Promise<Pick<AssistantReply, "conversationId" | "messageRecordId">> {
+  ): Promise<RecordedInboundText> {
     const channelMessage = requireChannelMessage(input.channelMessage);
     const customerName = channelMessage.customerName ?? input.customerName;
     const externalMessageId =
@@ -575,20 +588,31 @@ export class AssistantService {
       },
       "Assistant saving inbound message",
     );
-    const message = await this.prisma.message.create({
-      data: {
+    let message: { id: string };
+    try {
+      message = await this.prisma.message.create({
+        data: {
+          tenantId: channelMessage.tenantId,
+          channelId: channelMessage.channelId,
+          conversationId: conversation.id,
+          direction: "INBOUND",
+          source: "CUSTOMER",
+          role: "user",
+          body: input.text,
+          kind: toMessageKind(channelMessage.kind),
+          externalMessageId,
+          rawPayload: rawPayload as object,
+        },
+      });
+    } catch (error) {
+      if (!externalMessageId || !isUniqueViolation(error)) throw error;
+      return this.reuseRecordedInbound({
         tenantId: channelMessage.tenantId,
         channelId: channelMessage.channelId,
-        conversationId: conversation.id,
-        direction: "INBOUND",
-        source: "CUSTOMER",
-        role: "user",
-        body: input.text,
-        kind: toMessageKind(channelMessage.kind),
         externalMessageId,
-        rawPayload: rawPayload as object,
-      },
-    });
+        logContext: baseContext,
+      });
+    }
     if (attachmentKind) {
       await this.prisma.messageAttachment.create({
         data: {
@@ -615,6 +639,64 @@ export class AssistantService {
     return {
       conversationId: conversation.id,
       messageRecordId: message.id,
+    };
+  }
+
+  /**
+   * Retry de lote (a inbox reexecuta o lote inteiro quando ele falha): a
+   * mensagem gravada na tentativa anterior e reaproveitada. Antes disso a chave
+   * unica de `externalMessageId` derrubava todo retry e a conversa ficava presa
+   * ate o dead-letter, sem a IA responder mais nada (validacao de 2026-10-11).
+   * Se a IA ja gravou resposta depois dela, o turno nao roda de novo.
+   */
+  private async reuseRecordedInbound(input: {
+    tenantId: string;
+    channelId: string;
+    externalMessageId: string;
+    logContext: Record<string, unknown>;
+  }): Promise<RecordedInboundText> {
+    const existing = await this.prisma.message.findUnique({
+      where: {
+        tenantId_channelId_externalMessageId: {
+          tenantId: input.tenantId,
+          channelId: input.channelId,
+          externalMessageId: input.externalMessageId,
+        },
+      },
+      select: {
+        id: true,
+        conversationId: true,
+        createdAt: true,
+        direction: true,
+      },
+    });
+    if (!existing || existing.direction !== "INBOUND") {
+      throw new Error(
+        "Inbound message id collided with a message that is not inbound.",
+      );
+    }
+    const answer = await this.prisma.message.findFirst({
+      where: {
+        conversationId: existing.conversationId,
+        direction: "OUTBOUND",
+        source: "AI",
+        createdAt: { gt: existing.createdAt },
+      },
+      select: { id: true },
+    });
+    this.logger.info(
+      {
+        ...input.logContext,
+        conversationId: existing.conversationId,
+        messageRecordId: existing.id,
+        alreadyAnswered: Boolean(answer),
+      },
+      "Assistant reused inbound message recorded by an earlier attempt",
+    );
+    return {
+      conversationId: existing.conversationId,
+      messageRecordId: existing.id,
+      ...(answer ? { alreadyAnswered: true } : {}),
     };
   }
 
@@ -725,6 +807,69 @@ export class AssistantService {
       turns: session.turns,
       tools: this.tools.createDefinitions(toolContext),
     });
+    if (
+      response.toolCalls.length === 0 &&
+      !session.claimNudged &&
+      (await this.claimsEffectWithoutConfirming(session, aiRunId, response.text))
+    ) {
+      this.logger.warn(
+        {
+          requestId: session.requestId,
+          tenantId: session.tenantId,
+          conversationId: session.conversationId,
+          aiRunId,
+        },
+        "Assistant claimed an effect it did not confirm; asking the model to confirm first",
+      );
+      return this.invokeGraphAgent({
+        ...session,
+        aiRunId,
+        claimNudged: true,
+        input: [...session.input, claimWithoutEffectNudge()],
+      });
+    }
+    if (
+      response.toolCalls.length === 0 &&
+      !session.toolCallNudged &&
+      describesToolCallInsteadOfCalling(response.text)
+    ) {
+      this.logger.warn(
+        {
+          requestId: session.requestId,
+          tenantId: session.tenantId,
+          conversationId: session.conversationId,
+          aiRunId,
+        },
+        "Assistant described a tool call in the decision instead of calling it; asking the model to call it",
+      );
+      return this.invokeGraphAgent({
+        ...session,
+        aiRunId,
+        toolCallNudged: true,
+        input: [...session.input, describedToolCallNudge()],
+      });
+    }
+    if (
+      response.toolCalls.length === 0 &&
+      !session.confirmationNudged &&
+      (await this.asksConfirmationWithoutDraft(session, response.text))
+    ) {
+      this.logger.warn(
+        {
+          requestId: session.requestId,
+          tenantId: session.tenantId,
+          conversationId: session.conversationId,
+          aiRunId,
+        },
+        "Assistant asked for confirmation without a prepared draft; asking the model to prepare first",
+      );
+      return this.invokeGraphAgent({
+        ...session,
+        aiRunId,
+        confirmationNudged: true,
+        input: [...session.input, confirmationWithoutDraftNudge()],
+      });
+    }
     return {
       session: {
         ...session,
@@ -733,6 +878,75 @@ export class AssistantService {
       },
       response,
     };
+  }
+
+  /**
+   * Pergunta de confirmacao sem nada preparado (validacao de 2026-10-11): a IA
+   * perguntou "Posso confirmar design de sobrancelha na sexta as 18h?" sem
+   * chamar action=prepare, e o "sim" da cliente caiu em
+   * NO_PENDING_CONFIRMATION. A regra do prompt sozinha nao segurou; aqui a
+   * resposta e devolvida ao modelo uma vez, pedindo o prepare antes.
+   */
+  /**
+   * Validacao de 2026-10-12: no "pode" da cliente, com o rascunho preparado, a
+   * IA respondeu "Agendado com sucesso" sem chamar action=confirm (copiou o
+   * padrao das respostas anteriores). `guardCommitmentClaim` barrava a
+   * mentira, mas a cliente tinha de confirmar duas vezes. Antes de chegar ao
+   * guard, o modelo recebe um aviso para confirmar de verdade.
+   */
+  private async claimsEffectWithoutConfirming(
+    session: AssistantGraphSession,
+    aiRunId: string,
+    responseText: string,
+  ): Promise<boolean> {
+    const decision = parseAiDecision(responseText);
+    const claims = findCommitmentClaims((decision.messages ?? []).join(" "));
+    if (claims.length === 0) return false;
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: session.conversationId },
+    });
+    const pendingAction = normalizeStoredState(conversation?.state)
+      .pendingAction;
+    if (!isRecord(pendingAction) || typeof pendingAction.type !== "string") {
+      return false;
+    }
+    const claimType = commitmentKindOfPendingAction(pendingAction.type);
+    if (!claimType || !claims.includes(claimType)) return false;
+    const confirmed = await this.loadTurnConfirmedEffects(
+      session.tenantId,
+      aiRunId,
+    );
+    return !confirmed.has(claimType);
+  }
+
+  private async recentAssistantTexts(conversationId: string): Promise<string[]> {
+    // Melhor esforco: sem o historico, a resposta sai como o modelo escreveu.
+    try {
+      const messages = await this.prisma.message.findMany({
+        where: { conversationId, direction: "OUTBOUND", source: "AI" },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: { body: true },
+      });
+      return (messages ?? []).map((message) => message.body ?? "");
+    } catch {
+      return [];
+    }
+  }
+
+  private async asksConfirmationWithoutDraft(
+    session: AssistantGraphSession,
+    responseText: string,
+  ): Promise<boolean> {
+    const decision = parseAiDecision(responseText);
+    const text = normalizeText((decision.messages ?? []).join(" "));
+    if (!asksBookingConfirmation(text)) return false;
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: session.conversationId },
+    });
+    const pendingAction = normalizeStoredState(conversation?.state)
+      .pendingAction;
+    return !(isRecord(pendingAction) && typeof pendingAction.type === "string");
   }
 
   async executeGraphTools(
@@ -907,9 +1121,50 @@ export class AssistantService {
       decision,
       aiRunId: session.aiRunId,
     });
-    const text = await this.guardCommitmentClaim(
-      session,
-      normalizeModelDashes(composeReplyText(decision)),
+    if (isSilentPause(decision)) {
+      // A conversa ja ficou pausada para a profissional em `applyDecision`;
+      // nada sai para o contato.
+      if (session.aiRunId) {
+        await this.prisma.aiRun.update({
+          where: { id: session.aiRunId },
+          data: {
+            status: "SUCCEEDED",
+            outputText: response?.text ?? session.lastResponseText ?? "",
+            completedAt: new Date(),
+          },
+        });
+      }
+      this.logger.info(
+        {
+          requestId: session.requestId,
+          tenantId: session.tenantId,
+          conversationId: session.conversationId,
+          aiRunId: session.aiRunId,
+          pauseReason: decision.pauseReason,
+          classification: decision.classification,
+        },
+        "Assistant paused silently for a contact that is not a customer",
+      );
+      return {
+        text: "",
+        conversationId: session.conversationId,
+        messageRecordId: "",
+        silent: true,
+      };
+    }
+    const text = dropRepeatedPriceAndDuration(
+      alignFarewellToNow(
+        await this.guardCommitmentClaim(
+          session,
+          restorePortugueseAccents(
+            normalizeModelDashes(composeReplyText(decision)),
+          ),
+        ),
+        new Date().toISOString(),
+        session.businessContext.timezone,
+      ),
+      await this.recentAssistantTexts(session.conversationId),
+      latestCustomerText(session),
     );
     // A saida existe antes de qualquer chamada ao transporte, com
     // `correlationId` estavel: e ele que viaja como id da mensagem no envio e
@@ -1967,6 +2222,26 @@ function parseAiDecision(raw: string): AiDecision {
   };
 }
 
+/**
+ * Motivos de pausa em que o contato nao e cliente. Pelo vault (05-WhatsApp,
+ * "Mensagem ambigua"), quando fica claro que a conversa e pessoal a IA para de
+ * responder; validacao de 2026-10-11: uma amiga oferecendo botox e
+ * progressiva recebeu resposta como se fosse cliente.
+ */
+const SILENT_PAUSE_REASONS: ReadonlySet<string> = new Set([
+  "personal_contact",
+  "supplier_or_partner",
+  "spam",
+]);
+
+export function isSilentPause(decision: AiDecision): boolean {
+  if (decision.action !== "pause_ai") return false;
+  return (
+    SILENT_PAUSE_REASONS.has(decision.pauseReason ?? "") ||
+    SILENT_PAUSE_REASONS.has(decision.classification ?? "")
+  );
+}
+
 function composeReplyText(decision: AiDecision): string {
   const messages = (decision.messages ?? [])
     .map((message) => message.trim())
@@ -2287,4 +2562,174 @@ function isSensitiveComplaint(normalized: string): boolean {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  return code === "P2002" || code === "23505";
+}
+
+/**
+ * A resposta pede para a cliente confirmar um agendamento ("Posso confirmar
+ * ...?", "Posso marcar ...?"). Texto ja normalizado por `normalizeText`.
+ */
+export function asksBookingConfirmation(normalized: string): boolean {
+  if (!normalized.includes("?")) return false;
+  return (
+    /\bposso (confirmar|marcar|agendar|reservar|fechar)\b/u.test(normalized) ||
+    /\bpode(mos)? (confirmar|marcar|agendar|fechar)\b/u.test(normalized) ||
+    /\b(confirmo|confirma) (pra|para) (voce|vc|ti)\b/u.test(normalized)
+  );
+}
+
+function confirmationWithoutDraftNudge(): ModelInputMessage {
+  return {
+    role: "user",
+    content:
+      "[Aviso interno, nao e mensagem da cliente] Sua resposta pede confirmacao de agendamento, mas nenhum horario foi preparado. Chame create_appointment com action=prepare agora, com o servico, a data e o horario combinados, e so depois pergunte se pode marcar. Nao mencione este aviso.",
+  };
+}
+
+/**
+ * Validacao de 2026-10-11: no "sim" da cliente a IA devolveu a decisao
+ * `{"action":"call_tool","messages":[""],...}` com a nota "falta chamar
+ * create_appointment action=confirm", sem chamar a tool. A cliente recebeu o
+ * fallback generico e nada foi confirmado.
+ */
+export function describesToolCallInsteadOfCalling(responseText: string): boolean {
+  const decision = parseAiDecision(responseText);
+  if (decision.action !== "call_tool" && decision.action !== "create_appointment") {
+    return false;
+  }
+  const messages = (decision.messages ?? []).map((m) => m.trim()).filter(Boolean);
+  return messages.length === 0;
+}
+
+function describedToolCallNudge(): ModelInputMessage {
+  return {
+    role: "user",
+    content:
+      "[Aviso interno, nao e mensagem da cliente] Voce descreveu uma acao no JSON em vez de chamar a tool. Chame a tool agora de verdade (por exemplo create_appointment com action=confirm) e so depois responda a cliente com o resultado. Nao mencione este aviso.",
+  };
+}
+
+function claimWithoutEffectNudge(): ModelInputMessage {
+  return {
+    role: "user",
+    content:
+      "[Aviso interno, nao e mensagem da cliente] Sua resposta diz que o agendamento foi feito, mas voce nao chamou a tool para confirmar. Se a cliente acabou de aceitar o horario preparado, chame create_appointment com action=confirm agora e so depois responda com o resultado. Nao mencione este aviso.",
+  };
+}
+
+/**
+ * A despedida usa a parte do dia certa no fuso do negocio (validacao de
+ * 2026-10-12: "tenha uma otima tarde" a meia-noite, mesmo com a frase certa no
+ * prompt; o modelo copiava a das respostas anteriores).
+ */
+export function alignFarewellToNow(
+  text: string,
+  iso: string,
+  timeZone: string,
+): string {
+  const farewell = farewellForNow(iso, timeZone);
+  // "Te vejo hoje" soa estranho (validacao de 2026-10-12, atendimento as 14h
+  // marcado a 00h47): para o mesmo dia, "te vejo mais tarde".
+  text = text.replace(/\b(te) vejo hoje\b/giu, (_match, te: string) => `${te} vejo mais tarde`);
+  return text.replace(
+    /tenha (um|uma) [oó]tim[oa] (dia|tarde|noite)/giu,
+    (match) => (match[0] === "T" ? farewell[0].toUpperCase() + farewell.slice(1) : farewell),
+  );
+}
+
+/**
+ * Palavras que o modelo copia sem acento do prompt (que e todo em ASCII):
+ * "amanha", "as 9h", "Tambem", "pra voce" (validacao de 2026-10-12, mesmo com
+ * a regra 25 pedindo acentuacao). So entram aqui palavras sem outra leitura
+ * valida sem acento; "esta", "e", "ate" e "so" ficam de fora por ambiguidade.
+ */
+const ACCENT_FIXES: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\bamanha\b/giu, "amanhã"],
+  [/\bvoce\b/giu, "você"],
+  [/\bvoces\b/giu, "vocês"],
+  [/\btambem\b/giu, "também"],
+  [/\bnao\b/giu, "não"],
+  [/\bhorario\b/giu, "horário"],
+  [/\bhorarios\b/giu, "horários"],
+  [/\bservico\b/giu, "serviço"],
+  [/\bservicos\b/giu, "serviços"],
+  [/\bduracao\b/giu, "duração"],
+  [/\bmanutencao\b/giu, "manutenção"],
+  [/\bterca\b/giu, "terça"],
+  [/\bsabado\b/giu, "sábado"],
+  [/\bdisponivel\b/giu, "disponível"],
+  [/\bdisponiveis\b/giu, "disponíveis"],
+  [/\botim([oa])\b/giu, "ótim$1"],
+  [/\bas (\d{1,2}h)/gu, "às $1"],
+  [/\bAs (\d{1,2}h)/gu, "Às $1"],
+];
+
+export function restorePortugueseAccents(text: string): string {
+  let result = text;
+  for (const [pattern, replacement] of ACCENT_FIXES) {
+    result = result.replace(pattern, (match, ...groups) => {
+      const fixed = replacement.replace(/\$(\d)/g, (_, index: string) =>
+        String(groups[Number(index) - 1] ?? ""),
+      );
+      // Preserva maiuscula inicial ("Tambem" -> "Também").
+      return match[0] === match[0].toUpperCase() && match[0] !== match[0].toLowerCase()
+        ? fixed[0].toUpperCase() + fixed.slice(1)
+        : fixed;
+    });
+  }
+  return result;
+}
+
+function latestCustomerText(session: AssistantGraphSession): string {
+  const last = [...(session.input ?? [])]
+    .reverse()
+    .find((message) => message.role === "user");
+  return last?.content ?? "";
+}
+
+/**
+ * Tira a frase de duracao e valor ja dita antes na conversa (validacao de
+ * 2026-10-12: "O design de sobrancelha leva 40 min e custa R$ 35" em toda
+ * oferta, mesmo com o prompt pedindo para dizer uma vez so). Se a cliente
+ * perguntou valor ou tempo nesta mensagem, a frase fica.
+ */
+export function dropRepeatedPriceAndDuration(
+  text: string,
+  previousAssistantTexts: readonly string[],
+  customerText: string,
+): string {
+  const asked = /(quanto|valor|pre[cç]o|custa|demora|dura[cç][aã]o|quanto tempo)/iu.test(
+    customerText,
+  );
+  if (asked) return text;
+  const previous = previousAssistantTexts.join("\n");
+  const paragraphs = text.split(/\n\n/);
+  const kept = paragraphs
+    .map((paragraph) =>
+      paragraph
+        .split(/(?<=[.!?])\s+/)
+        .filter((sentence) => !isRepeatedPriceOrDuration(sentence, previous))
+        .join(" "),
+    )
+    .filter((paragraph) => paragraph.trim().length > 0);
+  return kept.length > 0 ? kept.join("\n\n") : text;
+}
+
+function isRepeatedPriceOrDuration(sentence: string, previous: string): boolean {
+  const prices = sentence.match(/R\$\s?\d+(?:[.,]\d+)?/gu) ?? [];
+  const durations = sentence.match(/\d+\s?min\b|\d+h\d*\s?de dura[cç][aã]o/giu) ?? [];
+  const facts = [...prices, ...durations];
+  if (facts.length === 0) return false;
+  // A frase so sai se for so isso: valor/duracao ja ditos, sem horario novo.
+  if (/\b(\d{1,2}h(\d{2})?)\b(?!\s?de dura)/u.test(sentence.replace(/\d+\s?min\b/giu, ""))) {
+    return false;
+  }
+  const normalize = (value: string) => value.replace(/\s+/g, "");
+  const said = normalize(previous);
+  return facts.every((fact) => said.includes(normalize(fact)));
 }

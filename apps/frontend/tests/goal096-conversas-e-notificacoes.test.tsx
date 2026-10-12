@@ -360,7 +360,7 @@ describe("Goal096 prova 1: o C5 e a regra de /conversas sem WhatsApp", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "Elas ficam organizadas em Comercial, Não classificadas e Pessoal — e a IA passa a atender seus clientes. Você continua usando o WhatsApp normalmente.",
+        "Elas ficam organizadas em Comercial, Não classificadas e Pessoal, e a IA passa a atender seus clientes. Você continua usando o WhatsApp normalmente.",
       ),
     ).toBeVisible();
     expect(

@@ -8,12 +8,19 @@ import {
   BUSINESS_MODALITY_OPTIONS,
   FREQUENT_BUSINESS_SEGMENTS,
 } from "@/features/onboarding/blocks/business";
+import { applyInlineValidation } from "@/features/onboarding/blocks/shared";
 import { Icon } from "@/shared/icons/Icon";
 import { PushedBar } from "@/shared/layout/PushedBar";
 import {
   getProductServices,
   useProductRuntime,
 } from "@/shared/runtime/ProductRuntime";
+import {
+  type AddressDraft,
+  addressDraftFrom,
+  AddressFields,
+  addressPartsFromDraft,
+} from "@/shared/ui/AddressFields";
 import { Dialog } from "@/shared/ui/Dialog";
 
 export function BusinessSettings({
@@ -36,7 +43,9 @@ export function BusinessSettings({
   const [modalities, setModalities] = useState<BusinessModality[]>(
     settings.business?.modalities ?? [],
   );
-  const [address, setAddress] = useState(settings.business?.address ?? "");
+  const [address, setAddress] = useState<AddressDraft>(() =>
+    addressDraftFrom(settings.business?.addressParts),
+  );
   const [timezone, setTimezone] = useState(
     settings.business?.timezone ?? "America/Sao_Paulo",
   );
@@ -68,7 +77,7 @@ export function BusinessSettings({
         !FREQUENT_BUSINESS_SEGMENTS.includes(settings.business.category),
     );
     setModalities(settings.business?.modalities ?? []);
-    setAddress(settings.business?.address ?? "");
+    setAddress(addressDraftFrom(settings.business?.addressParts));
     setTimezone(settings.business?.timezone ?? "America/Sao_Paulo");
     setMessage(null);
     returnFocusRef.current = true;
@@ -79,14 +88,13 @@ export function BusinessSettings({
   const requiresAddress = modalities.includes("ON_SITE");
   const pendingProjection =
     settings.business?.contextProjectionStatus === "PENDING";
-  async function save(event: FormEvent) {
+  async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Mesmo padrão do onboarding: o formulário é `noValidate` e cada campo
+    // inválido ganha o próprio erro abaixo dele, no lugar do balão nativo.
+    if (!applyInlineValidation(event.currentTarget)) return;
     if (modalities.length === 0) {
       setMessage("Escolha ao menos uma modalidade de atendimento.");
-      return;
-    }
-    if (requiresAddress && !address.trim()) {
-      setMessage("Informe o endereço do seu espaço.");
       return;
     }
     if (timezone !== settings.business?.timezone) {
@@ -101,7 +109,9 @@ export function BusinessSettings({
     try {
       onSaved(
         await getProductServices().settings.updateBusiness({
-          ...(requiresAddress ? { address: address.trim() } : {}),
+          ...(requiresAddress
+            ? { addressParts: addressPartsFromDraft(address) }
+            : {}),
           category,
           modalities,
           name,
@@ -139,6 +149,7 @@ export function BusinessSettings({
           aria-label="Editar dados do negócio"
           className="business-form"
           id="business-form"
+          noValidate
           onSubmit={(event) => void save(event)}
         >
           <div className="settings-form-grid">
@@ -262,16 +273,10 @@ export function BusinessSettings({
               </div>
             </div>
             {requiresAddress && (
-              <label className="field is-wide">
-                <span className="label">Endereço do seu espaço</span>
-                <input
-                  className="input"
-                  maxLength={300}
-                  required
-                  value={address}
-                  onChange={(event) => setAddress(event.target.value)}
-                />
-              </label>
+              <fieldset className="field is-wide address-fieldset">
+                <legend className="label">Endereço do seu espaço</legend>
+                <AddressFields value={address} onChange={setAddress} />
+              </fieldset>
             )}
           </div>
           {pendingProjection && (
@@ -475,9 +480,7 @@ function BusinessSummary({
                       {row.value ?? NOT_INFORMED}
                     </span>
                   )}
-                  {(row.editable || row.href) && (
-                    <Icon name="chevron-right" />
-                  )}
+                  {(row.editable || row.href) && <Icon name="chevron-right" />}
                 </span>
               </>
             );

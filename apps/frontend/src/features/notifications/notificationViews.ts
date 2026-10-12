@@ -16,13 +16,15 @@ const LEVEL_VIEWS: Record<NotificationLevel, NotificationLevelView> = {
   CRITICAL: { className: "is-critical", label: "Crítica" },
 };
 
-export function notificationLevelView(level: NotificationLevel): NotificationLevelView {
+export function notificationLevelView(
+  level: NotificationLevel,
+): NotificationLevelView {
   return LEVEL_VIEWS[level];
 }
 
 /**
  * Mesmo vocabulário fechado de `AppointmentNotificationReason` que
- * `LifecycleActions` traduz para o detalhe do agendamento — aqui em versão
+ * `LifecycleActions.tsx` traduz para o detalhe do agendamento — aqui em versão
  * curta para o cartão da central. `detail` nunca chega até aqui.
  */
 const REMINDER_REASON_LABELS: Record<string, string> = {
@@ -139,7 +141,9 @@ function openCopy(notification: Notification): NotificationCopy {
     }
     case "REMINDER_FAILED": {
       const reason = str(payload.reason);
-      const reasonLabel = reason ? (REMINDER_REASON_LABELS[reason] ?? null) : null;
+      const reasonLabel = reason
+        ? (REMINDER_REASON_LABELS[reason] ?? null)
+        : null;
       return {
         description: reasonLabel
           ? `Não foi possível enviar: ${reasonLabel}.`
@@ -190,7 +194,9 @@ function openCopy(notification: Notification): NotificationCopy {
       };
     case "SETUP_INCOMPLETE": {
       const issues = Array.isArray(payload.issues)
-        ? payload.issues.filter((value): value is string => typeof value === "string")
+        ? payload.issues.filter(
+            (value): value is string => typeof value === "string",
+          )
         : [];
       const labels = issues
         .map((issue) => SETUP_ISSUE_LABELS[issue])
@@ -207,7 +213,8 @@ function openCopy(notification: Notification): NotificationCopy {
     case "AI_ACTIVATED":
       // `payload` é sempre vazio (PUBLIC_API_V1.md): nenhum telefone aqui.
       return {
-        description: "Teste real concluído. A IA passou a atender pelo WhatsApp.",
+        description:
+          "Teste real concluído. A IA passou a atender pelo WhatsApp.",
         href: "/configuracoes/ia",
         title,
       };

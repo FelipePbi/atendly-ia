@@ -32,7 +32,7 @@ import { createEvalWorld, evalDoubleUsage, proibirRede } from "./harness.js";
 proibirRede();
 
 const COMMITMENT_NOT_RECORDED =
-  "Ainda nao ficou registrado na agenda. Posso confirmar agora pra voce?";
+  "Ainda não ficou registrado na agenda. Posso confirmar agora pra você?";
 
 const EXISTING_APPOINTMENT: SchedulingAppointment = {
   id: "appointment-1",
@@ -111,6 +111,16 @@ describe("QA A-01: prepare no turno 1, afirmação sem confirm no turno 2", () =
             confidence: 0.95,
           },
         },
+        {
+          nota: "ignora o aviso interno do runtime e afirma de novo; dublê afirma sucesso sem chamar a tool de confirmação (QA A-01)",
+          decision: {
+            action: "send_message",
+            messages: ["Confirmado! Pronto, ficou agendado para segunda as 13:30."],
+            conversationStage: "APPOINTMENT_CREATED",
+            classification: "existing_customer",
+            confidence: 0.95,
+          },
+        },
       ],
     });
 
@@ -120,8 +130,10 @@ describe("QA A-01: prepare no turno 1, afirmação sem confirm no turno 2", () =
     );
     expect(world.agenda.effects.createAppointment).toEqual([]);
     expect(world.agenda.efeitosComConsequencia()).toEqual([]);
-    expect(world.logger.warn).toHaveBeenCalledTimes(1);
-    expect(world.logger.warn.mock.calls[0][0]).toMatchObject({
+    // Dois avisos: o runtime pede ao modelo para confirmar de verdade
+    // (2026-10-12) e, como o dublê insiste, o guard troca o texto.
+    expect(world.logger.warn).toHaveBeenCalledTimes(2);
+    expect(world.logger.warn.mock.calls[1][0]).toMatchObject({
       claimType: "schedule",
       pendingActionType: "schedule",
     });
@@ -264,6 +276,16 @@ describe("hold vencido no confirm: a afirmação sai como texto fixo (Goal057)",
             confidence: 0.9,
           },
         },
+        {
+          nota: "ignora o aviso interno do runtime e afirma de novo; dublê afirma sucesso apesar da falha (QA A-01, caso irmão)",
+          decision: {
+            action: "send_message",
+            messages: ["Confirmado! Te espero segunda as 13:30."],
+            conversationStage: "APPOINTMENT_CREATED",
+            classification: "existing_customer",
+            confidence: 0.9,
+          },
+        },
       ],
     });
 
@@ -329,6 +351,16 @@ describe("remarcação com afirmação sem confirm: texto fixo (Goal057)", () =>
             confidence: 0.94,
           },
         },
+        {
+          nota: "ignora o aviso interno do runtime e afirma de novo; dublê afirma remarcacao sem chamar reschedule_appointment confirm",
+          decision: {
+            action: "send_message",
+            messages: ["Prontinho, remarcado para terca as 11h!"],
+            conversationStage: "APPOINTMENT_CREATED",
+            classification: "existing_customer",
+            confidence: 0.94,
+          },
+        },
       ],
     });
 
@@ -377,6 +409,16 @@ describe("remarcação com vocabulário genérico de confirmação sem confirm: 
       modelo: [
         {
           nota: "dublê afirma com vocabulario generico, sem chamar reschedule_appointment confirm",
+          decision: {
+            action: "send_message",
+            messages: ["Pronto, sua remarcação foi confirmada."],
+            conversationStage: "APPOINTMENT_CREATED",
+            classification: "existing_customer",
+            confidence: 0.94,
+          },
+        },
+        {
+          nota: "ignora o aviso interno do runtime e afirma de novo; dublê afirma com vocabulario generico, sem chamar reschedule_appointment confirm",
           decision: {
             action: "send_message",
             messages: ["Pronto, sua remarcação foi confirmada."],
@@ -436,6 +478,16 @@ describe("cancelamento com afirmação sem confirm: texto fixo (Goal057)", () =>
             confidence: 0.91,
           },
         },
+        {
+          nota: "ignora o aviso interno do runtime e afirma de novo; dublê afirma cancelamento sem chamar cancel_appointment confirm",
+          decision: {
+            action: "send_message",
+            messages: ["Cancelei seu horario, pode ficar tranquila!"],
+            conversationStage: "GENERAL_CONVERSATION",
+            classification: "existing_customer",
+            confidence: 0.91,
+          },
+        },
       ],
     });
 
@@ -487,11 +539,110 @@ describe("cancelamento com vocabulário genérico de confirmação sem confirm: 
             confidence: 0.91,
           },
         },
+        {
+          nota: "ignora o aviso interno do runtime e afirma de novo; dublê afirma com vocabulario generico, sem chamar cancel_appointment confirm",
+          decision: {
+            action: "send_message",
+            messages: ["Cancelamento confirmado!"],
+            conversationStage: "GENERAL_CONVERSATION",
+            classification: "existing_customer",
+            confidence: 0.91,
+          },
+        },
       ],
     });
 
     expect(reply.text).toBe(COMMITMENT_NOT_RECORDED);
     expect(world.agenda.effects.cancelAppointment).toEqual([]);
+  });
+});
+
+describe("afirmação sem confirm, aviso interno e confirm de verdade no mesmo turno (2026-10-12)", () => {
+  // Evita: no "pode" da cliente a IA respondeu "Agendado com sucesso" sem
+  // chamar action=confirm; o guard trocava pelo texto fixo e a cliente tinha
+  // de confirmar duas vezes. Com o aviso, o modelo confirma no mesmo turno.
+  it("depois do aviso o dublê chama create_appointment confirm e a resposta sai sem o texto fixo", async () => {
+    const world = createEvalWorld();
+
+    await world.send({
+      cliente: "Quero a Aplicacao 5D segunda as 13:30",
+      modelo: [
+        {
+          nota: "prepara o agendamento",
+          toolCalls: [
+            {
+              id: "call-prepare",
+              name: "create_appointment",
+              args: {
+                action: "prepare",
+                serviceId: "service-1",
+                date: "2026-06-08",
+                startTime: "13:30",
+                customerName: "Maria",
+              },
+            },
+          ],
+        },
+        {
+          nota: "pede a confirmacao",
+          decision: {
+            action: "update_appointment_draft",
+            messages: ["Aplicacao 5D, segunda 08/06, das 13:30 as 14:30. Posso confirmar?"],
+            conversationStage: "CONFIRMING_APPOINTMENT",
+            classification: "potential_customer",
+            confidence: 0.93,
+          },
+        },
+      ],
+    });
+    const antes = world.model.calls.length;
+
+    const reply = await world.send({
+      cliente: "Pode",
+      modelo: [
+        {
+          nota: "dublê afirma sucesso sem chamar a tool de confirmação (erro de 2026-10-12)",
+          decision: {
+            action: "send_message",
+            messages: ["Agendado com sucesso! Te espero segunda as 13:30."],
+            conversationStage: "APPOINTMENT_CREATED",
+            classification: "existing_customer",
+            confidence: 0.95,
+          },
+        },
+        {
+          nota: "depois do aviso interno, confirma de verdade",
+          toolCalls: [
+            {
+              id: "call-confirm-depois-do-aviso",
+              name: "create_appointment",
+              args: { action: "confirm" },
+            },
+          ],
+        },
+        {
+          nota: "afirma o sucesso, agora gravado no ledger do turno",
+          decision: {
+            action: "create_appointment",
+            messages: ["Agendado com sucesso! Te espero segunda as 13:30."],
+            conversationStage: "APPOINTMENT_CREATED",
+            classification: "existing_customer",
+            confidence: 0.97,
+          },
+        },
+      ],
+    });
+
+    const aviso = world.model.chamada(antes + 1).messages.at(-1);
+    expect(aviso?.content).toEqual(expect.stringContaining("[Aviso interno"));
+    expect(aviso?.content).toEqual(expect.stringContaining("action=confirm"));
+    expect(reply.text).toBe("Agendado com sucesso! Te espero segunda as 13:30.");
+    expect(reply.text).not.toBe(COMMITMENT_NOT_RECORDED);
+    expect(world.agenda.effects.createAppointment).toMatchObject([
+      { date: "2026-06-08", startTime: "13:30", serviceIds: ["service-1"] },
+    ]);
+    // Só o aviso; o guard não precisou trocar o texto.
+    expect(world.logger.warn).toHaveBeenCalledTimes(1);
   });
 });
 

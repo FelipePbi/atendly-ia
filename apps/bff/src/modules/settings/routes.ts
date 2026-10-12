@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
+import { Prisma } from "../../generated/prisma/client.js";
 import {
   type ActivationTestRun,
   getValidActivationRun,
@@ -14,6 +15,8 @@ import {
   resolveAiConversationStyle,
 } from "../../lib/ai-conversation-style.js";
 import {
+  businessAddressPartsDto,
+  businessAddressPartsSchema,
   businessAddressSchema,
   businessContextPayload,
   businessContextProjectionState,
@@ -42,6 +45,7 @@ const businessSchema = z.object({
   // omissao (Goal018/WU-01).
   modalities: z.array(businessModalitySchema).optional(),
   address: businessAddressSchema.optional(),
+  addressParts: businessAddressPartsSchema.optional(),
 });
 const aiSchema = z.object({
   enabled: z.boolean(),
@@ -127,7 +131,7 @@ export async function registerV1SettingsRoutes(
       const current = await prisma.businessProfile.findUnique({
         where: { tenantId: tenant.tenantId },
       });
-      const { modalities, address } = resolveBusinessProfileFields(
+      const { modalities, address, addressParts } = resolveBusinessProfileFields(
         current,
         body,
       );
@@ -150,6 +154,7 @@ export async function registerV1SettingsRoutes(
             timezone: body.timezone,
             modalities,
             address,
+            addressParts: addressParts ?? Prisma.DbNull,
           },
           update: {
             businessName: body.name,
@@ -157,6 +162,7 @@ export async function registerV1SettingsRoutes(
             timezone: body.timezone,
             modalities,
             address,
+            addressParts: addressParts ?? Prisma.DbNull,
             businessContextVersion: { increment: 1 },
           },
         }),
@@ -466,6 +472,7 @@ async function settingsState(
           currency: profile.currency,
           modalities: profile.modalities,
           address: profile.address,
+          addressParts: businessAddressPartsDto(profile.addressParts),
           contextVersion: profile.businessContextVersion,
           contextProjectedVersion: profile.businessContextProjectedVersion,
           contextProjectionStatus:

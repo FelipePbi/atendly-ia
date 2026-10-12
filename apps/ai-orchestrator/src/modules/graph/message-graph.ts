@@ -36,6 +36,11 @@ import {
   markTranscribedAudioTurn,
 } from "../media/audio-turn.js";
 import type { CustomerMemoryPromptPort } from "../memory/customer-memory-service.js";
+import {
+  type AiReplyDispatchOptions,
+  type AiReplyDispatchOutcome,
+  dispatchAiReply,
+} from "../outbox/ai-reply-dispatch.js";
 import { classifySendFailure } from "../outbox/outbox-policy.js";
 import type { ServiceInstructionPromptPort } from "../prompts/service-instructions.js";
 import type { GraphSessionPort } from "../session/SessionService.js";
@@ -68,7 +73,7 @@ export const processingErrorReply =
  * de audio.
  */
 export const audioNotUnderstoodReply =
-  "Recebi seu audio, mas nao consegui entender o conteudo dele agora. Pode me mandar em texto, por favor? Assim continuo seu atendimento por aqui.";
+  "Recebi seu áudio, mas não consegui entender o conteúdo dele agora. Pode me mandar em texto, por favor? Assim continuo seu atendimento por aqui.";
 /**
  * Imagem recebida com IA elegivel.
  *
@@ -76,11 +81,11 @@ export const audioNotUnderstoodReply =
  * sem tentar interpretar o que foi enviado nem a legenda (Goal013).
  */
 export const imageReceivedReply =
-  "Recebi sua imagem e ja chamei a profissional para dar uma olhada com voce. Ela continua seu atendimento por aqui.";
+  "Recebi sua imagem e já chamei a profissional para dar uma olhada com você. Ela continua seu atendimento por aqui.";
 export const documentReceivedReply =
-  "Recebi seu documento e ele ja esta aqui na conversa. Por enquanto nao consigo abrir arquivos, entao me conta em texto o que voce precisa que eu ajudo.";
+  "Recebi seu documento e ele já está aqui na conversa. Por enquanto não consigo abrir arquivos, então me conta em texto o que você precisa que eu ajudo.";
 export const videoReceivedReply =
-  "Recebi seu video e ele ja esta aqui na conversa. Por enquanto nao consigo assistir por aqui, entao me conta em texto o que voce precisa que eu ajudo.";
+  "Recebi seu vídeo e ele já está aqui na conversa. Por enquanto não consigo assistir por aqui, então me conta em texto o que você precisa que eu ajudo.";
 /** Resumo do handoff de imagem, gravado no `Handoff` em vez do texto de falha. */
 const imageHandoffSummary =
   "Cliente enviou uma imagem; a IA nao interpreta imagens no MVP.";
@@ -164,7 +169,16 @@ export interface MessageGraphDependencies {
    * na resposta generica anterior a este Goal, sem transcrever nada.
    */
   transcription?: InboundAudioTranscriptionPort;
+  /**
+   * Despacho da resposta em varias mensagens (2026-10-11). `progress` grava
+   * quantas partes ja sairam (sem ele, o retry nao tem de onde retomar);
+   * `sleep` so e trocado em teste.
+   */
+  replyDispatch?: Pick<AiReplyDispatchOptions, "progress" | "sleep">;
 }
+
+/** Ver `MessageGraphWorkflow.invoke`: ~20 idas a ferramentas por turno. */
+export const GRAPH_RECURSION_LIMIT = 80;
 
 export class MessageGraphWorkflow {
   private readonly logger: DiagnosticLogger;
@@ -180,6 +194,12 @@ export class MessageGraphWorkflow {
   async invoke(input: MessageGraphInput): Promise<MessageGraphExecution> {
     const config = {
       configurable: { thread_id: input.conversationId },
+      // Cada ida a uma ferramenta custa tres passos (agent, executeTool,
+      // validateToolResult) alem dos ~12 fixos do turno. O padrao de 25 do
+      // LangGraph estourava com 4 ferramentas num turno (validacao de
+      // 2026-10-11: "Queria marcar um horario" chamou list_services e
+      // get_availability 3 vezes), depois de a resposta ja estar gravada.
+      recursionLimit: GRAPH_RECURSION_LIMIT,
     };
     const pending = await this.graph.getState(config);
     if (pending.next.length > 0) {
@@ -201,6 +221,7 @@ export class MessageGraphWorkflow {
         inboundText: input.text ?? input.message.text ?? "",
         inputMessageIds: input.messageRecordIds ?? [],
         inboundRecordId: undefined,
+        inboundAlreadyAnswered: undefined,
         audioTranscription: undefined,
         deferResponse: input.deferResponse ?? false,
         eventAlreadyGuarded: input.eventAlreadyGuarded ?? false,
@@ -284,7 +305,11 @@ export class MessageGraphWorkflow {
       .addEdge("ownerActivity", END)
       .addEdge("bufferInbound", END)
       .addEdge("bufferRecordedInbound", END)
-      .addEdge("recordInbound", "transcribeAudio")
+      .addConditionalEdges(
+        "recordInbound",
+        (state) => (state.result ? "end" : "transcribe"),
+        { end: END, transcribe: "transcribeAudio" },
+      )
       .addConditionalEdges(
         "transcribeAudio",
         // Fragmento diferido ja persistido (e ja transcrito, quando audio) sai
@@ -314,8 +339,9 @@ export class MessageGraphWorkflow {
       .addEdge("validateToolResult", "agent")
       .addConditionalEdges(
         "composeResponse",
-        (state) => (state.handoffRequired ? "handoff" : "persist"),
-        { handoff: "handoff", persist: "persistResponse" },
+        (state) =>
+          state.result ? "end" : state.handoffRequired ? "handoff" : "persist",
+        { end: END, handoff: "handoff", persist: "persistResponse" },
       )
       .addEdge("handoff", "persistResponse")
       .addConditionalEdges(
@@ -407,6 +433,9 @@ export class MessageGraphWorkflow {
     // Regra do contato antes de tudo: conteudo de contato ignorado e de sessao
     // pessoal nao pode ser lido por classificacao, modelo, RAG nem memoria.
     if (state.session?.ignored) return { guardDecision: "ignored_contact" };
+    if (!replyAllowedForPhone(message.customerPhone)) {
+      return { guardDecision: "ignored_contact" };
+    }
     if (state.session?.category === "PERSONAL") {
       return { guardDecision: "personal_session" };
     }
@@ -471,6 +500,8 @@ export class MessageGraphWorkflow {
     const transcription = this.dependencies.transcription;
     const message = state.inboundMessage;
     if (!transcription || message.kind !== "audio") return {};
+    // Retry de lote: o audio ja foi transcrito e respondido antes.
+    if (state.inboundAlreadyAnswered) return {};
 
     let outcome: InboundTranscription;
     try {
@@ -780,7 +811,12 @@ export class MessageGraphWorkflow {
           })
         : undefined;
     return {
-      bufferedRecord: { ...recorded, text: state.inboundText.trim() },
+      bufferedRecord: {
+        conversationId: recorded.conversationId,
+        messageRecordId: recorded.messageRecordId,
+        text: state.inboundText.trim(),
+        ...(recorded.alreadyAnswered ? { alreadyAnswered: true } : {}),
+      },
       ...(session
         ? { session, observedInboundVersion: session.inboundVersion }
         : {}),
@@ -810,6 +846,7 @@ export class MessageGraphWorkflow {
         conversationId: state.conversationId,
         messageRecordId: state.inboundRecordId,
         text: state.inboundText.trim(),
+        ...(state.inboundAlreadyAnswered ? { alreadyAnswered: true } : {}),
       },
       result: { ok: true, action: "buffered" },
     };
@@ -883,6 +920,19 @@ export class MessageGraphWorkflow {
       });
       update.inputMessageIds = [recorded.messageRecordId];
       update.inboundRecordId = recorded.messageRecordId;
+      if (recorded.alreadyAnswered && state.deferResponse) {
+        // Fragmento diferido (audio) ja respondido: segue para o lote, que
+        // decide se ainda ha algo novo para responder.
+        update.inboundAlreadyAnswered = true;
+      }
+      if (recorded.alreadyAnswered && !state.deferResponse) {
+        // Retry de um turno que ja respondeu: nao responde de novo.
+        return {
+          ...update,
+          guardDecision: "duplicate",
+          result: { ok: true, action: "duplicate" },
+        };
+      }
     } else {
       // Lote ja agrupado: os fragmentos entram na ordem de recebimento, entao
       // a mensagem deste turno e a ultima.
@@ -1003,6 +1053,9 @@ export class MessageGraphWorkflow {
               aiSettings: message.aiSettings,
               channelMessage: message,
             });
+      if (reply.silent) {
+        return { result: { ok: true, action: "ai_paused_silently" } };
+      }
       const conversation = await this.dependencies.runtime.loadConversation({
         tenantId: state.tenantId,
         channelId: state.channelId,
@@ -1139,6 +1192,9 @@ export class MessageGraphWorkflow {
         state.assistantSession,
         state.modelResponse,
       );
+      if (reply.silent) {
+        return { result: { ok: true, action: "ai_paused_silently" } };
+      }
       const conversation = await this.dependencies.runtime.loadConversation({
         tenantId: state.tenantId,
         channelId: state.channelId,
@@ -1210,6 +1266,25 @@ export class MessageGraphWorkflow {
     }
   }
 
+  /**
+   * Entre uma parte e outra da resposta, so para a sequencia quem tira a IA
+   * de cena: humano assumindo, pausa, IA desligada, canal caido. Mensagem
+   * nova do cliente (`input_superseded`) nao interrompe uma resposta que ja
+   * comecou a sair — cortar no meio deixaria o cliente com meia resposta. O
+   * aviso de handoff sai inteiro: a pausa que ele mesmo criou nao o corta.
+   */
+  private async midReplyStopReason(
+    state: MessageGraphStateValue,
+  ): Promise<string | null> {
+    if (state.handoffRequired) return null;
+    const reason = await this.executionBlockReason(state);
+    if (reason && reason !== "input_superseded") return reason;
+    const paused = await this.dependencies.handoff.isBotPaused(
+      state.customerContext.phone,
+    );
+    return paused ? "paused_before_send" : null;
+  }
+
   private async sendResponse(
     state: MessageGraphStateValue,
   ): Promise<MessageGraphStateUpdate> {
@@ -1256,16 +1331,27 @@ export class MessageGraphWorkflow {
 
     const correlationId =
       state.response.correlationId ?? state.response.messageRecordId;
-    let sent: Awaited<ReturnType<WhatsAppProvider["sendText"]>>;
+    // A resposta sai em varias mensagens curtas (decisao 2026-10-11); a linha
+    // continua uma so e so vira SENT depois da ultima parte.
+    let sent: AiReplyDispatchOutcome;
     try {
-      sent = await this.dependencies.provider.sendText({
-        to: message.customerPhone,
-        text: state.response.text,
-        quotedMessageId: message.messageId,
-        quotedParticipant: message.chatId,
-        correlationId,
-        requestId: message.requestId,
-      });
+      sent = await dispatchAiReply(
+        this.dependencies.provider,
+        {
+          to: message.customerPhone,
+          text: state.response.text,
+          correlationId,
+          messageRecordId: state.response.messageRecordId,
+          quotedMessageId: message.messageId,
+          quotedParticipant: message.chatId,
+          requestId: message.requestId,
+        },
+        {
+          progress: this.dependencies.replyDispatch?.progress,
+          sleep: this.dependencies.replyDispatch?.sleep,
+          shouldStop: () => this.midReplyStopReason(state),
+        },
+      );
     } catch (error) {
       const classification = classifySendFailure(error);
       await this.recordDelivery(state.response.messageRecordId, {
@@ -1289,14 +1375,35 @@ export class MessageGraphWorkflow {
       return { result: { ok: true, action: "send_failed" } };
     }
 
+    if (sent.status === "stopped") {
+      // A profissional assumiu (ou a IA saiu de cena) no meio da sequencia:
+      // as partes ainda nao enviadas sao descartadas. A linha nao e SENT —
+      // nem toda a resposta saiu — e o motivo diz ate onde foi.
+      await this.recordDelivery(state.response.messageRecordId, {
+        state: "FAILED",
+        detail: `${sent.reason}_after_part_${sent.partsSent}_of_${sent.totalParts}`,
+      });
+      this.logger.info(
+        {
+          ...channelMessageLogContext(message),
+          messageRecordId: state.response.messageRecordId,
+          reason: sent.reason,
+          partsSent: sent.partsSent,
+          totalParts: sent.totalParts,
+        },
+        "LangGraph stopped a multi-part response midway",
+      );
+      return { result: { ok: true, action: "superseded" } };
+    }
+
     const response = {
       ...state.response,
-      providerMessageId: sent.messageId ?? correlationId,
+      providerMessageId: sent.providerMessageId,
       rawPayload: sent.raw,
     };
     await this.recordDelivery(state.response.messageRecordId, {
       state: "SENT",
-      providerMessageId: sent.messageId ?? correlationId,
+      providerMessageId: sent.providerMessageId,
       rawPayload: sent.raw,
     });
     return {
@@ -1546,4 +1653,21 @@ function isModelToolResultValid(result: { content: string }): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Filtro de validacao local (`AI_REPLY_ONLY_PHONES`): com a lista preenchida,
+ * so os numeros dela recebem resposta da IA; os demais seguem como contato
+ * ignorado. Lista vazia, sem filtro.
+ */
+export function replyAllowedForPhone(
+  phone: string,
+  allowList: string = env.AI_REPLY_ONLY_PHONES,
+): boolean {
+  const allowed = allowList
+    .split(",")
+    .map((item) => item.replace(/\D/g, ""))
+    .filter(Boolean);
+  if (allowed.length === 0) return true;
+  return allowed.includes(phone.replace(/\D/g, ""));
 }

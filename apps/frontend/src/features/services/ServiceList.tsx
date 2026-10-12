@@ -4,7 +4,11 @@ import clsx from "clsx";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { BffHttpError, type Service, type ServiceList as ServiceListResult } from "@/data";
+import {
+  BffHttpError,
+  type Service,
+  type ServiceList as ServiceListResult,
+} from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { ListDetailEmpty, ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
@@ -357,9 +361,7 @@ function ServiceGroup({
   if (services.length === 0) return null;
   return (
     <div className="service-group">
-      <h2
-        className={clsx("service-group-heading", hideHeading && "sr-only")}
-      >
+      <h2 className={clsx("service-group-heading", hideHeading && "sr-only")}>
         {heading}
       </h2>
       <ul className="service-group-list">

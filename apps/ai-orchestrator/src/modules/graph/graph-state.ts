@@ -100,6 +100,8 @@ export interface GraphBufferedRecord {
    * agrupa: um fragmento de voz nao tem texto no payload do canal.
    */
   text?: string;
+  /** Ver `RecordedInboundText.alreadyAnswered`. */
+  alreadyAnswered?: boolean;
 }
 
 export interface GraphResult {
@@ -123,6 +125,9 @@ export interface GraphResult {
     | "unsupported_media_kind"
     | "buffered"
     | "replied"
+    // Contato que nao e cliente (pessoal, quem oferece o proprio servico,
+    // fornecedor, spam): a IA pausa sem mandar nada (2026-10-11).
+    | "ai_paused_silently"
     | "superseded"
     | "send_failed"
     // Resposta da IA recusada no despacho porque o destino e grupo
@@ -154,6 +159,12 @@ export const MessageGraphState = Annotation.Root({
    * primeiro fragmento do lote.
    */
   inboundRecordId: Annotation<string | undefined>(),
+  /**
+   * Retry de lote: o fragmento diferido ja estava gravado e respondido.
+   * Passa adiante no `bufferedRecord` (validacao de 2026-10-12: fragmento de
+   * audio ja respondido fazia o retry responder de novo).
+   */
+  inboundAlreadyAnswered: Annotation<boolean | undefined>(),
   /** Desfecho da transcricao deste turno, ver `transcribeAudio`. */
   audioTranscription: Annotation<InboundTranscription | undefined>(),
   deferResponse: Annotation<boolean>(),

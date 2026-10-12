@@ -70,7 +70,10 @@ function dayLabel(day: Date, marks: AgendaEntry[]): string {
   if (appointments.length > 0) {
     parts.push(plural(appointments.length, "atendimento", "atendimentos"));
   }
-  if (others > 0) parts.push(plural(others, "bloqueio ou compromisso", "bloqueios ou compromissos"));
+  if (others > 0)
+    parts.push(
+      plural(others, "bloqueio ou compromisso", "bloqueios ou compromissos"),
+    );
   if (marks.length === 0) parts.push("sem atendimentos");
   return parts.join(", ");
 }
@@ -140,7 +143,9 @@ function Line({
   entry: AgendaEntry;
 }) {
   const appointment = entry.kind === "appointment" ? entry.appointment : null;
-  const tokens = appointment ? appointmentServiceColors(appointment, colors) : [];
+  const tokens = appointment
+    ? appointmentServiceColors(appointment, colors)
+    : [];
   return (
     <span className={clsx("month-line", `is-${entry.kind}`)}>
       {appointment && (

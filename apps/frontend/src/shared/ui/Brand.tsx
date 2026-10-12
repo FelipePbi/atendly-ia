@@ -126,9 +126,58 @@ export function Brand({
   signature?: BrandSignature;
 }) {
   return (
-    <Link className="brand" href={href} aria-label="Avenly — Início">
+    <Link className="brand" href={href} aria-label="Avenly, Início">
       <BrandMark signature={signature} />
       {!compact && <span>Avenly</span>}
     </Link>
+  );
+}
+
+/**
+ * Carregamento de tela inteira: o "A" da Avenly cresce e diminui no centro
+ * da viewport, com ondas por baixo. O texto fica só para leitor de tela.
+ *
+ * É uma camada fixa sobre a página (não um `<main>`): no primeiro
+ * carregamento a tela monta por baixo dele e ele sai (`leaving`, 160 ms)
+ * quando a primeira leitura dela terminou (D-168, revisão de 2026-10-12).
+ * O mesmo elemento fica no DOM da verificação da sessão até a saída, para a
+ * respiração do símbolo não recomeçar no meio.
+ */
+export function BrandLoader({
+  label,
+  leaving = false,
+}: {
+  label: string;
+  leaving?: boolean;
+}) {
+  return (
+    <div
+      className={
+        leaving ? "brand-loader-screen is-leaving" : "brand-loader-screen"
+      }
+      aria-busy={leaving ? undefined : "true"}
+      aria-hidden={leaving ? "true" : undefined}
+      data-splash={leaving ? "leaving" : "covering"}
+    >
+      <div role="status" aria-live="polite">
+        <span className="brand-loader-mark">
+          <svg
+            className="brand-loader"
+            viewBox="0 0 64 64"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={6}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M6 56L28 9L40.85 36.5" />
+            <path d="M44.7 44.8L50 56" />
+            <path d="M25.5 38L32 44.5L58 21" />
+          </svg>
+        </span>
+        <span className="sr-only">{label}</span>
+      </div>
+    </div>
   );
 }

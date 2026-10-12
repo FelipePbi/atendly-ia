@@ -41,9 +41,7 @@ export function ImportHistoryCard({
         </span>
         <div className="import-history-done-copy">
           <h2>Importação concluída</h2>
-          <span>
-            Minha Agenda{completedAt ? ` · ${completedAt}` : ""}
-          </span>
+          <span>Minha Agenda{completedAt ? ` · ${completedAt}` : ""}</span>
         </div>
       </div>
       <ul className="import-history-rows">
@@ -90,8 +88,8 @@ export function ImportHistoryCard({
       )}
       <p className="import-history-note">
         A importação do Minha Agenda é feita uma única vez. Alterações feitas lá
-        depois de {completedDay ?? "esta data"} não chegam à Avenly — sua
-        agenda oficial é esta.
+        depois de {completedDay ?? "esta data"} não chegam à Avenly: sua agenda
+        oficial é esta.
       </p>
     </div>
   );

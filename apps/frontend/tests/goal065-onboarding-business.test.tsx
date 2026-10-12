@@ -20,6 +20,8 @@ import {
 } from "@/features/onboarding/OnboardingRuntime";
 import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
 
+import { addressField, fillAddress,FLORES_ADDRESS } from "./support/address";
+
 const push = vi.fn();
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -369,7 +371,7 @@ const onSiteWithoutAddress: Partial<OnboardingState> = {
   },
 };
 
-describe("endereco: só existe para Local próprio, exige valor não vazio", () => {
+describe("endereco: só existe para Local próprio, exige cada parte não vazia", () => {
   test("a retomada com ON_SITE e sem endereço abre endereco", () => {
     expect(nextRequiredStep(stateFixture(onSiteWithoutAddress))).toBe(
       "endereco",
@@ -378,42 +380,73 @@ describe("endereco: só existe para Local próprio, exige valor não vazio", () 
 
   test("envio vazio bloqueia com erro inline, foca o campo e não grava", async () => {
     const user = await renderStep("endereco", stateFixture(onSiteWithoutAddress));
-    const addressInput = await screen.findByLabelText("Endereço do seu espaço");
+    const postalCode = await screen.findByLabelText("CEP");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
+    // Todos os obrigatórios mostram o erro juntos; o foco vai ao primeiro (CEP).
     expect(
-      await screen.findByText("Informe o endereço do seu espaço."),
+      await screen.findByText("Informe o CEP com 8 números."),
     ).toBeVisible();
-    expect(addressInput).toHaveFocus();
-    expect(addressInput).toHaveAttribute("aria-invalid", "true");
+    expect(postalCode).toHaveFocus();
+    expect(postalCode).toHaveAttribute("aria-invalid", "true");
+    expect(postalCode).toHaveAccessibleDescription(
+      "Informe o CEP com 8 números.",
+    );
+    for (const [label, message] of [
+      ["Rua", "Informe a rua."],
+      ["Número", "Informe o número."],
+      ["Bairro", "Informe o bairro."],
+      ["Cidade", "Informe a cidade."],
+      ["Estado", "Escolha o estado."],
+    ] as const) {
+      expect(screen.getByText(message)).toBeVisible();
+      expect(addressField(label)).toHaveAttribute("aria-invalid", "true");
+    }
+    // Complemento é opcional: vazio não é erro.
+    expect(addressField("Complemento")).not.toHaveAttribute("aria-invalid");
     expect(updateOnboarding).not.toHaveBeenCalled();
   });
 
   test("valor só de espaços bloqueia com o mesmo erro, sem gravar", async () => {
     const user = await renderStep("endereco", stateFixture(onSiteWithoutAddress));
-    await user.type(
-      await screen.findByLabelText("Endereço do seu espaço"),
-      "   ",
-    );
+    await fillAddress(user, {
+      ...FLORES_ADDRESS,
+      city: "   ",
+      district: "   ",
+      number: "   ",
+      street: "   ",
+    });
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
-    expect(
-      await screen.findByText("Informe o endereço do seu espaço."),
-    ).toBeVisible();
+    expect(await screen.findByText("Informe a rua.")).toBeVisible();
+    expect(screen.getByText("Informe o número.")).toBeVisible();
+    expect(screen.getByText("Informe o bairro.")).toBeVisible();
+    expect(screen.getByText("Informe a cidade.")).toBeVisible();
+    expect(addressField("Rua")).toHaveFocus();
+    // CEP e estado preenchidos não acusam erro.
+    expect(addressField("CEP")).not.toHaveAttribute("aria-invalid");
+    expect(addressField("Estado")).not.toHaveAttribute("aria-invalid");
     expect(updateOnboarding).not.toHaveBeenCalled();
   });
 
   test("preenchido, grava com o endereço e avança para sistema-atual", async () => {
     const user = await renderStep("endereco", stateFixture(onSiteWithoutAddress));
-    await user.type(
-      await screen.findByLabelText("Endereço do seu espaço"),
-      "Rua das Flores, 100",
-    );
+    await fillAddress(user, { ...FLORES_ADDRESS, complement: "Sala 2" });
+    // A máscara do CEP entra enquanto digita.
+    expect(addressField("CEP")).toHaveValue("01310-100");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     await waitFor(() => expect(updateOnboarding).toHaveBeenCalledWith({
       business: {
-        address: "Rua das Flores, 100",
+        addressParts: {
+          city: "São Paulo",
+          complement: "Sala 2",
+          district: "Centro",
+          number: "100",
+          postalCode: "01310100",
+          state: "SP",
+          street: "Rua das Flores",
+        },
         category: "Cabelo",
         modalities: ["ON_SITE"],
         name: "Studio Aurora",
@@ -435,17 +468,21 @@ describe("endereco: só existe para Local próprio, exige valor não vazio", () 
       }),
     );
     const user = await renderStep("endereco", stateFixture(onSiteWithoutAddress));
-    const addressInput = await screen.findByLabelText("Endereço do seu espaço");
-    await user.type(addressInput, "Rua das Flores, 100");
+    await fillAddress(user, FLORES_ADDRESS);
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
+    // `data-server-field="business.address"` fica no CEP, o primeiro campo
+    // do endereço; o texto é o da tela, nunca a mensagem crua do servidor.
+    const postalCode = addressField("CEP");
     expect(
-      await screen.findByText("Informe o endereço do seu espaço."),
+      await screen.findByText("Preencha o endereço do seu espaço."),
     ).toBeVisible();
-    expect(addressInput).toHaveAttribute("aria-invalid", "true");
-    expect(addressInput).toHaveAccessibleDescription(
-      "Informe o endereço do seu espaço.",
+    expect(postalCode).toHaveAttribute("aria-invalid", "true");
+    expect(postalCode).toHaveFocus();
+    expect(postalCode).toHaveAccessibleDescription(
+      "Preencha o endereço do seu espaço.",
     );
+    expect(screen.queryByText(/Address is required/)).toBeNull();
     expect(
       screen.queryByText("Alguma informação desta etapa não foi aceita. Revise o que você preencheu e continue."),
     ).toBeNull();

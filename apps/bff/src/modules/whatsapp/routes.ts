@@ -7,7 +7,7 @@ import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { EvolutionClient } from "../../clients/evolution/index.js";
 import { resolveAiConversationStyle } from "../../lib/ai-conversation-style.js";
 import { AppError } from "../../lib/errors.js";
-import { dataResponse, parseBody } from "../../lib/http.js";
+import { dataResponse, parseBody, parseQuery } from "../../lib/http.js";
 import { credentialKeysConfigured } from "../../lib/instance-credentials.js";
 import {
   normalizeBrazilianWhatsappPhone,
@@ -18,6 +18,7 @@ import {
   currentTenantContext,
   requireTenantContext,
 } from "../../lib/tenant-context.js";
+import { selectWhatsappContacts } from "../../lib/whatsapp-contacts.js";
 import { internalContext } from "../tenant/context.js";
 import { disconnectWhatsApp } from "./disconnect.js";
 import {
@@ -42,6 +43,11 @@ const connectSchema = z
     path: ["phone"],
     message: "Phone is required for pairing code mode.",
   });
+
+const contactsQuerySchema = z.object({
+  search: z.string().trim().max(80).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
 
 export async function registerV1WhatsAppRoutes(
   app: FastifyInstance,
@@ -84,6 +90,32 @@ export async function registerV1WhatsAppRoutes(
         },
       });
       return dataResponse(request, whatsappDto(updated));
+    },
+  );
+
+  // Contatos do número conectado (validação de 2026-10-11): a escolha dos
+  // contatos ignorados não depende de já haver conversas na Avenly. Lidos na
+  // hora e nunca gravados; só quem a pessoa marcar vira contato ignorado.
+  app.get(
+    "/v1/whatsapp/contacts",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const query = parseQuery(contactsQuerySchema, request.query);
+      const tenant = currentTenantContext(request);
+      const instance = await findLinkedInstance(tenant);
+      if (!instance || instance.status !== "CONNECTED") {
+        return dataResponse(request, { available: false, items: [] });
+      }
+      const credential = await resolveInstanceCredential(instance);
+      const raw = await evolution.getContacts(credential, request.id);
+      return dataResponse(request, {
+        available: true,
+        items: selectWhatsappContacts(raw, {
+          excludePhone: instance.phoneNumber,
+          limit: query.limit,
+          search: query.search,
+        }),
+      });
     },
   );
 

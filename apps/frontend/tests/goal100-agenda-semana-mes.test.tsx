@@ -615,7 +615,7 @@ describe("5 — Mês: o primeiro toque seleciona, o segundo abre o Dia", () => {
 
     expect(other).toHaveAttribute("aria-pressed", "true");
     expect(today).toHaveAttribute("aria-pressed", "false");
-    expect(summaryCard()).toHaveTextContent("Quarta 30");
+    expect(summaryCard()).toHaveTextContent("Quarta, 30");
     expect(summaryCard()).toHaveTextContent("1 atendimento");
     expect(summaryCard()).not.toHaveTextContent("Hoje");
     expect(screen.getByRole("tab", { name: "Mês" })).toHaveAttribute(
@@ -644,7 +644,7 @@ describe("5 — Mês: o primeiro toque seleciona, o segundo abre o Dia", () => {
     );
     expect(await screen.findByText("Bia Castro")).toBeVisible();
     expect(document.querySelector(".agenda-day-summary")).toHaveTextContent(
-      "Quarta 30",
+      "Quarta, 30",
     );
     expect(screen.queryByRole("region", { name: "Mapa do mês" })).toBeNull();
   });
@@ -655,7 +655,7 @@ describe("5 — Mês: o primeiro toque seleciona, o segundo abre o Dia", () => {
 
     const month = await openMonth(user);
     await user.click(dayCell(month, /^1 de outubro/));
-    expect(summaryCard()).toHaveTextContent("Quinta 1");
+    expect(summaryCard()).toHaveTextContent("Quinta, 1");
     expect(screen.getByRole("tab", { name: "Mês" })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -695,19 +695,31 @@ describe("5 — Mês: o primeiro toque seleciona, o segundo abre o Dia", () => {
     );
   });
 
-  test("na Semana, tocar no cabeçalho de um dia continua abrindo o Dia", async () => {
+  // Pedido de 2026-10-12: o cabeçalho escolhe o dia para o resumo e a
+  // Semana continua; "Abrir dia" é que leva ao Dia.
+  test("na Semana, tocar no cabeçalho de um dia o escolhe para o resumo, e 'Abrir dia' abre o Dia", async () => {
     const user = setup();
     renderBoard();
 
     const week = await openWeek(user);
-    await user.click(within(week).getByRole("button", { name: /QUA/ }));
+    await user.click(
+      within(week).getByRole("button", { name: /^QUA\s*30, mostrar quarta, 30/ }),
+    );
 
+    expect(screen.getByRole("tab", { name: "Semana" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("region", { name: "Resumo do dia" })).toHaveTextContent(
+      "Quarta, 30",
+    );
+    await user.click(screen.getByRole("button", { name: "Abrir dia" }));
     expect(screen.getByRole("tab", { name: "Dia" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
     expect(document.querySelector(".agenda-day-summary")).toHaveTextContent(
-      "Quarta 30",
+      "Quarta, 30",
     );
   });
 });

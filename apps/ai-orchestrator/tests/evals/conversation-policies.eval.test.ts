@@ -37,7 +37,7 @@ describe("condução da conversa: saudação, serviço e ambiguidade", () => {
     expect(world.model.invoke).not.toHaveBeenCalled();
     expect(world.sequenciaDeTools()).toEqual([]);
     expect(world.agenda.reached).toEqual([]);
-    expect(reply.text).toBe("Oii, tudo bem? Como posso te ajudar hoje?");
+    expect(reply.text).toBe("Oii, tudo bem? Como posso te ajudar?");
     expect(reply.text).not.toMatch(
       /servi[çc]o|agenda|hor[áa]rio|dispon[íi]vel|R\$/i,
     );

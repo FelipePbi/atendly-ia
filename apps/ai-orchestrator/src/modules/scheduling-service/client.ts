@@ -245,7 +245,22 @@ const appointmentPresenceSchema = z.object({
 
 const DEFAULT_AVAILABILITY_DAYS = 14;
 const DEFAULT_APPOINTMENT_LOOKUP_DAYS = 90;
-const DEFAULT_MAX_SLOTS = 3;
+/**
+ * Quantos horarios o motor devolve para a IA escolher. Antes eram 3, sempre
+ * os primeiros: "quais os horarios pra essa semana?" so via hoje cedo
+ * (validacao de 2026-10-11). Agora a busca cobre o periodo e
+ * `spreadSlotsAcrossDays` espalha a oferta pelos dias.
+ */
+const AVAILABILITY_FETCH_MAX_SLOTS = 100;
+/** Dias com horario na oferta e horarios por dia (comeco, meio e fim). */
+const OFFER_MAX_DAYS = 5;
+const OFFER_SLOTS_PER_DAY = 3;
+/**
+ * Pedido de um dia so (ou dois) tambem fica em 3: com 6 a IA repassava todos
+ * ("9h, 9h30, 10h, 11h, 15h ou 15h30"), mesmo com o prompt pedindo no maximo
+ * 3 (validacao de 2026-10-12).
+ */
+const OFFER_SLOTS_PER_SHORT_PERIOD_DAY = 3;
 const DEFAULT_SLOT_STEP_MINUTES = 30;
 
 export interface SchedulingGateway {
@@ -261,6 +276,7 @@ export interface SchedulingGateway {
     startDate: string | undefined,
     businessContext: BusinessContext,
     context?: SchedulingRequestContext,
+    options?: AvailabilityQueryOptions,
   ): Promise<Array<{ date: string; startTime: string; endTime: string }>>;
   createAppointment(
     input: ScheduleAppointmentInput,
@@ -438,21 +454,28 @@ export class SchedulingClient implements SchedulingGateway {
     startDate: string | undefined,
     businessContext: BusinessContext,
     context?: SchedulingRequestContext,
+    options?: AvailabilityQueryOptions,
   ) {
+    const days = options?.days ?? DEFAULT_AVAILABILITY_DAYS;
     // Sem `stepMinutes` (Goal009): a granularidade da oferta é sempre a do
     // negócio, decidida pelo motor de disponibilidade — a IA não propõe a
     // própria grade.
     const query = new URLSearchParams({
       serviceIds: serviceIds.join(","),
       startDate: startDate ?? todayInTimeZone(businessContext.timezone),
-      days: String(DEFAULT_AVAILABILITY_DAYS),
-      maxSlots: String(DEFAULT_MAX_SLOTS),
+      days: String(days),
+      maxSlots: String(AVAILABILITY_FETCH_MAX_SLOTS),
     });
-    return this.request(
+    const slots = await this.request(
       `/internal/availability?${query.toString()}`,
       slotSchema.array(),
       { context },
     );
+    return spreadSlotsAcrossDays(slots, {
+      maxDays: OFFER_MAX_DAYS,
+      perDay:
+        days <= 2 ? OFFER_SLOTS_PER_SHORT_PERIOD_DAY : OFFER_SLOTS_PER_DAY,
+    });
   }
 
   async createAppointment(
@@ -1104,4 +1127,44 @@ function extractUpstreamError(value: unknown): {
         code: "SCHEDULING_UPSTREAM_ERROR",
         message: "Scheduling Service request failed.",
       };
+}
+
+export interface AvailabilityQueryOptions {
+  /** Dias a partir de `startDate` (1 a 14); sem ele, 14. */
+  days?: number;
+}
+
+/**
+ * Oferta espalhada pelo periodo: ate `maxDays` dias com horario e, em cada
+ * um, ate `perDay` horarios distribuidos do comeco ao fim do dia (o primeiro,
+ * o ultimo e os do meio), na ordem do motor. Assim a cliente que pediu "essa
+ * semana" ve dias diferentes, e a que pediu "a tarde" encontra a tarde.
+ */
+export function spreadSlotsAcrossDays<T extends { date: string }>(
+  slots: T[],
+  options: { maxDays: number; perDay: number },
+): T[] {
+  const byDay = new Map<string, T[]>();
+  for (const slot of slots) {
+    const day = byDay.get(slot.date);
+    if (day) day.push(slot);
+    else if (byDay.size < options.maxDays) byDay.set(slot.date, [slot]);
+  }
+  const offer: T[] = [];
+  for (const day of byDay.values()) {
+    if (day.length <= options.perDay) {
+      offer.push(...day);
+      continue;
+    }
+    const picked = new Set<number>();
+    for (let index = 0; index < options.perDay; index += 1) {
+      picked.add(
+        Math.round((index * (day.length - 1)) / (options.perDay - 1)),
+      );
+    }
+    for (const index of [...picked].sort((a, b) => a - b)) {
+      offer.push(day[index]);
+    }
+  }
+  return offer;
 }

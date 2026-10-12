@@ -34,32 +34,37 @@ import {
 import { AppointmentForm } from "@/features/agenda/AppointmentForm";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
+import { chooseManualTime } from "./support/pickers";
+
 const replace = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace }),
 }));
 
-const createAppointment = vi.fn<
-  (
-    input: CreateAppointmentInput,
-    idempotencyKey: string,
-    signal?: AbortSignal,
-  ) => Promise<Appointment>
->();
-const createHold = vi.fn<
-  (
-    input: CreateHoldInput,
-    idempotencyKey: string,
-    signal?: AbortSignal,
-  ) => Promise<AppointmentHold>
->();
-const getAvailability = vi.fn<
-  (
-    query: AvailabilityQuery,
-    signal?: AbortSignal,
-  ) => Promise<AvailabilitySlot[]>
->();
+const createAppointment =
+  vi.fn<
+    (
+      input: CreateAppointmentInput,
+      idempotencyKey: string,
+      signal?: AbortSignal,
+    ) => Promise<Appointment>
+  >();
+const createHold =
+  vi.fn<
+    (
+      input: CreateHoldInput,
+      idempotencyKey: string,
+      signal?: AbortSignal,
+    ) => Promise<AppointmentHold>
+  >();
+const getAvailability =
+  vi.fn<
+    (
+      query: AvailabilityQuery,
+      signal?: AbortSignal,
+    ) => Promise<AvailabilitySlot[]>
+  >();
 const getCalendar = vi.fn();
 const listAppointments = vi.fn();
 const listTimeBlocks = vi.fn();
@@ -125,7 +130,9 @@ function customerFixture(overrides: Partial<Customer> = {}): Customer {
   };
 }
 
-function holdFixture(overrides: Partial<AppointmentHold> = {}): AppointmentHold {
+function holdFixture(
+  overrides: Partial<AppointmentHold> = {},
+): AppointmentHold {
   return {
     contactRef: null,
     customerId: "cus-ana",
@@ -305,7 +312,9 @@ describe("prova 2 — cliente novo pelo mesmo campo", () => {
       screen.getByLabelText("Telefone (opcional)"),
       "+5511988887777",
     );
-    await user.click(screen.getByRole("checkbox", { name: /Corte feminino/ }));
+    await user.click(
+      await screen.findByRole("checkbox", { name: /Corte feminino/ }),
+    );
     await user.click(await screen.findByRole("radio", { name: "09:00" }));
     await waitFor(() => expect(createHold).toHaveBeenCalled());
     // Cliente novo ainda não tem ID: o hold não inventa um.
@@ -328,7 +337,13 @@ describe("prova 2 — cliente novo pelo mesmo campo", () => {
       await screen.findByLabelText("Nome do cliente"),
       "Carla Nunes",
     );
-    await user.click(screen.getByRole("checkbox", { name: /Corte feminino/ }));
+    // O nome digitado vira cliente novo pelo "Cadastrar" (D-170, 2026-10-12).
+    await user.click(
+      screen.getByRole("button", { name: /Cadastrar “Carla Nunes”/ }),
+    );
+    await user.click(
+      await screen.findByRole("checkbox", { name: /Corte feminino/ }),
+    );
     await user.click(await screen.findByRole("radio", { name: "09:00" }));
     await waitFor(() => expect(createHold).toHaveBeenCalled());
     await user.click(createButton());
@@ -397,10 +412,7 @@ describe("prova 4 — Outro, sem cadastro", () => {
     await user.type(screen.getByLabelText("Duração em minutos"), "25");
     expect(createButton()).toBeDisabled();
 
-    await user.type(
-      screen.getByLabelText("Outro horário, fora dos oferecidos"),
-      "11:30",
-    );
+    await chooseManualTime(user, "11:30");
     await user.click(screen.getByRole("button", { name: "Usar este horário" }));
 
     expect(createButton()).toBeEnabled();
@@ -413,10 +425,7 @@ describe("prova 4 — Outro, sem cadastro", () => {
       "Retoque de franja",
     );
     await user.type(screen.getByLabelText("Duração em minutos"), "25");
-    await user.type(
-      screen.getByLabelText("Outro horário, fora dos oferecidos"),
-      "11:30",
-    );
+    await chooseManualTime(user, "11:30");
     await user.click(screen.getByRole("button", { name: "Usar este horário" }));
     await user.click(createButton());
 
@@ -453,10 +462,7 @@ describe("prova 5 — conflito na criação", () => {
     );
     await screen.findByRole("radio", { name: "09:00" });
     await user.click(screen.getByRole("button", { name: "Outro horário" }));
-    await user.type(
-      screen.getByLabelText("Outro horário, fora dos oferecidos"),
-      "12:00",
-    );
+    await chooseManualTime(user, "12:00");
     await user.click(screen.getByRole("button", { name: "Usar este horário" }));
 
     const notice = await screen.findByRole("alert");
@@ -501,17 +507,14 @@ describe("prova 5 — conflito na criação", () => {
     );
     await user.type(screen.getByLabelText("Título do atendimento"), "Retoque");
     await user.type(screen.getByLabelText("Duração em minutos"), "25");
-    await user.type(
-      screen.getByLabelText("Outro horário, fora dos oferecidos"),
-      "11:30",
-    );
+    await chooseManualTime(user, "11:30");
     await user.click(screen.getByRole("button", { name: "Usar este horário" }));
     await user.click(createButton());
 
     const notice = await screen.findByRole("alert");
     await waitFor(() =>
       expect(notice).toHaveTextContent(
-        "Nada na sua agenda ocupa 11:30–11:55, mas o horário fica fora da grade de atendimento.",
+        "Nada na sua agenda ocupa 11:30–11:55, mas a agenda não liberou o horário agora.",
       ),
     );
     expect(
@@ -520,7 +523,9 @@ describe("prova 5 — conflito na criação", () => {
     expect(
       screen.getByRole("button", { name: "Escolher outro horário" }),
     ).toBeVisible();
-    expect(screen.queryByRole("button", { name: /^Criar agendamento/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /^Criar agendamento/ }),
+    ).toBeNull();
     expect(replace).not.toHaveBeenCalled();
   });
 });
@@ -537,9 +542,13 @@ describe("prova 6 — sem texto de bastidor e sem campo nativo", () => {
   });
 
   test("todo input de texto, select e textarea do formulário tem classe do design system", async () => {
-    const { container } = renderForm();
+    // Com cliente e serviço, todas as etapas estão à vista (revelação
+    // progressiva, pedido de 2026-10-12, D-170).
+    const { container } = renderForm("cus-ana");
     const user = userEvent.setup();
-    await screen.findByRole("checkbox", { name: /Corte feminino/ });
+    await user.click(
+      await screen.findByRole("checkbox", { name: /Corte feminino/ }),
+    );
 
     // Abre tudo o que o A6 esconde atrás de um toque: observação, outra data,
     // outro horário e o ramo "Outro, sem cadastro".
@@ -559,7 +568,9 @@ describe("prova 6 — sem texto de bastidor e sem campo nativo", () => {
       if (element instanceof HTMLSelectElement) return true;
       if (element instanceof HTMLTextAreaElement) return true;
       const type = (element as HTMLInputElement).type;
-      return !["checkbox", "radio", "hidden", "button", "submit"].includes(type);
+      return !["checkbox", "radio", "hidden", "button", "submit"].includes(
+        type,
+      );
     });
 
     expect(controls.length).toBeGreaterThan(1);

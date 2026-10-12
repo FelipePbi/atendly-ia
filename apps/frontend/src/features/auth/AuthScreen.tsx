@@ -27,7 +27,7 @@ const PASSWORD_RULE_LABELS: Record<string, string> = {
 };
 
 const INVALID_CREDENTIALS_MESSAGE =
-  "E-mail ou senha não conferem. Confira e tente de novo — ou recupere a senha.";
+  "E-mail ou senha não conferem. Confira e tente de novo ou recupere a senha.";
 
 function RuleCheck() {
   return (
@@ -120,7 +120,7 @@ function AuthLayout({
               Oi! Vocês têm horário amanhã à tarde?
             </div>
             <div className="entry-mock-bubble entry-mock-bubble--ai">
-              Temos sim. Corte feminino às 15:00 ou 16:30 — qual prefere?
+              Temos sim. Corte feminino às 15:00 ou 16:30, qual prefere?
             </div>
             <div className="entry-mock-bubble entry-mock-bubble--client">
               15:00, por favor
@@ -271,7 +271,8 @@ function validateForm(
     );
     if (passwordError) errors["signup-password"] = passwordError;
     if (!data.get("terms")) {
-      errors.terms = "Você precisa aceitar os Termos de Uso e a Política de Privacidade.";
+      errors.terms =
+        "Você precisa aceitar os Termos de Uso e a Política de Privacidade.";
     }
   } else if (scenario === "login") {
     const emailError = validateEmail(formString(data, "email"));
@@ -319,7 +320,11 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
     if (Object.keys(validationErrors).length > 0) {
       setFieldErrors(validationErrors);
       setSubmitError(null);
-      focusFirstError(form, validationErrors, fieldOrderByScenario[scenario] ?? []);
+      focusFirstError(
+        form,
+        validationErrors,
+        fieldOrderByScenario[scenario] ?? [],
+      );
       return;
     }
 
@@ -388,7 +393,11 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
       const mapped = mapAuthError(error, scenario);
       setFieldErrors(mapped.fieldErrors);
       setSubmitError(mapped.formError ?? null);
-      focusFirstError(form, mapped.fieldErrors, fieldOrderByScenario[scenario] ?? []);
+      focusFirstError(
+        form,
+        mapped.fieldErrors,
+        fieldOrderByScenario[scenario] ?? [],
+      );
     } finally {
       setLoading(false);
     }
@@ -468,7 +477,7 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
             <header className="auth-heading">
               <h1>Senha redefinida</h1>
               <p>
-                Pronto. Você já pode entrar com a nova senha — e a IA segue
+                Pronto. Você já pode entrar com a nova senha. A IA segue
                 atendendo normalmente.
               </p>
             </header>
@@ -530,7 +539,11 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
             </div>
           </div>
         )}
-        <form className="auth-form" onSubmit={(event) => void submit(event)} noValidate>
+        <form
+          className="auth-form"
+          onSubmit={(event) => void submit(event)}
+          noValidate
+        >
           {signup && (
             <label className={`field${fieldErrors.name ? " field-error" : ""}`}>
               <span className="label">Nome</span>
@@ -569,7 +582,9 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
                   autoComplete="email"
                   placeholder="voce@seunegocio.com.br"
                   aria-invalid={fieldErrors.email ? true : undefined}
-                  aria-describedby={fieldErrors.email ? "email-error" : undefined}
+                  aria-describedby={
+                    fieldErrors.email ? "email-error" : undefined
+                  }
                 />
               </span>
               {fieldErrors.email && (
@@ -588,7 +603,11 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
               error={fieldErrors[passwordFieldId]}
               credentialsError={credentialsError}
               showRules={newPassword}
-              hint={signup ? "Mínimo de 8 caracteres, com letras e números." : undefined}
+              hint={
+                signup
+                  ? "Mínimo de 8 caracteres, com letras e números."
+                  : undefined
+              }
             />
           )}
           {signup && (
@@ -599,13 +618,15 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
                   name="terms"
                   type="checkbox"
                   aria-invalid={fieldErrors.terms ? true : undefined}
-                  aria-describedby={fieldErrors.terms ? "terms-error" : undefined}
+                  aria-describedby={
+                    fieldErrors.terms ? "terms-error" : undefined
+                  }
                 />
                 <span className="check-box" aria-hidden="true" />
                 <span className="auth-check-text">
                   Li e concordo com os{" "}
-                  <Link href="/termos-de-uso">Termos de Uso</Link> e declaro
-                  que li a{" "}
+                  <Link href="/termos-de-uso">Termos de Uso</Link> e declaro que
+                  li a{" "}
                   <Link href="/politica-de-privacidade">
                     Política de Privacidade
                   </Link>

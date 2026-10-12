@@ -12,9 +12,10 @@ export type PushedBarMenuItem = {
 };
 
 type PushedBarProps = {
-  backHref: string;
+  /** Sem ele não há voltar: só o `⋯` (painel do Dia ao lado da lista, D-165). */
+  backHref?: string;
   backIcon?: "chevron-left" | "x";
-  backLabel: string;
+  backLabel?: string;
   /** Esconde o voltar de 1024 px em diante, mesmo com título (N1): a lista já está ao lado. */
   hideBackWide?: boolean;
   /** `h2` quando outro cabeçalho da tela já é o `h1` (lista em painel na rota do hub). */
@@ -58,17 +59,20 @@ export function PushedBar({
 
   return (
     <div className="pushed-bar">
-      <Link
-        aria-label={backLabel}
-        className={clsx(
-          "pushed-bar-back",
-          title && "is-titled",
-          hideBackWide && "is-hidden-wide",
-        )}
-        href={backHref}
-      >
-        <Icon name={backIcon} />
-      </Link>
+      {backHref && (
+        <Link
+          aria-label={backLabel}
+          className={clsx(
+            "pushed-bar-back",
+            title && "is-titled",
+            hideBackWide && "is-hidden-wide",
+          )}
+          data-motion="back"
+          href={backHref}
+        >
+          <Icon name={backIcon} />
+        </Link>
+      )}
       {title && (
         <div className="pushed-bar-title">
           <Heading>{title}</Heading>

@@ -862,6 +862,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Avenly.
 749. **Copy da lista?** — **A — “Quer impedir que a IA responda algumas pessoas?”** **Vigente.**
 750. **Como escolher contatos ignorados?** — **C — Conversas/contatos + número manual.** **Vigente.**
 751. **Sem agenda de contatos do aparelho?** — **A — Usar conversas existentes + número manual.** **Vigente.**
+751a. **Contatos do aparelho na escolha dos ignorados?** — **Sim (validação de 2026-10-11).** Conversas + contatos do WhatsApp do número conectado (lidos na hora, nunca gravados) + número manual. Sem a lista do aparelho, vale a 751. **Vigente.**
 752. **Tela WhatsApp conectada mostra o quê?** — **A — Número, estado da conexão, estado da IA, última conexão, trocar/desconectar.** **Vigente.**
 753. **Mostrar nome/foto do perfil?** — **A — Sim quando disponíveis.** **Vigente.**
 754. **Desconectar WhatsApp?** — **B — Área de perigo com confirmação.** **Vigente.**
@@ -1423,7 +1424,7 @@ Sessão de brainstorm sobre público-alvo, oferta e landing page. Resultado cons
 
 ### G9. A IA deve enviar respostas em mensagens separadas?
 
-**Vigente como decisão de produto; implementação pendente.** Sim — mensagens curtas separadas com "digitando…" entre elas. Ver "Envio em mensagens separadas" em [[01-Regras/03-IA-e-Conversas]].
+**Vigente; implementado em 2026-10-11.** Sim: mensagens curtas separadas, com pausa e “digitando…” entre elas. Ver "Envio em mensagens separadas" em [[01-Regras/03-IA-e-Conversas]].
 
 ### G10. A landing page usa a identidade visual do produto?
 

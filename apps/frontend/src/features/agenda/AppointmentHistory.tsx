@@ -1,32 +1,20 @@
 "use client";
 
+import clsx from "clsx";
 import { useEffect, useState } from "react";
 
 import { type AppointmentEvent } from "@/data";
-import { getProductServices, useProductRuntime } from "@/shared/runtime/ProductRuntime";
+import {
+  getProductServices,
+  useProductRuntime,
+} from "@/shared/runtime/ProductRuntime";
 import { StatePanel } from "@/shared/ui/States";
 
+import {
+  recalledAppointmentHistory,
+  rememberAppointmentHistory,
+} from "./agendaMemory";
 import { requestError } from "./occupancy";
-
-const EVENT_TYPE_LABELS: Record<AppointmentEvent["type"], string> = {
-  CREATED: "Agendamento criado",
-  RESCHEDULED: "Reagendado",
-  CANCELLED: "Cancelado",
-  COMPLETED: "Atendimento concluído",
-  NO_SHOW: "Falta registrada",
-  FINAL_VALUE_SET: "Valor final registrado",
-  PRESENCE_CONFIRMED: "Presença confirmada",
-  HOLD_CONSUMED: "Reserva consumida",
-  OVERLAP_OVERRIDE: "Sobreposição autorizada",
-};
-
-/** Origem do evento (Goal016): a IA aparece como IA, nunca como termo interno. */
-const EVENT_SOURCE_LABELS: Record<AppointmentEvent["source"], string> = {
-  AI: "IA",
-  USER: "Equipe",
-  SYSTEM: "Automático",
-  INTEGRATION: "Integração",
-};
 
 /**
  * `occurredAt` é o início da transação: eventos gravados juntos compartilham
@@ -111,13 +99,6 @@ function formatTimelineTimestamp(value: string): string {
   return `${weekday}, ${day} · ${time}`;
 }
 
-function formatEventTimestamp(value: string): string {
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
 /**
  * `actor` grava o `user.id` de quem agiu — um identificador interno, nunca
  * exibível (AG-07). Só quando ele bate com o `user.id` da própria sessão dá
@@ -132,26 +113,41 @@ function actorLabel(
   return session.user.name ?? session.user.email;
 }
 
+/** O histórico do quadro A5: um ponto por evento, com autoria. */
 export function AppointmentHistory({
   appointmentId,
   reloadKey,
-  variant = "list",
 }: {
   appointmentId: string;
   reloadKey?: number;
-  /** `timeline` é o histórico do quadro A5: um ponto por evento, com autoria. */
-  variant?: "list" | "timeline";
 }) {
   const { session } = useProductRuntime();
-  const [events, setEvents] = useState<AppointmentEvent[] | null>(null);
+  // O histórico visto por último nesta aba aparece na hora (D-168); a
+  // leitura abaixo o substitui no lugar.
+  const [events, setEvents] = useState<AppointmentEvent[] | null>(() =>
+    recalledAppointmentHistory(appointmentId),
+  );
+  const [seeded, setSeeded] = useState(events !== null);
   const [error, setError] = useState<string | null>(null);
+  // Outro atendimento na mesma tela: nada do anterior fica; vale o lembrado
+  // dele, ou a linha reservada.
+  const [forId, setForId] = useState(appointmentId);
+  if (forId !== appointmentId) {
+    const remembered = recalledAppointmentHistory(appointmentId);
+    setForId(appointmentId);
+    setEvents(remembered);
+    setSeeded(remembered !== null);
+    setError(null);
+  }
 
   useEffect(() => {
     const controller = new AbortController();
     getProductServices()
       .calendar.listAppointmentEvents(appointmentId, controller.signal)
       .then((result) => {
-        setEvents([...result].sort(compareAppointmentEvents));
+        const sorted = [...result].sort(compareAppointmentEvents);
+        setEvents(sorted);
+        rememberAppointmentHistory(appointmentId, sorted);
         setError(null);
       })
       .catch((caught: unknown) => {
@@ -173,60 +169,64 @@ export function AppointmentHistory({
       />
     );
   }
-  if (!events) {
-    return (
-      <div
-        aria-hidden="true"
-        className="skeleton agenda-loading-column"
-      />
-    );
-  }
+  if (!events) return <AppointmentHistoryReserved />;
+  // O histórico sempre chega depois do esqueleto: entra com um fade curto
+  // (desligado com movimento reduzido), no lugar da linha reservada.
   if (events.length === 0) {
     return (
-      <p className="agenda-summary-note">Nenhum evento registrado ainda.</p>
-    );
-  }
-  if (variant === "timeline") {
-    return (
-      <ol className="agenda-appt-history">
-        {events.map((event) => (
-          <li className="agenda-appt-history-item" key={event.id}>
-            <span aria-hidden="true" className="agenda-appt-history-dot" />
-            <span className="agenda-appt-history-body">
-              <span className="agenda-appt-history-text">
-                {EVENT_VERBS[event.type]}{" "}
-                <EventAuthor actor={actorLabel(event.actor, session)} event={event} />
-              </span>
-              {event.reason && (
-                <span className="agenda-appt-history-reason">
-                  Motivo: {event.reason}
-                </span>
-              )}
-              <span className="agenda-appt-history-time">
-                {formatTimelineTimestamp(event.occurredAt)}
-              </span>
-            </span>
-          </li>
-        ))}
-      </ol>
+      <p className={clsx("agenda-summary-note", !seeded && "agenda-reveal")}>
+        Nenhum evento registrado ainda.
+      </p>
     );
   }
   return (
-    <ol className="agenda-history">
-      {events.map((event) => {
-        const actor = actorLabel(event.actor, session);
-        return (
-          <li className="agenda-history-item" key={event.id}>
-            <strong>
-              {EVENT_TYPE_LABELS[event.type]} ·{" "}
-              {EVENT_SOURCE_LABELS[event.source]}
-            </strong>
-            <span>{formatEventTimestamp(event.occurredAt)}</span>
-            {actor && <span>Por {actor}</span>}
-            {event.reason && <span>Motivo: {event.reason}</span>}
-          </li>
-        );
-      })}
+    <ol className={clsx("agenda-appt-history", !seeded && "agenda-reveal")}>
+      {events.map((event) => (
+        <li className="agenda-appt-history-item" key={event.id}>
+          <span aria-hidden="true" className="agenda-appt-history-dot" />
+          <span className="agenda-appt-history-body">
+            <span className="agenda-appt-history-text">
+              {EVENT_VERBS[event.type]}{" "}
+              <EventAuthor
+                actor={actorLabel(event.actor, session)}
+                event={event}
+              />
+            </span>
+            {event.reason && (
+              <span className="agenda-appt-history-reason">
+                Motivo: {event.reason}
+              </span>
+            )}
+            <span className="agenda-appt-history-time">
+              {formatTimelineTimestamp(event.occurredAt)}
+            </span>
+          </span>
+        </li>
+      ))}
     </ol>
+  );
+}
+
+/**
+ * Carregando (pedido de 2026-10-12): o lugar de uma linha do histórico — o
+ * ponto, o texto e a hora —, na altura da linha real, para nada pular quando
+ * o histórico chega. Invisível (`visibility: hidden`), sem esqueleto nenhum:
+ * o atendimento já está na tela, e uma linha secundária dele não pisca nem
+ * numa transição nem depois do splash (revisão de D-168, 2026-10-12).
+ */
+function AppointmentHistoryReserved() {
+  return (
+    <div
+      aria-hidden="true"
+      className="agenda-appt-history agenda-appt-history-reserved"
+    >
+      <div className="agenda-appt-history-item">
+        <span className="agenda-appt-history-dot" />
+        <span className="agenda-appt-history-body">
+          <span className="agenda-appt-history-text">Criado pela equipe</span>
+          <span className="agenda-appt-history-time">Terça, 29/09 · 10:00</span>
+        </span>
+      </div>
+    </div>
   );
 }

@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import type { SettingsState } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { TimeField } from "@/shared/ui/pickers/PickerFields";
 
 import { SaveActions } from "./shared/fields";
 import { weekdayLabels } from "./shared/labels";
@@ -24,7 +25,15 @@ const MAX_RULES = 28;
 const weekOrder = [1, 2, 3, 4, 5, 6, 0];
 
 function buildDayIntervals(rules: AvailabilityRule[]): DayIntervals {
-  const byDay: DayIntervals = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+  const byDay: DayIntervals = {
+    0: [],
+    1: [],
+    2: [],
+    3: [],
+    4: [],
+    5: [],
+    6: [],
+  };
   for (const rule of rules) {
     if (!rule.active) continue;
     byDay[rule.dayOfWeek] = [
@@ -95,21 +104,19 @@ function DayRow({
         {active ? (
           intervals.map((interval, index) => (
             <span className="availability-period" key={index}>
-              <input
+              <TimeField
                 aria-label={`${weekdayLabels[day]} · início do intervalo ${index + 1}`}
-                type="time"
                 value={interval.startTime}
-                onChange={(event) =>
-                  onChangeInterval(index, "startTime", event.target.value)
+                onValueChange={(value) =>
+                  onChangeInterval(index, "startTime", value)
                 }
               />
               <span aria-hidden="true">–</span>
-              <input
+              <TimeField
                 aria-label={`${weekdayLabels[day]} · fim do intervalo ${index + 1}`}
-                type="time"
                 value={interval.endTime}
-                onChange={(event) =>
-                  onChangeInterval(index, "endTime", event.target.value)
+                onValueChange={(value) =>
+                  onChangeInterval(index, "endTime", value)
                 }
               />
               {intervals.length > 1 && (
@@ -199,7 +206,10 @@ export function AvailabilitySettings({
 
   function addInterval(day: number) {
     if (totalRules >= MAX_RULES) return;
-    setDay(day, [...dayIntervals[day], { startTime: "09:00", endTime: "18:00" }]);
+    setDay(day, [
+      ...dayIntervals[day],
+      { startTime: "09:00", endTime: "18:00" },
+    ]);
   }
 
   function removeInterval(day: number, index: number) {
@@ -246,10 +256,11 @@ export function AvailabilitySettings({
         startTime: rule.startTime,
         endTime: rule.endTime,
       }));
-      const availability = await getProductServices().settings.updateAvailability({
-        timezone: settings.business?.timezone ?? "America/Sao_Paulo",
-        rules: [...activeRules, ...preservedInactiveRules],
-      });
+      const availability =
+        await getProductServices().settings.updateAvailability({
+          timezone: settings.business?.timezone ?? "America/Sao_Paulo",
+          rules: [...activeRules, ...preservedInactiveRules],
+        });
       onSaved({ ...settings, availability });
       setMessage("Disponibilidade salva.");
     } catch {
@@ -282,7 +293,11 @@ export function AvailabilitySettings({
             />
           ))}
         </div>
-        <SaveActions busy={busy} message={message} onClick={() => void save()} />
+        <SaveActions
+          busy={busy}
+          message={message}
+          onClick={() => void save()}
+        />
       </section>
     </SettingsPage>
   );

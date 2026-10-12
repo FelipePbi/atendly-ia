@@ -397,15 +397,22 @@ describe("execução", () => {
   });
 
   test("diálogo de trocar de conta: foco entra, Tab fica preso e Esc devolve o foco a quem abriu", async () => {
-    getImportState.mockResolvedValue(stateWithSession(runningSessionFixture()));
-    getImportProgress.mockResolvedValue(partialProgressFixture());
+    // A tela parada ("Importação quase concluída") não tem mais a troca de
+    // conta (validação de 2026-10-11); a execução interrompida ainda tem.
+    getImportState.mockResolvedValue(
+      stateWithSession(runningSessionFixture({ interrupted: true })),
+    );
+    getImportProgress.mockResolvedValue({
+      ...partialProgressFixture(),
+      interrupted: true,
+    });
     const user = userEvent.setup();
     renderScreen();
 
     // Espera a leitura de progresso assentar: `ReplaceAccountZone` também
     // aparece na tela de carregamento, e um `findBy` ansioso pegaria o botão
     // da renderização transitória em vez do da tela final.
-    await screen.findByRole("heading", { name: "Importação quase concluída" });
+    await screen.findByRole("heading", { name: "Isso parou no meio do caminho" });
     const trigger = screen.getByRole("button", { name: "Conectar outra conta" });
     await user.click(trigger);
     const dialog = await screen.findByRole("dialog", {

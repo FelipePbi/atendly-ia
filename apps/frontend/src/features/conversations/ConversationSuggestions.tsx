@@ -16,7 +16,7 @@ const refusalCopy: Record<string, string> = {
   AI_DISABLED:
     "A IA está desligada para este negócio. Ative a IA para receber sugestões.",
   CONTACT_IGNORED:
-    "Este contato está marcado para a IA não usar — sugestões não estão disponíveis.",
+    "Este contato está marcado para a IA não usar. Sugestões não estão disponíveis.",
   HUMAN_HANDLING_REQUIRED: "Assuma a conversa para pedir sugestões da IA.",
   NO_TEXTUAL_MESSAGE:
     "Não há uma mensagem de texto recente do cliente para basear a sugestão.",

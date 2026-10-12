@@ -6,6 +6,7 @@ import type { WhatsAppConsentPhase } from "@/features/whatsapp/WhatsAppConnectio
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { CurrencyInput } from "@/shared/ui/CurrencyInput";
+import { TimeField } from "@/shared/ui/pickers/PickerFields";
 
 import type { OnboardingDraft } from "../OnboardingRuntime";
 import type { OnboardingScenario } from "../scenarios";
@@ -54,7 +55,9 @@ function formatPrice(
     return priceType === "ON_REQUEST" ? "Sob consulta" : "Sem preço informado";
   }
   const value =
-    typeof price === "number" ? price : Number(String(price ?? "").replace(",", "."));
+    typeof price === "number"
+      ? price
+      : Number(String(price ?? "").replace(",", "."));
   return Number.isFinite(value)
     ? value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
     : "";
@@ -81,7 +84,9 @@ function ListedPrice({
     return <span className="service-list-quiet">sem preço informado</span>;
   if (priceType === "ON_REQUEST") return <>sob consulta</>;
   const value =
-    typeof price === "number" ? price : Number(String(price ?? "").replace(",", "."));
+    typeof price === "number"
+      ? price
+      : Number(String(price ?? "").replace(",", "."));
   if (!Number.isFinite(value)) return <>{formatPrice(priceType, price)}</>;
   const amount = value.toLocaleString("pt-BR", {
     currency: "BRL",
@@ -121,7 +126,8 @@ function daysHead(days: number[]): string {
   const names = selected.map((day) => (weekdayLabels[day] ?? "").toLowerCase());
   const positions = selected.map((day) => weekOrder.indexOf(day));
   const consecutive = positions.every(
-    (position, index) => index === 0 || position === (positions[index - 1] ?? 0) + 1,
+    (position, index) =>
+      index === 0 || position === (positions[index - 1] ?? 0) + 1,
   );
   if (count === 1) return `Só ${names[0]}`;
   if (consecutive && count >= 3)
@@ -198,26 +204,24 @@ function TimeRangeFields({
   const endMinutes = timeToMinutes(endTime);
   const inputClass = hero ? "time-card-input" : "input time-input";
   const startInput = (
-    <input
+    <TimeField
       className={inputClass}
       data-server-field="availability.startTime"
       id={startId}
       required
-      type="time"
       value={startTime}
-      onChange={(event) => onChangeStart(event.target.value)}
+      onValueChange={(value) => onChangeStart(value)}
     />
   );
   const endInput = (
-    <input
+    <TimeField
       className={inputClass}
       data-server-field="availability.endTime"
       id={endId}
       ref={endRef}
       required
-      type="time"
       value={endTime}
-      onChange={(event) => onChangeEnd(event.target.value)}
+      onValueChange={(value) => onChangeEnd(value)}
     />
   );
   // Cada campo num `div.field`: a mensagem de erro entra logo depois do
@@ -291,7 +295,8 @@ function summarizeHours(draft: OnboardingDraft): string {
   const uniform =
     first !== undefined &&
     perDay.every(
-      (hours) => hours.startTime === first.startTime && hours.endTime === first.endTime,
+      (hours) =>
+        hours.startTime === first.startTime && hours.endTime === first.endTime,
     );
   if (uniform && first) return `${first.startTime} às ${first.endTime}`;
   return selectedDays
@@ -521,16 +526,23 @@ function AdditionalServicesStepBody({ draft }: { draft: OnboardingDraft }) {
     }
     setBusy(true);
     try {
-      const created = await getProductServices().serviceCatalog.create({
-        active: true,
-        durationMinutes: duration,
-        name,
-        price: priceRequiresValue(priceType)
-          ? Number(price.replace(",", "."))
-          : null,
-        priceType,
+      // Decisão de 2026-10-12: o onboarding não pergunta a cor. O adicional
+      // é criado por `PATCH /v1/onboarding` (sem `id`), que não exige cor —
+      // o servidor sorteia uma da paleta —, e a lista é relida em seguida.
+      const services = getProductServices();
+      await services.onboarding.update({
+        service: {
+          active: true,
+          durationMinutes: duration,
+          name,
+          price: priceRequiresValue(priceType)
+            ? Number(price.replace(",", "."))
+            : null,
+          priceType,
+        },
       });
-      setItems((current) => (current ? [...current, created] : [created]));
+      const refreshed = await services.serviceCatalog.list();
+      setItems(refreshed.items);
       setName("");
       setDuration(60);
       setPriceType("FIXED");
@@ -551,7 +563,9 @@ function AdditionalServicesStepBody({ draft }: { draft: OnboardingDraft }) {
             <li className="service-list-row" key={item.key}>
               <span className="service-list-name">{item.name}</span>
               <span className="service-list-meta">
-                {item.duration > 0 ? `${item.duration} min` : "Duração pendente"}{" "}
+                {item.duration > 0
+                  ? `${item.duration} min`
+                  : "Duração pendente"}{" "}
                 · <ListedPrice priceType={item.priceType} price={item.price} />
               </span>
             </li>
@@ -678,7 +692,9 @@ function DayHoursView({
   const markedDays = weekOrder.filter((day) => draft.days.includes(day));
   const differs = (day: number) => {
     const hours = dayHourOf(draft, day);
-    return hours.startTime !== draft.startTime || hours.endTime !== draft.endTime;
+    return (
+      hours.startTime !== draft.startTime || hours.endTime !== draft.endTime
+    );
   };
   const differingDays = markedDays.filter(differs);
   const copyDay =
@@ -867,8 +883,7 @@ export function scheduleStepBody(
   _onIgnoredCountChange?: (count: number) => void,
   hoursDayView?: HoursDayView,
 ) {
-  if (scenario === "quando-importar")
-    return <ImportIllustration />;
+  if (scenario === "quando-importar") return <ImportIllustration />;
   if (scenario === "servico-nome")
     return (
       <ServiceFields
@@ -898,7 +913,9 @@ export function scheduleStepBody(
         <div
           aria-label="Dias de atendimento"
           className="day-pill-row"
-          data-group-error={draft.days.length === 0 ? DAYS_REQUIRED_MESSAGE : ""}
+          data-group-error={
+            draft.days.length === 0 ? DAYS_REQUIRED_MESSAGE : ""
+          }
           data-validation-group=""
           role="group"
         >
@@ -927,16 +944,13 @@ export function scheduleStepBody(
         </div>
         {draft.days.length > 0 && (
           <p aria-live="polite" className="days-summary">
-            <svg
-              aria-hidden="true"
-              className="icon"
-              viewBox="0 0 24 24"
-            >
+            <svg aria-hidden="true" className="icon" viewBox="0 0 24 24">
               <rect height="14.5" rx="2.5" width="16" x="4" y="5.5" />
               <path d="M4 10h16M8 3.5v4M16 3.5v4" />
             </svg>
             <span>
-              <strong>{daysHead(draft.days)}</strong> · {daysCountText(draft.days)}
+              <strong>{daysHead(draft.days)}</strong> ·{" "}
+              {daysCountText(draft.days)}
             </span>
           </p>
         )}

@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import type { Notification } from "@/data";
 import { PushedBar } from "@/shared/layout/PushedBar";
@@ -62,15 +68,62 @@ function useNotificationList(): NotificationListState {
 }
 
 /**
+ * Ver é ler (pedido de 2026-10-12): assim que a lista aparece, cada não lida
+ * visível é marcada como lida pelo próprio `id` — nunca `{ all: true }`, que
+ * levaria junto o que chegou depois da leitura ou ficou além da primeira
+ * página. A lista não é recarregada: o destaque de não lida continua enquanto
+ * a pessoa olha, para ela ver o que é novo.
+ *
+ * O contador da casca (badge da sidebar, ponto do sino da Home) muda quando a
+ * gaveta fecha ou a página é deixada: depois que as marcações terminam, o
+ * resumo é relido do BFF — nunca zerado por conta própria. Se a marcação
+ * falhar, o resumo relido continua contando a não lida.
+ */
+function useMarkVisibleAsRead(items: Notification[] | null) {
+  const { refresh } = useSystemStatus();
+  const marking = useRef<{ pending: Promise<unknown>; requested: Set<string> }>(
+    {
+      pending: Promise.resolve(),
+      requested: new Set(),
+    },
+  );
+
+  useEffect(() => {
+    if (!items) return;
+    const state = marking.current;
+    const ids = items
+      .filter((item) => item.readAt === null && !state.requested.has(item.id))
+      .map((item) => item.id);
+    if (ids.length === 0) return;
+    const notifications = getProductServices().notifications;
+    for (const id of ids) state.requested.add(id);
+    state.pending = Promise.allSettled([
+      state.pending,
+      ...ids.map((id) => notifications.markRead({ id })),
+    ]);
+  }, [items]);
+
+  useEffect(() => {
+    const state = marking.current;
+    return () => {
+      if (state.requested.size === 0) return;
+      void state.pending.then(() => refresh());
+    };
+  }, [refresh]);
+}
+
+/**
  * Central de notificações (Goal022/WU-07, Goal077): três níveis distintos,
  * não lida destacada, marcar uma/todas como lidas, condição resolvida dizendo
  * como foi resolvida (nunca some da lista), histórico agrupado por dia e a
  * preferência de agendamento criado pela IA — esta última só aqui, nunca na
- * gaveta. Toda mutação recarrega a lista do zero — nunca soma contagem local —
- * para que o que a tela mostra seja sempre o que a rota devolveu.
+ * gaveta. Toda mutação pedida pela pessoa recarrega a lista do zero — nunca
+ * soma contagem local — para que o que a tela mostra seja sempre o que a rota
+ * devolveu. Abrir já marca as não lidas visíveis (`useMarkVisibleAsRead`).
  */
 export function NotificationsScreen() {
   const list = useNotificationList();
+  useMarkVisibleAsRead(list.items);
   const wide = useWideLayout();
 
   useShellConfig({
@@ -119,6 +172,7 @@ export function NotificationsDrawerContent({
   onNavigate: () => void;
 }) {
   const list = useNotificationList();
+  useMarkVisibleAsRead(list.items);
 
   return (
     <div className="notifications-drawer-body">
@@ -310,7 +364,10 @@ function NotificationRow({
       aria-label={`${level.label}: ${copy.title}${resolved ? " (resolvido)" : ""}`}
       className={`notifications-row ${level.className}${unread ? " is-unread" : ""}${resolved ? " is-resolved" : ""}`}
     >
-      <NotificationMarker levelClassName={level.className} resolved={resolved} />
+      <NotificationMarker
+        levelClassName={level.className}
+        resolved={resolved}
+      />
       {copy.href ? (
         <Link className="notifications-row-link" href={copy.href}>
           {body}

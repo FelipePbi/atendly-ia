@@ -598,10 +598,20 @@ export async function registerManagementRoutes(
   app.get("/internal/service-catalog", internalOnly, async (request) => {
     const context = currentInternalContext(request);
     await requireCalendar(prisma, context.tenantId);
-    const services = (
-      await new AvenlyServiceService(prisma, context.tenantId).list()
-    ).map(serviceDto);
-    return data(request, services);
+    const catalog = new AvenlyServiceService(prisma, context.tenantId);
+    const [services, usage] = await Promise.all([
+      catalog.list(),
+      catalog.usageCounts(),
+    ]);
+    // `usageCount`: atendimentos dos últimos 90 dias com o serviço (D-170),
+    // para o novo agendamento mostrar primeiro os mais usados.
+    return data(
+      request,
+      services.map((service) => ({
+        ...serviceDto(service),
+        usageCount: usage.get(service.id) ?? 0,
+      })),
+    );
   });
 
   app.post(
@@ -2196,6 +2206,12 @@ function availabilityRuleDto(rule: {
   };
 }
 
+/**
+ * `createdAt` e o resumo da série (pedido de 2026-10-12): a folha de ações
+ * do bloqueio mostra quando ele foi criado e o padrão da série ("Repete toda
+ * terça"). A série só vem onde a leitura a inclui (lista e mover
+ * ocorrência); criar um bloco avulso não tem série, e `null` é o valor.
+ */
 function timeBlockDto(block: {
   id: string;
   startAt: Date;
@@ -2204,6 +2220,12 @@ function timeBlockDto(block: {
   kind: "BLOCK" | "PERSONAL";
   title: string | null;
   seriesId: string | null;
+  createdAt?: Date | null;
+  series?: {
+    daysOfWeek: number[];
+    occurrenceCount: number | null;
+    seriesEndDate: Date | null;
+  } | null;
 }) {
   return {
     id: block.id,
@@ -2213,6 +2235,15 @@ function timeBlockDto(block: {
     kind: block.kind,
     title: block.title,
     seriesId: block.seriesId,
+    createdAt: block.createdAt?.toISOString() ?? null,
+    series: block.series
+      ? {
+          daysOfWeek: [...block.series.daysOfWeek].sort((a, b) => a - b),
+          occurrenceCount: block.series.occurrenceCount,
+          seriesEndDate:
+            block.series.seriesEndDate?.toISOString().slice(0, 10) ?? null,
+        }
+      : null,
   };
 }
 

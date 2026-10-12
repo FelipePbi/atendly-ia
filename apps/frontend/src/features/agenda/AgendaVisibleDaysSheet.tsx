@@ -148,7 +148,10 @@ function VisibleDayRow({
 }) {
   const id = useId();
   return (
-    <label className={clsx("agenda-days-row", !visible && "is-hidden")} htmlFor={id}>
+    <label
+      className={clsx("agenda-days-row", !visible && "is-hidden")}
+      htmlFor={id}
+    >
       <span className="agenda-days-row-copy">
         <span className="agenda-days-row-name" id={`${id}-name`}>
           {label}

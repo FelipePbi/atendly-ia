@@ -132,7 +132,7 @@ describe("vínculo por customerId", () => {
     renderSheet(conversationFixture({ customerId: "cust-42" }));
 
     const link = await screen.findByRole("link", { name: "Ver perfil" });
-    expect(link).toHaveAttribute("href", "/clientes/detalhes?id=cust-42");
+    expect(link).toHaveAttribute("href", "/clientes/detalhes?id=cust-42&voltar=%2Fconversas%2Fconv-1");
     expect(getCustomer).toHaveBeenCalledWith("cust-42", expect.anything());
   });
 
@@ -214,7 +214,7 @@ describe("o contexto abre em folha pelo nome no cabeçalho (Goal114)", () => {
     });
     expect(
       await within(dialog).findByRole("link", { name: "Ver perfil" }),
-    ).toHaveAttribute("href", "/clientes/detalhes?id=cust-42");
+    ).toHaveAttribute("href", "/clientes/detalhes?id=cust-42&voltar=%2Fconversas%2Fconv-1");
   });
 });
 

@@ -7,6 +7,11 @@ export interface SendTextInput {
   quotedParticipant?: string;
   correlationId?: string;
   requestId?: string;
+  /**
+   * Quanto tempo (ms) o canal mostra "digitando…" antes de enviar. Ausente ou
+   * zero: envia na hora, sem "digitando…".
+   */
+  typingDelayMs?: number;
 }
 
 export interface SendTextResult {

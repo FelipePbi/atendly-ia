@@ -210,6 +210,87 @@
 .chat-sheet.is-agenda-new .chat-sheet-handle {
   margin-bottom: 0;
 }
+/* Ações do bloqueio ou do compromisso pessoal na mesma casca de folha
+   (pedido de 2026-10-12): folha embaixo no celular, diálogo de 768 px em
+   diante, em vez do painel embutido abaixo da grade. */
+.chat-sheet.is-agenda-occurrence {
+  gap: 12px;
+}
+.chat-sheet.is-agenda-occurrence * {
+  box-sizing: border-box;
+}
+.chat-sheet.is-agenda-occurrence .agenda-detail-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.chat-sheet.is-agenda-occurrence .agenda-detail-section {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.chat-sheet.is-agenda-occurrence
+  .agenda-detail-section
+  + .agenda-detail-section {
+  padding-top: 16px;
+  border-top: 1px solid #e5ded4;
+}
+.chat-sheet.is-agenda-occurrence .eyebrow {
+  padding-right: 44px;
+}
+.agenda-occurrence-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #5f574e;
+  cursor: pointer;
+}
+.agenda-occurrence-close:hover {
+  background: #f1ece4;
+}
+.agenda-occurrence-close .icon {
+  width: 18px;
+  height: 18px;
+}
+/* Detalhes do bloqueio no topo da folha (pedido de 2026-10-12), com os
+   rótulos do detalhe A5 (`.agenda-appt-label`/`.agenda-appt-text`). */
+.agenda-occurrence-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.agenda-occurrence-title {
+  margin: 0;
+  padding-right: 44px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+.agenda-occurrence-facts {
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.agenda-occurrence-facts dd {
+  margin: 0;
+}
+.chat-sheet.is-agenda-occurrence
+  .agenda-occurrence-details
+  + .agenda-detail-section {
+  padding-top: 16px;
+  border-top: 1px solid #e5ded4;
+}
 .agenda-new-sheet-title {
   margin: 0;
   padding: 4px 0;
@@ -260,7 +341,11 @@
   color: #0b4a4e;
 }
 .agenda-new-row-icon.is-block {
-  background: repeating-linear-gradient(135deg, #efeae2 0 5px, #f7f4ef 5px 10px);
+  background: repeating-linear-gradient(
+    135deg,
+    #efeae2 0 5px,
+    #f7f4ef 5px 10px
+  );
 }
 .agenda-new-row-copy {
   flex: 1;
@@ -282,6 +367,7 @@
 }
 @media (min-width: 1024px) {
   .chat-sheet.is-agenda-new,
+  .chat-sheet.is-agenda-occurrence,
   .chat-sheet.is-agenda-calendar,
   .chat-sheet.is-agenda-days {
     width: 460px;
@@ -705,16 +791,22 @@
   margin-inline: -10px -4px;
   display: flex;
 }
+/* Altura do cabeçalho dos dias da Semana no celular: 52px (era 44px), com
+   respiro em cima do dia da semana para o fundo da coluna escolhida não
+   colar em "QUA" (validação de 2026-10-12). Eixo das horas acompanha. */
+.week-map-board {
+  --week-head-h: 56px;
+}
 .week-map-axis {
   width: 30px;
-  height: calc(44px + var(--hours) * var(--hour-h));
+  height: calc(var(--week-head-h) + var(--hours) * var(--hour-h));
   position: relative;
   flex: none;
 }
 .week-map-hour {
   position: absolute;
   right: 6px;
-  top: calc(37px + var(--at) * var(--hour-h));
+  top: calc(var(--week-head-h) - 7px + var(--at) * var(--hour-h));
   color: #716859;
   font-size: 10px;
   font-weight: 600;
@@ -733,14 +825,14 @@
   flex-direction: column;
 }
 .week-map-head {
-  height: 44px;
+  height: var(--week-head-h);
   margin: 0;
-  padding: 0 0 6px;
+  padding: 8px 0 6px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  gap: 3px;
+  gap: 2px;
   border: 0;
   background: none;
   color: inherit;
@@ -750,19 +842,24 @@
 .week-map-weekday {
   color: #716859;
   font-size: 10px;
+  line-height: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
 }
 .week-map-head.is-today .week-map-weekday {
   color: #0f5f63;
 }
+/* Quadrado de cantos arredondados (pedido de 2026-10-12). Antes era um
+   círculo com `min-width` num cabeçalho de 52 px que o espremia para ~21 px de
+   altura: saía oval. `flex: none` e o cabeçalho de 56 px garantem 28x28. */
 .week-map-date {
-  min-width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -775,6 +872,34 @@
   color: #f7f4ef;
 }
 .week-map-head.is-today:hover .week-map-date {
+  background: #0b484c;
+}
+/* Dia escolhido na Semana (pedido de 2026-10-12): a coluna inteira ganha o
+   fundo suave e o número fica cheio, como o dia escolhido na faixa do Dia;
+   hoje, quando não é o escolhido, fica com o anel, também como lá. */
+/* Cinza quente translúcido no tom do app: o verde-azulado claro anterior
+   (--accent-soft) destoava da grade (validação de 2026-10-12). Translúcido
+   para a faixa fora do expediente continuar mais escura por baixo. */
+.week-map-day.is-selected {
+  border-radius: 10px;
+  background: rgba(34, 30, 26, 0.05);
+}
+.week-map-head.is-selected .week-map-weekday {
+  color: #0f5f63;
+}
+.week-map-head.is-today:not(.is-selected) .week-map-date {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px #0f5f63;
+  color: #0f5f63;
+}
+.week-map-head.is-today:not(.is-selected):hover .week-map-date {
+  background: #efeae2;
+}
+.week-map-head.is-selected .week-map-date {
+  background: #0f5f63;
+  color: #f7f4ef;
+}
+.week-map-head.is-selected:hover .week-map-date {
   background: #0b484c;
 }
 .week-map-column {
@@ -803,9 +928,52 @@
   width: calc((100% - 6px) / var(--lanes, 1));
   height: calc(var(--span) * var(--hour-h));
   min-height: 6px;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
+  border: 0;
   border-radius: 4px;
   box-sizing: border-box;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+/* Atendimento (link) e bloqueio (botão) abrem o detalhe: alvo de toque de
+ * 24px no mínimo (WCAG 2.5.8), mesmo para quem dura menos de uma hora. */
+a.week-bar,
+button.week-bar {
+  min-height: 24px;
+  cursor: pointer;
+}
+a.week-bar:hover {
+  text-decoration: none;
+}
+a.week-bar:focus-visible,
+button.week-bar:focus-visible,
+.week-map-slot:focus-visible {
+  z-index: 3;
+  outline: 2px solid #0f5f63;
+  outline-offset: 1px;
+}
+/* Hora da grade: abre o "Novo" nesse dia e hora; as barras ficam por cima. */
+.week-map-slot {
+  position: absolute;
+  top: calc(var(--start) * var(--hour-h));
+  right: 0;
+  left: 0;
+  height: var(--hour-h);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.week-map-slot:hover {
+  background: rgba(15, 95, 99, 0.06);
+}
+.week-map-slot:focus-visible {
+  outline-offset: -2px;
 }
 .week-bar.is-past {
   opacity: 0.4;
@@ -830,11 +998,7 @@
 }
 .week-bar.is-block,
 .week-bar.is-exception-unavailable {
-  background: repeating-linear-gradient(
-    135deg,
-    #d6cec2 0 3px,
-    #efeae2 3px 6px
-  );
+  background: repeating-linear-gradient(135deg, #d6cec2 0 3px, #efeae2 3px 6px);
 }
 .week-bar.is-personal,
 .week-bar.is-exception-extra {
@@ -847,6 +1011,7 @@
 .week-map-now {
   position: absolute;
   z-index: 2;
+  pointer-events: none;
   top: calc(var(--start) * var(--hour-h));
   right: 0;
   left: -2px;
@@ -889,6 +1054,68 @@
   border: 1.5px solid #b9b1a6;
   background: none;
   box-sizing: border-box;
+}
+/* Nome da cliente no cartão da Semana, só no celular (pedido de 2026-10-12).
+ * No tablet e no desktop o cartão já mostra nome e serviço (.week-bar-text).
+ * A cor vem de weekBarLabelInk (branco ou preto pela luminância do traço). */
+.week-bar-label {
+  display: none;
+}
+@media (max-width: 767px) {
+  a.week-bar {
+    container-type: size;
+  }
+  .week-bar-label {
+    position: relative;
+    display: block;
+    padding: 2px 2px 0 3px;
+    overflow: hidden;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .week-bar.is-no-show .week-bar-label {
+    text-decoration: line-through;
+  }
+  /* Nome branco nas cores fortes (pedido de 2026-10-12): a sombra curta
+   * separa a letra do fundo nas cores mais claras da paleta. */
+  .week-bar-label.is-light {
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+  }
+  /* Só no cartão da Semana no celular (pedido de 2026-10-12): as quatro
+   * cores mais claras da paleta escurecem o bastante para o nome branco
+   * passar de 4,5:1. O tom da cor e a legenda continuam os da paleta
+   * (espelho em CARD_SWATCH_HEX, weekBarLabel.ts). */
+  .week-bar-stripe b[data-color="AMBER"] {
+    --swatch: #ab6045;
+  }
+  .week-bar-stripe b[data-color="EMERALD"] {
+    --swatch: #6e7b37;
+  }
+  .week-bar-stripe b[data-color="ROSE"] {
+    --swatch: #9d6470;
+  }
+  .week-bar-stripe b[data-color="VIOLET"] {
+    --swatch: #7c6da1;
+  }
+  /* Abaixo de 20px de largura cabe uma letra e as reticências, o que não
+   * identifica ninguém; abaixo de 14px de altura a linha (10px + 2px de
+   * respiro) seria cortada. Nos dois casos o cartão fica só com a cor. */
+  @container (width < 20px) or (height < 14px) {
+    .week-bar-label {
+      display: none;
+    }
+  }
+  /* Passado: só o traço esmaece, para o nome continuar legível
+   * (o contraste é calculado sobre o traço esmaecido). */
+  a.week-bar.is-past {
+    opacity: 1;
+  }
+  a.week-bar.is-past .week-bar-stripe {
+    opacity: 0.4;
+  }
 }
 @media (min-width: 768px) {
   .week-bar {
@@ -1014,9 +1241,36 @@
     "chips chips";
   align-items: baseline;
   gap: 8px;
+  position: relative;
   border: 1px solid #e5ded4;
   border-radius: 14px;
   background: #fffdfa;
+  cursor: pointer;
+  transition: background-color var(--at-duration-fast) var(--at-ease-standard);
+}
+/* Pedido de 2026-10-12: o cartão inteiro abre o Dia, não só "Abrir dia". O
+   botão continua sendo o único alvo para teclado e leitor de tela; o
+   ::after dele cobre o cartão para o clique e desenha o foco na moldura. */
+.agenda-summary-open::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 14px;
+}
+.agenda-summary-open:focus-visible {
+  outline: none;
+}
+.agenda-summary-open:focus-visible::after {
+  outline: 2px solid #0f5f63;
+  outline-offset: 2px;
+}
+.agenda-day-summary-card:hover {
+  background: #faf6f0;
+}
+.agenda-day-summary-card:hover .agenda-summary-open {
+  color: #0b484c;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .agenda-summary-heading {
   grid-area: heading;
@@ -1179,10 +1433,13 @@
 .month-day.is-outside .month-day-number {
   color: #948b80;
 }
+/* Hoje no Mês: o mesmo quadrado de cantos arredondados do cabeçalho da
+   Semana, na escala do número daqui (pedido de 2026-10-12). */
 .month-day.is-today .month-day-number {
   width: 24px;
+  flex: none;
   padding: 0;
-  border-radius: 50%;
+  border-radius: 7px;
   background: #0f5f63;
   color: #f7f4ef;
 }
@@ -1395,9 +1652,6 @@
 .agenda-day-row.is-buffer {
   cursor: default;
 }
-.agenda-day-row.is-selected {
-  background: var(--accent-soft);
-}
 .agenda-day-time {
   font-size: 15px;
   font-weight: 600;
@@ -1468,6 +1722,27 @@
 }
 .agenda-day-row.is-past .agenda-day-stripe {
   opacity: 0.45;
+}
+/* Atendimento aberto ao lado (painel do Dia e coluna da rota; pedido de
+   2026-10-12). O quadro A5 não desenha seleção: fundo suave de superfície que
+   transborda 12 px para os lados (margem negativa e o mesmo padding, sem
+   mudar a altura nem a posição do conteúdo) e a faixa do serviço inteira e
+   mais grossa por sombra, sem mexer na coluna de 3 px. O foco continua o
+   contorno global de `:focus-visible`. */
+/* Revisto em 2026-10-12 a pedido do usuário: o fundo ocupa a largura toda da
+   lista (os 20 px de padding de `.agenda-day-list`), com cantos retos. */
+.agenda-day-row.is-selected {
+  width: calc(100% + 40px);
+  margin-inline: -20px;
+  padding-inline: 20px;
+  border-radius: 0;
+  background: var(--surface-interactive);
+}
+.agenda-day-row.is-selected .agenda-day-stripe {
+  opacity: 1;
+}
+.agenda-day-row.is-selected .agenda-day-stripe-part {
+  box-shadow: 0 0 0 1px var(--swatch);
 }
 .agenda-day-pill {
   display: flex;
@@ -1559,12 +1834,6 @@
   color: var(--fg-soft);
   font-size: 13px;
   font-weight: 700;
-}
-.agenda-no-results {
-  padding: 48px 20px;
-  color: var(--muted);
-  font-size: 14px;
-  text-align: center;
 }
 
 .agenda-state-surface {
@@ -1711,9 +1980,6 @@
   justify-content: flex-end;
   gap: 10px;
 }
-.agenda-form-status {
-  margin-top: 16px;
-}
 .agenda-time-options {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1809,42 +2075,10 @@
   margin-top: 3px;
   font-size: 15px;
 }
-.agenda-detail-hero {
-  margin-bottom: 20px;
-  padding: 24px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 24px;
-  background: var(--surface);
-}
-.agenda-detail-date {
-  margin-top: 12px;
-  font-size: 24px;
-  line-height: 1.3;
-  letter-spacing: -0.015em;
-}
-.agenda-detail-service {
-  margin-top: 4px;
-  color: var(--muted);
-}
-.agenda-detail-actions {
-  display: flex;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 10px;
-}
 .agenda-detail-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
   gap: 20px;
-}
-/* Acoes da ocorrencia selecionada no Dia: mesma superficie do detalhe, aberta
-   abaixo da grade em vez de outra rota. */
-.agenda-occurrence-panel {
-  display: grid;
-  gap: 12px;
 }
 .agenda-detail-section {
   padding: 22px 24px;
@@ -1855,73 +2089,6 @@
 .agenda-detail-section h2 {
   margin-bottom: 14px;
   font-size: 18px;
-}
-.agenda-history {
-  display: grid;
-  gap: 14px;
-}
-.agenda-history-item {
-  position: relative;
-  padding-left: 22px;
-}
-.agenda-history-item::before {
-  content: "";
-  position: absolute;
-  left: 1px;
-  top: 6px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--border-strong);
-}
-.agenda-history-item::after {
-  content: "";
-  position: absolute;
-  left: 4px;
-  top: 18px;
-  bottom: -16px;
-  width: 1px;
-  background: var(--border);
-}
-.agenda-history-item:last-child::after {
-  display: none;
-}
-.agenda-history-item strong,
-.agenda-history-item span {
-  display: block;
-}
-.agenda-history-item strong {
-  font-size: 13px;
-}
-.agenda-history-item span {
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.agenda-lifecycle {
-  display: grid;
-  gap: 16px;
-}
-.agenda-lifecycle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.agenda-lifecycle-row strong,
-.agenda-lifecycle-row span {
-  display: block;
-}
-.agenda-lifecycle-row span {
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 13px;
-}
-.agenda-lifecycle-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 .agenda-lifecycle-form {
   padding: 16px;
@@ -1958,14 +2125,6 @@
   margin: 0 auto 20px;
   color: var(--fg-soft);
 }
-.agenda-inline-error {
-  padding: 12px 14px;
-  border: 1px solid color-mix(in oklch, var(--danger), white 68%);
-  border-radius: var(--r-input);
-  color: var(--danger);
-  background: var(--danger-soft);
-  font-size: 13px;
-}
 .agenda-readonly-list {
   border: 1px solid var(--border);
   border-radius: var(--r-card);
@@ -1984,29 +2143,6 @@
 }
 
 /* --- Escolha de serviços, reserva e conflito (Goal016) ------------------- */
-.agenda-service-options {
-  display: grid;
-  gap: 8px;
-}
-.agenda-service-option {
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  background: var(--surface);
-  cursor: pointer;
-}
-.agenda-service-option input:checked ~ span {
-  color: var(--accent);
-  font-weight: 600;
-}
-.agenda-service-option:focus-within {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
 .agenda-manual-time {
   margin-top: 18px;
   display: grid;
@@ -2178,11 +2314,10 @@
     grid-template-columns: repeat(7, 62px);
     padding-inline: 16px;
   }
+  /* Cartao dentro da tela, com as margens e o raio do resto do app: de
+     ponta a ponta ele parecia cortado (validacao de 2026-10-12). */
   .agenda-state-surface {
-    min-height: 470px;
-    margin-inline: -16px;
-    border-inline: 0;
-    border-radius: 0;
+    min-height: 360px;
   }
   .agenda-loading-shell {
     margin-inline: -16px;
@@ -2231,20 +2366,6 @@
   }
   .agenda-time-options {
     grid-template-columns: repeat(2, 1fr);
-  }
-  .agenda-detail-hero {
-    padding: 20px 16px;
-    grid-template-columns: 1fr;
-  }
-  .agenda-detail-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-  .agenda-detail-actions .btn {
-    width: 100%;
-  }
-  .agenda-detail-date {
-    font-size: 21px;
   }
   .agenda-readonly-footer {
     align-items: flex-start;
@@ -2383,8 +2504,7 @@
 }
 .agenda-new-customer-clear:focus-visible,
 .agenda-new-swap:focus-visible,
-.agenda-new-note-button:focus-visible,
-.agenda-new-series:focus-visible {
+.agenda-new-note-button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -2696,22 +2816,6 @@
   height: 16px;
   stroke-width: 2.25;
 }
-.agenda-new-series {
-  min-height: 24px;
-  padding-top: 2px;
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  color: var(--accent);
-  font-size: 15px;
-  font-weight: 600;
-  text-decoration: none;
-}
-.agenda-new-series:hover {
-  color: var(--at-color-primary-hover);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
 .agenda-new-footer {
   position: sticky;
   bottom: 0;
@@ -2873,6 +2977,533 @@
   }
 }
 
+/* Novo agendamento mais enxuto (D-170, pedido de 2026-10-12).
+ * Sem busca, as sugestões de cliente são atalho: de 768 px em diante elas
+ * abrem como lista suspensa sob o campo, só com ele em foco, em vez de
+ * empurrar Serviços para baixo da dobra. No celular continuam na página. */
+@media (min-width: 768px) {
+  .agenda-new-customer-field {
+    position: relative;
+  }
+  .agenda-new-customer-field:not(:focus-within)
+    .agenda-new-options.is-suggestions {
+    display: none;
+  }
+  .agenda-new-options.is-suggestions {
+    position: absolute;
+    z-index: 5;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 6px;
+    padding: 6px;
+    gap: 2px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: 0 12px 32px rgba(34, 30, 26, 0.14);
+  }
+  .agenda-new-options.is-suggestions .agenda-new-option {
+    min-height: 44px;
+    border-color: transparent;
+  }
+  .agenda-new-options.is-suggestions .agenda-new-option:hover {
+    border-color: transparent;
+    background: #f7f4ef;
+  }
+}
+
+/* "Cadastrar “nome” como novo cliente" virou botão (D-170): é ele, ou sair do
+ * campo, que assume o nome digitado e revela Serviços. */
+button.agenda-new-hint {
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  align-self: flex-start;
+  background: transparent;
+  font: 600 13px/1.25 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+button.agenda-new-hint:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+button.agenda-new-hint:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Revelação progressiva (D-170): Data e Horário entram juntos, num bloco
+ * com o mesmo espaçamento da coluna. */
+/* Quadro "Data e horário" — Seletores-de-Data-e-Hora.dc.html, 03 · Juntos.
+ * Resumo em Literata que repete a escolha; o calendário (semana que abre o
+ * mês) e o horário empilham no celular e dividem a linha a partir de ~660 px
+ * de quadro. Os cartões são os seletores de src/shared/ui/pickers. */
+.agenda-new-when {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-sizing: border-box;
+  /* 16 px até o tablet: com 768 px de tela, data e horário ainda dividem a
+   * linha (duas colunas de 300 px). */
+  padding: clamp(16px, 2vw, 24px);
+  border: 1px solid var(--at-color-border);
+  border-radius: 20px;
+  background: var(--at-color-canvas);
+}
+.agenda-new-when-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.agenda-new-when-reading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.agenda-new-when-eyebrow {
+  color: var(--at-color-ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.agenda-new-when-summary {
+  font-family: var(--at-font-display);
+  font-size: clamp(22px, 3vw, 28px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  text-wrap: pretty;
+  animation: picker-reveal1 260ms var(--at-ease-standard);
+}
+.agenda-new-when-summary > span {
+  color: var(--at-color-ink-muted);
+}
+.agenda-new-when-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--at-color-ink-soft);
+  font-size: 13px;
+}
+.agenda-new-when-who .agenda-appt-service-dot {
+  flex: none;
+}
+.agenda-new-when-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.agenda-new-time-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--at-color-border);
+  border-radius: var(--at-radius-lg);
+  background: var(--at-color-surface);
+}
+.agenda-new-time-card > p {
+  margin: 0;
+}
+.agenda-new-manual .time-picker {
+  max-width: none;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+.agenda-new-stage {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+}
+
+/* "Repetir este atendimento" (D-171): o interruptor da folha "Dias
+ * visíveis", o passo de quantos atendimentos e os chips do intervalo. */
+.agenda-new-repeat {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e5ded4;
+}
+.agenda-new-repeat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.agenda-new-repeat-label {
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+}
+.agenda-new-repeat-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.agenda-new-stepper {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.agenda-new-stepper-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  background: transparent;
+  font: 600 20px/1 var(--font-body);
+  cursor: pointer;
+}
+.agenda-new-stepper-button .icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.25;
+}
+.agenda-new-stepper-button:hover:not(:disabled) {
+  background: #f3efe8;
+}
+.agenda-new-stepper-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.agenda-new-stepper-button:disabled {
+  color: var(--disabled-fg);
+  cursor: not-allowed;
+}
+.agenda-new-stepper-value {
+  min-width: 32px;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Revisão da repetição (D-171), na folha padrão (D-166). */
+.chat-sheet.is-agenda-repeat {
+  gap: 14px;
+}
+.chat-sheet.is-agenda-repeat .chat-sheet-handle {
+  margin-bottom: 0;
+}
+.agenda-repeat-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.agenda-repeat-title {
+  margin: 0;
+  font-family: var(--font-display, Literata, Georgia, serif);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.agenda-repeat-lead {
+  margin: 0;
+  color: #5f574e;
+  font-size: 14px;
+}
+.agenda-repeat-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.agenda-repeat-item {
+  padding: 10px 0;
+  border-bottom: 1px solid #e5ded4;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  align-items: center;
+}
+.agenda-repeat-item:last-child {
+  border-bottom: 0;
+}
+.agenda-repeat-when {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 15px;
+}
+.agenda-repeat-when strong {
+  font-weight: 600;
+}
+.agenda-repeat-when span {
+  font-variant-numeric: tabular-nums;
+}
+.agenda-repeat-service {
+  grid-column: 1;
+  color: #5f574e;
+  font-size: 13px;
+}
+.agenda-repeat-note {
+  grid-column: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: #7a4e0a;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.agenda-repeat-note .icon {
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  flex: none;
+}
+.agenda-repeat-item.is-adjusted,
+.agenda-repeat-item.is-unavailable {
+  margin: 0 -10px;
+  padding: 10px;
+  border-bottom-color: transparent;
+  border-radius: 12px;
+  background: #f8ecd5;
+}
+.agenda-repeat-item.is-unavailable .agenda-repeat-when,
+.agenda-repeat-item.is-skipped .agenda-repeat-when {
+  color: #716859;
+  text-decoration: line-through;
+}
+.chat-sheet .agenda-repeat-skip {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #b9b1a6;
+  border-radius: 10px;
+  color: var(--accent);
+  background: transparent;
+  font: 600 13px/1.25 var(--font-body);
+  cursor: pointer;
+}
+.chat-sheet .agenda-repeat-skip[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.chat-sheet .agenda-repeat-skip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.agenda-repeat-total {
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #5f574e;
+  font-size: 14px;
+}
+.agenda-repeat-total strong {
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.agenda-repeat-failure {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.agenda-repeat-actions {
+  display: flex;
+  gap: 10px;
+}
+.agenda-repeat-actions > * {
+  flex: 1;
+}
+@media (min-width: 1024px) {
+  .chat-sheet.is-agenda-repeat {
+    width: 480px;
+  }
+}
+
+/* Tela empurrada (abaixo de 1024 px): a altura vem do `main` e a tela ocupa
+ * o que sobra dele, como em "Bloquear horário" (D-169). Um aviso da casca
+ * acima (WhatsApp desconectado) encolhe a tela em vez de fazê-la rolar: no
+ * começo, só com o Cliente, nada rola (D-170). */
+@media (max-width: 1023px) {
+  .app-frame > main:has(.agenda-new-screen) {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  .app-frame > main:has(.agenda-new-screen) > :has(.agenda-new-screen) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .agenda-new-screen {
+    min-height: 0;
+    flex: 1;
+  }
+}
+
+/* Fluxos sem a barra da Agenda (D-170): criar, remarcar e cancelar. A tela
+ * ocupa a altura que sobra do `main` — a barra saiu, e um aviso da casca
+ * acima encolhe a tela em vez de fazê-la rolar. */
+@media (min-width: 1024px) {
+  .app-frame > main:has(.agenda-appt-split-barless) {
+    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+  }
+  .app-frame
+    > main:has(.agenda-appt-split-barless)
+    > :has(.agenda-appt-split-barless) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .agenda-appt-split-barless {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .agenda-appt-split-barless > .list-detail {
+    flex: 1;
+  }
+  .agenda-appt-split-barless .list-detail-panel {
+    display: flex;
+    flex-direction: column;
+  }
+  .agenda-appt-split-barless .agenda-new-screen,
+  .agenda-appt-split-barless .agenda-appt {
+    min-height: 0;
+    flex: 1;
+  }
+}
+@media (min-width: 1100px) {
+  .app-frame > main:has(.agenda-appt-split-barless) {
+    min-height: 100dvh;
+  }
+}
+
+/* "Ver outros serviços" (D-170): a folha padrão (D-166) com os serviços fora
+ * dos 5 mais usados, busca por nome quando são muitos. */
+.chat-sheet.is-agenda-services {
+  gap: 12px;
+}
+.chat-sheet.is-agenda-services .chat-sheet-handle {
+  margin-bottom: 0;
+}
+.agenda-services-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.agenda-services-title {
+  margin: 0;
+  font-family: var(--font-display, Literata, Georgia, serif);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.chat-sheet .agenda-services-close {
+  width: 40px;
+  height: 40px;
+  margin: -8px -8px -8px 0;
+  padding: 0;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #5f574e;
+  background: transparent;
+  cursor: pointer;
+}
+.chat-sheet .agenda-services-close:hover {
+  background: #f3efe8;
+}
+.chat-sheet .agenda-services-close .icon {
+  width: 20px;
+  height: 20px;
+}
+.chat-sheet .agenda-services-search {
+  box-sizing: border-box;
+  width: 100%;
+}
+.agenda-services-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.chat-sheet .agenda-services-option {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 4px;
+  border: 0;
+  border-bottom: 1px solid #e5ded4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  background: transparent;
+  font: 500 15px/1.25 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+.agenda-services-list li:last-child .agenda-services-option {
+  border-bottom: 0;
+}
+.chat-sheet .agenda-services-option:hover {
+  background: #f7f4ef;
+}
+.chat-sheet .agenda-services-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.agenda-services-option .agenda-appt-service-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+}
+.agenda-services-name {
+  min-width: 0;
+  flex: 1;
+}
+.agenda-services-option small {
+  color: #716859;
+  font-size: 14px;
+}
+.agenda-services-empty {
+  margin: 0;
+  padding: 12px 0;
+  color: #716859;
+  font-size: 14px;
+}
+@media (min-width: 1024px) {
+  .chat-sheet.is-agenda-services {
+    width: 460px;
+  }
+}
+
 /* Faixa da semana do Dia (quadro A1): sete colunas de 48 px com o dia em
    círculo; o selecionado enche de verde, passado fica em cinza. */
 .agenda-day-panel .agenda-week-strip {
@@ -2919,7 +3550,9 @@
   color: var(--accent);
 }
 /* Hoje, quando não é o dia escolhido, fica com anel (quadro A2). */
-.agenda-day-panel .agenda-week-strip-day.is-today:not(.is-selected) .agenda-week-strip-number {
+.agenda-day-panel
+  .agenda-week-strip-day.is-today:not(.is-selected)
+  .agenda-week-strip-number {
   box-sizing: border-box;
   border: 1.5px solid var(--accent);
   color: var(--accent);
@@ -2928,7 +3561,9 @@
   background: var(--accent);
   color: var(--at-color-on-primary);
 }
-.agenda-day-panel .agenda-week-strip-day:hover:not(.is-selected) .agenda-week-strip-number {
+.agenda-day-panel
+  .agenda-week-strip-day:hover:not(.is-selected)
+  .agenda-week-strip-number {
   background: var(--surface-interactive);
 }
 .agenda-day-panel .agenda-week-strip-dot,
@@ -2970,6 +3605,15 @@
     align-items: center;
     justify-content: center;
     padding: 40px;
+  }
+  /* Com um atendimento selecionado, o painel é o corpo do quadro A5 (D-165):
+     a barra, o corpo e o rodapé trazem o próprio respiro. */
+  .agenda-page .agenda-day-detail.is-appointment {
+    display: block;
+    padding: 0;
+  }
+  .agenda-page .agenda-day-detail .agenda-appt {
+    min-height: 480px;
   }
 }
 @media (min-width: 1024px) and (max-width: 1099px) {
@@ -3030,8 +3674,46 @@
 .agenda-appt-column .agenda-day-panel .agenda-week-strip {
   padding: 16px 12px 0;
 }
-.agenda-appt-column > .agenda-loading-shell {
-  margin: 16px 20px;
+/* Coluna e barra carregando na forma das reais (pedido de 2026-10-12): as
+   mesmas classes do Dia e da barra, com o texto de exemplo transparente
+   (`.skeleton-text`), então cada linha tem a altura da carregada. */
+.agenda-day-skeleton .agenda-week-strip-day,
+.agenda-day-skeleton .agenda-day-row {
+  cursor: default;
+}
+.agenda-day-skeleton .agenda-day-stripe-part {
+  --swatch: var(--surface-interactive);
+}
+.agenda-command-bar-skeleton {
+  pointer-events: none;
+}
+.agenda-command-bar-skeleton .agenda-date-tools .icon-btn {
+  color: #b9b1a6;
+}
+.agenda-command-bar-skeleton-new {
+  display: block;
+  width: 90px;
+  height: 40px;
+  border-radius: 12px;
+}
+/* Histórico, lembrete, coluna do Dia e barra carregando: só o lugar, na
+   altura real, invisível — nem ponto, nem barra, nem brilho (pedido de
+   2026-10-12). */
+.agenda-appt-history-reserved,
+.agenda-appt-reminder-reserved,
+.agenda-day-skeleton,
+.agenda-command-bar-skeleton {
+  visibility: hidden;
+}
+/* O que chega depois de um esqueleto entra com um fade curto, sem mover nada
+   (só opacidade); com movimento reduzido, troca direto. */
+.agenda-reveal {
+  animation: fade 160ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .agenda-reveal {
+    animation: none;
+  }
 }
 .agenda-appt-column-note {
   margin: 0;
@@ -3352,6 +4034,56 @@
 .agenda-appt-action .icon {
   width: 18px;
   height: 18px;
+}
+/* Carregando (A5): o esqueleto ocupa os lugares do horário, da cliente, dos
+   serviços e da coluna ao lado, para a troca de atendimento ser percebida. */
+.agenda-appt-skeleton .skeleton {
+  display: block;
+  flex: none;
+}
+.agenda-appt-skeleton-label {
+  width: 140px;
+  height: 12px;
+}
+.agenda-appt-skeleton-hero {
+  width: 190px;
+  height: 34px;
+}
+.agenda-appt-skeleton-status {
+  width: 96px;
+  height: 26px;
+  border-radius: 999px;
+}
+.agenda-appt-skeleton-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+.agenda-appt-skeleton-name {
+  width: 55%;
+  height: 16px;
+}
+.agenda-appt-skeleton-meta {
+  width: 70%;
+  height: 12px;
+}
+.agenda-appt-skeleton-line {
+  width: 100%;
+  height: 12px;
+}
+.agenda-appt-skeleton .is-short {
+  width: 60px;
+}
+.agenda-appt-skeleton-line.is-short {
+  width: 64%;
+}
+.agenda-appt-skeleton .agenda-appt-services {
+  gap: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .agenda-appt-skeleton .skeleton {
+    animation: none;
+  }
 }
 @media (min-width: 768px) {
   .agenda-appt-body {
@@ -3843,15 +4575,6 @@
   width: 16px;
   height: 16px;
 }
-.agenda-rs-date-input {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
 .agenda-rs-chips {
   min-width: 0;
   margin: 0;
@@ -4067,5 +4790,159 @@
 @media (max-width: 767px) {
   .agenda-rs-footer {
     padding-bottom: 46px;
+  }
+}
+
+/* Bloquear horário numa tela só (D-169, revisão de 2026-10-12): barra
+ * empurrada com "×" do novo agendamento, título e ações no rodapé. Abaixo de
+ * 1100 px a tela ocupa a altura que a barra inferior deixa, sem rolar, e as
+ * ações ficam no pé dela. */
+.block-flow {
+  width: min(560px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+.block-flow-body {
+  flex: 1;
+  padding: 12px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.block-flow-body .form-error {
+  margin: 0;
+}
+.block-flow-step {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.block-flow-heading {
+  display: grid;
+  gap: 4px;
+}
+.block-flow-title,
+.block-flow-heading h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.25;
+}
+.block-flow-title:focus:not(:focus-visible) {
+  outline: none;
+}
+.block-flow-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+.block-flow-field {
+  min-width: 0;
+  gap: 6px;
+}
+.block-flow-switch {
+  grid-column: 1 / -1;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.block-flow-wide {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.block-flow-field.is-wide,
+.block-flow-extras {
+  grid-column: 1 / -1;
+}
+.block-flow-extras {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  column-gap: 12px;
+}
+.block-flow-extra {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.block-flow-extra .icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.block-flow-actions {
+  margin-top: auto;
+  padding-top: 4px;
+  display: flex;
+  gap: 12px;
+}
+.block-flow-actions .btn {
+  min-height: 52px;
+  border-radius: var(--r-input);
+  font-size: 16px;
+}
+.block-flow-actions .btn-primary {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.block-flow-actions .btn-secondary,
+.block-flow-actions .btn-danger {
+  min-width: 96px;
+}
+/* A altura vem do `main` (a viewport menos a barra inferior) e a tela ocupa
+ * o que sobra dele: um aviso da casca acima (WhatsApp desconectado, IA
+ * indisponível) encolhe a tela em vez de empurrar as ações para baixo da
+ * barra. O `:has()` alcança também o invólucro de transição da página. */
+@media (max-width: 1099px) {
+  .app-frame > main:has(.block-flow) {
+    min-height: calc(100dvh - 65px - env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+  }
+  .app-frame > main:has(.block-flow) > :has(.block-flow) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .block-flow {
+    flex: 1;
+  }
+}
+/* Celular baixo (360x740 com o aviso da casca no topo): respiros menores
+ * para a tela continuar sem rolar. */
+@media (max-width: 767px) and (max-height: 760px) {
+  .block-flow-body {
+    gap: 10px;
+  }
+  .block-flow-fields {
+    gap: 8px 12px;
+  }
+}
+@media (min-width: 768px) and (max-width: 1099px) {
+  .app-frame > main:has(.block-flow) {
+    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+  }
+}
+@media (min-width: 768px) {
+  .block-flow-body {
+    padding: 20px 28px 28px;
   }
 }

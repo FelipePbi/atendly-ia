@@ -14,9 +14,9 @@
  * computado. Isso é `npm run validate:ui`, não jsdom.
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { OnboardingState, SettingsState } from "@/data";
 import { OnboardingRuntimeProvider } from "@/features/onboarding/OnboardingRuntime";
@@ -25,6 +25,7 @@ import { ProductSettingsScreen } from "@/features/settings/ProductSettingsScreen
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
 import { expectNoA11yViolations } from "./support/a11y";
+import { composedAddress, FLORES_ADDRESS } from "./support/address";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -165,7 +166,8 @@ describe("onboarding: bloco Seu negócio", () => {
     getOnboarding.mockResolvedValue({
       ...emptyOnboardingState(),
       business: {
-        address: "Rua das Flores, 100",
+        address: composedAddress(FLORES_ADDRESS),
+        addressParts: FLORES_ADDRESS,
         category: "Beleza",
         modalities: ["ON_SITE"],
         name: "Studio Aurora",
@@ -177,7 +179,11 @@ describe("onboarding: bloco Seu negócio", () => {
         <OnboardingScreen scenario="endereco" />
       </OnboardingRuntimeProvider>,
     );
-    await screen.findByLabelText("Endereço do seu espaço");
+    // Os campos abrem com as partes gravadas.
+    await waitFor(() =>
+      expect(screen.getByLabelText("CEP")).toHaveValue("01310-100"),
+    );
+    expect(screen.getByLabelText("Estado")).toHaveValue("SP");
     await expectNoA11yViolations(container);
   });
 });
@@ -240,7 +246,8 @@ describe("configurações/negocio: BusinessSettings", () => {
   test("com ON_SITE gravado, campo de endereço e aviso de projeção pendente visíveis", async () => {
     getSettings.mockResolvedValue(
       settingsFixture({
-        address: "Av. Central, 456",
+        address: composedAddress(FLORES_ADDRESS),
+        addressParts: FLORES_ADDRESS,
         contextProjectionStatus: "PENDING",
         modalities: ["ON_SITE"],
       }),
@@ -251,7 +258,10 @@ describe("configurações/negocio: BusinessSettings", () => {
       </ShellConfigProvider>,
     );
     await userEvent.click(await screen.findByRole("button", { name: /^Endereço/ }));
-    await screen.findByLabelText("Endereço do seu espaço");
+    const group = await screen.findByRole("group", {
+      name: "Endereço do seu espaço",
+    });
+    expect(within(group).getByLabelText("CEP")).toHaveValue("01310-100");
     await expectNoA11yViolations(container);
   });
 });

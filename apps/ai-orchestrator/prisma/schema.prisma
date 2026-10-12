@@ -435,6 +435,10 @@ model Message {
   deliveryDetail    String?
   deliveryAttempts  Int                   @default(0)
   deliveryUpdatedAt DateTime?
+  /// Resposta da IA despachada em varias mensagens curtas (2026-10-11): quantas
+  /// partes ja sairam. A linha continua uma so (texto completo) e so vira SENT
+  /// depois da ultima parte; o retry retoma daqui sem reenviar parte enviada.
+  deliveryPartsSent Int                   @default(0)
 
   channel      ChannelConnection   @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
   conversation Conversation        @relation(fields: [tenantId, channelId, conversationId], references: [tenantId, channelId, id], onDelete: Cascade)

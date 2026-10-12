@@ -57,6 +57,11 @@ const envSchema = z.object({
   // do proxy e divide o mesmo balde de rate limit, inclusive o de login.
   TRUST_PROXY_HOPS: nonNegativeIntEnv(0),
   AI_ORCHESTRATOR_BASE_URL: stringEnv("http://localhost:3000"),
+  // Endereco da IA visto pela Evolution Go, para o webhook das instancias.
+  // Vazio: o mesmo AI_ORCHESTRATOR_BASE_URL (producao, onde os dois lados
+  // enxergam a IA pelo mesmo endereco). Localmente a Evolution roda no Docker
+  // e "localhost" e o proprio container: use http://host.docker.internal:3000.
+  EVOLUTION_WEBHOOK_BASE_URL: stringEnv(""),
   SCHEDULING_SERVICE_BASE_URL: stringEnv("http://localhost:3003"),
   EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),
   EVOLUTION_GO_API_KEY: stringEnv(),

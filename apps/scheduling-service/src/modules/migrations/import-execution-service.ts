@@ -971,7 +971,7 @@ export class ImportExecutionService {
             tenantId: environment.tenantId,
             startAt: interval.startAt,
             endAt: interval.endAt,
-            reason: source.comments ?? null,
+            reason: meaningfulText(source.comments),
             kind: "BLOCK",
           },
         });
@@ -1657,4 +1657,14 @@ function localTime(value: string): string {
 
 function databaseTime(value: string): Date {
   return new Date(`1970-01-01T${value}:00.000Z`);
+}
+
+/**
+ * Texto que diz alguma coisa: sem letra nem numero (".", "-", espacos), vira
+ * nulo. A Minha Agenda guarda "." como comentario de bloqueio sem motivo, e o
+ * ponto aparecia na Agenda como se fosse o motivo (validacao de 2026-10-12).
+ */
+export function meaningfulText(value: string | null | undefined): string | null {
+  const trimmed = value?.trim() ?? "";
+  return /[\p{L}\p{N}]/u.test(trimmed) ? trimmed : null;
 }

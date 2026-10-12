@@ -14,6 +14,7 @@ import type {
 } from "../assistant/assistant.service.js";
 import type { GraphRuntimePort } from "../graph/graph-runtime.js";
 import {
+  type MessageGraphDependencies,
   MessageGraphWorkflow,
   type OutboundGate,
 } from "../graph/message-graph.js";
@@ -63,6 +64,9 @@ export interface InboundProcessingResult {
     | "unsupported_media_kind"
     | "buffered"
     | "replied"
+    // Contato que nao e cliente (pessoal, quem oferece o proprio servico,
+    // fornecedor, spam): a IA pausa sem mandar nada (2026-10-11).
+    | "ai_paused_silently"
     | "superseded"
     | "send_failed"
     // Resposta da IA recusada no despacho porque o destino e grupo
@@ -88,6 +92,12 @@ export interface InboundExecutionOptions {
 export interface RecordedInboundText {
   conversationId: string;
   messageRecordId: string;
+  /**
+   * Retry de um lote que ja tinha gravado esta mensagem e ja respondido a ela
+   * (a IA gravou resposta depois). O turno nao roda de novo: responderia duas
+   * vezes a mesma mensagem.
+   */
+  alreadyAnswered?: boolean;
 }
 
 export interface AutomationPort {
@@ -183,6 +193,8 @@ export interface InboundMessageProcessorOptions {
   serviceInstructions?: ServiceInstructionPromptPort;
   /** Transcricao de audio recebido (Goal013). */
   transcription?: InboundAudioTranscriptionPort;
+  /** Resposta da IA em varias mensagens: progresso persistido (2026-10-11). */
+  replyDispatch?: MessageGraphDependencies["replyDispatch"];
 }
 
 interface BufferedMessage {
@@ -232,6 +244,7 @@ export class InboundMessageProcessor {
       customerMemory: options.customerMemory,
       serviceInstructions: options.serviceInstructions,
       transcription: options.transcription,
+      replyDispatch: options.replyDispatch,
       logger,
     });
   }
@@ -317,6 +330,7 @@ export class InboundMessageProcessor {
     const conversationId = await this.runtime.resolveConversationId(latest);
     const messageRecordIds: string[] = [];
     const fragments: string[] = [];
+    let allAnswered = true;
     for (const message of messages) {
       const execution = await this.workflow.invoke({
         message,
@@ -330,6 +344,7 @@ export class InboundMessageProcessor {
         throw new Error("LangGraph buffered input without a message record.");
       }
       messageRecordIds.push(execution.bufferedRecord.messageRecordId);
+      if (!execution.bufferedRecord.alreadyAnswered) allAnswered = false;
       // O texto do fragmento vem do grafo, nao do payload: audio so tem texto
       // depois de transcrito.
       const fragment = (
@@ -339,6 +354,10 @@ export class InboundMessageProcessor {
       ).trim();
       if (fragment) fragments.push(fragment);
     }
+
+    // Retry de um lote que ja foi respondido (a falha veio depois da resposta
+    // gravada): nada novo para a IA responder.
+    if (allAnswered) return { ok: true, action: "duplicate" };
 
     const text = fragments.join("\n");
     const execution = await this.workflow.invoke({

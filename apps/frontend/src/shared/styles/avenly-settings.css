@@ -674,6 +674,26 @@
 .availability-period input:focus {
   outline: 0;
 }
+/* Campo de hora compartilhado (src/shared/ui/pickers): o relógio cabe dentro
+   da pílula, sem alargar a linha do dia. */
+.availability-period .picker-field {
+  width: auto;
+  flex: none;
+}
+.availability-period .picker-field > input {
+  width: 104px;
+  min-width: 104px;
+  padding: 0 34px 0 0;
+}
+.availability-period .picker-field-toggle {
+  right: 0;
+  width: 32px;
+  height: 32px;
+}
+.availability-period .picker-field-toggle .icon {
+  width: 18px;
+  height: 18px;
+}
 .availability-period:focus-within {
   box-shadow:
     0 0 0 2px var(--surface),
@@ -2877,13 +2897,12 @@ a.account-danger-card {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #e5ded4;
+  overflow: hidden;
   border-radius: 12px;
-  color: #5f574e;
-  background: #fffdfa;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+}
+.imports-origin-logo svg {
+  width: 100%;
+  height: 100%;
 }
 .imports-origin-copy {
   flex: 1;

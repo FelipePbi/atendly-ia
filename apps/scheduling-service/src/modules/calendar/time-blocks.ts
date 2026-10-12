@@ -26,6 +26,17 @@ interface TimeBlockScope {
   timeZone: string;
 }
 
+/**
+ * Resumo da série que a ocorrência segue, lido junto com o bloco para a folha
+ * de ações da Agenda dizer "Repete toda terça" sem uma segunda leitura
+ * (pedido de 2026-10-12).
+ */
+export const TIME_BLOCK_SERIES_SUMMARY = {
+  series: {
+    select: { daysOfWeek: true, occurrenceCount: true, seriesEndDate: true },
+  },
+} as const;
+
 export async function createTimeBlock(
   prisma: PrismaClient,
   input: TimeBlockScope & {
@@ -121,6 +132,7 @@ export async function listTimeBlocks(
       startAt: { lt: rangeEnd },
       endAt: { gt: rangeStart },
     },
+    include: TIME_BLOCK_SERIES_SUMMARY,
     orderBy: [{ startAt: "asc" }],
   });
 }

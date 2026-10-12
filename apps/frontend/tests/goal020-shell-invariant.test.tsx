@@ -305,8 +305,15 @@ describe("ShellConfigProvider + conflitos por item não excede a profundidade de
 
 describe("ShellConfigProvider + execução não excede a profundidade de atualização", () => {
   test("abre e fecha a confirmação de trocar de conta repetidamente", async () => {
-    getImportState.mockResolvedValue(stateWithSession(runningSessionFixture()));
-    getImportProgress.mockResolvedValue(partialProgressFixture());
+    // A tela parada ("Importação quase concluída") não tem mais a troca de
+    // conta (validação de 2026-10-11); a execução interrompida ainda tem.
+    getImportState.mockResolvedValue(
+      stateWithSession(runningSessionFixture({ interrupted: true })),
+    );
+    getImportProgress.mockResolvedValue({
+      ...partialProgressFixture(),
+      interrupted: true,
+    });
     const user = userEvent.setup();
 
     renderScreen();
@@ -314,7 +321,7 @@ describe("ShellConfigProvider + execução não excede a profundidade de atualiz
     // Espera a leitura de progresso assentar: `ReplaceAccountZone` também
     // aparece na tela de carregamento, e um `findBy` ansioso pegaria o botão
     // da renderização transitória em vez do da tela final.
-    await screen.findByRole("heading", { name: "Importação quase concluída" });
+    await screen.findByRole("heading", { name: "Isso parou no meio do caminho" });
     const replaceTrigger = screen.getByRole("button", { name: "Conectar outra conta" });
     for (let i = 0; i < 4; i += 1) {
       await user.click(replaceTrigger);

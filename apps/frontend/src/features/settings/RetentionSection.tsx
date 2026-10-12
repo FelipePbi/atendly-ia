@@ -89,7 +89,8 @@ export function RetentionSection() {
   }
 
   const saved = settings;
-  const commercial = draft.commercialRetentionDays ?? saved.commercialRetentionDays;
+  const commercial =
+    draft.commercialRetentionDays ?? saved.commercialRetentionDays;
   const personal = draft.personalRetentionDays ?? saved.personalRetentionDays;
   const dirty =
     commercial !== saved.commercialRetentionDays ||
@@ -176,7 +177,10 @@ export function RetentionSection() {
           options={saved.retentionDaysOptions}
           value={commercial}
           onChange={(days) =>
-            setDraft((current) => ({ ...current, commercialRetentionDays: days }))
+            setDraft((current) => ({
+              ...current,
+              commercialRetentionDays: days,
+            }))
           }
         />
         <RetentionGroup
@@ -189,8 +193,13 @@ export function RetentionSection() {
             setDraft((current) => ({ ...current, personalRetentionDays: days }))
           }
         />
-        <section aria-label="O que não é afetado" className="retention-unaffected">
-          <span className="retention-unaffected-title">O que não é afetado</span>
+        <section
+          aria-label="O que não é afetado"
+          className="retention-unaffected"
+        >
+          <span className="retention-unaffected-title">
+            O que não é afetado
+          </span>
           <ul>
             {NOT_AFFECTED.map((item) => (
               <li key={item}>

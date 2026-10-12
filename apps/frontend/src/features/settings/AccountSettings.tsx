@@ -6,7 +6,10 @@ import { type FormEvent, type ReactNode, useState } from "react";
 
 import { PASSWORD_POLICY_RULES } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
-import { getProductServices, useProductRuntime } from "@/shared/runtime/ProductRuntime";
+import {
+  getProductServices,
+  useProductRuntime,
+} from "@/shared/runtime/ProductRuntime";
 import {
   accountDeletionDaysRemaining,
   useSystemStatus,
@@ -267,7 +270,11 @@ export function AccountSettings() {
               type="text"
             />
           </label>
-          <SaveActions busy={nameBusy} message={nameMessage} label="Salvar nome" />
+          <SaveActions
+            busy={nameBusy}
+            message={nameMessage}
+            label="Salvar nome"
+          />
         </form>
       </Dialog>
       <Dialog
@@ -458,7 +465,10 @@ function AccountDeletionSection({
   }
 
   return (
-    <Link className="account-danger-card is-action" href="/configuracoes/conta/excluir">
+    <Link
+      className="account-danger-card is-action"
+      href="/configuracoes/conta/excluir"
+    >
       <span className="account-danger-copy">
         <span className="account-danger-title">Excluir conta</span>
         <span className="account-danger-detail">

@@ -14,9 +14,7 @@ import { type OnboardingScenario, onboardingScenarios } from "./scenarios";
  * chevron cinza da Boas-vindas (sem destino e fora da ordem de Tab); ausente,
  * não há chevron. */
 export type OnboardingBack =
-  | { href: string }
-  | { onClick: () => void }
-  | { disabled: true };
+  { href: string } | { onClick: () => void } | { disabled: true };
 
 export function OnboardingShell({
   actions,
@@ -203,11 +201,7 @@ function OnboardingBackLink({ back }: { back?: OnboardingBack }) {
     );
   }
   return (
-    <Link
-      aria-label="Voltar"
-      className="onboarding-back-link"
-      href={back.href}
-    >
+    <Link aria-label="Voltar" className="onboarding-back-link" href={back.href}>
       <Icon name="chevron-left" />
     </Link>
   );
@@ -277,11 +271,7 @@ function OnboardingSidebar({ scenario }: { scenario: OnboardingScenario }) {
               key={chapter.id}
             >
               <span aria-hidden="true" className="onboarding-stepper-marker">
-                {chapter.status === "done" ? (
-                  <Icon name="check" />
-                ) : (
-                  index + 1
-                )}
+                {chapter.status === "done" ? <Icon name="check" /> : index + 1}
               </span>
               <span aria-hidden="true">{chapter.label}</span>
             </li>

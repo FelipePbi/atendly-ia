@@ -28,16 +28,19 @@ type NotificationsDrawerValue = {
   open: () => void;
 };
 
-const NotificationsDrawerContext = createContext<NotificationsDrawerValue | null>(
-  null,
-);
+const NotificationsDrawerContext =
+  createContext<NotificationsDrawerValue | null>(null);
 
 /**
  * Uma gaveta só por casca: o sino da Home e o item "Notificações" da sidebar
  * abrem a mesma. Fecha sozinha quando a rota muda — por exemplo, quando a
  * usuária segue o link de uma notificação ou o das preferências.
  */
-export function NotificationsDrawerProvider({ children }: { children: ReactNode }) {
+export function NotificationsDrawerProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const pathname = usePathname();
   // A rota em que a gaveta foi aberta: trocar de rota a fecha sem efeito.
   const [openedAt, setOpenedAt] = useState<string | null>(null);

@@ -112,7 +112,7 @@ export const onboardingScenarios = {
   "teste-real": [
     "WhatsApp",
     "Vamos fazer um teste real",
-    "Um número da Avenly vai enviar uma mensagem no seu WhatsApp simulando um cliente. Você só observa — a IA faz o atendimento sozinha.",
+    "Um número da Avenly vai enviar uma mensagem no seu WhatsApp simulando um cliente. Você só observa: a IA faz o atendimento sozinha.",
     "activation-test",
   ],
   "teste-real-progresso": [

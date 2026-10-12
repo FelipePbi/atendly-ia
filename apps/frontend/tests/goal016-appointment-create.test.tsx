@@ -38,6 +38,7 @@ import { RescheduleFlow } from "@/features/agenda/RescheduleFlow";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
 import { expectNoA11yViolations } from "./support/a11y";
+import { chooseManualTime } from "./support/pickers";
 
 const replace = vi.fn();
 
@@ -46,27 +47,30 @@ vi.mock("next/navigation", () => ({
 }));
 
 const cancelAppointment = vi.fn();
-const createAppointment = vi.fn<
-  (
-    input: CreateAppointmentInput,
-    idempotencyKey: string,
-    signal?: AbortSignal,
-  ) => Promise<Appointment>
->();
-const createHold = vi.fn<
-  (
-    input: CreateHoldInput,
-    idempotencyKey: string,
-    signal?: AbortSignal,
-  ) => Promise<AppointmentHold>
->();
+const createAppointment =
+  vi.fn<
+    (
+      input: CreateAppointmentInput,
+      idempotencyKey: string,
+      signal?: AbortSignal,
+    ) => Promise<Appointment>
+  >();
+const createHold =
+  vi.fn<
+    (
+      input: CreateHoldInput,
+      idempotencyKey: string,
+      signal?: AbortSignal,
+    ) => Promise<AppointmentHold>
+  >();
 const getAppointment = vi.fn();
-const getAvailability = vi.fn<
-  (
-    query: AvailabilityQuery,
-    signal?: AbortSignal,
-  ) => Promise<AvailabilitySlot[]>
->();
+const getAvailability =
+  vi.fn<
+    (
+      query: AvailabilityQuery,
+      signal?: AbortSignal,
+    ) => Promise<AvailabilitySlot[]>
+  >();
 const getCalendar = vi.fn();
 const listAppointments = vi.fn();
 const listTimeBlocks = vi.fn();
@@ -97,7 +101,9 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 const today = new Date();
 const ISO_TODAY = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
-function calendarFixture(overrides: Partial<CalendarState> = {}): CalendarState {
+function calendarFixture(
+  overrides: Partial<CalendarState> = {},
+): CalendarState {
   return {
     capabilities: {
       createAppointments: true,
@@ -137,7 +143,9 @@ function customerFixture(overrides: Partial<Customer> = {}): Customer {
   };
 }
 
-function holdFixture(overrides: Partial<AppointmentHold> = {}): AppointmentHold {
+function holdFixture(
+  overrides: Partial<AppointmentHold> = {},
+): AppointmentHold {
   return {
     contactRef: null,
     customerId: "cus-ana",
@@ -297,9 +305,22 @@ function renderCreate() {
   );
 }
 
-async function pickService(name: string | RegExp) {
+type User = ReturnType<typeof userEvent.setup>;
+
+/** Cliente da lista: a primeira etapa do formulário (D-170). */
+async function chooseAna(user: User) {
+  await user.click(await screen.findByRole("button", { name: /Ana Paula/ }));
+}
+
+// Revelação progressiva (pedido de 2026-10-12, D-170): Serviços só aparece
+// depois do cliente, então o cliente vem antes do serviço.
+async function pickService(
+  name: string | RegExp,
+  chooseCustomer: (user: User) => Promise<void> = chooseAna,
+) {
   renderCreate();
   const user = userEvent.setup();
+  await chooseCustomer(user);
   await user.click(await screen.findByRole("checkbox", { name }));
   return user;
 }
@@ -307,7 +328,6 @@ async function pickService(name: string | RegExp) {
 describe("identidade por customerId", () => {
   test("cliente já cadastrado vai por ID: nem o hold nem a criação mandam telefone", async () => {
     const user = await pickService(/Corte feminino/);
-    await user.click(await screen.findByRole("button", { name: /Ana Paula/ }));
 
     await user.click(await screen.findByRole("radio", { name: "09:00" }));
     await waitFor(() => expect(createHold).toHaveBeenCalledTimes(1));
@@ -332,13 +352,16 @@ describe("identidade por customerId", () => {
 
   test("cliente cadastrado sem telefone nenhum continua agendável", async () => {
     listCustomers.mockResolvedValue({
-      items: [customerFixture({ id: "cus-sem-fone", name: "Bia", phone: null })],
+      items: [
+        customerFixture({ id: "cus-sem-fone", name: "Bia", phone: null }),
+      ],
       managedExternally: false,
       source: "AVENLY",
     });
 
-    const user = await pickService(/Corte feminino/);
-    await user.click(await screen.findByRole("button", { name: /Bia/ }));
+    const user = await pickService(/Corte feminino/, async (current) => {
+      await current.click(await screen.findByRole("button", { name: /Bia/ }));
+    });
     await user.click(await screen.findByRole("radio", { name: "09:00" }));
     await waitFor(() => expect(createHold).toHaveBeenCalled());
 
@@ -352,12 +375,16 @@ describe("identidade por customerId", () => {
   });
 
   test("cliente novo é criado na confirmação, por nome e telefone", async () => {
-    const user = await pickService(/Corte feminino/);
-    await user.type(screen.getByLabelText("Nome do cliente"), "Carla Nunes");
-    await user.type(
-      screen.getByLabelText("Telefone (opcional)"),
-      "+5511988887777",
-    );
+    const user = await pickService(/Corte feminino/, async (current) => {
+      await current.type(
+        await screen.findByLabelText("Nome do cliente"),
+        "Carla Nunes",
+      );
+      await current.type(
+        screen.getByLabelText("Telefone (opcional)"),
+        "+5511988887777",
+      );
+    });
 
     await user.click(await screen.findByRole("radio", { name: "09:00" }));
     await waitFor(() => expect(createHold).toHaveBeenCalled());
@@ -441,6 +468,7 @@ describe("ciclo de vida do hold", () => {
   test("abandonar o fluxo libera a reserva", async () => {
     const { unmount } = renderCreate();
     const user = userEvent.setup();
+    await chooseAna(user);
     await user.click(await screen.findByRole("checkbox", { name: /Corte/ }));
     await user.click(await screen.findByRole("radio", { name: "09:00" }));
     await waitFor(() => expect(createHold).toHaveBeenCalledTimes(1));
@@ -473,7 +501,6 @@ describe("ciclo de vida do hold", () => {
     createAppointment.mockRejectedValueOnce(holdExpiredError(true));
 
     const user = await pickService(/Corte feminino/);
-    await user.click(await screen.findByRole("button", { name: /Ana Paula/ }));
     await user.click(await screen.findByRole("radio", { name: "09:00" }));
     await waitFor(() => expect(createHold).toHaveBeenCalled());
 
@@ -492,7 +519,6 @@ describe("ciclo de vida do hold", () => {
 
   test("a confirmação consome a reserva: holdId vai no corpo", async () => {
     const user = await pickService(/Corte feminino/);
-    await user.click(await screen.findByRole("button", { name: /Ana Paula/ }));
     await user.click(await screen.findByRole("radio", { name: "09:00" }));
     await waitFor(() => expect(createHold).toHaveBeenCalled());
 
@@ -521,9 +547,7 @@ describe("conflito e sobreposição por decisão humana", () => {
     const user = await pickService(/Corte feminino/);
     await screen.findByRole("radio", { name: "09:00" });
     await user.click(screen.getByRole("button", { name: "Outro horário" }));
-    const manual = screen.getByLabelText("Outro horário, fora dos oferecidos");
-    await user.clear(manual);
-    await user.type(manual, "12:00");
+    await chooseManualTime(user, "12:00");
     await user.click(screen.getByRole("button", { name: "Usar este horário" }));
     return user;
   }
@@ -535,12 +559,14 @@ describe("conflito e sobreposição por decisão humana", () => {
     await waitFor(() =>
       expect(notice).toHaveTextContent(/Corte feminino às 12:00/),
     );
-    expect(within(notice).getByText("Esse horário já está ocupado")).toBeVisible();
+    expect(
+      within(notice).getByText("Esse horário já está ocupado"),
+    ).toBeVisible();
     expect(within(notice).getByText("Ana Paula")).toBeVisible();
     // Atendimento e bloqueio cobrem o mesmo intervalo: os dois são mostrados.
     expect(notice).toHaveTextContent('Bloqueio "Almoço" das 12:00 às 13:00.');
     expect(notice).toHaveTextContent(
-      'Ana Paula tem Corte feminino às 12:00 (em confirmação). Bloqueio "Almoço" das 12:00 às 13:00. Você pode encaixar mesmo assim — todos vão ficar no mesmo horário na sua agenda.',
+      'Ana Paula tem Corte feminino às 12:00 (em confirmação). Bloqueio "Almoço" das 12:00 às 13:00. Você pode encaixar mesmo assim: todos vão ficar no mesmo horário na sua agenda.',
     );
   });
 
@@ -564,12 +590,16 @@ describe("conflito e sobreposição por decisão humana", () => {
       screen.getByLabelText("Motivo do encaixe"),
       "Cliente antigo, encaixe combinado",
     );
-    await user.click(screen.getByRole("button", { name: "Encaixar mesmo assim" }));
+    await user.click(
+      screen.getByRole("button", { name: "Encaixar mesmo assim" }),
+    );
 
     await waitFor(() => expect(createAppointment).toHaveBeenCalledTimes(1));
     const body = createAppointment.mock.calls[0][0];
     expect(body.overlapOverride).toBe(true);
-    expect(body.overlapOverrideReason).toBe("Cliente antigo, encaixe combinado");
+    expect(body.overlapOverrideReason).toBe(
+      "Cliente antigo, encaixe combinado",
+    );
     expect(body.startTime).toBe("12:00");
     // Conflito não gerou reserva: não há `holdId` a consumir.
     expect(body.holdId).toBeUndefined();
@@ -659,19 +689,25 @@ describe("remarcar", () => {
     await screen.findByRole("radio", { name: "10:00" });
     // "Outro horário" abre o campo manual (A9).
     await user.click(screen.getByRole("button", { name: "Outro horário" }));
-    const manual = screen.getByLabelText("Outro horário, fora dos oferecidos");
-    await user.type(manual, "14:00");
+    await user.type(
+      screen.getByLabelText("Outro horário, fora dos oferecidos"),
+      "14:00",
+    );
     await user.click(screen.getByRole("button", { name: "Usar este horário" }));
 
     expect(await screen.findByText("Dora")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Sobrepor mesmo assim" }));
+    await user.click(
+      screen.getByRole("button", { name: "Sobrepor mesmo assim" }),
+    );
     expect(rescheduleAppointment).not.toHaveBeenCalled();
 
     await user.type(
       screen.getByLabelText("Motivo da sobreposição"),
       "Retorno urgente",
     );
-    await user.click(screen.getByRole("button", { name: "Sobrepor mesmo assim" }));
+    await user.click(
+      screen.getByRole("button", { name: "Sobrepor mesmo assim" }),
+    );
 
     await waitFor(() => expect(rescheduleAppointment).toHaveBeenCalledTimes(1));
     expect(rescheduleAppointment.mock.calls[0][1]).toMatchObject({
@@ -721,18 +757,16 @@ describe("cancelar", () => {
 describe("acessibilidade das superfícies desta unidade", () => {
   test("o formulário de criação e o painel de conflito passam no axe", async () => {
     const { container } = renderCreate();
+    const user = userEvent.setup();
+    await chooseAna(user);
     await screen.findByRole("checkbox", { name: /Corte feminino/ });
     await expectNoA11yViolations(container);
 
     createHold.mockRejectedValue(conflictError());
-    const user = userEvent.setup();
     await user.click(screen.getByRole("checkbox", { name: /Corte feminino/ }));
     await screen.findByRole("radio", { name: "09:00" });
     await user.click(screen.getByRole("button", { name: "Outro horário" }));
-    await user.type(
-      screen.getByLabelText("Outro horário, fora dos oferecidos"),
-      "12:00",
-    );
+    await chooseManualTime(user, "12:00");
     await user.click(screen.getByRole("button", { name: "Usar este horário" }));
     await screen.findByRole("button", { name: "Encaixar mesmo assim" });
 

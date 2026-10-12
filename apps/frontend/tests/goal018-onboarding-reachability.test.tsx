@@ -24,7 +24,13 @@
  * cenários.
  */
 
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -115,6 +121,8 @@ import {
   onboardingOrder,
   onboardingScenarios,
 } from "@/features/onboarding/scenarios";
+
+import { advanceDemo, runDemoToEnd } from "./support/onboarding-demo";
 
 function emptyState(): OnboardingState {
   return {
@@ -491,24 +499,10 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
   });
 
   test("demonstracao-da-ia com serviço e horário reais mostra a conversa com o preço e os horários reais, e avança para tom-da-ia sem escrever nem enviar", async () => {
-    // Com prefers-reduced-motion a conversa abre inteira, com o Continuar
-    // (Goal079); a sequência item a item é provada em goal079-onboarding-demo.
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: (query: string) => ({
-        addEventListener: vi.fn(),
-        addListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-        matches: query.includes("prefers-reduced-motion"),
-        media: query,
-        onchange: null,
-        removeEventListener: vi.fn(),
-        removeListener: vi.fn(),
-      }),
-      writable: true,
-    });
+    // A conversa entra item a item (a sequência é provada em
+    // goal079-onboarding-demo): roda até o fim com relógio falso.
+    vi.useFakeTimers();
     try {
-      const user = userEvent.setup();
       renderScreen(
         "demonstracao-da-ia",
         stateFixture({
@@ -518,9 +512,11 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
           ...availabilityDone,
         }),
       );
+      await advanceDemo(0);
       expect(
-        await screen.findByRole("log", { name: "Conversa de exemplo da IA" }),
+        screen.getByRole("log", { name: "Conversa de exemplo da IA" }),
       ).toBeVisible();
+      await runDemoToEnd();
       expect(
         screen.getByText("Corte custa R$ 100,00.", { exact: false }),
       ).toBeVisible();
@@ -528,15 +524,15 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
         screen.getByText(/Tenho segunda às 9h, 13h ou 17h\./u),
       ).toBeVisible();
 
-      // "Continuar" entra num efeito depois da conversa: espera, não afirma.
-      await user.click(await screen.findByRole("button", { name: "Continuar" }));
+      fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+      await advanceDemo(0);
 
       expect(push).toHaveBeenCalledWith("/onboarding/tom-da-ia");
       // A demonstração é simulada: nenhuma escrita nem porta de envio.
       expect(updateOnboarding).not.toHaveBeenCalled();
       expect(completeOnboarding).not.toHaveBeenCalled();
     } finally {
-      Reflect.deleteProperty(window, "matchMedia");
+      vi.useRealTimers();
     }
   });
 

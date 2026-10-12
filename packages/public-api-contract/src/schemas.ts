@@ -8,6 +8,19 @@ export const calendarSourceSchema = z
   .transform((): "AVENLY" => "AVENLY");
 // Modalidades de atendimento do negócio (Goal018/WU-01), seleção múltipla.
 export const businessModalitySchema = z.enum(["ON_SITE", "AT_HOME", "ONLINE"]);
+
+// Endereço do local próprio em partes. `number` nulo é "sem número";
+// `complement` nulo é sem complemento. O texto único `address` continua
+// existindo e é montado pelo BFF a partir destas partes.
+export const businessAddressPartsSchema = z.object({
+  postalCode: z.string(),
+  state: z.string(),
+  city: z.string(),
+  district: z.string(),
+  street: z.string(),
+  number: z.string().nullable(),
+  complement: z.string().nullable(),
+});
 // Estado de projeção do contexto de negócio para a IA (Goal018/WU-03):
 // `PROJECTED` quando a última versão gravada já chegou na IA, `PENDING`
 // quando a gravação é mais nova que a última projeção bem-sucedida.
@@ -55,6 +68,7 @@ export const businessProfileSchema = z.object({
   // anterior a este Goal continua decodificando sem eles.
   modalities: z.array(businessModalitySchema).optional(),
   address: z.string().nullable().optional(),
+  addressParts: businessAddressPartsSchema.nullable().optional(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });
@@ -148,6 +162,7 @@ export const onboardingStateSchema = z.object({
       // continua decodificando sem eles.
       modalities: z.array(businessModalitySchema).optional(),
       address: z.string().nullable().optional(),
+      addressParts: businessAddressPartsSchema.nullable().optional(),
       contextVersion: z.number().int().nonnegative().optional(),
       contextProjectedVersion: z.number().int().nonnegative().optional(),
       contextProjectionStatus: businessContextProjectionStatusSchema.optional(),
@@ -203,6 +218,7 @@ export const settingsStateSchema = z.object({
       // continua decodificando sem eles.
       modalities: z.array(businessModalitySchema).optional(),
       address: z.string().nullable().optional(),
+      addressParts: businessAddressPartsSchema.nullable().optional(),
       contextVersion: z.number().int().nonnegative().optional(),
       contextProjectedVersion: z.number().int().nonnegative().optional(),
       contextProjectionStatus: businessContextProjectionStatusSchema.optional(),
@@ -282,6 +298,10 @@ export const serviceSchema = z.object({
   bufferBeforeMinutes: z.number().int().nonnegative().optional().default(0),
   bufferAfterMinutes: z.number().int().nonnegative().optional().default(0),
   recurrenceIntervalDays: z.number().int().positive().nullish().optional(),
+  // Atendimentos não cancelados dos últimos 90 dias com o serviço (D-170):
+  // o novo agendamento mostra primeiro os 5 mais usados. Só `GET
+  // /v1/services` traz; resposta sem o campo continua válida.
+  usageCount: z.number().int().nonnegative().optional(),
 });
 
 // Recorte de um agendamento no fuso do calendário do negócio (Goal075):
@@ -564,6 +584,19 @@ export const timeBlockSchema = z.object({
   kind: timeBlockKindSchema.optional().default("BLOCK"),
   title: z.string().nullable().optional().default(null),
   seriesId: z.string().nullable().optional().default(null),
+  // Quando o bloco foi criado e o resumo da série que a ocorrência segue
+  // (pedido de 2026-10-12: a folha de ações do bloqueio mostra os dois).
+  // `series` só vem preenchida na leitura da grade e ao mover a ocorrência;
+  // opcionais mantêm decodável toda resposta anterior.
+  createdAt: isoDateTimeSchema.nullable().optional(),
+  series: z
+    .object({
+      daysOfWeek: z.array(z.number().int().min(0).max(6)),
+      occurrenceCount: z.number().int().nonnegative().nullable(),
+      seriesEndDate: dateSchema.nullable(),
+    })
+    .nullable()
+    .optional(),
 });
 
 /** Excecoes de disponibilidade geridas (Goal009). */
@@ -972,6 +1005,19 @@ export const whatsappConnectionSchema = z.object({
   updatedAt: isoDateTimeSchema,
 });
 
+// Contatos do número conectado para a escolha dos contatos ignorados
+// (validação de 2026-10-11). Lidos na hora da Evolution e nunca gravados.
+// `available: false` quando não há número conectado para ler.
+export const whatsappContactSchema = z.object({
+  phone: z.string().min(1),
+  name: z.string().nullable(),
+});
+
+export const whatsappContactListSchema = z.object({
+  available: z.boolean(),
+  items: z.array(whatsappContactSchema),
+});
+
 export const whatsappConnectResultSchema = z.object({
   connection: whatsappConnectionSchema,
   pairingCode: z.string().nullable(),
@@ -1248,6 +1294,9 @@ export type ConversationSuggestions = z.infer<
 
 export type AiTone = z.infer<typeof aiToneSchema>;
 export type BusinessModality = z.infer<typeof businessModalitySchema>;
+export type BusinessAddressParts = z.infer<typeof businessAddressPartsSchema>;
+export type WhatsappContact = z.infer<typeof whatsappContactSchema>;
+export type WhatsappContactList = z.infer<typeof whatsappContactListSchema>;
 export type BusinessContextProjectionStatus = z.infer<
   typeof businessContextProjectionStatusSchema
 >;

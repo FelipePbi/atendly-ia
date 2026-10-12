@@ -1,4 +1,5 @@
 import type { PrismaClient } from "../../generated/prisma/client.js";
+import type { AiReplyPartProgressPort } from "./ai-reply-dispatch.js";
 import type { MessageDeliveryState } from "./outbox-policy.js";
 
 export interface OutboxRecord {
@@ -37,8 +38,27 @@ export interface OutboxPort {
  * apaga a tentativa — `unknown` é um estado, não um motivo para esquecer que a
  * mensagem pode ter sido entregue.
  */
-export class OutboxStore implements OutboxPort {
+export class OutboxStore implements OutboxPort, AiReplyPartProgressPort {
   constructor(private readonly prisma: PrismaClient) {}
+
+  /** Partes da resposta da IA ja enviadas (despacho em varias mensagens). */
+  async readPartsSent(messageRecordId: string): Promise<number> {
+    const message = await this.prisma.message.findUnique({
+      where: { id: messageRecordId },
+      select: { deliveryPartsSent: true },
+    });
+    return message?.deliveryPartsSent ?? 0;
+  }
+
+  async recordPartsSent(input: {
+    messageRecordId: string;
+    partsSent: number;
+  }): Promise<void> {
+    await this.prisma.message.update({
+      where: { id: input.messageRecordId },
+      data: { deliveryPartsSent: input.partsSent },
+    });
+  }
 
   async markSent(input: {
     messageRecordId: string;
@@ -78,7 +98,10 @@ export class OutboxStore implements OutboxPort {
    * saída de `UNKNOWN`: o recibo prova que a mensagem existe no WhatsApp.
    *
    * O `correlationId` viaja como id da mensagem no envio, então o recibo casa
-   * mesmo quando o envio expirou sem devolver ID externo.
+   * mesmo quando o envio expirou sem devolver ID externo. Na resposta da IA
+   * em varias partes, so a ultima parte leva o `correlationId` (as anteriores
+   * levam `<correlationId>-p<n>` e nao casam): o recibo que reconcilia a linha
+   * e o da ultima parte.
    */
   async reconcileFromReceipt(input: {
     tenantId: string;

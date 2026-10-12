@@ -39,6 +39,7 @@ import { CancelFlow } from "@/features/agenda/CancelFlow";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
 import { expectNoA11yViolations } from "./support/a11y";
+import { chooseManualTime } from "./support/pickers";
 
 const push = vi.fn();
 const replace = vi.fn();
@@ -83,7 +84,9 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 
 const ISO_TODAY = "2026-09-14";
 
-function calendarFixture(overrides: Partial<CalendarState> = {}): CalendarState {
+function calendarFixture(
+  overrides: Partial<CalendarState> = {},
+): CalendarState {
   return {
     capabilities: {
       createAppointments: true,
@@ -123,7 +126,9 @@ function customerFixture(overrides: Partial<Customer> = {}): Customer {
   };
 }
 
-function holdFixture(overrides: Partial<AppointmentHold> = {}): AppointmentHold {
+function holdFixture(
+  overrides: Partial<AppointmentHold> = {},
+): AppointmentHold {
   return {
     contactRef: null,
     customerId: undefined,
@@ -217,7 +222,11 @@ async function tabUntilFocused(
   target: HTMLElement,
   max = 40,
 ): Promise<void> {
-  for (let attempt = 0; attempt < max && document.activeElement !== target; attempt += 1) {
+  for (
+    let attempt = 0;
+    attempt < max && document.activeElement !== target;
+    attempt += 1
+  ) {
     await user.tab();
   }
 }
@@ -319,7 +328,10 @@ describe("grades da agenda (Dia, Semana e Mês)", () => {
     const weekSection = await screen.findByLabelText("Mapa da semana");
     await expectNoA11yViolations(container);
 
-    const dayHeadButtons = within(weekSection).getAllByRole("button");
+    // Só os cabeçalhos: as horas vazias da grade também são botões ("Novo às …").
+    const dayHeadButtons = within(weekSection).getAllByRole("button", {
+      name: /, mostrar /,
+    });
     expect(dayHeadButtons.length).toBe(7);
     const firstDayHead = dayHeadButtons[0];
 
@@ -327,7 +339,11 @@ describe("grades da agenda (Dia, Semana e Mês)", () => {
     expect(firstDayHead).toHaveFocus();
     await user.keyboard("{Enter}");
 
-    expect(await screen.findByLabelText(/Agenda de/)).toBeVisible();
+    // Desde 2026-10-12 o cabeçalho escolhe o dia para o resumo, sem sair da
+    // Semana; quem abre o Dia é "Abrir dia" no resumo.
+    expect(firstDayHead).toHaveAttribute("aria-pressed", "true");
+    expect(firstDayHead).toHaveFocus();
+    expect(screen.getByLabelText("Mapa da semana")).toBeVisible();
   });
 
   test("grade do Mês: sem violação de acessibilidade e seleção de dia alcançável por teclado", async () => {
@@ -373,8 +389,18 @@ describe("criação sem diálogo de confirmação", () => {
         <AppointmentForm />
       </ShellConfigProvider>,
     );
-    await user.click(await screen.findByRole("checkbox", { name: /Corte feminino/ }));
-    await user.type(screen.getByLabelText("Nome do cliente"), "Carla Nunes");
+    // Cliente antes do serviço: revelação progressiva (pedido de 2026-10-12, D-170).
+    await user.type(
+      await screen.findByLabelText("Nome do cliente"),
+      "Carla Nunes",
+    );
+    // O nome digitado vira cliente novo pelo "Cadastrar" (D-170, 2026-10-12).
+    await user.click(
+      screen.getByRole("button", { name: /Cadastrar “Carla Nunes”/ }),
+    );
+    await user.click(
+      await screen.findByRole("checkbox", { name: /Corte feminino/ }),
+    );
     await user.click(await screen.findByRole("radio", { name: "09:00" }));
     await waitFor(() => expect(createHold).toHaveBeenCalled());
     return result;
@@ -413,7 +439,9 @@ describe("criação sem diálogo de confirmação", () => {
 
   test("cancelamento em um passo (A8): a sheet prende o foco, passa no axe e Esc volta ao detalhe sem cancelar", async () => {
     getAppointment.mockResolvedValue(appointmentFixture());
-    cancelAppointment.mockResolvedValue(appointmentFixture({ status: "CANCELLED" }));
+    cancelAppointment.mockResolvedValue(
+      appointmentFixture({ status: "CANCELLED" }),
+    );
     const user = userEvent.setup();
 
     const { container } = render(
@@ -455,24 +483,36 @@ describe("controles de decisão de sobreposição", () => {
         <AppointmentForm />
       </ShellConfigProvider>,
     );
-    await user.click(await screen.findByRole("checkbox", { name: /Corte feminino/ }));
-    await user.type(screen.getByLabelText("Nome do cliente"), "Carla Nunes");
-    await user.click(screen.getByRole("button", { name: "Outro horário" }));
+    // Cliente antes do serviço: revelação progressiva (pedido de 2026-10-12, D-170).
     await user.type(
-      screen.getByLabelText("Outro horário, fora dos oferecidos"),
-      "1200",
+      await screen.findByLabelText("Nome do cliente"),
+      "Carla Nunes",
     );
+    // O nome digitado vira cliente novo pelo "Cadastrar" (D-170, 2026-10-12).
+    await user.click(
+      screen.getByRole("button", { name: /Cadastrar “Carla Nunes”/ }),
+    );
+    await user.click(
+      await screen.findByRole("checkbox", { name: /Corte feminino/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Outro horário" }));
+    await chooseManualTime(user, "1200");
     await user.click(screen.getByRole("button", { name: "Usar este horário" }));
 
     const chooseAnother = await screen.findByRole("button", {
       name: "Escolher outro horário",
     });
-    const override = screen.getByRole("button", { name: "Encaixar mesmo assim" });
+    const override = screen.getByRole("button", {
+      name: "Encaixar mesmo assim",
+    });
     await waitFor(() => expect(override).toBeEnabled());
     await expectNoA11yViolations(container);
 
     // Ordem do quadro A7: motivo, depois "Encaixar mesmo assim", depois "Escolher outro horário".
-    await user.type(screen.getByLabelText("Motivo do encaixe"), "Retorno urgente");
+    await user.type(
+      screen.getByLabelText("Motivo do encaixe"),
+      "Retorno urgente",
+    );
     await tabUntilFocused(user, override);
     expect(override).toHaveFocus();
     await user.tab();
@@ -494,8 +534,12 @@ describe("controles de decisão de sobreposição", () => {
     await user.click(screen.getByRole("checkbox", { name: "Seg" }));
     await user.click(screen.getByRole("button", { name: "Criar série" }));
 
-    const adjust = await screen.findByRole("button", { name: "Ajustar a série" });
-    const skip = screen.getByRole("button", { name: "Pular estas ocorrências" });
+    const adjust = await screen.findByRole("button", {
+      name: "Ajustar a série",
+    });
+    const skip = screen.getByRole("button", {
+      name: "Pular estas ocorrências",
+    });
     const force = screen.getByRole("button", { name: "Forçar sobreposição" });
     await expectNoA11yViolations(container);
 

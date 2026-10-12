@@ -66,5 +66,10 @@ subida fica no painel do Coolify.
 - Com `app.<domínio>` e `api.<domínio>`, o cookie `lax` funciona porque os dois
   são same-site. Se frontend e API ficarem em domínios registráveis diferentes,
   use `COOKIE_SAME_SITE=none`.
+- `TRUST_PROXY_HOPS=1` vale com o DNS da Cloudflare em modo "DNS only" (nuvem
+  cinza), com só o Traefik na frente do BFF. Com o proxy da Cloudflare ligado
+  (nuvem laranja) são dois proxies: use `2` e restrinja as portas 80/443 da VM
+  às faixas de IP da Cloudflare. Sem essa restrição, quem acessar a VM direto
+  forja o IP do rate limit.
 - Backup: o volume `postgres_data` é o único estado. Agende um `pg_dumpall`
   para fora da VM.

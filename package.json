@@ -11,7 +11,6 @@
     "build:ai-orchestrator": "cd apps/ai-orchestrator && npm run build",
     "build:scheduling-service": "cd apps/scheduling-service && npm run build",
     "build:all": "bash scripts/build-all.sh",
-    "check:health-worker": "cd apps/health-worker && npm run check",
     "smoke:final-audit": "node scripts/final-production-audit.mjs",
     "test:evolution-go": "cd apps/evolution-go && go test ./...",
     "test:ai-orchestrator": "cd apps/ai-orchestrator && npm test",

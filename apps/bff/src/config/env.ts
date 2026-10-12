@@ -17,6 +17,12 @@ const intEnv = (defaultValue: number) =>
     return Number(value);
   }, z.number().int().positive().default(defaultValue));
 
+const nonNegativeIntEnv = (defaultValue: number) =>
+  z.preprocess((value) => {
+    if (value === undefined || value === null || value === "") return undefined;
+    return Number(value);
+  }, z.number().int().min(0).default(defaultValue));
+
 const stringEnv = (defaultValue = "") =>
   z.preprocess(
     (value) => (typeof value === "string" ? value.trim() : value),
@@ -45,6 +51,11 @@ const envSchema = z.object({
   COOKIE_SECURE: boolEnv(false),
   COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).default("lax"),
   FRONTEND_ORIGIN: stringEnv("http://localhost:3001"),
+  // Quantos proxies reversos confiáveis ficam na frente do BFF. Com 0 o IP do
+  // cliente é o do socket e X-Forwarded-For é ignorado (ninguém forja IP). Atrás
+  // de um proxy (Traefik/Coolify) use 1: sem isso todo usuário chega com o IP
+  // do proxy e divide o mesmo balde de rate limit, inclusive o de login.
+  TRUST_PROXY_HOPS: nonNegativeIntEnv(0),
   AI_ORCHESTRATOR_BASE_URL: stringEnv("http://localhost:3000"),
   SCHEDULING_SERVICE_BASE_URL: stringEnv("http://localhost:3003"),
   EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),

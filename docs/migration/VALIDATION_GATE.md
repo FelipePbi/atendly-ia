@@ -16,7 +16,7 @@ git diff --check
 
 | Comando | Cobre | Não cobre |
 | --- | --- | --- |
-| `validate:core` | Build de `packages/public-api-contract` (antes de BFF e frontend, desde o Goal035); builds de Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática; a reprodução de A-03 (`repro:a03-contract-drift`) | Qualquer escrita em banco. Nenhum passo abre conexão de banco. A verificação de resposta do BFF contra o contrato **não** roda aqui — ela liga dentro da suíte de integração do BFF (`test:bff`, fora de produção), nunca em `validate:core` |
+| `validate:core` | Build de `packages/public-api-contract` (antes de BFF e frontend, desde o Goal035); builds de Scheduling, IA, BFF e frontend; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática; a reprodução de A-03 (`repro:a03-contract-drift`) | Qualquer escrita em banco. Nenhum passo abre conexão de banco. A verificação de resposta do BFF contra o contrato **não** roda aqui — ela liga dentro da suíte de integração do BFF (`test:bff`, fora de produção), nunca em `validate:core` |
 | `validate:integration` | 35 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go, um ensaio por migration de Goal — o mais recente deles `rehearse:goal027-calendar-source-migration` —, a reconciliação do fuso único do negócio (`rehearse:goal029-timezone-reconciliation`, Goal029) e, desde o Goal028, o ensaio de release (`rehearse:goal028-release-migrations`) e o de dump/restore (`rehearse:goal028-restore`); desde o Goal030, o percurso único de produto ponta a ponta (`rehearse:goal030-mvp-journey`); desde o Goal032, a resposta automática ponta a ponta (`rehearse:goal032-auto-reply`); desde o Goal033, o gate renderizado nas telas autenticadas de `AUTHENTICATED_ROUTES` — sete até o Goal062, oito desde o Goal063, com `/configuracoes/ia` — (`rehearse:goal033-authenticated-ui`, último da lista) | Envio real por WhatsApp e origem real do Minha Agenda, em qualquer passo. Jornada de interface passou a ter cobertura **parcial**, só pelo que o Goal033 mede — ver a nota abaixo |
 | `git diff --check` | Espaço em branco/conflito no diff | Correção do diff |
 
@@ -42,14 +42,14 @@ Service; ele é o agregador histórico, não o gate.
 
 | Dependência | Versão usada na validação do Goal002 | Origem da versão |
 | --- | --- | --- |
-| Node | 24.18.0 (CI fixa 24.13.0) | `render.yaml` declara 24.13.0; `engines` exige `>=20` |
+| Node | 24.18.0 (CI fixa 24.13.0) | Dockerfiles usam `node:24.13.0`; `engines` exige `>=20` |
 | npm | 11.16.0 | acompanha o Node |
 | Go | 1.25.0 (windows/amd64), CGO habilitado | `apps/evolution-go/go.mod` |
 | PostgreSQL | 18.4 local descartável (CI: `postgres:16-alpine`) | binários já instalados na estação |
 
 Dependências de cada package precisam estar instaladas antes do gate
-(`npm ci` em `apps/scheduling-service`, `apps/ai-orchestrator`, `apps/bff`,
-`apps/frontend` e `apps/health-worker`). Desde o Goal035, `apps/bff` e
+(`npm ci` em `apps/scheduling-service`, `apps/ai-orchestrator`, `apps/bff` e
+`apps/frontend`). Desde o Goal035, `apps/bff` e
 `apps/frontend` resolvem `@avenly-ia/public-api-contract` como dependência
 `file:` com `install-links=true` (`apps/bff/.npmrc`, `apps/frontend/.npmrc`):
 o npm copia o pacote para `node_modules` — o que mantém uma só cópia de Zod
@@ -88,7 +88,11 @@ banco.
   aplica expressões regulares. Não executa serviços, não prova isolamento em
   runtime e não substitui integração ou E2E. Só faz chamada remota quando
   `PRODUCTION_HEALTH_TARGETS` é fornecido; sem isso o check de health é
-  registrado como `skipped` e **não** entra na contagem de `passed`.
+  registrado como `skipped` e **não** entra na contagem de `passed`. As
+  regras de configuração de produção (serviços, healthchecks, cobertura de
+  env, flags de laço explícitas, sem host de desenvolvimento nem segredo
+  literal, contexto de build e Dockerfile existentes) leem
+  `docker-compose.prod.yml`, que substituiu o `render.yaml`.
 
 ## Banco de teste descartável
 
@@ -389,7 +393,9 @@ Códigos de saída: `0` sucesso, `1` alguma etapa falhou, `2` (só integração)
 alvo de banco recusado. `skipped` e `not_run` jamais viram `passed`.
 
 Packages sem suíte automatizada aparecem explicitamente como `skipped` em
-`validate:core`: `apps/bff` (só integração) e `apps/health-worker`.
+`validate:core`: `apps/bff` (só integração). `apps/health-worker` saiu do
+repositório junto com o `render.yaml`: ele só mantinha os serviços do Render
+acordados, e na VM os healthchecks do compose fazem esse papel.
 `packages/contracts` tinha o mesmo tratamento até o diff026, quando o pacote
 e o passo saíram do gate junto — os skips declarados passaram de três para dois.
 

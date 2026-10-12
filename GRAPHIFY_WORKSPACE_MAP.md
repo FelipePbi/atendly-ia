@@ -9,7 +9,6 @@
 | `apps/ai-orchestrator` | Conversas, handoff e execução da IA |
 | `apps/scheduling-service` | Agenda, serviços, clientes, disponibilidade e agendamentos |
 | `apps/evolution-go` | Transporte WhatsApp |
-| `apps/health-worker` | Monitoramento de saúde |
 | `packages/contracts` | Contratos TypeScript/Zod compartilhados entre apps |
 | `packages/legal-contract` | Textos legais versionados |
 

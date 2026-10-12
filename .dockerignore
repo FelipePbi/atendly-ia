@@ -1,0 +1,20 @@
+# Contexto de build da raiz do repositório, usado pelas imagens que precisam
+# de packages/ (frontend e bff). Os demais serviços usam o próprio diretório
+# como contexto e têm .dockerignore próprio.
+.git
+**/node_modules
+**/.next
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+**/*.tsbuildinfo
+**/e2e-results
+**/test-results
+**/playwright-report
+docs
+graphify-out
+apps/evolution-go
+apps/ai-orchestrator
+apps/scheduling-service
+apps/health-worker

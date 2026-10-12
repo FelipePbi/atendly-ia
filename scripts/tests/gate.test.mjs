@@ -76,7 +76,6 @@ test("validate:core declares the Scheduling Service build", () => {
     "build:public-api-contract",
     "build:bff",
     "build:frontend",
-    "check:health-worker",
     "test:ai-orchestrator",
     "build:evolution-go",
     "vet:evolution-go",

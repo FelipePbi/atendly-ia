@@ -19,8 +19,5 @@ npm run build
 cd "$ROOT_DIR/apps/frontend"
 npm run build
 
-cd "$ROOT_DIR/apps/health-worker"
-npm run check
-
 cd "$ROOT_DIR/apps/evolution-go"
 go test ./...

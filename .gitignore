@@ -13,6 +13,7 @@ coverage.html
 .env
 .env.*
 !.env.example
+!.env.production.example
 
 # Logs and local runtime files
 logs/

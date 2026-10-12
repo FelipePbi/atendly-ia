@@ -1,1 +1,4 @@
 graphify-out/graph.json merge=graphify
+
+# Scripts executados dentro de containers Linux: CRLF quebra o shebang.
+*.sh text eol=lf

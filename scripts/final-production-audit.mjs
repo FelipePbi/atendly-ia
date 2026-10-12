@@ -17,17 +17,19 @@ const repositoryRoot = path.resolve(
 );
 const results = [];
 
-const expectedServices = [
-  "atendly-ia-frontend",
-  "atendly-ia-bff",
-  "atendly-ia-ai-orchestrator",
-  "atendly-ia-scheduling-service",
-  "atendly-ia-evolution-go",
-  "atendly-ia-health-worker",
+// Serviços de aplicação do docker-compose.prod.yml; postgres completa o
+// arquivo e não expõe rota HTTP.
+const expectedApplicationServices = [
+  "frontend",
+  "bff",
+  "ai-orchestrator",
+  "scheduling-service",
+  "evolution-go",
 ];
+const expectedServices = [...expectedApplicationServices, "postgres"];
 
 export async function main() {
-  const renderBlueprint = read("render.yaml");
+  const composeServices = parseComposeServices(read("docker-compose.prod.yml"));
   const frontendSources = sourceFiles("apps/frontend/src");
   const bffSchema = read("apps/bff/prisma/schema.prisma");
   const aiSources = sourceFiles("apps/ai-orchestrator/src");
@@ -48,16 +50,20 @@ export async function main() {
     "apps/scheduling-service/src/modules/integrations/credentials.ts",
   );
 
+  const composeServiceNames = composeServices.map((service) => service.name);
   check(
-    "render_has_exact_final_service_set",
-    expectedServices.every((name) =>
-      renderBlueprint.includes(`name: ${name}`),
-    ) && !renderBlueprint.includes("name: atendly-ia-api"),
+    "compose_has_exact_final_service_set",
+    composeServiceNames.length === expectedServices.length &&
+      expectedServices.every((name) => composeServiceNames.includes(name)),
     expectedServices.join(", "),
   );
   check(
     "all_services_expose_cheap_health_route",
-    count(renderBlueprint, "healthCheckPath: /health") === 6 &&
+    expectedApplicationServices.every((name) =>
+      composeServices
+        .find((service) => service.name === name)
+        ?.healthcheck?.includes("/health"),
+    ) &&
       read("apps/frontend/src/app/health/route.ts").includes("function GET") &&
       read("apps/bff/src/routes/health.ts").includes('app.get("/health"') &&
       read("apps/ai-orchestrator/src/app.ts").includes('app.get("/health"') &&
@@ -66,11 +72,8 @@ export async function main() {
       ) &&
       read("apps/evolution-go/pkg/routes/routes.go").includes(
         'eng.GET("/health"',
-      ) &&
-      read("apps/health-worker/src/index.js").includes(
-        'request.url === "/health"',
       ),
-    "six GET /health endpoints and six Render health checks",
+    "five GET /health endpoints and five compose healthchecks",
   );
 
   const frontendNetworkFiles = matchingFiles(frontendSources, [
@@ -172,9 +175,8 @@ export async function main() {
       "apps/ai-orchestrator/src/app.ts",
       "apps/ai-orchestrator/src/modules/scheduling-service/client.ts",
       "apps/evolution-go/pkg/routes/routes.go",
-      "apps/health-worker/src/index.js",
     ].every((file) => /x-request-id/iu.test(read(file))),
-    "frontend, BFF, AI, Scheduling calls, Evolution and worker carry x-request-id",
+    "frontend, BFF, AI, Scheduling calls and Evolution carry x-request-id",
   );
   check(
     "ai_tool_logs_have_required_correlation",
@@ -306,47 +308,43 @@ export async function main() {
       : "no CSS under apps/frontend/src declares prefers-color-scheme or a dark theme selector",
   );
 
-  const renderYaml = read("render.yaml");
+  const composeYaml = read("docker-compose.prod.yml");
   const configEnvSources = {
-    "atendly-ia-bff": read("apps/bff/src/config/env.ts"),
-    "atendly-ia-ai-orchestrator": read("apps/ai-orchestrator/src/config/env.ts"),
-    "atendly-ia-scheduling-service": read(
-      "apps/scheduling-service/src/config/env.ts",
-    ),
+    bff: read("apps/bff/src/config/env.ts"),
+    "ai-orchestrator": read("apps/ai-orchestrator/src/config/env.ts"),
+    "scheduling-service": read("apps/scheduling-service/src/config/env.ts"),
   };
   const envExamplesByService = {
-    "atendly-ia-bff": read("apps/bff/.env.example"),
-    "atendly-ia-ai-orchestrator": read("apps/ai-orchestrator/.env.example"),
-    "atendly-ia-scheduling-service": read(
-      "apps/scheduling-service/.env.example",
-    ),
+    bff: read("apps/bff/.env.example"),
+    "ai-orchestrator": read("apps/ai-orchestrator/.env.example"),
+    "scheduling-service": read("apps/scheduling-service/.env.example"),
   };
 
-  const missingRenderEnvKeys = Object.entries(configEnvSources).flatMap(
+  const missingComposeEnvKeys = Object.entries(configEnvSources).flatMap(
     ([serviceName, envSource]) =>
-      findMissingRequiredEnvKeys(envSource, renderYaml, serviceName).map(
+      findMissingRequiredEnvKeys(envSource, composeYaml, serviceName).map(
         (key) => `${serviceName}:${key}`,
       ),
   );
   check(
-    "production_config_render_env_coverage",
-    missingRenderEnvKeys.length === 0,
-    missingRenderEnvKeys.length
-      ? missingRenderEnvKeys.join(", ")
-      : "every required config/env.ts key is declared in render.yaml or HMAC-derived",
+    "production_config_compose_env_coverage",
+    missingComposeEnvKeys.length === 0,
+    missingComposeEnvKeys.length
+      ? missingComposeEnvKeys.join(", ")
+      : "every required config/env.ts key is declared in docker-compose.prod.yml or HMAC-derived",
   );
 
-  const missingLoopFlags = findMissingExplicitLoopFlags(renderYaml);
+  const missingLoopFlags = findMissingExplicitLoopFlags(composeYaml);
   check(
     "production_config_loop_flags_explicit",
     missingLoopFlags.length === 0,
     missingLoopFlags.length
       ? missingLoopFlags.join(", ")
-      : "RETENTION_SWEEP_ENABLED, ACCOUNT_PURGE_ENABLED, INBOX_WORKER_ENABLED, NOTIFICATION_DELIVERY_ENABLED and CALENDAR_AUTO_COMPLETE_ENABLED all have an explicit value in render.yaml",
+      : "RETENTION_SWEEP_ENABLED, ACCOUNT_PURGE_ENABLED, INBOX_WORKER_ENABLED, NOTIFICATION_DELIVERY_ENABLED and CALENDAR_AUTO_COMPLETE_ENABLED all have an explicit value in docker-compose.prod.yml",
   );
 
   const developmentDefaultViolations = findDevelopmentDefaultViolations(
-    renderYaml,
+    composeYaml,
     configEnvSources,
   );
   check(
@@ -357,7 +355,7 @@ export async function main() {
       : "no *_BASE_URL/FRONTEND_ORIGIN/PASSWORD_RESET_PUBLIC_URL resolves to a development host, NODE_ENV and COOKIE_SECURE are production-ready, and no secret-like key has a literal value",
   );
 
-  const missingBuildPaths = findMissingBuildPaths(renderYaml, (relativePath) =>
+  const missingBuildPaths = findMissingBuildPaths(composeYaml, (relativePath) =>
     existsSync(path.join(repositoryRoot, relativePath)),
   );
   check(
@@ -365,7 +363,7 @@ export async function main() {
     missingBuildPaths.length === 0,
     missingBuildPaths.length
       ? missingBuildPaths.join(", ")
-      : "every rootDir and buildFilter.paths entry exists in the tree",
+      : "every build context and Dockerfile exists in the tree",
   );
 
   const envExampleParityMismatches = Object.entries(configEnvSources).flatMap(
@@ -725,7 +723,7 @@ async function auditProductionHealth() {
 }
 
 // Regras de configuracao de producao (Goal028/WU-03). Todas puras: recebem
-// texto de render.yaml / config/env.ts / .env.example, nunca leem o disco
+// texto de docker-compose.prod.yml / config/env.ts / .env.example, nunca leem o disco
 // sozinhas, para que o caso negativo passe um contraexemplo sintetico sem
 // depender da arvore real.
 
@@ -733,7 +731,7 @@ async function auditProductionHealth() {
 // (nunca o valor bruto) — ver apps/bff/src/config/env.ts:53-55,
 // apps/ai-orchestrator/src/config/env.ts:149-151 e
 // apps/scheduling-service/src/config/env.ts:40-41. Por isso ficam
-// legitimamente ausentes de render.yaml mesmo sendo obrigatorios no schema, e
+// legitimamente ausentes do compose mesmo sendo obrigatorios no schema, e
 // a regra de cobertura nao pode reprova-los por essa ausencia.
 export const HMAC_DERIVED_SERVICE_TOKEN_KEYS = [
   "AI_ORCHESTRATOR_PROVISIONING_TOKEN",
@@ -745,11 +743,11 @@ export const HMAC_DERIVED_SERVICE_TOKEN_KEYS = [
 ];
 
 export const LOOP_FLAG_OWNERS = Object.freeze({
-  RETENTION_SWEEP_ENABLED: "atendly-ia-bff",
-  ACCOUNT_PURGE_ENABLED: "atendly-ia-bff",
-  INBOX_WORKER_ENABLED: "atendly-ia-ai-orchestrator",
-  NOTIFICATION_DELIVERY_ENABLED: "atendly-ia-ai-orchestrator",
-  CALENDAR_AUTO_COMPLETE_ENABLED: "atendly-ia-scheduling-service",
+  RETENTION_SWEEP_ENABLED: "bff",
+  ACCOUNT_PURGE_ENABLED: "bff",
+  INBOX_WORKER_ENABLED: "ai-orchestrator",
+  NOTIFICATION_DELIVERY_ENABLED: "ai-orchestrator",
+  CALENDAR_AUTO_COMPLETE_ENABLED: "scheduling-service",
 });
 
 // Extrai as chaves de `const envSchema = z.object({ ... });`. Uma chave e
@@ -785,60 +783,76 @@ export function parseEnvExampleKeys(envExampleContent) {
     .map((match) => match[1]);
 }
 
-function parseRenderEnvVarEntries(envVarsText) {
-  return envVarsText
-    .split(/(?=- key: )/u)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.startsWith("- key:"))
-    .map((entry) => {
-      const lines = entry
-        .split("\n")
-        .filter((line) => !line.trim().startsWith("#"));
-      const key = lines[0].match(/^-\s*key:\s*(\S+)/u)?.[1] ?? null;
-      const valueLine = lines.find((line) => /^\s*value:\s*\S+/u.test(line));
+// Valor declarado no compose. Referência `${VAR}` não é literal: o valor vem
+// do ambiente do deploy. Só literal conta como valor explícito de flag e só
+// literal pode ser reprovado como segredo versionado.
+function parseComposeEnvironment(environmentText) {
+  return environmentText
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("#"))
+    .map((line) => line.match(/^\s+([A-Z][A-Z0-9_]*):\s*(.*?)\s*$/u))
+    .filter((match) => match !== null)
+    .map(([, key, rawValue]) => {
+      const value = rawValue.replace(/^(["'])(.*)\1$/u, "$2");
       return {
         key,
-        hasExplicitValue: Boolean(valueLine),
-        value: valueLine
-          ? valueLine.replace(/^\s*value:\s*/u, "").trim()
-          : null,
+        hasExplicitValue: value !== "" && !value.includes("${"),
+        value: value === "" ? null : value,
       };
-    })
-    .filter((entry) => entry.key !== null);
+    });
 }
 
-// Parser de render.yaml deliberadamente tolerante a indentacao (usa `\s+` em
-// vez de contar espacos): o formato do arquivo e estavel, mas casar a
-// indentacao exata deixaria o parser fragil a uma reindentacao inofensiva.
-export function parseRenderServices(renderYamlContent) {
-  const withoutDatabases = renderYamlContent.split(/\ndatabases:\n/u)[0];
-  return withoutDatabases
-    .split(/\n(?=  - type: )/u)
-    .map((block) => block.trim())
-    .filter((block) => block.startsWith("- type:"))
+function normalizeComposePath(value) {
+  const trimmed = value.replace(/^\.\/?/u, "").replace(/\/$/u, "");
+  return trimmed === "" ? "." : trimmed;
+}
+
+// Parser de docker-compose.prod.yml deliberadamente sem dependência de YAML:
+// lê só o bloco `services:` (serviço = chave com dois espaços), `build`,
+// `environment` e `healthcheck.test`, no formato que o arquivo usa.
+export function parseComposeServices(composeContent) {
+  // Checkout no Windows com core.autocrlf entrega o arquivo com CRLF.
+  const servicesBlock =
+    composeContent.replace(/\r\n/gu, "\n").match(
+      /(?:^|\n)services:\n([\s\S]*?)(?=\n[a-z][\w-]*:|\s*$)/u,
+    )?.[1] ?? "";
+  return servicesBlock
+    .split(/\n(?= {2}[a-z][\w-]*:\s*$)/mu)
+    .map((block) => block.replace(/^\n+/u, ""))
+    .filter((block) => /^ {2}[a-z][\w-]*:/u.test(block))
     .map((block) => {
-      const name = block.match(/\n\s*name:\s*(\S+)/u)?.[1] ?? null;
-      const rootDir = block.match(/\n\s*rootDir:\s*(\S+)/u)?.[1] ?? null;
-      const pathsBlock = block.match(
-        /buildFilter:\s*\n\s*paths:\s*\n((?:\s*-\s*\S+\n?)+)/u,
+      const name = block.match(/^ {2}([a-z][\w-]*):/u)[1];
+      const context = block.match(/\n\s+context:\s*(\S+)/u)?.[1] ?? null;
+      const dockerfile =
+        block.match(/\n\s+dockerfile:\s*(\S+)/u)?.[1] ?? null;
+      const buildContext = context ? normalizeComposePath(context) : null;
+      const defaultDockerfile =
+        buildContext === "." ? "Dockerfile" : `${buildContext}/Dockerfile`;
+      const environmentBlock = block.match(
+        /\n {4}environment:\n((?: {6}.*(?:\n|$))*)/u,
       );
-      const buildFilterPaths = pathsBlock
-        ? [...pathsBlock[1].matchAll(/-\s*(\S+)/gu)].map((match) => match[1])
-        : [];
-      const envVarsBlock = block.match(/envVars:\s*\n([\s\S]*)$/u);
-      const envVars = envVarsBlock
-        ? parseRenderEnvVarEntries(envVarsBlock[1])
-        : [];
-      return { name, rootDir, buildFilterPaths, envVars };
+      return {
+        name,
+        buildContext,
+        dockerfilePath: buildContext
+          ? normalizeComposePath(dockerfile ?? defaultDockerfile)
+          : null,
+        envVars: environmentBlock
+          ? parseComposeEnvironment(environmentBlock[1])
+          : [],
+        healthcheck:
+          block.match(/\n\s+healthcheck:\s*\n\s+test:\s*(.+)/u)?.[1] ??
+          null,
+      };
     });
 }
 
 export function findMissingRequiredEnvKeys(
   envSource,
-  renderYamlContent,
+  composeContent,
   serviceName,
 ) {
-  const service = parseRenderServices(renderYamlContent).find(
+  const service = parseComposeServices(composeContent).find(
     (entry) => entry.name === serviceName,
   );
   const declaredKeys = new Set(
@@ -851,8 +865,8 @@ export function findMissingRequiredEnvKeys(
     .map((key) => key.name);
 }
 
-export function findMissingExplicitLoopFlags(renderYamlContent) {
-  const services = parseRenderServices(renderYamlContent);
+export function findMissingExplicitLoopFlags(composeContent) {
+  const services = parseComposeServices(composeContent);
   return Object.entries(LOOP_FLAG_OWNERS)
     .filter(([flagName, serviceName]) => {
       const service = services.find((entry) => entry.name === serviceName);
@@ -865,9 +879,9 @@ export function findMissingExplicitLoopFlags(renderYamlContent) {
 const DEVELOPMENT_HOST_PATTERN = /localhost|127\.0\.0\.1/iu;
 const SECRET_LIKE_KEY_PATTERN = /SECRET|TOKEN|PASSWORD|API_KEY|CREDENTIAL/u;
 const NODE_ENV_PRODUCTION_SERVICES = [
-  "atendly-ia-bff",
-  "atendly-ia-ai-orchestrator",
-  "atendly-ia-scheduling-service",
+  "bff",
+  "ai-orchestrator",
+  "scheduling-service",
 ];
 
 function isDevelopmentSensitiveUrlKey(name) {
@@ -880,34 +894,34 @@ function isDevelopmentSensitiveUrlKey(name) {
 
 // Chave de endereco publico nao e segredo mesmo quando o nome contem uma
 // palavra da lista de segredos (PASSWORD_RESET_PUBLIC_URL e o caso real).
-// Ela precisa de valor literal em render.yaml justamente para a checagem de
+// Ela pode ter valor literal no compose justamente para a checagem de
 // host de desenvolvimento acima poder conferir o dominio de producao.
 function isPublicUrlKey(name) {
   return isDevelopmentSensitiveUrlKey(name) || /_PUBLIC_URL$/u.test(name);
 }
 
 // Reprova valor efetivo de producao que resolve para host de desenvolvimento
-// (declarado em render.yaml ou, na ausencia, o default do proprio schema),
-// NODE_ENV/COOKIE_SECURE sem valor de producao, e segredo literal em
-// render.yaml (deveria usar generateValue/fromService/sync: false).
+// (declarado no compose ou, na ausencia, o default do proprio schema),
+// NODE_ENV/COOKIE_SECURE sem valor de producao, e segredo literal no compose
+// (deveria ser referencia `${VAR}` ao ambiente do deploy).
 export function findDevelopmentDefaultViolations(
-  renderYamlContent,
+  composeContent,
   envSourcesByService,
 ) {
   const violations = [];
-  const services = parseRenderServices(renderYamlContent);
+  const services = parseComposeServices(composeContent);
 
   for (const [serviceName, envSource] of Object.entries(
     envSourcesByService,
   )) {
     const service = services.find((entry) => entry.name === serviceName);
-    const renderEnvVars = service?.envVars ?? [];
+    const composeEnvVars = service?.envVars ?? [];
     for (const schemaKey of parseEnvSchemaKeys(envSource)) {
       if (!isDevelopmentSensitiveUrlKey(schemaKey.name)) continue;
-      const renderEntry = renderEnvVars.find(
+      const composeEntry = composeEnvVars.find(
         (entry) => entry.key === schemaKey.name,
       );
-      const effectiveValue = renderEntry?.value ?? schemaKey.defaultValue;
+      const effectiveValue = composeEntry?.value ?? schemaKey.defaultValue;
       if (effectiveValue && DEVELOPMENT_HOST_PATTERN.test(effectiveValue)) {
         violations.push(
           `${serviceName}:${schemaKey.name} resolves to a development host (${effectiveValue})`,
@@ -924,14 +938,12 @@ export function findDevelopmentDefaultViolations(
     }
   }
 
-  const bffService = services.find(
-    (entry) => entry.name === "atendly-ia-bff",
-  );
+  const bffService = services.find((entry) => entry.name === "bff");
   const cookieSecure = bffService?.envVars.find(
     (entry) => entry.key === "COOKIE_SECURE",
   );
   if (!cookieSecure || cookieSecure.value !== "true") {
-    violations.push("atendly-ia-bff:COOKIE_SECURE is not declared as true");
+    violations.push("bff:COOKIE_SECURE is not declared as true");
   }
 
   for (const service of services) {
@@ -945,7 +957,7 @@ export function findDevelopmentDefaultViolations(
         entry.value !== "false"
       ) {
         violations.push(
-          `${service.name}:${entry.key} declares a literal secret value in render.yaml`,
+          `${service.name}:${entry.key} declares a literal secret value in docker-compose.prod.yml`,
         );
       }
     }
@@ -954,17 +966,14 @@ export function findDevelopmentDefaultViolations(
   return violations;
 }
 
-export function findMissingBuildPaths(renderYamlContent, pathExists) {
+export function findMissingBuildPaths(composeContent, pathExists) {
   const missing = [];
-  for (const service of parseRenderServices(renderYamlContent)) {
-    if (service.rootDir && !pathExists(service.rootDir)) {
-      missing.push(`${service.name}:rootDir:${service.rootDir}`);
+  for (const service of parseComposeServices(composeContent)) {
+    if (service.buildContext && !pathExists(service.buildContext)) {
+      missing.push(`${service.name}:context:${service.buildContext}`);
     }
-    for (const buildPath of service.buildFilterPaths) {
-      const literalPath = buildPath.replace(/\/\*\*?$/u, "");
-      if (!pathExists(literalPath)) {
-        missing.push(`${service.name}:buildFilter:${buildPath}`);
-      }
+    if (service.dockerfilePath && !pathExists(service.dockerfilePath)) {
+      missing.push(`${service.name}:dockerfile:${service.dockerfilePath}`);
     }
   }
   return missing;
@@ -1550,10 +1559,6 @@ function matchingFiles(files, patterns) {
 
 function joinSources(files) {
   return files.map(read).join("\n");
-}
-
-function count(value, needle) {
-  return value.split(needle).length - 1;
 }
 
 function check(name, ok, details, skipped = false) {

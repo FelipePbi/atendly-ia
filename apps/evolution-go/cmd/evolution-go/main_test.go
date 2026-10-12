@@ -12,7 +12,7 @@ func TestServerPort(t *testing.T) {
 		}
 	})
 
-	t.Run("falls back to render port", func(t *testing.T) {
+	t.Run("falls back to PORT", func(t *testing.T) {
 		t.Setenv("SERVER_PORT", "")
 		t.Setenv("PORT", "10000")
 

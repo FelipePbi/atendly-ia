@@ -1,17 +1,23 @@
-FROM node:22-bookworm-slim AS build
+FROM node:24.13.0-bookworm-slim AS build
+
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 
 COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
-FROM node:22-bookworm-slim AS runtime
+FROM node:24.13.0-bookworm-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 ENV NODE_ENV=production
@@ -23,6 +29,8 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/prisma.config.ts ./prisma.config.ts
 
+USER node
 EXPOSE 3000
 
-CMD ["npm", "start"]
+# Migração antes de subir: prisma migrate deploy é idempotente.
+CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]

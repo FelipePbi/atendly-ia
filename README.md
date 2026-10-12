@@ -17,11 +17,10 @@ O código ainda contém contratos e fluxos anteriores à definição vigente. El
 | `apps/ai-orchestrator` | Conversas e execução da IA |
 | `apps/scheduling-service` | Agenda, clientes, serviços e importação |
 | `apps/evolution-go` | Transporte WhatsApp |
-| `apps/health-worker` | Monitoramento de saúde |
 
 Pacotes compartilhados entre apps: `packages/contracts` (contratos TypeScript/Zod) e `packages/legal-contract` (textos legais versionados).
 
-Para setup e limites técnicos, consulte o README e o `AGENTS.md` do app correspondente.
+Para setup e limites técnicos, consulte o README e o `AGENTS.md` do app correspondente. O deploy de produção (VM única com Docker Compose) está em [`docs/architecture/deploy-vm.md`](docs/architecture/deploy-vm.md).
 
 ## Para agentes
 

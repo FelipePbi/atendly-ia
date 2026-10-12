@@ -33,7 +33,6 @@ export const coreSteps = [
   },
   npm("apps/bff", "build:bff", "run", "build"),
   npm("apps/frontend", "build:frontend", "run", "build"),
-  npm("apps/health-worker", "check:health-worker", "run", "check"),
 
   npm("apps/ai-orchestrator", "test:ai-orchestrator", "test"),
   // Regras de identidade de cliente que não dependem de banco: telefone não
@@ -90,11 +89,6 @@ export const coreSteps = [
     name: "test:bff",
     cwd: "apps/bff",
     skip: "only the integration suite exists; it runs in validate:integration",
-  },
-  {
-    name: "test:health-worker",
-    cwd: "apps/health-worker",
-    skip: "package has no automated test suite; only the syntax check runs",
   },
 ];
 

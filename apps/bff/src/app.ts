@@ -35,6 +35,7 @@ import { registerHealthRoutes } from "./routes/health.js";
 
 export async function buildApp() {
   const app = Fastify({
+    trustProxy: env.TRUST_PROXY_HOPS || false,
     logger: {
       redact: [
         "req.headers.authorization",

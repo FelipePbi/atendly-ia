@@ -5596,7 +5596,7 @@ button.ignored-row:focus-visible,
 /* A conversa é o conteúdo da etapa: entrada dos balões e pontos do
    "digitando…" vencem a regra global de movimento reduzido, que deixaria a
    demonstração parada. */
-.onboarding-demo-chat > * {
+.onboarding-demo-chat > :not(.demo-chat-end) {
   animation-duration: var(--at-duration-moderate) !important;
 }
 .demo-typing span {

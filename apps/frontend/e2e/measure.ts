@@ -302,6 +302,27 @@ export function hasFocusIndicator(focus: FocusAfterTab): boolean {
  * failure says which ones. The caller emulates the media preference and loads
  * the screen; this only reads the computed result.
  */
+/**
+ * Waits for the finite animations to finish before a measure that reads
+ * rendered colours or hit-testing: the entry fades (`motion-enter*`) and the
+ * view transitions (D-168) run with opacity, and axe reads the colour mid-fade
+ * (the Day rows measured at ~50% opacity and failed contrast for that alone).
+ * Infinite animations (the "digitando…" dots) never finish and are ignored.
+ * Past the timeout the measure runs anyway and reports what it sees.
+ */
+export async function waitForFiniteAnimations(page: Page, timeoutMs = 5000): Promise<void> {
+  await page
+    .waitForFunction(
+      () => document.getAnimations().every((animation) => {
+        const iterations = animation.effect?.getComputedTiming().iterations;
+        return animation.playState !== "running" || iterations === Infinity;
+      }),
+      undefined,
+      { timeout: timeoutMs },
+    )
+    .catch(() => undefined);
+}
+
 export async function measureRunningAnimations(page: Page): Promise<string[]> {
   return page.evaluate((tolerance) => {
     const offenders: string[] = [];

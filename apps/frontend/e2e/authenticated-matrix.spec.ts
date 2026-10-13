@@ -31,6 +31,7 @@ import {
   SIDEBAR_WIDTH,
   TOUCH_TARGET_AA,
   TOUCH_TARGET_COMFORTABLE,
+  waitForFiniteAnimations,
 } from "./measure";
 import { AUTHENTICATED_ROUTES, ONBOARDING_ROUTES } from "./routes";
 
@@ -729,6 +730,7 @@ for (const route of AUTHENTICATED_ROUTES) {
       // first screen, it is what a pointer lands on, and the sidebar sits
       // beside `main` instead of over it. Every other measurement here passed
       // on a shell whose sidebar took the whole width and covered the list.
+      await waitForFiniteAnimations(page);
       const composition = await measureComposition(contentLocator(page, route).first());
       const where = `${route.path} at ${testInfo.project.name}`;
       await testInfo.attach(`composition-${route.name}`, {
@@ -841,6 +843,7 @@ for (const route of AUTHENTICATED_ROUTES) {
       }
 
       // 3. Contrast, computed against the rendered palette.
+      await waitForFiniteAnimations(page);
       const axe = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
         .analyze();
@@ -1095,6 +1098,7 @@ for (const route of ONBOARDING_ROUTES) {
       }
 
       // 3. Contrast, computed against the rendered palette.
+      await waitForFiniteAnimations(page);
       const axe = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
         .analyze();
@@ -2165,6 +2169,15 @@ test(`G-7 appointment detail from /agenda, five widths`, async ({ page }, testIn
       .filter({ has: page.locator(".week-map-date", { hasText: new RegExp(`^${measuredDay}$`, "u") }) });
     if ((await dayHead.count()) > 0) {
       await clickForReal(dayHead.first(), `${what}: the seeded day`, testInfo);
+      // Na Semana o cabeçalho do dia só o escolhe para o resumo (pedido de
+      // 2026-10-12); a lista do Dia abre pelo "Abrir dia" do resumo.
+      await clickForReal(
+        page
+          .getByRole("region", { name: "Resumo do dia" })
+          .getByRole("button", { name: /Abrir dia/u }),
+        `${what}: "Abrir dia" in the day summary`,
+        testInfo,
+      );
     }
     await clickForReal(
       page.locator(".agenda-day-layout button[aria-pressed]", { hasText: SEED.customerName }).first(),
@@ -2282,6 +2295,8 @@ test(`G-7 appointment detail from /agenda, five widths`, async ({ page }, testIn
     )
     .toBeLessThanOrEqual(overflow.clientWidth + OVERFLOW_TOLERANCE);
 
+  await waitForFiniteAnimations(page);
+
   const axe = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
@@ -2321,7 +2336,8 @@ ${JSON.stringify(contrastNodes, null, 2)}`,
 /**
  * The new appointment screen (Goal101, G-8). From `/agenda` on the seeded day,
  * a real click on "Novo" and then on the "Agendamento" menu item opens
- * `/agenda/novo` the way a person does. Below 1024px the screen is pushed: no
+ * `/agenda/novo` the way a person does, and the seeded customer and service are
+ * chosen so the footer appears (progressive reveal, D-170). Below 1024px the screen is pushed: no
  * tab bar and no floating action button, the primary action ("Agendar") and the
  * "×" are whole inside the window and at least 24px (WCAG 2.5.8 AA). From
  * 1024px the Agenda column sits to the left of the form, without overlap, and
@@ -2396,9 +2412,30 @@ test(`G-8 new appointment from /agenda, five widths`, async ({ page }, testInfo)
     testInfo,
   );
   await expectPath(page, /^\/agenda\/novo$/u, `${what} at ${testInfo.project.name}`);
+  const form = page.getByRole("form", { name: "Novo agendamento" });
   await expect(
-    page.getByRole("form", { name: "Novo agendamento" }),
+    form,
     `${where}: the new appointment form did not render within ${CONTENT_TIMEOUT_MS}ms.`,
+  ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+
+  // Revelação progressiva (D-170): a tela abre só com o Cliente; os Serviços
+  // vêm depois dele e o rodapé com "Criar agendamento" depois do serviço. A
+  // pessoa chega à ação principal escolhendo cliente e serviço, e o gate
+  // também.
+  await form.getByRole("textbox", { name: "Nome do cliente" }).fill(SEED.customerName);
+  await clickForReal(
+    form.getByRole("button", { name: SEED.customerName }).first(),
+    `${where}: the seeded customer in the suggestions`,
+    testInfo,
+  );
+  await clickForReal(
+    form.locator("label.agenda-new-chip", { hasText: SEED.serviceName }).first(),
+    `${where}: the seeded service chip`,
+    testInfo,
+  );
+  await expect(
+    page.locator("main#main-content .agenda-new-cta"),
+    `${where}: "Criar agendamento" did not appear after the customer and the service within ${CONTENT_TIMEOUT_MS}ms.`,
   ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
 
   const screen = await measureNewAppointment(page);
@@ -2471,6 +2508,8 @@ test(`G-8 new appointment from /agenda, five widths`, async ({ page }, testInfo)
         + `content in ${overflow.clientWidth}px.\nFirst offenders: ${JSON.stringify(overflow.offenders, null, 2)}`,
     )
     .toBeLessThanOrEqual(overflow.clientWidth + OVERFLOW_TOLERANCE);
+
+  await waitForFiniteAnimations(page);
 
   const axe = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])

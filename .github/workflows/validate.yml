@@ -105,11 +105,27 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: Install BFF dependencies
-        # Única preparação fora do gate. A geração do client Prisma é o
-        # primeiro passo de validate:integration, e não depende de nenhum
-        # artefato produzido por outro job ou por execução local anterior.
-        run: npm ci --prefix apps/bff
+      - uses: actions/setup-go@v5
+        # Cache dos módulos Go: `test:evolution-go-*` baixava tudo do
+        # proxy.golang.org a cada execução, e um stream cortado no meio
+        # derrubava o gate sem defeito nenhum no código.
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: apps/evolution-go/go.sum
+      - name: Install package dependencies
+        # Única preparação fora do gate. Os passos usam o Prisma CLI de BFF, IA
+        # e Scheduling, e o Goal033 constrói e serve o frontend. A geração dos
+        # clients Prisma acontece dentro de validate:integration, sem depender
+        # de artefato de outro job ou de execução local anterior.
+        run: |
+          for dir in apps/bff apps/ai-orchestrator apps/scheduling-service apps/frontend; do
+            npm ci --prefix "$dir"
+          done
+      - name: Install Playwright Chromium
+        # `rehearse:goal033-authenticated-ui` mede as telas logadas no
+        # Chromium (projetos "Desktop Chrome" de playwright.authenticated.config.ts).
+        working-directory: apps/frontend
+        run: npx playwright install --with-deps chromium
       - name: Assert no generated Prisma client is committed
         run: |
           if [ -e apps/bff/src/generated/prisma ]; then

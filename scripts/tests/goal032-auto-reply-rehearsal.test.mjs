@@ -13,6 +13,9 @@ import { repositoryRoot } from "../lib/gate.mjs";
 import {
   AutoReplyRehearsalError,
   BREAKABLE_LINKS,
+  REHEARSAL,
+  assertAutoReply,
+  replyCount,
   resolveRehearsalPlan,
 } from "../goal032-auto-reply-rehearsal.mjs";
 
@@ -128,4 +131,88 @@ test("refuses an unknown GOAL032_BREAK_LINK with exit 2 and no credential, befor
   );
   assert.ok(!outcome.stdout.includes("pgtest:pgtest@"));
   assert.ok(!outcome.stderr.includes("pgtest:pgtest@"));
+});
+
+// A resposta da IA sai em partes (decisão de produto de 2026-10-11): a prova
+// positiva conta respostas, não envios, e exige que as partes reconstruam o
+// texto do dublê de modelo e que a última carregue o correlationId da linha.
+function autoReplyResult(sends, returnedText = "Oi, Nina! Aqui e o Estudio.") {
+  return {
+    worker: { events: [{ status: "DONE" }] },
+    model: { returnedTexts: [returnedText] },
+    messages: [{ direction: "OUTBOUND", body: returnedText }],
+    transport: {
+      sends: sends.map((send) => ({
+        to: REHEARSAL.contact.phone,
+        observedAtSendTime: { outboundMessages: 1 },
+        ...send,
+      })),
+    },
+  };
+}
+
+const splitReply = [
+  { text: "Oi, Nina!", correlationId: "ai-1-p1" },
+  { text: "Aqui e o Estudio.", correlationId: "ai-1" },
+];
+
+test("replyCount groups the parts of one reply by their base correlationId", () => {
+  assert.equal(replyCount(splitReply), 1);
+  assert.equal(
+    replyCount([...splitReply, { text: "x", correlationId: "ai-2" }]),
+    2,
+  );
+});
+
+test("a reply sent in parts that rebuild the model text passes", () => {
+  assert.doesNotThrow(() => assertAutoReply(autoReplyResult(splitReply)));
+});
+
+test("a single-part reply still passes", () => {
+  assert.doesNotThrow(() =>
+    assertAutoReply(
+      autoReplyResult([
+        { text: "Oi, Nina! Aqui e o Estudio.", correlationId: "ai-1" },
+      ]),
+    ),
+  );
+});
+
+test("parts that do not rebuild the model text fail", () => {
+  assert.throws(
+    () =>
+      assertAutoReply(
+        autoReplyResult([
+          { text: "Oi, Nina!", correlationId: "ai-1-p1" },
+          { text: "Outra coisa.", correlationId: "ai-1" },
+        ]),
+      ),
+    AutoReplyRehearsalError,
+  );
+});
+
+test("two replies for one turn fail", () => {
+  assert.throws(
+    () =>
+      assertAutoReply(
+        autoReplyResult([
+          { text: "Oi, Nina!", correlationId: "ai-1" },
+          { text: "Aqui e o Estudio.", correlationId: "ai-2" },
+        ]),
+      ),
+    AutoReplyRehearsalError,
+  );
+});
+
+test("a sequence whose last part carries a -pN id fails", () => {
+  assert.throws(
+    () =>
+      assertAutoReply(
+        autoReplyResult([
+          { text: "Oi, Nina!", correlationId: "ai-1-p1" },
+          { text: "Aqui e o Estudio.", correlationId: "ai-1-p2" },
+        ]),
+      ),
+    AutoReplyRehearsalError,
+  );
 });

@@ -1389,12 +1389,30 @@ async function internalRequest(baseUrl, method, route, { token, body }) {
 // sempre a MESMA coisa: uma etapa do percurso deixa de acontecer. Nenhuma
 // asserção é relaxada e nenhum código de produção é tocado.
 
+/**
+ * Id da resposta a que um envio pertence. A resposta da IA sai em partes
+ * (decisão de produto de 2026-10-11): as anteriores à última levam
+ * `<correlationId>-p<n>` e a última leva o `correlationId` da linha. Envio
+ * sem id conta como resposta própria.
+ */
+export function replyIdOfSend(send, index) {
+  return typeof send.correlationId === "string"
+    ? send.correlationId.replace(/-p\d+$/u, "")
+    : `no-correlation-${index}`;
+}
+
+/** Quantas respostas distintas os envios carregam. */
+export function replyCount(sends) {
+  return new Set(sends.map(replyIdOfSend)).size;
+}
+
 /** Contagens dos dois dublês num instante: a base de todo delta de elo. */
 function doubleCounters(openAi, evolution) {
   return {
     responses: openAi.calls.responses.length,
     embeddings: openAi.calls.embeddings.length,
     sends: evolution.sends.length,
+    replies: replyCount(evolution.sends),
   };
 }
 
@@ -1403,6 +1421,7 @@ function countersDelta(before, after) {
     modelResponses: after.responses - before.responses,
     modelEmbeddings: after.embeddings - before.embeddings,
     sends: after.sends - before.sends,
+    replies: after.replies - before.replies,
   };
 }
 
@@ -1654,6 +1673,9 @@ async function exerciseIdempotencyLink({
     ).length,
     sendsToContact: evolution.sends.filter((send) => send.to === contact.phone)
       .length,
+    repliesToContact: replyCount(
+      evolution.sends.filter((send) => send.to === contact.phone),
+    ),
     messages,
   };
 }
@@ -1736,6 +1758,9 @@ async function exerciseSupersedeLink({
       .map((message) => message.deliveryDetail),
     sendsToContact: evolution.sends.filter((send) => send.to === contact.phone)
       .length,
+    repliesToContact: replyCount(
+      evolution.sends.filter((send) => send.to === contact.phone),
+    ),
     messages,
   };
 }
@@ -1822,13 +1847,22 @@ export function assertAutoReply(result) {
   });
 
   const sends = result.transport.sends;
-  const matchingSends = sends.filter(
-    (send) => send.text === returnedText && send.to === REHEARSAL.contact.phone,
+  const sendsToContact = sends.filter(
+    (send) => send.to === REHEARSAL.contact.phone,
   );
+  const collapse = (text) => String(text ?? "").replace(/\s+/gu, " ").trim();
+  const lastSend = sends.at(-1);
   assertions.push({
-    name: "transport double received exactly one send with that text and the contact's phone",
-    count: matchingSends.length,
-    pass: sends.length === 1 && matchingSends.length === 1,
+    name: "transport double received exactly one reply, in parts that rebuild that text, to the contact's phone",
+    count: sends.length,
+    pass:
+      sends.length >= 1 &&
+      sendsToContact.length === sends.length &&
+      replyCount(sends) === 1 &&
+      collapse(sends.map((send) => send.text).join(" ")) ===
+        collapse(returnedText) &&
+      typeof lastSend?.correlationId === "string" &&
+      !/-p\d+$/u.test(lastSend.correlationId),
   });
 
   const sendsAfterOutboundPersisted = sends.filter(
@@ -1954,16 +1988,16 @@ function checkIdempotencyLink(observed) {
   const events = observed.events ?? [];
   return {
     link: "idempotency",
-    name: "the same event delivered twice produces one answer and one send",
-    counts: `events=${events.length}, outbound=${observed.outboundMessages}, transport=${observed.delta.sends} send(s) (${observed.sendsToContact} to this contact), acks=${(observed.acks ?? []).join("/")}`,
+    name: "the same event delivered twice produces one answer and one reply",
+    counts: `events=${events.length}, outbound=${observed.outboundMessages}, transport=${observed.delta.sends} send(s) in ${observed.delta.replies} reply(ies) (${observed.repliesToContact} to this contact), acks=${(observed.acks ?? []).join("/")}`,
     pass:
       (observed.acks ?? []).every((status) => status === 202) &&
       events.length === 1 &&
       events[0]?.status === "DONE" &&
       observed.outboundMessages === 1 &&
-      observed.sendsToContact === 1 &&
-      observed.delta.sends === 1,
-    message: `idempotency: the same event delivered twice must leave one inbox event, one outbound message and one send, but the rehearsal observed ${events.length} event(s), ${observed.outboundMessages} outbound message(s) and ${observed.sendsToContact} send(s) to the contact. Observed: ${JSON.stringify(observed)}`,
+      observed.repliesToContact === 1 &&
+      observed.delta.replies === 1,
+    message: `idempotency: the same event delivered twice must leave one inbox event, one outbound message and one reply, but the rehearsal observed ${events.length} event(s), ${observed.outboundMessages} outbound message(s) and ${observed.repliesToContact} reply(ies) to the contact. Observed: ${JSON.stringify(observed)}`,
   };
 }
 
@@ -1973,14 +2007,14 @@ function checkSupersedeLink(observed) {
   return {
     link: "supersede",
     name: "a new inbound message cancels the pending output instead of sending both",
-    counts: `first event=${status}/${action}, cancelled outbound=${observed.cancelledOutbound}, sent outbound=${observed.sentOutbound}, transport=${observed.sendsToContact} send(s) to this contact, reasons=${(observed.cancelReasons ?? []).join(",") || "none"}`,
+    counts: `first event=${status}/${action}, cancelled outbound=${observed.cancelledOutbound}, sent outbound=${observed.sentOutbound}, transport=${observed.repliesToContact} reply(ies) to this contact, reasons=${(observed.cancelReasons ?? []).join(",") || "none"}`,
     pass:
       status === "DONE" &&
       action === "superseded" &&
       observed.cancelledOutbound === 1 &&
       observed.sentOutbound === 1 &&
-      observed.sendsToContact === 1,
-    message: `supersede: a new message from the same contact must cancel the output that had not been sent yet, but the first turn settled ${status}/${action}, ${observed.cancelledOutbound} outbound message(s) were cancelled, ${observed.sentOutbound} were sent and the transport double received ${observed.sendsToContact} send(s) for this contact. Observed: ${JSON.stringify(observed)}`,
+      observed.repliesToContact === 1,
+    message: `supersede: a new message from the same contact must cancel the output that had not been sent yet, but the first turn settled ${status}/${action}, ${observed.cancelledOutbound} outbound message(s) were cancelled, ${observed.sentOutbound} were sent and the transport double received ${observed.repliesToContact} reply(ies) for this contact. Observed: ${JSON.stringify(observed)}`,
   };
 }
 

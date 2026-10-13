@@ -2507,10 +2507,10 @@ function makeTempSourceTree(files: Record<string, string>): string {
 }
 
 describe("todo egresso HTTP fora da porta do canal é enumerado com resíduo zero (Goal041 / WU-04)", () => {
-  it("descobre os 9 sítios das duas árvores, com resíduo zero e exatamente 1 portador de prosa ao número da cliente", () => {
+  it("descobre os 10 sítios das duas árvores, com resíduo zero e exatamente 1 portador de prosa ao número da cliente", () => {
     const discovery = discoverHttpEgressSites(aiOrchestratorSrcPath, bffSrcPath);
     expect(discovery.excluded).toEqual([]);
-    expect(discovery.sites).toHaveLength(9);
+    expect(discovery.sites).toHaveLength(10);
     const proseSites = discovery.sites.filter(
       (site) => site.category === "product_prose_to_client_number",
     );
@@ -2521,7 +2521,7 @@ describe("todo egresso HTTP fora da porta do canal é enumerado com resíduo zer
     expect(proseSites[0].line).toBe(73);
   });
 
-  it("classifica cada um dos 9 sítios na categoria que a resolução de destino computa, sem lista escrita à mão e sem pular arquivo nenhum", () => {
+  it("classifica cada um dos 10 sítios na categoria que a resolução de destino computa, sem lista escrita à mão e sem pular arquivo nenhum", () => {
     const discovery = discoverHttpEgressSites(aiOrchestratorSrcPath, bffSrcPath);
     const sites = discovery.sites
       .map((site) => ({
@@ -2572,8 +2572,13 @@ describe("todo egresso HTTP fora da porta do canal é enumerado com resíduo zer
       },
       {
         file: "bff/src/clients/password-reset-delivery.ts",
-        line: 20,
+        line: 37,
         category: "env_var_PASSWORD_RESET_DELIVERY_URL",
+      },
+      {
+        file: "bff/src/clients/password-reset-delivery.ts",
+        line: 74,
+        category: "env_var_RESEND_API_URL",
       },
       {
         file: "bff/src/routes/health.ts",

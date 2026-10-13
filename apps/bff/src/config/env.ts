@@ -159,6 +159,11 @@ const envSchema = z.object({
   PASSWORD_RESET_PUBLIC_URL: stringEnv("http://localhost:3001/nova-senha"),
   PASSWORD_RESET_DELIVERY_URL: stringEnv(),
   PASSWORD_RESET_DELIVERY_TOKEN: stringEnv(),
+  // E-mail pelo Resend. Com chave e remetente, a recuperação de senha sai por
+  // ele e o webhook acima fica sem uso.
+  RESEND_API_KEY: stringEnv(),
+  RESEND_API_URL: stringEnv("https://api.resend.com/emails"),
+  EMAIL_FROM: stringEnv(),
   EVOLUTION_WEBHOOK_SECRET: stringEnv(),
 });
 

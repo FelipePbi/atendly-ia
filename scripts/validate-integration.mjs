@@ -225,6 +225,8 @@ function childEnvironment(target) {
     CHANNEL_CREDENTIAL_ACTIVE_KEY_ID: "v1",
     PASSWORD_RESET_DELIVERY_URL: "",
     PASSWORD_RESET_DELIVERY_TOKEN: "",
+    RESEND_API_KEY: "",
+    EMAIL_FROM: "",
   };
 }
 

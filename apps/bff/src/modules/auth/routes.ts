@@ -4,7 +4,10 @@ import { passwordPolicySchema } from "@avenly-ia/public-api-contract";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
-import { PasswordResetDeliveryClient } from "../../clients/password-reset-delivery.js";
+import {
+  isPasswordResetDeliveryConfigured,
+  PasswordResetDeliveryClient,
+} from "../../clients/password-reset-delivery.js";
 import { env } from "../../config/env.js";
 import { CURRENT_LEGAL_VERSIONS } from "../../config/legal-versions.js";
 import {
@@ -280,7 +283,7 @@ export async function registerV1AuthRoutes(
       config: { rateLimit: { max: 5, timeWindow: "15 minutes" } },
     },
     async (request) => {
-      if (!env.PASSWORD_RESET_DELIVERY_URL) {
+      if (!isPasswordResetDeliveryConfigured()) {
         throw new AppError(
           "CONFIGURATION_ERROR",
           "Password recovery is temporarily unavailable.",

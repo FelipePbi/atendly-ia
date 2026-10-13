@@ -77,6 +77,17 @@ subida fica no painel do Coolify.
   às faixas de IP da Cloudflare. Sem essa restrição, quem acessar a VM direto
   forja o IP do rate limit.
 
+## E-mail
+
+O único e-mail do sistema hoje é o de recuperação de senha. Ele sai pelo
+[Resend](https://resend.com) quando o BFF tem `RESEND_API_KEY` e
+`EMAIL_FROM` (ex.: `Avenly <nao-responda@avenly.com.br>`); o domínio do
+remetente precisa estar verificado no Resend, com os registros DNS dele na
+Cloudflare. Sem Resend, o BFF usa o webhook genérico
+(`PASSWORD_RESET_DELIVERY_URL`); sem nenhum dos dois, `forgot-password`
+responde `503 CONFIGURATION_ERROR`. O plano grátis do Resend cobre 3.000
+e-mails por mês e 100 por dia.
+
 ## Backup
 
 O volume `postgres_data` é o único estado da aplicação. O backup diário roda na

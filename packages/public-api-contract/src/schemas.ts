@@ -192,6 +192,7 @@ export const onboardingStateSchema = z.object({
       bufferBeforeMinutes: z.number().int().nonnegative().optional().default(0),
       bufferAfterMinutes: z.number().int().nonnegative().optional().default(0),
       recurrenceIntervalDays: z.number().int().positive().nullish().optional(),
+      usageCount: z.number().int().nonnegative().optional(),
     })
     .nullable(),
   availability: availabilitySettingsSchema.nullable(),

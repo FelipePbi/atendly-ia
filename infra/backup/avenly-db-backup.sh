@@ -6,6 +6,7 @@ set -euo pipefail
 PROJECT=wxictoixqkxp3uh2h9dgogmk
 DEST=/var/backups/avenly
 KEEP_DAYS=14
+BUCKET=avenly-db-backups
 
 stamp=$(date -u +%Y%m%dT%H%MZ)
 dir="$DEST/$stamp"
@@ -32,3 +33,13 @@ chmod -R go= "$dir"
 
 find "$DEST" -mindepth 1 -maxdepth 1 -type d -name '20*' -mtime +"$KEEP_DAYS" -exec rm -rf {} +
 echo "backup ok: $dir ($(du -sh "$dir" | cut -f1))"
+
+# Cópia fora da VM, no Object Storage da Oracle. A VM se autentica pelo instance
+# principal e só pode criar objetos novos (--no-overwrite): não apaga nem
+# sobrescreve. A regra de ciclo de vida do bucket apaga o que passa de 30 dias.
+# SHA256SUMS vai por último: a presença dele marca a cópia como completa.
+for f in $(cd "$dir" && ls | grep -vx SHA256SUMS) SHA256SUMS; do
+  oci os object put --auth instance_principal --bucket-name "$BUCKET" \
+    --name "$stamp/$f" --file "$dir/$f" --no-overwrite > /dev/null
+done
+echo "cópia ok: oci://$BUCKET/$stamp/"

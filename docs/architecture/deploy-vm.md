@@ -107,5 +107,24 @@ Restaurar um banco (com a aplicação parada para ele):
 sudo docker exec -i <container postgres> pg_restore -U postgres -d <banco> --clean --if-exists < /var/backups/avenly/<data>/<banco>.dump
 ```
 
-O backup ainda fica só na VM: protege contra erro de dados e deploy ruim, não
-contra perda da VM ou da conta. Falta a cópia para fora.
+### Cópia fora da VM
+
+Cada backup também vai para o bucket privado `avenly-db-backups` do Object
+Storage da Oracle (região `sa-vinhedo-1`), em `<data UTC>/<arquivo>`, com o
+`SHA256SUMS` por último. Usa o OCI CLI da VM (`/opt/oci-cli`, link em
+`/usr/local/bin/oci`), autenticado pelo instance principal: sem senha nem
+token na VM.
+
+- Grupo dinâmico `avenly-backup` (domínio Default): só a instância
+  `avenly-prod`.
+- Política `avenly-backup` (root): o grupo só tem `OBJECT_CREATE` e
+  `OBJECT_INSPECT` no bucket. A VM cria e lista; não lê, não apaga nem
+  sobrescreve (o upload usa `--no-overwrite`). Quem invadir a VM não destrói as
+  cópias.
+- A mesma política deixa o serviço `objectstorage-sa-vinhedo-1` gerenciar
+  objetos, para a regra de ciclo de vida `apagar-30-dias` do bucket apagar o
+  que passa de 30 dias.
+
+Para restaurar a partir do bucket, baixe a pasta da data pelo console (ou por
+um usuário com leitura) e use o `pg_restore` acima. A cópia fica no mesmo
+provedor da VM: cobre a perda da VM, não a perda da conta Oracle.

@@ -76,5 +76,36 @@ subida fica no painel do Coolify.
   (nuvem laranja) são dois proxies: use `2` e restrinja as portas 80/443 da VM
   às faixas de IP da Cloudflare. Sem essa restrição, quem acessar a VM direto
   forja o IP do rate limit.
-- Backup: o volume `postgres_data` é o único estado. Agende um `pg_dumpall`
-  para fora da VM.
+
+## Backup
+
+O volume `postgres_data` é o único estado da aplicação. O backup diário roda na
+VM por um timer do systemd, com os arquivos de `infra/backup/`:
+
+- `avenly-db-backup.sh` (em `/usr/local/bin/`) grava, em
+  `/var/backups/avenly/<data UTC>/`, um `pg_dump -Fc` de cada banco do Postgres
+  do compose, os roles (`globals.sql`), o banco do Coolify e um `SHA256SUMS`.
+  Cada dump passa por `pg_restore --list` antes de ser aceito. O container é
+  achado pelos labels do compose, porque o nome muda a cada deploy.
+- `avenly-db-backup.timer` dispara às 06:30 UTC (03:30 de Brasília), com
+  `Persistent=true`: se a VM estava desligada, o backup roda ao ligar.
+- Ficam os últimos 14 dias. O diretório é só do root.
+- `restore-check.sh` restaura o backup mais recente num Postgres descartável e
+  conta as tabelas de cada banco. Rode depois de mudar o script.
+
+Comandos na VM:
+
+```bash
+sudo systemctl start avenly-db-backup.service     # backup agora
+sudo journalctl -u avenly-db-backup.service -n 20 # resultado do último
+systemctl list-timers avenly-db-backup.timer      # próxima execução
+```
+
+Restaurar um banco (com a aplicação parada para ele):
+
+```bash
+sudo docker exec -i <container postgres> pg_restore -U postgres -d <banco> --clean --if-exists < /var/backups/avenly/<data>/<banco>.dump
+```
+
+O backup ainda fica só na VM: protege contra erro de dados e deploy ruim, não
+contra perda da VM ou da conta. Falta a cópia para fora.

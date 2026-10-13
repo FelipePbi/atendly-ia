@@ -1,0 +1,10 @@
+[Unit]
+Description=Backup diário dos bancos do Avenly às 03:30 de Brasília
+
+[Timer]
+OnCalendar=*-*-* 06:30:00 UTC
+Persistent=true
+RandomizedDelaySec=5m
+
+[Install]
+WantedBy=timers.target

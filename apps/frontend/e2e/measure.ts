@@ -308,17 +308,24 @@ export function hasFocusIndicator(focus: FocusAfterTab): boolean {
  * view transitions (D-168) run with opacity, and axe reads the colour mid-fade
  * (the Day rows measured at ~50% opacity and failed contrast for that alone).
  * Infinite animations (the "digitando…" dots) never finish and are ignored.
+ *
+ * On the first load the brand splash (`[data-splash]`, D-168) covers the
+ * screen for up to 4 s and, as it leaves, the screen "presents" itself
+ * (`.is-presenting`, ~700 ms of staggered fades). The splash logo animates
+ * forever, so a check made while it covers finds no finite animation and
+ * passes at once — then axe reads the presenting fade. Both are awaited first.
  * Past the timeout the measure runs anyway and reports what it sees.
  */
-export async function waitForFiniteAnimations(page: Page, timeoutMs = 5000): Promise<void> {
+export async function waitForFiniteAnimations(page: Page, timeoutMs = 8000): Promise<void> {
   await page
     .waitForFunction(
-      () => document.getAnimations().every((animation) => {
-        const iterations = animation.effect?.getComputedTiming().iterations;
-        return animation.playState !== "running" || iterations === Infinity;
-      }),
+      () => document.querySelector("[data-splash], .is-presenting") === null
+        && document.getAnimations().every((animation) => {
+          const iterations = animation.effect?.getComputedTiming().iterations;
+          return animation.playState !== "running" || iterations === Infinity;
+        }),
       undefined,
-      { timeout: timeoutMs },
+      { timeout: timeoutMs, polling: 100 },
     )
     .catch(() => undefined);
 }
@@ -326,13 +333,21 @@ export async function waitForFiniteAnimations(page: Page, timeoutMs = 5000): Pro
 export async function measureRunningAnimations(page: Page): Promise<string[]> {
   return page.evaluate((tolerance) => {
     const offenders: string[] = [];
+    // `className` of an SVG element is an SVGAnimatedString, not a string:
+    // read the attribute, and name an element without class by its parent.
+    const classes = (node: Element | null) =>
+      (node?.getAttribute("class") ?? "").trim().split(/\s+/u).filter(Boolean).join(".");
+    const label = (el: Element) => {
+      const tag = el.tagName.toLowerCase();
+      if (classes(el)) return `${tag}.${classes(el)}`;
+      const parent = el.parentElement;
+      return parent ? `${parent.tagName.toLowerCase()}.${classes(parent)} > ${tag}` : tag;
+    };
     for (const el of Array.from(document.querySelectorAll("*"))) {
       const style = getComputedStyle(el);
       const duration = parseFloat(style.animationDuration) + parseFloat(style.transitionDuration);
       if (duration > tolerance) {
-        offenders.push(
-          `${el.tagName.toLowerCase()}.${el.className}: ${style.animationDuration}/${style.transitionDuration}`,
-        );
+        offenders.push(`${label(el)}: ${style.animationDuration}/${style.transitionDuration}`);
       }
     }
     return offenders.slice(0, 10);

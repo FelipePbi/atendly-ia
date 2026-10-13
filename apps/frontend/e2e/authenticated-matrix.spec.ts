@@ -196,10 +196,47 @@ type KnownContrastFailure = { html: string; route: string; why: string };
  */
 const KNOWN_CONTRAST_FAILURES: KnownContrastFailure[] = [];
 
+type KnownReducedMotion = { element: string; route: string; why: string };
+
 /**
- * Bookkeeping for the list above — not a second ruler. Contrast itself is
- * decided by axe against the rendered palette; this only answers which
- * baselined entries stopped reproducing.
+ * Animations that run under `prefers-reduced-motion` by a recorded product
+ * decision, same contract and same strictness: each entry must keep
+ * reproducing at its route, or the gate fails and asks for it to be deleted.
+ * `element` is the label `measureRunningAnimations` prints, before the colon.
+ */
+const KNOWN_REDUCED_MOTION: KnownReducedMotion[] = [
+  {
+    route: "onboarding-teste-real-sucesso",
+    element: "svg.completion-check > path",
+    why: "O check de sucesso se desenha uma vez ao abrir, também com movimento reduzido: é o resultado, não enfeite (decisão de 2026-10-12, comentário em .completion-check path, avenly.css).",
+  },
+  {
+    route: "onboarding-whatsapp-concluido",
+    element: "svg.completion-check > path",
+    why: "Mesmo check de sucesso da conclusão, mesma decisão de 2026-10-12.",
+  },
+];
+
+/** Splits the moving elements into the unexcused and the stale exceptions. */
+function excuseKnownReducedMotion(
+  route: string,
+  moving: string[],
+): { unexcused: string[]; stale: KnownReducedMotion[] } {
+  const known = KNOWN_REDUCED_MOTION.filter((entry) => entry.route === route);
+  const excused = (line: string) =>
+    known.some((entry) => line.startsWith(`${entry.element}:`));
+  return {
+    unexcused: moving.filter((line) => !excused(line)),
+    stale: known.filter(
+      (entry) => !moving.some((line) => line.startsWith(`${entry.element}:`)),
+    ),
+  };
+}
+
+/**
+ * Bookkeeping for `KNOWN_CONTRAST_FAILURES` — not a second ruler. Contrast
+ * itself is decided by axe against the rendered palette; this only answers
+ * which baselined entries stopped reproducing.
  */
 function findStaleContrastExceptions(
   route: string,
@@ -917,12 +954,22 @@ for (const route of AUTHENTICATED_ROUTES) {
       await page.emulateMedia({ reducedMotion: "reduce" });
       await page.reload({ waitUntil: "networkidle" });
       await waitForLoadedContent(page, route);
-      const moving = await measureRunningAnimations(page);
+      const motion = excuseKnownReducedMotion(
+        route.name,
+        await measureRunningAnimations(page),
+      );
       expect
         .soft(
-          moving,
+          motion.stale,
+          "these reduced-motion exceptions no longer reproduce and must be deleted:\n"
+            + JSON.stringify(motion.stale, null, 2),
+        )
+        .toEqual([]);
+      expect
+        .soft(
+          motion.unexcused,
           `animation still running under prefers-reduced-motion at ${route.name}/`
-            + `${testInfo.project.name}:\n${moving.join("\n")}`,
+            + `${testInfo.project.name}:\n${motion.unexcused.join("\n")}`,
         )
         .toEqual([]);
     });
@@ -1166,12 +1213,22 @@ for (const route of ONBOARDING_ROUTES) {
       await page.emulateMedia({ reducedMotion: "reduce" });
       await page.reload({ waitUntil: "networkidle" });
       await proveOnboardingScreen(page, route);
-      const moving = await measureRunningAnimations(page);
+      const motion = excuseKnownReducedMotion(
+        route.name,
+        await measureRunningAnimations(page),
+      );
       expect
         .soft(
-          moving,
+          motion.stale,
+          "these reduced-motion exceptions no longer reproduce and must be deleted:\n"
+            + JSON.stringify(motion.stale, null, 2),
+        )
+        .toEqual([]);
+      expect
+        .soft(
+          motion.unexcused,
           `animation still running under prefers-reduced-motion at ${route.name}/`
-            + `${testInfo.project.name}:\n${moving.join("\n")}`,
+            + `${testInfo.project.name}:\n${motion.unexcused.join("\n")}`,
         )
         .toEqual([]);
     });

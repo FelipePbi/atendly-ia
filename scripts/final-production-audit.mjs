@@ -366,6 +366,15 @@ export async function main() {
       : "every build context and Dockerfile exists in the tree",
   );
 
+  const repositoryBindMounts = findRepositoryBindMounts(composeYaml);
+  check(
+    "production_config_no_repository_bind_mounts",
+    repositoryBindMounts.length === 0,
+    repositoryBindMounts.length
+      ? repositoryBindMounts.join(", ")
+      : "no service bind-mounts a repository path; repository files ship inside images",
+  );
+
   const envExampleParityMismatches = Object.entries(configEnvSources).flatMap(
     ([serviceName, envSource]) => {
       const { missingFromExample, extraInExample } =
@@ -964,6 +973,19 @@ export function findDevelopmentDefaultViolations(
   }
 
   return violations;
+}
+
+// Bind mount de caminho relativo (`./x:/y`) depende do arquivo existir no host
+// do deploy. O Coolify não garante isso: o Docker cria um diretório vazio no
+// lugar e o container sobe sem o arquivo (foi assim que o init do Postgres
+// não rodou no primeiro deploy). Arquivo do repositório entra pela imagem.
+export function findRepositoryBindMounts(composeContent) {
+  return composeContent
+    .replace(/\r\n/gu, "\n")
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("#"))
+    .map((line) => line.match(/^\s+-\s+["']?(\.{1,2}\/[^:"']+):/u)?.[1])
+    .filter(Boolean);
 }
 
 export function findMissingBuildPaths(composeContent, pathExists) {

@@ -7,6 +7,7 @@ import {
   findMissingBuildPaths,
   findMissingExplicitLoopFlags,
   findMissingRequiredEnvKeys,
+  findRepositoryBindMounts,
   parseComposeServices,
   parseEnvExampleKeys,
   parseEnvSchemaKeys,
@@ -359,6 +360,26 @@ test("production_config_build_paths_exist: fails when a Dockerfile does not exis
     existingPaths.has(relativePath),
   );
   assert.deepEqual(missing, ["bff:dockerfile:apps/bff/Dockerfile"]);
+});
+
+test("production_config_no_repository_bind_mounts: named volumes are allowed", () => {
+  assert.deepEqual(findRepositoryBindMounts(composeYaml()), []);
+  assert.deepEqual(
+    findRepositoryBindMounts(
+      "services:\n  postgres:\n    volumes:\n      - postgres_data:/var/lib/postgresql/data\n",
+    ),
+    [],
+  );
+});
+
+test("production_config_no_repository_bind_mounts: fails on a relative bind mount from the repository", () => {
+  const withBindMount = composeYaml().replace(
+    "      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}\n",
+    "      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}\n    volumes:\n      - postgres_data:/var/lib/postgresql/data\n      - ./infra/postgres/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro\n",
+  );
+  assert.deepEqual(findRepositoryBindMounts(withBindMount), [
+    "./infra/postgres/init-databases.sh",
+  ]);
 });
 
 test("production_config_env_example_parity: passes when .env.example and config/env.ts declare the same keys", () => {

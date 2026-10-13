@@ -21,7 +21,8 @@ x-node-healthcheck: &node-healthcheck
 
 services:
   postgres:
-    image: pgvector/pgvector:0.8.6-pg17-bookworm
+    build:
+      context: ./infra/postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
@@ -32,7 +33,6 @@ services:
       EVOLUTION_DB_PASSWORD: ${EVOLUTION_DB_PASSWORD:?}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./infra/postgres/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 10s

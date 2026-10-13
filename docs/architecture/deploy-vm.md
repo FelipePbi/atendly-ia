@@ -15,8 +15,13 @@ Arquivos:
 - `.env.production.example`: variáveis e como gerar cada segredo.
 - `apps/*/Dockerfile`: uma imagem por serviço. Frontend e BFF usam a raiz do
   repositório como contexto de build, porque dependem de `packages/`.
-- `infra/postgres/init-databases.sh`: cria usuário e banco por serviço na
-  primeira subida do volume.
+- `infra/postgres/`: imagem do Postgres (pgvector) com o
+  `init-databases.sh` embutido, que cria usuário e banco por serviço na
+  primeira subida do volume. O script vai dentro da imagem, não por bind
+  mount: o Coolify não garante o arquivo do repositório no host, e o Docker
+  monta um diretório vazio no lugar. A auditoria
+  (`production_config_no_repository_bind_mounts`) reprova bind mount relativo
+  no compose.
 
 ## Topologia
 

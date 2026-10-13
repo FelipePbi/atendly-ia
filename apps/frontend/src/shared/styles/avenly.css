@@ -7289,8 +7289,16 @@ main#main-content:focus-visible {
     max-width: 520px;
     font-size: 34px;
   }
+  /* A frase de apoio também no tablet (pedido de 2026-10-13), centrada como o
+     selo e o título. */
+  .entry-badge,
   .entry-support {
-    display: none;
+    align-self: center;
+  }
+  .entry-support {
+    max-width: 460px;
+    font-size: 15px;
+    line-height: 1.5;
   }
   .entry-main {
     margin-top: 0;
@@ -7520,6 +7528,69 @@ main#main-content:focus-visible {
 }
 @media (max-width: 767px) {
   .entry-shell--compact .entry-support {
+    display: none;
+  }
+  /* Validação no iPhone (2026-10-13): no navegador, `safe-area-inset-top` é
+     0 e a marca colava na barra de endereço; e o hero de ~300 px empurrava
+     "Entrar" e "Criar conta" para fora da tela. Respiro fixo em cima e hero
+     mais curto, para o formulário caber na altura útil do Safari/Chrome. */
+  .entry-panel {
+    padding: max(20px, calc(10px + env(safe-area-inset-top))) 24px 20px;
+    gap: 12px;
+  }
+  .entry-copy {
+    margin-top: 4px;
+    gap: 10px;
+  }
+  .entry-tagline {
+    max-width: 320px;
+    font-size: 26px;
+  }
+  .entry-main {
+    padding-top: 24px;
+  }
+  .auth-card {
+    gap: 12px;
+  }
+}
+/* Celular com pouca altura útil (barras do navegador abertas): só a marca e
+   a frase no hero; o texto de apoio sai e os respiros encolhem. Para o texto
+   de apoio, a media query é só o palpite antes do JavaScript: `AuthLayout`
+   mede a altura visível e marca `data-support` (fits/tight), que decide. */
+@media (max-width: 767px) and (max-height: 760px) {
+  .entry-panel {
+    padding-bottom: 18px;
+  }
+  .entry-support {
+    display: none;
+  }
+  .entry-tagline {
+    font-size: 23px;
+    line-height: 1.12;
+  }
+  .entry-main {
+    padding-top: 20px;
+    padding-bottom: max(24px, calc(16px + env(safe-area-inset-bottom)));
+  }
+  .auth-card,
+  .auth-form {
+    gap: 10px;
+  }
+  .auth-heading h1 {
+    font-size: 24px;
+  }
+  .auth-form .input,
+  .auth-form .btn,
+  .auth-card .auth-cta {
+    height: 48px;
+    min-height: 48px;
+  }
+}
+@media (max-width: 767px) {
+  .entry-shell[data-support="fits"] .entry-support {
+    display: block;
+  }
+  .entry-shell[data-support="tight"] .entry-support {
     display: none;
   }
 }

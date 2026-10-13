@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, type ReactNode, useState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { CURRENT_LEGAL_VERSIONS } from "@/config/legal-versions";
 import { BffHttpError, PASSWORD_POLICY_RULES } from "@/data";
@@ -85,15 +91,53 @@ function ChevronLeft() {
   );
 }
 
+/**
+ * No celular, o texto de apoio do hero só aparece se a tela inteira couber
+ * com ele na altura visível de verdade (`innerHeight`: a área entre as barras
+ * do navegador; não encolhe com o teclado). A media query de altura do CSS é
+ * só o palpite antes do JavaScript; aqui a medida decide (pedido de
+ * 2026-10-13). Tablet e desktop sempre mostram. A medida liga o texto, mede e
+ * decide no mesmo quadro, direto no DOM, sem pintar o meio do caminho.
+ * Vale também para o cadastro: `entry-shell--compact` só esconde a frase
+ * como palpite antes da medida.
+ */
+function useSupportFits() {
+  const shellRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const check = () => {
+      // Sem `matchMedia` (ambiente sem layout), não mede: vale o CSS.
+      if (!window.matchMedia || window.matchMedia("(min-width: 768px)").matches) {
+        delete shell.dataset.support;
+        return;
+      }
+      shell.dataset.support = "fits";
+      const panel = shell.querySelector<HTMLElement>(".entry-panel");
+      const main = shell.querySelector<HTMLElement>(".entry-main");
+      const needed = (panel?.offsetHeight ?? 0) + (main?.offsetHeight ?? 0);
+      shell.dataset.support = needed <= window.innerHeight ? "fits" : "tight";
+    };
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return shellRef;
+}
+
 function AuthLayout({
   children,
-  compact,
+  compact = false,
 }: {
   children: ReactNode;
   compact?: boolean;
 }) {
+  const shellRef = useSupportFits();
   return (
-    <main className={`entry-shell${compact ? " entry-shell--compact" : ""}`}>
+    <main
+      className={`entry-shell${compact ? " entry-shell--compact" : ""}`}
+      ref={shellRef}
+    >
       <aside className="entry-panel" aria-label="Avenly">
         <Brand href="/login" signature="entry" />
         <div className="entry-copy">

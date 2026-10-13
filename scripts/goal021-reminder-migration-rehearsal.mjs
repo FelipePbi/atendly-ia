@@ -724,14 +724,25 @@ async function rehearse(target) {
       `DELETE FROM "Appointment" WHERE "tenantId" = 'tenant-um' AND "id" = 'appointment-futuro'`,
       "operational history must keep blocking a bare appointment delete — RESTRICT is untouched",
     );
-    // `23001` (restrict_violation) e o codigo que o PostgreSQL reserva para
-    // `ON DELETE RESTRICT`; `NO ACTION` recusaria com `23503`. Exigir o codigo
-    // exato, e nao apenas "recusou", e o que prova que a cascata nova nao
-    // rebaixou o historico operacional de RESTRICT para NO ACTION.
+    // A recusa tem de vir da FK do historico. O codigo de erro sozinho nao
+    // prova RESTRICT: o PostgreSQL 18 reporta `23001` (restrict_violation)
+    // para `ON DELETE RESTRICT`, mas o 16 e o 17 (CI e producao) reportam
+    // `23503` para RESTRICT e para NO ACTION igualmente.
     assert(
-      restrictedByHistory?.code === "23001" &&
+      ["23001", "23503"].includes(restrictedByHistory?.code) &&
         restrictedByHistory?.constraint === "AppointmentEvent_appointment_fkey",
-      `the bare delete must fail on the AppointmentEvent foreign key (restrict_violation), got ${restrictedByHistory?.code} on ${restrictedByHistory?.constraint}`,
+      `the bare delete must fail on the AppointmentEvent foreign key, got ${restrictedByHistory?.code} on ${restrictedByHistory?.constraint}`,
+    );
+    // O que prova que a cascata nova nao rebaixou o historico operacional de
+    // RESTRICT para NO ACTION e a propria regra no catalogo, em qualquer
+    // versao: `confdeltype` 'r' e RESTRICT, 'a' e NO ACTION.
+    const historyDeleteRule = await client.query(
+      `SELECT confdeltype FROM pg_constraint WHERE conname = 'AppointmentEvent_appointment_fkey'`,
+    );
+    assert(
+      historyDeleteRule.rows.length === 1 &&
+        historyDeleteRule.rows[0].confdeltype === "r",
+      `AppointmentEvent_appointment_fkey must stay ON DELETE RESTRICT, got confdeltype=${historyDeleteRule.rows[0]?.confdeltype}`,
     );
     await expectAccepted(
       client,

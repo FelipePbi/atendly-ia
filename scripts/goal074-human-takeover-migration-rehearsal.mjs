@@ -95,6 +95,16 @@ const GOAL146_MIGRATION_SQL = path.join(
   "migration.sql",
 );
 
+const AI_REPLY_SPLIT_MIGRATION_SQL = path.join(
+  repositoryRoot,
+  "apps",
+  "ai-orchestrator",
+  "prisma",
+  "migrations",
+  "20261011120000_ai_reply_split_dispatch",
+  "migration.sql",
+);
+
 function refuse(message) {
   console.error(`goal074:human-takeover-migration-rehearsal REFUSED — ${message}`);
   process.exit(2);
@@ -492,6 +502,58 @@ async function alignAiDurabilityTargetWithGoal146(target) {
   }
 }
 
+/**
+ * Leva o banco de durabilidade da IA a coluna `Message.deliveryPartsSent` (a
+ * resposta da IA em varias partes, 2026-10-11). O `OutboxStore` le e grava a
+ * mensagem com essa coluna, entao ela precisa existir em todo banco que a
+ * suite usa. O DDL usa `ADD COLUMN IF NOT EXISTS`, entao reaplicar sobre banco
+ * ja alinhado nao muda nada.
+ */
+async function alignAiDurabilityTargetWithAiReplySplit(target) {
+  const database = decodeURIComponent(
+    target.maintenance.pathname.replace(/^\//u, ""),
+  );
+  const durability = new URL(target.maintenance.href);
+  durability.pathname = `/${database}_goal004`;
+
+  const client = new Client({ connectionString: durability.href });
+  try {
+    await client.connect();
+  } catch {
+    console.log(
+      "durability target not provisioned yet — skipping the AI reply split column",
+    );
+    return;
+  }
+  try {
+    const messageTable = await client.query(
+      `SELECT to_regclass('"Message"') AS present`,
+    );
+    if (!messageTable.rows[0].present) {
+      console.log(
+        "durability target has no Message table yet — skipping the AI reply split column",
+      );
+      return;
+    }
+    const applied = await applyMigrationFile(
+      client,
+      AI_REPLY_SPLIT_MIGRATION_SQL,
+    );
+    if (applied !== true) {
+      console.error(
+        `goal074:human-takeover-migration-rehearsal FAILED — durability target columns failed applying ${AI_REPLY_SPLIT_MIGRATION_SQL}: ${applied}`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    console.log(
+      `durability target aligned with the AI reply split Message.deliveryPartsSent column: ${database}_goal004`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
 export async function main() {
   const target = rehearsalTarget(process.env);
 
@@ -500,6 +562,7 @@ export async function main() {
   await alignAiDurabilityTargetWithGoal109(target);
   await alignAiDurabilityTargetWithGoal115(target);
   await alignAiDurabilityTargetWithGoal146(target);
+  await alignAiDurabilityTargetWithAiReplySplit(target);
 
   if (process.exitCode) {
     console.error(

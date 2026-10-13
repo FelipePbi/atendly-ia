@@ -76,32 +76,32 @@ jobs:
   integration:
     name: validate:integration (linux)
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        # Banco descartável do job; morre junto com o runner.
-        # pgvector/pgvector:pg16 é o PostgreSQL 16 oficial com a biblioteca
-        # pgvector já instalada no servidor. `postgres:16-alpine` não a traz, e
-        # `CREATE EXTENSION vector` — que o histórico da IA exige desde
-        # `20260829180000_rag_pgvector` — não consegue instalá-la: extensão é
-        # arquivo no servidor, nenhuma migration a provisiona. Sem esta imagem
-        # o passo `rehearse:goal028-release-migrations` recusa com exit 2 antes
-        # de criar banco, e o job falha por configuração, não por defeito.
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: bff_test
-          POSTGRES_PASSWORD: bff_test_synthetic_password
-          POSTGRES_DB: avenly_bff_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U bff_test -d avenly_bff_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
     env:
       BFF_TEST_DATABASE_URL: postgresql://bff_test:bff_test_synthetic_password@127.0.0.1:5432/avenly_bff_test
     steps:
       - uses: actions/checkout@v4
+      - name: Start disposable PostgreSQL 16 on the runner (loopback)
+        # Banco descartável do job; morre junto com o runner. PostgreSQL nativo
+        # do runner, e não container de serviço: no container o servidor se vê
+        # pelo IP da bridge do Docker (172.x), e a trava das suítes de
+        # integração (`assertDisposableTarget`, `inet_server_addr()` loopback)
+        # recusa com razão. Aqui o servidor escuta em 127.0.0.1 de fato.
+        # pgvector é obrigatório: `CREATE EXTENSION vector` — que o histórico da
+        # IA exige desde `20260829180000_rag_pgvector` — só funciona com a
+        # biblioteca instalada no servidor. Sem ela o passo
+        # `rehearse:goal028-release-migrations` recusa com exit 2.
+        # Superusuário como o POSTGRES_USER do container anterior: os ensaios
+        # criam bancos próprios e instalam extensão.
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q postgresql-16-pgvector
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE bff_test LOGIN SUPERUSER PASSWORD 'bff_test_synthetic_password'" \
+            -c "CREATE DATABASE avenly_bff_test OWNER bff_test"
+          pg_isready -h 127.0.0.1 -p 5432
+          PGPASSWORD=bff_test_synthetic_password psql -h 127.0.0.1 -U bff_test -d avenly_bff_test -tAc \
+            "SELECT host(inet_server_addr()), current_setting('server_version')"
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}

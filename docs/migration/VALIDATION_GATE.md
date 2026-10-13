@@ -45,7 +45,7 @@ Service; ele é o agregador histórico, não o gate.
 | Node | 24.18.0 (CI fixa 24.13.0) | Dockerfiles usam `node:24.13.0`; `engines` exige `>=20` |
 | npm | 11.16.0 | acompanha o Node |
 | Go | 1.25.0 (windows/amd64), CGO habilitado | `apps/evolution-go/go.mod` |
-| PostgreSQL | 18.4 local descartável (CI: `postgres:16-alpine`) | binários já instalados na estação |
+| PostgreSQL | 18.4 local descartável (CI: PostgreSQL 16 nativo do runner, com `postgresql-16-pgvector`, em 127.0.0.1) | binários já instalados na estação; no CI, nativo e não container de serviço, porque `assertDisposableTarget` exige `inet_server_addr()` loopback |
 
 Dependências de cada package precisam estar instaladas antes do gate
 (`npm ci` em `apps/scheduling-service`, `apps/ai-orchestrator`, `apps/bff` e

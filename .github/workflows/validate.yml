@@ -189,6 +189,8 @@ jobs:
             echo "::error::COOLIFY_DEPLOY_WEBHOOK and COOLIFY_API_TOKEN must be set when DEPLOY_ENABLED is true"
             exit 1
           fi
+          # Coolify 4.4+ answers 405 to GET on /api/v1/deploy.
           curl --fail-with-body --silent --show-error --max-time 60 \
+            --request POST \
             --header "Authorization: Bearer $COOLIFY_API_TOKEN" \
             "$COOLIFY_DEPLOY_WEBHOOK"

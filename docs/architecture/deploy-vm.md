@@ -88,6 +88,16 @@ Cloudflare. Sem Resend, o BFF usa o webhook genérico
 responde `503 CONFIGURATION_ERROR`. O plano grátis do Resend cobre 3.000
 e-mails por mês e 100 por dia.
 
+No DNS da Cloudflare, o Resend usa `resend._domainkey` (DKIM), os CNAME `send`
+e `rsend` (SPF e retorno, região São Paulo) e `_dmarc` (`p=none`). O
+recebimento é o Email Routing da Cloudflare, grátis: MX `route*.mx.cloudflare.net`
+e SPF da raiz `v=spf1 include:_spf.mx.cloudflare.net ~all`. Hoje só
+`contato@avenly.com.br` existe, encaminhado ao Gmail do dono; outros endereços
+são regras novas em Email Routing → Routing rules. As respostas saem como
+`contato@` pelo "Enviar e-mail como" do Gmail, via SMTP do Resend
+(`smtp.resend.com:465`, usuário `resend`), com uma chave própria, separada da
+chave do BFF.
+
 ## Backup
 
 O volume `postgres_data` é o único estado da aplicação. O backup diário roda na

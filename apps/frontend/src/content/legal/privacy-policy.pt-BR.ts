@@ -152,14 +152,14 @@ export function createPrivacyPolicy(
         title: "10. Transferências internacionais",
         paragraphs: [
           "Alguns fornecedores podem tratar dados fora do Brasil. Nesses casos, serão adotados mecanismos permitidos pela LGPD, avaliação do destino e salvaguardas contratuais e técnicas adequadas.",
-          "Países, mecanismos e fornecedores concretos dependem da confirmação da infraestrutura indicada nesta Política.",
+          "Os fornecedores envolvidos e os países onde atuam são os indicados na seção 9.",
         ],
       },
       {
         id: "retencao",
         title: "11. Retenção, descarte e anonimização",
         paragraphs: [
-          `Critério ou prazo geral pendente de confirmação: ${details.retentionPeriod}.`,
+          `Prazo geral de retenção: ${details.retentionPeriod}.`,
           "Dados são mantidos pelo tempo necessário às finalidades informadas, à execução contratual, a obrigações legais e ao exercício regular de direitos. Encerrada a necessidade, serão eliminados ou anonimizados, salvo conservação permitida ou exigida por lei.",
           "Prazos podem variar conforme categoria, instrução do Cliente, backup seguro, litígio ou obrigação aplicável.",
         ],

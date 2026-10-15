@@ -153,7 +153,7 @@ export function createTermsOfUse(details: LegalDetails): LegalDocumentContent {
         id: "lei-foro",
         title: "17. Legislação aplicável e foro",
         paragraphs: [
-          `Aplicam-se as leis brasileiras. O foro contratual ainda depende de confirmação: ${details.applicableForum}. Essa indicação não limita foro obrigatório, direito do consumidor ou outra competência inderrogável prevista em lei.`,
+          `Aplicam-se as leis brasileiras. Foro eleito: ${details.applicableForum}. Essa indicação não limita foro obrigatório, direito do consumidor ou outra competência inderrogável prevista em lei.`,
         ],
       },
       {

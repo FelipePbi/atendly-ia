@@ -368,7 +368,7 @@ describe.skipIf(!RUN_INTEGRATION)(
         expect(sent[0].url).toBe("http://127.0.0.1:9/emails");
         expect(sent[0].to).toEqual([session.email]);
 
-        const resetUrl = sent[0].text.match(/https?://S+/)?.[0] ?? "";
+        const resetUrl = sent[0].text.match(/https?:\/\/\S+/)?.[0] ?? "";
         const token = new URL(resetUrl).searchParams.get("token");
         expect(token).not.toBeNull();
 

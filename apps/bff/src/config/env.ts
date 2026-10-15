@@ -157,10 +157,8 @@ const envSchema = z.object({
   ACCOUNT_PURGE_MAX_ROWS_PER_STORE: intEnv(2_000),
   PASSWORD_RESET_TOKEN_TTL_MINUTES: intEnv(30),
   PASSWORD_RESET_PUBLIC_URL: stringEnv("http://localhost:3001/nova-senha"),
-  PASSWORD_RESET_DELIVERY_URL: stringEnv(),
-  PASSWORD_RESET_DELIVERY_TOKEN: stringEnv(),
-  // E-mail pelo Resend. Com chave e remetente, a recuperação de senha sai por
-  // ele e o webhook acima fica sem uso.
+  // E-mail pelo Resend. Sem chave e remetente, a recuperação de senha responde
+  // 503 CONFIGURATION_ERROR.
   RESEND_API_KEY: stringEnv(),
   RESEND_API_URL: stringEnv("https://api.resend.com/emails"),
   EMAIL_FROM: stringEnv(),

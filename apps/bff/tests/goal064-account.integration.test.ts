@@ -335,22 +335,25 @@ describe.skipIf(!RUN_INTEGRATION)(
       expect(loginNew.statusCode).toBe(200);
     });
 
-    it("runs forgot-password -> reset-password -> login end to end with the delivery double", async () => {
-      const originalUrl = env.PASSWORD_RESET_DELIVERY_URL;
-      env.PASSWORD_RESET_DELIVERY_URL = "http://127.0.0.1:9/password-reset-delivery";
+    it("runs forgot-password -> reset-password -> login end to end, with the link sent by Resend", async () => {
+      const original = {
+        key: env.RESEND_API_KEY,
+        from: env.EMAIL_FROM,
+        api: env.RESEND_API_URL,
+      };
+      env.RESEND_API_KEY = "re_integration_only";
+      env.EMAIL_FROM = "Avenly <nao-responda@avenly.com.br>";
+      env.RESEND_API_URL = "http://127.0.0.1:9/emails";
       try {
         const session = await business("delivery-flow");
-        let capturedResetUrl = "";
+        const sent: Array<{ url: string; to: string[]; text: string }> = [];
         vi.stubGlobal(
           "fetch",
           vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             const request = new Request(input as RequestInfo, init);
-            const body = (await request.json()) as { resetUrl: string };
-            capturedResetUrl = body.resetUrl;
-            return new Response(JSON.stringify({ ok: true }), {
-              status: 200,
-              headers: { "content-type": "application/json" },
-            });
+            const body = (await request.json()) as { to: string[]; text: string };
+            sent.push({ url: request.url, to: body.to, text: body.text });
+            return new Response(JSON.stringify({ id: "email-1" }), { status: 200 });
           }),
         );
 
@@ -361,9 +364,12 @@ describe.skipIf(!RUN_INTEGRATION)(
           payload: { email: session.email },
         });
         expect(forgot.statusCode).toBe(200);
-        expect(capturedResetUrl).not.toBe("");
+        expect(sent).toHaveLength(1);
+        expect(sent[0].url).toBe("http://127.0.0.1:9/emails");
+        expect(sent[0].to).toEqual([session.email]);
 
-        const token = new URL(capturedResetUrl).searchParams.get("token");
+        const resetUrl = sent[0].text.match(/https?://S+/)?.[0] ?? "";
+        const token = new URL(resetUrl).searchParams.get("token");
         expect(token).not.toBeNull();
 
         const newPassword = "Integration-only-888";
@@ -391,62 +397,14 @@ describe.skipIf(!RUN_INTEGRATION)(
         });
         expect(loginOld.statusCode).toBe(401);
       } finally {
-        env.PASSWORD_RESET_DELIVERY_URL = originalUrl;
-      }
-    });
-
-    it("sends the reset link by Resend when only Resend is configured", async () => {
-      const original = {
-        url: env.PASSWORD_RESET_DELIVERY_URL,
-        key: env.RESEND_API_KEY,
-        from: env.EMAIL_FROM,
-        api: env.RESEND_API_URL,
-      };
-      env.PASSWORD_RESET_DELIVERY_URL = "";
-      env.RESEND_API_KEY = "re_integration_only";
-      env.EMAIL_FROM = "Avenly <nao-responda@avenly.com.br>";
-      env.RESEND_API_URL = "http://127.0.0.1:9/emails";
-      try {
-        const session = await business("resend-flow");
-        const sent: Array<{ url: string; to: string[]; text: string }> = [];
-        vi.stubGlobal(
-          "fetch",
-          vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-            const request = new Request(input as RequestInfo, init);
-            const body = (await request.json()) as { to: string[]; text: string };
-            sent.push({ url: request.url, to: body.to, text: body.text });
-            return new Response(JSON.stringify({ id: "email-1" }), { status: 200 });
-          }),
-        );
-
-        const forgot = await app.inject({
-          method: "POST",
-          url: "/v1/auth/forgot-password",
-          headers: { origin: ALLOWED_ORIGIN },
-          payload: { email: session.email },
-        });
-        expect(forgot.statusCode).toBe(200);
-        expect(sent).toHaveLength(1);
-        expect(sent[0].url).toBe("http://127.0.0.1:9/emails");
-        expect(sent[0].to).toEqual([session.email]);
-        expect(sent[0].text).toContain("token=");
-        expect(
-          await getPrisma().passwordResetToken.count({
-            where: { userId: session.userId },
-          }),
-        ).toBe(1);
-      } finally {
-        env.PASSWORD_RESET_DELIVERY_URL = original.url;
         env.RESEND_API_KEY = original.key;
         env.EMAIL_FROM = original.from;
         env.RESEND_API_URL = original.api;
       }
     });
 
-    it("refuses forgot-password without PASSWORD_RESET_DELIVERY_URL configured, and writes no token", async () => {
-      const originalUrl = env.PASSWORD_RESET_DELIVERY_URL;
+    it("refuses forgot-password without Resend configured, and writes no token", async () => {
       const originalResendKey = env.RESEND_API_KEY;
-      env.PASSWORD_RESET_DELIVERY_URL = "";
       env.RESEND_API_KEY = "";
       try {
         const session = await business("no-delivery");
@@ -466,7 +424,6 @@ describe.skipIf(!RUN_INTEGRATION)(
           }),
         ).toBe(0);
       } finally {
-        env.PASSWORD_RESET_DELIVERY_URL = originalUrl;
         env.RESEND_API_KEY = originalResendKey;
       }
     });

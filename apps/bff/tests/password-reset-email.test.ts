@@ -11,7 +11,6 @@ const original = {
   RESEND_API_KEY: env.RESEND_API_KEY,
   RESEND_API_URL: env.RESEND_API_URL,
   EMAIL_FROM: env.EMAIL_FROM,
-  PASSWORD_RESET_DELIVERY_URL: env.PASSWORD_RESET_DELIVERY_URL,
 };
 
 afterEach(() => {
@@ -32,12 +31,11 @@ function captureFetch(status = 200) {
 }
 
 describe("recuperação de senha pelo Resend", () => {
-  it("envia pelo Resend quando chave e remetente estão configurados, mesmo com o webhook", async () => {
+  it("envia pelo Resend quando chave e remetente estão configurados", async () => {
     Object.assign(env, {
       RESEND_API_KEY: "re_test_key",
       RESEND_API_URL: "https://resend.example.test/emails",
       EMAIL_FROM: "Avenly <nao-responda@avenly.com.br>",
-      PASSWORD_RESET_DELIVERY_URL: "https://webhook.example.test/reset",
     });
     const calls = captureFetch();
 
@@ -80,8 +78,6 @@ describe("recuperação de senha pelo Resend", () => {
   });
 
   it("só considera o Resend configurado com chave e remetente", () => {
-    Object.assign(env, { PASSWORD_RESET_DELIVERY_URL: "" });
-
     Object.assign(env, { RESEND_API_KEY: "re_test_key", EMAIL_FROM: "" });
     expect(isPasswordResetDeliveryConfigured()).toBe(false);
 

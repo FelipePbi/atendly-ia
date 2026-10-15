@@ -8,63 +8,21 @@ type PasswordResetDelivery = {
   requestId: string;
 };
 
-/**
- * Há entrega quando o Resend está configurado (chave e remetente) ou quando
- * existe o webhook genérico. Com os dois, o Resend tem precedência.
- */
+/** A recuperação de senha só tem entrega com chave e remetente do Resend. */
 export function isPasswordResetDeliveryConfigured(): boolean {
-  return isResendConfigured() || Boolean(env.PASSWORD_RESET_DELIVERY_URL);
-}
-
-function isResendConfigured(): boolean {
   return Boolean(env.RESEND_API_KEY && env.EMAIL_FROM);
 }
 
 export class PasswordResetDeliveryClient {
   async send(input: PasswordResetDelivery): Promise<void> {
-    if (isResendConfigured()) {
-      return this.sendWithResend(input);
-    }
-    if (!env.PASSWORD_RESET_DELIVERY_URL) {
+    if (!isPasswordResetDeliveryConfigured()) {
       throw new AppError(
         "CONFIGURATION_ERROR",
         "Password reset delivery is not configured.",
         500,
       );
     }
-    let response: Response;
-    try {
-      response = await fetch(env.PASSWORD_RESET_DELIVERY_URL, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-request-id": input.requestId,
-          ...(env.PASSWORD_RESET_DELIVERY_TOKEN
-            ? { authorization: `Bearer ${env.PASSWORD_RESET_DELIVERY_TOKEN}` }
-            : {}),
-        },
-        body: JSON.stringify({
-          to: input.to,
-          resetUrl: input.resetUrl,
-          expiresAt: input.expiresAt,
-        }),
-        signal: AbortSignal.timeout(env.INTERNAL_HTTP_TIMEOUT_MS),
-      });
-    } catch {
-      throw new AppError(
-        "UPSTREAM_ERROR",
-        "Password reset delivery failed.",
-        502,
-      );
-    }
-    if (!response.ok) {
-      await response.text();
-      throw new AppError(
-        "UPSTREAM_ERROR",
-        "Password reset delivery failed.",
-        502,
-      );
-    }
+    return this.sendWithResend(input);
   }
 
   private async sendWithResend(input: PasswordResetDelivery): Promise<void> {

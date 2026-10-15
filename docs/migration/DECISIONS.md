@@ -7703,3 +7703,24 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Provas:** `apps/frontend/tests/novo-agendamento-repetir.test.tsx` (sem repetir cria um com o mesmo pedido, "Revisar N agendamentos", passo de 2 a 12, sugestão do serviço, datas certas pelo intervalo, conflito e data sem horário em destaque, pular a data, confirmação com a chave e repetição sem duplicar, Voltar, redirecionamento da rota antiga, axe). `goal120-recusas-do-scheduling` passa a ler a recusa pela revisão nova. `goal016-appointment-series` foi removido com a tela; `goal016-agenda-reachability` e `goal016-shell-invariant` foram ajustados.
 
 **Revisar se:** o produto quiser série sem término, intervalo mensal exato (exigiria contrato em meses), encaixe por cima numa ocorrência de série ou repetir com "Outro, sem cadastro".
+
+## D-172 — Produção em VM única na Oracle Cloud com Coolify, deploy pelo CI e e-mail pelo Resend; o Render e o health-worker saem
+
+**Status:** ACCEPTED em 2026-10-15, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Configuração e operação em `docs/architecture/deploy-vm.md`.
+
+**Contexto:** o blueprint `render.yaml` publicava os serviços no plano free do Render, que desliga serviço ocioso. A Evolution Go precisa manter a sessão do WhatsApp aberta e a IA roda inbox e lembretes em laço contínuo; o `apps/health-worker` existia só para mantê-los acordados. O pedido foi um ambiente grátis, com qualidade para 10 a 15 negócios, e publicação automática a cada push na `main`. O e-mail de recuperação de senha dependia de um webhook genérico (`PASSWORD_RESET_DELIVERY_URL`) nunca configurado, então a recuperação respondia 503 (U-03).
+
+**Decisão:**
+
+1. **Uma VM, sempre ligada.** Oracle Cloud Always Free, VM.Standard.A1.Flex (4 OCPU, 24 GB), região `sa-vinhedo-1`, conta Pay As You Go só para garantir capacidade ARM e evitar a recuperação de VM ociosa, com alerta de orçamento no primeiro centavo.
+2. **Coolify com `docker-compose.prod.yml`.** Uma imagem por serviço, Postgres com pgvector e um banco por serviço, init embutido na imagem (sem bind mount), Traefik com Let's Encrypt, `TRUST_PROXY_HOPS=1` com o DNS da Cloudflare em "DNS only".
+3. **Deploy só pelo CI.** O job `deploy` de `validate.yml` chama a API do Coolify (`POST /api/v1/deploy`) com um token só de deploy, depois de `core`, `go-windows` e `integration`; o auto-deploy do Coolify fica desligado. A auditoria de produção passa a conferir o compose em vez do `render.yaml`.
+4. **E-mail pelo Resend (resolve U-03 na parte de recuperação de senha).** O BFF envia o link pela API do Resend com `RESEND_API_KEY` e `EMAIL_FROM`; o webhook genérico sai do código. Recebimento pelo Email Routing da Cloudflare (`contato@`).
+5. **Backup diário** na VM e no Object Storage da Oracle, com a VM autenticada por instance principal e sem permissão de apagar.
+6. **Saem** `render.yaml`, `apps/health-worker`, o `.env.example` da raiz e as variáveis `PASSWORD_RESET_DELIVERY_URL`/`_TOKEN`.
+
+**Alternativas:** continuar no plano free do Render (desliga serviço ocioso, o que derruba a sessão do WhatsApp e os laços da IA); Cloudflare Email Sending para o e-mail (exige o plano Workers Paid); manter o webhook genérico como alternativa ao Resend (rejeitada pelo usuário: segundo caminho sem uso).
+
+**Consequências:** um ponto único de falha (a VM), aceito para a escala atual; o backup fora da VM fica no mesmo provedor; as `AVENLY_*` e a `API_URL` entram no build do frontend, então mudar uma delas exige deploy; o número oficial da plataforma (`PLATFORM_WHATSAPP_*`) e a credencial da Minha Agenda seguem vazios até o dono configurá-los.
+
+**Revisar se:** o uso passar de algumas dezenas de negócios ativos, a VM ficar sem folga de CPU ou memória, a Oracle mudar a camada Always Free, ou o produto precisar de alta disponibilidade.

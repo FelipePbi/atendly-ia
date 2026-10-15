@@ -7,6 +7,6 @@ Os ADRs anteriores foram removidos junto com a proposta substituída pelo produc
 - [`../PLANO_REFATORACAO.md`](../PLANO_REFATORACAO.md) — escopo do alinhamento técnico, sem decisões antecipadas;
 - [`../../apps/bff/PUBLIC_API_V1.md`](../../apps/bff/PUBLIC_API_V1.md) — contrato HTTP registrado hoje;
 - `AGENTS.md` e README de cada app — limites técnicos locais;
-- [`deploy-vm.md`](deploy-vm.md) — deploy da plataforma inteira em VM única com Docker Compose.
+- [`deploy-vm.md`](deploy-vm.md) — produção: VM na Oracle Cloud com Coolify, CI/CD, variáveis, DNS, e-mail, backup, acesso operacional e pendências.
 
 Ao registrar uma decisão nova, crie um arquivo `NNN-titulo.md` aqui, preserve decisões substituídas marcando-as como `superseded`/`deprecated` e siga a política de [`../AI_WORKFLOW.md`](../AI_WORKFLOW.md).

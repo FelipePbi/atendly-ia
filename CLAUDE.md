@@ -11,6 +11,7 @@ Guardrails de produto estão em `AGENTS.md`. Detalhe operacional em `docs/AI_WOR
 | Como a interface deve parecer e se comportar visualmente | `docs/design-reference/claude-design/` | consultar apenas a página, asset ou seção necessária; é referência, não runtime |
 | Como algo está implementado hoje: call paths, dependências, impacto | Graphify + `apps/` | `graphify query "..." --budget 800`, depois abrir só os arquivos relevantes |
 | Arquitetura e contratos vigentes | `docs/architecture/`, `apps/bff/PUBLIC_API_V1.md`, `AGENTS.md`/README do app | abrir só o documento do tema |
+| Como está publicado: produção, deploy, variáveis, DNS, e-mail, backup | `docs/architecture/deploy-vm.md` | abrir só a seção do tema |
 | Qual deve ser a arquitetura futura | ADRs e planejamento técnico vigentes, quando existirem | não inferir automaticamente do Claude Design nem do código legado |
 | Output verboso de shell (git, testes, lint, build, logs) | RTK | automático — o hook `PreToolUse` reescreve o comando |
 

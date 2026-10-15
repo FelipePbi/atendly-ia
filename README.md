@@ -20,7 +20,11 @@ O código ainda contém contratos e fluxos anteriores à definição vigente. El
 
 Pacotes compartilhados entre apps: `packages/contracts` (contratos TypeScript/Zod) e `packages/legal-contract` (textos legais versionados).
 
-Para setup e limites técnicos, consulte o README e o `AGENTS.md` do app correspondente. O deploy de produção (VM única com Docker Compose) está em [`docs/architecture/deploy-vm.md`](docs/architecture/deploy-vm.md).
+Para setup e limites técnicos, consulte o README e o `AGENTS.md` do app correspondente.
+
+## Produção
+
+O app está em `https://app.avenly.com.br` e a API em `https://api.avenly.com.br`, numa VM da Oracle Cloud com Coolify. Todo push na `main` com o CI verde é publicado sozinho. Ambiente, variáveis, DNS, e-mail, backup e acesso operacional estão em [`docs/architecture/deploy-vm.md`](docs/architecture/deploy-vm.md); a landing (`https://avenly.com.br`) fica no repositório `avenly-lp`.
 
 ## Para agentes
 

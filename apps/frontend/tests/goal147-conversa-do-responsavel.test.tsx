@@ -187,6 +187,17 @@ beforeEach(() => {
   window.history.pushState({}, "", "/clientes/detalhes?id=pedro-1");
 });
 
+/** O responsável principal abre pelo menu ⋯ do perfil, numa janela (2026-10-16). */
+async function openGuardianPanel(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    await screen.findByRole("button", { name: "Mais ações do cliente" }),
+  );
+  await user.click(
+    screen.getByRole("menuitem", { name: "Responsável principal" }),
+  );
+  return screen.getByRole("dialog", { name: "Responsável principal" });
+}
+
 describe("De quem é a conversa do perfil (escolha 2)", () => {
   test("o dependente pede só pelo id do responsável, nunca pelo próprio", async () => {
     conversationsByOwner({ "maria-1": "conv-maria", "pedro-1": "conv-pedro" });
@@ -361,6 +372,7 @@ describe("Trocar o dono da conversa (escolha 2)", () => {
       await screen.findByRole("link", { name: "Conversa" }),
     ).toHaveAttribute("href", "/conversas/conv-pedro");
 
+    await openGuardianPanel(user);
     await user.click(screen.getByRole("button", { name: "Confirmar" }));
 
     const link = await screen.findByRole("link", {
@@ -378,6 +390,7 @@ describe("Trocar o dono da conversa (escolha 2)", () => {
     await renderProfile();
     await screen.findByRole("link", { name: "Conversa com Maria" });
 
+    await openGuardianPanel(user);
     await user.click(screen.getByRole("button", { name: "Remover" }));
 
     const link = await screen.findByRole("link", { name: "Conversa" });
@@ -399,6 +412,7 @@ describe("Trocar o dono da conversa (escolha 2)", () => {
     await renderProfile();
     await screen.findByRole("link", { name: "Conversa com Maria" });
 
+    await openGuardianPanel(user);
     await user.click(screen.getByRole("button", { name: "Remover" }));
 
     await waitFor(() => expect(requestedOwners()).toContain("pedro-1"));
@@ -421,6 +435,7 @@ describe("Trocar o dono da conversa (escolha 2)", () => {
     await renderProfile();
     await waitFor(() => expect(requestedOwners()).toEqual(["maria-1"]));
 
+    await openGuardianPanel(user);
     await user.click(screen.getByRole("button", { name: "Remover" }));
     await waitFor(() =>
       expect(requestedOwners()).toEqual(["maria-1", "pedro-1"]),
@@ -448,6 +463,7 @@ describe("Trocar o dono da conversa (escolha 2)", () => {
     await renderProfile(detailFixture({ primaryGuardian: proposedGuardian() }));
     await waitFor(() => expect(requestedOwners()).toEqual(["pedro-1"]));
 
+    await openGuardianPanel(user);
     await user.click(screen.getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(card()).toBeVisible());
     await waitFor(() =>

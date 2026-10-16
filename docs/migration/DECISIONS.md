@@ -7743,3 +7743,23 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Consequências:** a exceção vale só para fades de opacidade nessas três trocas. Uma tela nova que queira o mesmo usa `fadeOnReducedMotion` e acrescenta o par de regras `::view-transition-old/new` no bloco de movimento reduzido de `avenly-motion.css`.
 
 **Revisar se:** surgir pedido de acessibilidade para desligar também esses fades, ou se o produto ganhar uma preferência própria de animação.
+
+## D-174 — O perfil do cliente sem resumo por IA; o Histórico em frases; o responsável principal pelo menu
+
+**Status:** ACCEPTED em 2026-10-16, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Substitui a resposta 152 de `99-Perguntas-e-Respostas.md` ("Resumo por IA no perfil? Sim automático").
+
+**Contexto:** no Resumo do perfil, o cartão "Resumo da IA" ficava vazio até alguém pedir "Gerar resumo", e os números do histórico apareciam numa fileira solta ("9 · 7 sem · 0 · 1", com "atendimentos", "a cada", "faltas", "cancelamento" embaixo), difícil de ler. O cartão "Responsável principal" ocupava o fim do Resumo mesmo sem relação nenhuma, e o protótipo (CL5) não o mostra ali. O usuário pediu tirar o resumo por IA, reorganizar os números e levar o responsável para um submenu.
+
+**Decisão:**
+
+1. O perfil não mostra mais o resumo por IA. A rota do BFF que gera o resumo continua existindo, sem uso na interface.
+2. O lugar dele vira o cartão **Histórico**: "9 atendimentos desde mar 2025", "Volta a cada 7 semanas, em média." (em dias abaixo de 10, em meses acima de 8 semanas) e dois marcadores, "Nenhuma falta" / "N faltas" e "Nenhum cancelamento" / "N cancelamentos", que só ganham cor quando a contagem passa de zero.
+3. O próximo atendimento mostra, como no protótipo, o serviço junto da hora ("15:30 · Corte feminino") e duração, valor do acordo e quem marcou ("45 min · R$ 90 · marcado pela IA"). O Scheduling passa esses campos só no detalhe do cliente; valor sob consulta não vira número.
+4. O responsável principal abre pelo menu ⋯ do perfil, numa janela. Confirmado, continua no cartão do topo (CL8); proposto, um aviso no Resumo leva à janela. O cadastro de cliente não oferece mais "Alguém agenda por esta pessoa?".
+
+**Alternativas:** manter o resumo por IA sob demanda (rejeitada pelo usuário); manter os quatro números com rótulos melhores (continuaria exigindo leitura de tabela); uma aba "Responsável" (o menu mantém as três abas do protótipo).
+
+**Consequências:** o quadro CL5 continua com o cartão do resumo, que vira divergência declarada; o cartão do Histórico usa só `appointmentStats` e `firstAppointmentDate`, que já vinham no detalhe.
+
+**Revisar se:** o resumo por IA voltar a ser pedido, ou o produto ganhar métricas de gasto realizado no perfil.
+

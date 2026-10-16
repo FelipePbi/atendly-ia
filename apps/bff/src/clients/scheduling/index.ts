@@ -51,6 +51,13 @@ const customerAppointmentSummarySchema = z.object({
   date: z.string(),
   startTime: z.string(),
   status: z.string(),
+  // Só no próximo atendimento do detalhe do cliente (2026-10-16, D-174).
+  serviceNames: z.array(z.string()).optional(),
+  title: z.string().nullable().optional(),
+  durationMinutes: z.number().int().nonnegative().optional(),
+  totalPrice: z.number().nonnegative().nullable().optional(),
+  totalPriceType: z.enum(["FIXED", "STARTING_AT", "NONE"]).optional(),
+  source: z.enum(["AI", "USER", "INTEGRATION"]).optional(),
 });
 const customerSchema = z.object({
   id: z.string(),
@@ -119,7 +126,7 @@ const customerTagSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
-const customerDetailSchema = customerSchema.extend({
+export const customerDetailSchema = customerSchema.extend({
   primaryGuardian: primaryGuardianSchema.default(null),
   notes: z.array(customerNoteSchema).default([]),
   tags: z.array(customerTagSchema).default([]),

@@ -20,6 +20,12 @@ Direção atual:
 - não há reimportação;
 - não há sincronização.
 
+## Resumo por IA no perfil do cliente
+
+**Substituída em 2026-10-16 (D-174).**
+
+Direção atual: o perfil não mostra resumo gerado por IA. O Resumo traz o Histórico em linguagem natural, o próximo atendimento detalhado e as preferências.
+
 ## Reimportação
 
 **Removida do MVP e da experiência definida.**

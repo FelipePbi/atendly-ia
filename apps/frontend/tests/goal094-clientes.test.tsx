@@ -488,24 +488,12 @@ describe("Goal094 prova 2 (CL4): o formulário de novo cliente", () => {
     );
   });
 
-  test("a linha do responsável aparece e diz que o vínculo é feito no perfil", async () => {
-    const user = userEvent.setup();
+  test("o cadastro não oferece o responsável (pedido de 2026-10-16): ele é escolhido no perfil", async () => {
     await renderForm();
-
-    const guardian = screen.getByRole("button", {
-      name: /Alguém agenda por esta pessoa\?/,
-    });
-    expect(guardian).toHaveTextContent(
-      "Vincule um responsável, como mãe ou pai",
-    );
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
-
-    await user.click(guardian);
-
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "O vínculo com o responsável é feito no perfil, depois de salvar o cliente.",
-    );
-    expect(customersCreate).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: /Alguém agenda por esta pessoa/ }),
+    ).toBeNull();
+    expect(screen.queryByText(/Vincule um responsável/)).toBeNull();
   });
 });
 

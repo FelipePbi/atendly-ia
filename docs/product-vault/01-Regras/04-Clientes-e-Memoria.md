@@ -121,11 +121,9 @@ Não usar preço previsto como receita real quando o valor efetivamente cobrado 
 
 ## Resumo por IA
 
-Exemplo:
+Saiu do perfil (D-174, 2026-10-16, a pedido do usuário). No lugar, o Resumo mostra o **Histórico** em linguagem natural: quantos atendimentos e desde quando, de quanto em quanto tempo a cliente volta, em média, e faltas e cancelamentos — que só ganham cor quando aconteceram.
 
-> Cliente recorrente. Costuma realizar manutenção a cada 2–3 semanas e normalmente prefere horários no fim da tarde.
-
-O resumo só pode considerar informações que a IA está autorizada a utilizar.
+Se o resumo por IA voltar, ele só pode considerar informações que a IA está autorizada a utilizar.
 
 ## Tags
 

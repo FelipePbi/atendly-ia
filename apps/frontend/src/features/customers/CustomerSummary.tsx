@@ -1,110 +1,71 @@
 "use client";
 
-import { useState } from "react";
+import { useId } from "react";
 
 import {
   appointmentStatusLabel,
-  BffHttpError,
   type CustomerAppointmentStats,
   type CustomerAppointmentSummary,
-  type CustomerSummary as CustomerSummaryRecord,
 } from "@/data";
-import { Icon } from "@/shared/icons/Icon";
-import { getProductServices } from "@/shared/runtime/ProductRuntime";
-import { Spinner } from "@/shared/ui/Spinner";
+import { durationLabel } from "@/shared/ui/pickers/dateTime";
 
-type CustomerSummaryProps = {
-  customerId: string;
+/**
+ * Histórico da cliente em linguagem natural (pedido de 2026-10-16): no lugar
+ * da fileira "9 · 7 sem · 0 · 1" com rótulos soltos, o cartão diz quantos
+ * atendimentos, desde quando, de quanto em quanto tempo ela volta e se houve
+ * falta ou cancelamento — o número de destaque é o que importa, e falta e
+ * cancelamento só ganham cor quando aconteceram. O Resumo da IA saiu do
+ * perfil (D-174).
+ */
+export function CustomerHistory({
+  stats,
+}: {
   stats?: CustomerAppointmentStats;
-};
-
-export function CustomerSummary({ customerId, stats }: CustomerSummaryProps) {
-  const [summary, setSummary] = useState<CustomerSummaryRecord | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function generate() {
-    setBusy(true);
-    setError(null);
-    try {
-      const result =
-        await getProductServices().customers.generateSummary(customerId);
-      setSummary(result);
-    } catch (caught: unknown) {
-      setError(requestError(caught, "Não foi possível gerar o resumo."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
+}) {
+  const headingId = useId();
+  const total = stats ? stats.completed + stats.noShows + stats.cancelled : 0;
   return (
-    <section aria-label="Resumo" className="resume-main">
-      <div className="resume-ai">
-        <span className="resume-label">
-          <span aria-hidden="true" className="resume-dot" />
-          Resumo da IA
-        </span>
-        {summary && (
-          <>
-            <p className="resume-ai-text">{summary.summary}</p>
-            <p className="resume-ai-hint">
-              Considerou apenas material autorizado: {summary.sources.memory}{" "}
-              item(ns) de preferência, {summary.sources.notes} observação(ões) e{" "}
-              {summary.sources.tags} tag(s) autorizadas, além de{" "}
-              {summary.sources.upcomingAppointments} atendimento(s) futuro(s).
-            </p>
-          </>
-        )}
-        {error && (
-          <div className="customer-inline-error" role="alert">
-            {error}
-          </div>
-        )}
-        {busy && !summary && <Spinner label="Gerando resumo" />}
-        {!summary && !busy && !error && (
-          <p className="resume-ai-text is-empty">Nenhum resumo gerado ainda.</p>
-        )}
-        {!summary && (
-          <p className="resume-ai-hint">
-            Gerado sob demanda, só a partir de observações, tags e preferências
-            autorizadas para uso pela IA, além dos próximos atendimentos.
-          </p>
-        )}
-        <button
-          className="resume-ai-action"
-          disabled={busy}
-          onClick={() => void generate()}
-          type="button"
-        >
-          <Icon name="spark" />
-          {busy ? "Gerando..." : summary ? "Gerar novamente" : "Gerar resumo"}
-        </button>
-      </div>
-
-      <h2 className="sr-only">Números</h2>
-      {stats ? (
-        <div className="resume-stats">
-          <div className="resume-stat">
-            <strong>{stats.completed}</strong>
-            <span>atendimentos</span>
-          </div>
-          <div className="resume-stat">
-            <strong>{intervalWeeksLabel(stats.averageIntervalDays)}</strong>
-            <span>a cada</span>
-          </div>
-          <div className="resume-stat">
-            <strong>{stats.noShows}</strong>
-            <span>faltas</span>
-          </div>
-          <div className="resume-stat">
-            <strong>{stats.cancelled}</strong>
-            <span>
-              {stats.cancelled === 1 ? "cancelamento" : "cancelamentos"}
-            </span>
-          </div>
-        </div>
+    <section aria-labelledby={headingId} className="resume-history">
+      <h2 className="resume-heading" id={headingId}>
+        Histórico
+      </h2>
+      {!stats || total === 0 ? (
+        <p className="resume-history-empty">
+          Nenhum atendimento concluído ainda.
+        </p>
       ) : (
-        <p className="muted small">Ainda sem números de atendimento.</p>
+        <>
+          <p className="resume-history-total">
+            <strong>{stats.completed}</strong>{" "}
+            {stats.completed === 1 ? "atendimento" : "atendimentos"}
+            {stats.firstAppointmentDate && (
+              <span className="resume-history-since">
+                {" "}
+                desde {monthYearLabel(stats.firstAppointmentDate)}
+              </span>
+            )}
+          </p>
+          <p className="resume-history-rhythm">
+            {rhythmLabel(stats.averageIntervalDays)}
+          </p>
+          <ul
+            aria-label="Faltas e cancelamentos"
+            className="resume-history-flags"
+          >
+            <li className={stats.noShows > 0 ? "is-alert" : undefined}>
+              <span aria-hidden="true" className="resume-dot" />
+              {stats.noShows === 0
+                ? "Nenhuma falta"
+                : `${stats.noShows} ${stats.noShows === 1 ? "falta" : "faltas"}`}
+            </li>
+            <li className={stats.cancelled > 0 ? "is-warning" : undefined}>
+              <span aria-hidden="true" className="resume-dot" />
+              {stats.cancelled === 0
+                ? "Nenhum cancelamento"
+                : `${stats.cancelled} ${stats.cancelled === 1 ? "cancelamento" : "cancelamentos"}`}
+            </li>
+          </ul>
+        </>
       )}
     </section>
   );
@@ -117,6 +78,19 @@ export function CustomerNextAppointment({
 }) {
   if (!appointment) return null;
   const confirmed = appointment.status === "CONFIRMED";
+  // Como no quadro CL5: "15:30 · Corte feminino" e, abaixo, duração, valor e
+  // quem marcou, quando a resposta traz esses dados.
+  const what =
+    appointment.serviceNames && appointment.serviceNames.length > 0
+      ? appointment.serviceNames.join(" + ")
+      : (appointment.title ?? null);
+  const meta = [
+    appointment.durationMinutes
+      ? durationLabel(appointment.durationMinutes)
+      : null,
+    priceLabel(appointment),
+    sourceLabel(appointment.source),
+  ].filter(Boolean);
   return (
     <section aria-label="Próximo atendimento" className="resume-next">
       <h2 className="resume-heading">Próximo</h2>
@@ -128,7 +102,15 @@ export function CustomerNextAppointment({
         </span>
         <span aria-hidden="true" className="resume-next-bar" />
         <div className="resume-next-main">
-          <span className="resume-next-time">{appointment.startTime}</span>
+          <div className="resume-next-what">
+            <span className="resume-next-time">
+              {appointment.startTime}
+              {what && <> · {what}</>}
+            </span>
+            {meta.length > 0 && (
+              <span className="resume-next-meta">{meta.join(" · ")}</span>
+            )}
+          </div>
           <span
             className={
               confirmed
@@ -145,16 +127,69 @@ export function CustomerNextAppointment({
   );
 }
 
+/** "R$ 90", "a partir de R$ 90"; sem valor fechado, nada (não inventa). */
+function priceLabel(appointment: CustomerAppointmentSummary): string | null {
+  if (
+    appointment.totalPrice === null ||
+    appointment.totalPrice === undefined ||
+    appointment.totalPriceType === "NONE"
+  )
+    return null;
+  const money = new Intl.NumberFormat("pt-BR", {
+    currency: "BRL",
+    maximumFractionDigits: appointment.totalPrice % 1 === 0 ? 0 : 2,
+    minimumFractionDigits: appointment.totalPrice % 1 === 0 ? 0 : 2,
+    style: "currency",
+  }).format(appointment.totalPrice);
+  return appointment.totalPriceType === "STARTING_AT"
+    ? `a partir de ${money}`
+    : money;
+}
+
+function sourceLabel(
+  source: CustomerAppointmentSummary["source"],
+): string | null {
+  if (source === "AI") return "marcado pela IA";
+  if (source === "USER") return "marcado por você";
+  if (source === "INTEGRATION") return "importado";
+  return null;
+}
+
+/** De quanto em quanto tempo a cliente volta, em média. */
+export function rhythmLabel(averageIntervalDays: number | null): string {
+  if (averageIntervalDays === null)
+    return "A frequência aparece a partir do segundo atendimento.";
+  const days = Math.max(1, Math.round(averageIntervalDays));
+  if (days < 10)
+    return days === 1
+      ? "Volta todo dia, em média."
+      : `Volta a cada ${days} dias, em média.`;
+  const weeks = Math.round(days / 7);
+  if (weeks <= 8)
+    return weeks === 1
+      ? "Volta toda semana, em média."
+      : `Volta a cada ${weeks} semanas, em média.`;
+  const months = Math.round(days / 30);
+  return months <= 1
+    ? "Volta todo mês, em média."
+    : `Volta a cada ${months} meses, em média.`;
+}
+
+function monthYearLabel(value: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    month: "short",
+    timeZone: "UTC",
+    year: "numeric",
+  })
+    .format(new Date(`${value}T12:00:00Z`))
+    .replace(".", "")
+    .replace(" de ", " ");
+}
+
 function weekdayLabel(value: string): string {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", weekday: "short" })
     .format(new Date(`${value}T12:00:00Z`))
     .replace(".", "");
-}
-
-function intervalWeeksLabel(averageIntervalDays: number | null): string {
-  if (averageIntervalDays === null) return "-";
-  const weeks = Math.round(averageIntervalDays / 7);
-  return `${weeks} sem`;
 }
 
 function formatAppointmentDate(value: string): string {
@@ -163,13 +198,4 @@ function formatAppointmentDate(value: string): string {
     month: "2-digit",
     timeZone: "UTC",
   }).format(new Date(`${value}T12:00:00Z`));
-}
-
-function requestError(error: unknown, fallback: string): string {
-  if (!(error instanceof BffHttpError)) return fallback;
-  const messages: Record<string, string> = {
-    NETWORK_ERROR: "Não foi possível acessar a Avenly. Confira sua conexão.",
-  };
-  const message = messages[error.code] ?? fallback;
-  return `${message} Referência: ${error.requestId}`;
 }

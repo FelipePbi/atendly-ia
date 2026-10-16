@@ -190,7 +190,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Avenly.
 149. **Profissional edita/remove memória inferida?** — **B — Sim.** **Vigente.**
 150. **Cliente pode pedir para esquecer informação?** — **A — Sim, quando identificável.** **Vigente conceitualmente.**
 151. **Visão principal do cliente?** — **B — Perfil + próximos + histórico + observações + preferências.** **Vigente.**
-152. **Resumo por IA no perfil?** — **B — Sim automático.** **Vigente.**
+152. **Resumo por IA no perfil?** — **B — Sim automático.** **Substituída por D-174 (2026-10-16): o perfil não mostra resumo por IA.**
 153. **Resumo usa notas sensíveis?** — **B — Só informações autorizadas.** **Vigente.**
 154. **Métricas do cliente?** — **B — Total, último, frequência, gasto realizado, faltas/cancelamentos.** **Vigente.**
 155. **Gasto total usa qual valor?** — **B — Valor final registrado.** **Vigente.**

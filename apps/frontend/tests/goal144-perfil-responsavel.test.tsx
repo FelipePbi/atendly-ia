@@ -164,6 +164,17 @@ beforeEach(() => {
   window.history.pushState({}, "", "/clientes/detalhes?id=pedro-1");
 });
 
+/** O responsável principal abre pelo menu ⋯ do perfil, numa janela (2026-10-16). */
+async function openGuardianPanel(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    await screen.findByRole("button", { name: "Mais ações do cliente" }),
+  );
+  await user.click(
+    screen.getByRole("menuitem", { name: "Responsável principal" }),
+  );
+  return screen.getByRole("dialog", { name: "Responsável principal" });
+}
+
 describe("O cartão do responsável (escolhas 2 e 3)", () => {
   test("aparece com a relação CONFIRMED, entre a identidade e as ações", async () => {
     await renderProfile();
@@ -525,6 +536,7 @@ describe("O painel Responsável principal e o cartão (escolha 6)", () => {
     expect(screen.queryByRole("region", { name: CARD_NAME })).toBeNull();
     const reads = customersGet.mock.calls.length;
 
+    await openGuardianPanel(user);
     await user.click(screen.getByRole("button", { name: "Confirmar" }));
 
     await waitFor(() => expect(card()).toBeVisible());
@@ -547,6 +559,7 @@ describe("O painel Responsável principal e o cartão (escolha 6)", () => {
     expect(card()).toBeVisible();
     const reads = customersGet.mock.calls.length;
 
+    await openGuardianPanel(user);
     await user.click(screen.getByRole("button", { name: "Remover" }));
 
     await waitFor(() =>
@@ -560,10 +573,17 @@ describe("O painel Responsável principal e o cartão (escolha 6)", () => {
     expect(customersGet).toHaveBeenCalledTimes(reads);
   });
 
-  test("o painel segue no fim do Resumo, com a relação e os botões de sempre", async () => {
+  test("o painel sai do Resumo e abre pelo menu ⋯ (2026-10-16), com a relação e os botões de sempre", async () => {
+    const user = userEvent.setup();
     await renderProfile();
+    expect(
+      screen.queryByRole("region", { name: "Responsável principal" }),
+    ).toBeNull();
 
-    const panel = screen.getByRole("region", { name: "Responsável principal" });
+    const dialog = await openGuardianPanel(user);
+    const panel = within(dialog).getByRole("region", {
+      name: "Responsável principal",
+    });
     expect(within(panel).getByText("Maria Souza")).toBeVisible();
     expect(
       within(panel).getByText("Confirmado", { selector: ".badge" }),
@@ -574,9 +594,8 @@ describe("O painel Responsável principal e o cartão (escolha 6)", () => {
     expect(
       within(panel).getByRole("button", { name: "Remover" }),
     ).toBeVisible();
-    expect(
-      card().compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    // O cartão do responsável confirmado continua à vista no perfil (CL8).
+    expect(card()).toBeVisible();
   });
 
   test("propor continua pedindo PROFESSIONAL e não mostra cartão enquanto PROPOSED", async () => {
@@ -588,6 +607,7 @@ describe("O painel Responsável principal e o cartão (escolha 6)", () => {
     customersSetPrimaryGuardian.mockResolvedValue(proposed());
     await renderProfile(detailFixture({ primaryGuardian: null }));
 
+    await openGuardianPanel(user);
     await user.click(
       screen.getByRole("button", { name: /Propor responsável/ }),
     );
@@ -645,14 +665,21 @@ describe("O que não muda (escolha 6)", () => {
     );
   });
 
-  test("cliente sem responsável fica como antes: sem cartão, painel com 'Nenhum responsável'", async () => {
+  test("cliente sem responsável: sem cartão e nada no Resumo; o menu ⋯ abre o painel com 'Nenhum responsável'", async () => {
+    const user = userEvent.setup();
     await renderProfile(
       detailFixture({ phone: "11991234567", primaryGuardian: null }),
     );
 
     expect(screen.queryByRole("region", { name: CARD_NAME })).toBeNull();
+    // Sem relação, o Resumo não mostra o painel (pedido de 2026-10-16).
     expect(
-      screen.getByText("Nenhum responsável principal definido."),
+      screen.queryByText("Nenhum responsável principal definido."),
+    ).toBeNull();
+
+    const dialog = await openGuardianPanel(user);
+    expect(
+      within(dialog).getByText("Nenhum responsável principal definido."),
     ).toBeVisible();
   });
 });

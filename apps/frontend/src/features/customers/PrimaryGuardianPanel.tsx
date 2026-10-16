@@ -14,6 +14,8 @@ type Guardian = CustomerDetail["primaryGuardian"];
 
 type PrimaryGuardianPanelProps = {
   customerId: string;
+  /** Dentro de uma janela com o mesmo título: sem o título repetido. */
+  embedded?: boolean;
   editable: boolean;
   guardian: Guardian;
   onChange: (next: Guardian) => void;
@@ -27,6 +29,7 @@ const ACTOR_TYPE_LABELS: Record<"AI" | "PROFESSIONAL" | "CUSTOMER", string> = {
 
 export function PrimaryGuardianPanel({
   customerId,
+  embedded = false,
   editable,
   guardian,
   onChange,
@@ -129,13 +132,22 @@ export function PrimaryGuardianPanel({
   }
 
   return (
-    <section className="directory-section" aria-label="Responsável principal">
-      <div className="directory-section-header">
-        <div>
-          <h2>Responsável principal</h2>
-          <p>Quem agenda e decide em nome deste cliente.</p>
+    <section
+      className={embedded ? "guardian-panel is-embedded" : "directory-section"}
+      aria-label="Responsável principal"
+    >
+      {embedded ? (
+        <p className="small muted">
+          Quem agenda e decide em nome deste cliente.
+        </p>
+      ) : (
+        <div className="directory-section-header">
+          <div>
+            <h2>Responsável principal</h2>
+            <p>Quem agenda e decide em nome deste cliente.</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {error && (
         <div className="customer-inline-error" role="alert">

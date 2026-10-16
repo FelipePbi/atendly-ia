@@ -75,7 +75,12 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 }));
 
 function customerFixture(overrides: Partial<Customer> = {}): Customer {
-  return { id: "c1", name: "Marina Duarte", phone: "11999990000", ...overrides };
+  return {
+    id: "c1",
+    name: "Marina Duarte",
+    phone: "11999990000",
+    ...overrides,
+  };
 }
 
 function customerDetailFixture(
@@ -92,7 +97,9 @@ function customerDetailFixture(
   };
 }
 
-function calendarStateFixture(overrides: Partial<CalendarState> = {}): CalendarState {
+function calendarStateFixture(
+  overrides: Partial<CalendarState> = {},
+): CalendarState {
   return {
     capabilities: {
       createAppointments: true,
@@ -128,6 +135,17 @@ beforeEach(() => {
   // por um teste vaza para o próximo.
   window.history.replaceState({}, "", "/clientes");
 });
+
+/** O responsável principal abre pelo menu ⋯ do perfil, numa janela (2026-10-16). */
+async function openGuardianPanel(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    await screen.findByRole("button", { name: "Mais ações do cliente" }),
+  );
+  await user.click(
+    screen.getByRole("menuitem", { name: "Responsável principal" }),
+  );
+  return screen.getByRole("dialog", { name: "Responsável principal" });
+}
 
 describe("cliente sem nome e sem telefone não vira dado inventado", () => {
   test("a lista mostra a copy real do produto, não um placeholder fabricado", async () => {
@@ -200,7 +218,9 @@ describe("autorização de uso pela IA nasce negada e só muda por ação explí
     );
     await user.click(screen.getByRole("button", { name: "Salvar observação" }));
 
-    const noteBox = await screen.findByRole("checkbox", { name: "A IA pode usar esta informação" });
+    const noteBox = await screen.findByRole("checkbox", {
+      name: "A IA pode usar esta informação",
+    });
     expect(noteBox).not.toBeChecked();
     expect(customersCreateNote).toHaveBeenCalledWith(
       "c1",
@@ -219,7 +239,11 @@ describe("autorização de uso pela IA nasce negada e só muda por ação explí
     });
     await user.click(noteBox);
     await waitFor(() => expect(noteBox).toBeChecked());
-    expect(customersSetNoteAuthorization).toHaveBeenCalledWith("c1", "note-1", true);
+    expect(customersSetNoteAuthorization).toHaveBeenCalledWith(
+      "c1",
+      "note-1",
+      true,
+    );
   });
 
   test("tag: criada não autorizada, autoriza só ao clicar em 'Autorizar uso pela IA'", async () => {
@@ -240,7 +264,9 @@ describe("autorização de uso pela IA nasce negada e só muda por ação explí
     await user.type(screen.getByLabelText("Tag"), "prefere horário da manhã");
     await user.click(screen.getByRole("button", { name: "Criar tag" }));
 
-    const tagBox = await screen.findByRole("checkbox", { name: "IA pode usar a tag prefere horário da manhã" });
+    const tagBox = await screen.findByRole("checkbox", {
+      name: "IA pode usar a tag prefere horário da manhã",
+    });
     expect(tagBox).not.toBeChecked();
     expect(screen.getByText("só você")).toBeVisible();
     expect(customersCreateTag).toHaveBeenCalledWith(
@@ -261,7 +287,11 @@ describe("autorização de uso pela IA nasce negada e só muda por ação explí
     await user.click(tagBox);
     await waitFor(() => expect(tagBox).toBeChecked());
     expect(screen.getByText("IA pode usar")).toBeVisible();
-    expect(customersSetTagAuthorization).toHaveBeenCalledWith("c1", "tag-1", true);
+    expect(customersSetTagAuthorization).toHaveBeenCalledWith(
+      "c1",
+      "tag-1",
+      true,
+    );
   });
 
   test("memória: criada não autorizada, autoriza só ao clicar em 'Autorizar uso pela IA'", async () => {
@@ -297,7 +327,9 @@ describe("autorização de uso pela IA nasce negada e só muda por ação explí
     expect(await screen.findByText("IA não autorizada a usar")).toBeVisible();
     expect(customersCreateMemory).toHaveBeenCalledWith(
       "c1",
-      expect.objectContaining({ value: "Prefere atendimentos no fim da tarde" }),
+      expect.objectContaining({
+        value: "Prefere atendimentos no fim da tarde",
+      }),
     );
 
     customersSetMemoryPermission.mockResolvedValue({
@@ -359,7 +391,11 @@ describe("na Agenda Avenly, a agenda do perfil pede por customerId", () => {
     const user = userEvent.setup();
 
     customersGet.mockResolvedValueOnce(
-      customerDetailFixture({ id: "c1", name: "Marina Duarte", phone: "11999990000" }),
+      customerDetailFixture({
+        id: "c1",
+        name: "Marina Duarte",
+        phone: "11999990000",
+      }),
     );
     const first = render(
       <ShellConfigProvider>
@@ -371,7 +407,11 @@ describe("na Agenda Avenly, a agenda do perfil pede por customerId", () => {
     first.unmount();
 
     customersGet.mockResolvedValueOnce(
-      customerDetailFixture({ id: "c2", name: "Bruno Alves", phone: "11999990000" }),
+      customerDetailFixture({
+        id: "c2",
+        name: "Bruno Alves",
+        phone: "11999990000",
+      }),
     );
     render(
       <ShellConfigProvider>
@@ -382,9 +422,8 @@ describe("na Agenda Avenly, a agenda do perfil pede por customerId", () => {
     await user.click(screen.getByRole("tab", { name: "Atendimentos" }));
 
     expect(calendarListAppointments).toHaveBeenCalledTimes(2);
-    const [firstQuery, secondQuery] = calendarListAppointments.mock.calls as Array<
-      [Record<string, unknown>]
-    >;
+    const [firstQuery, secondQuery] = calendarListAppointments.mock
+      .calls as Array<[Record<string, unknown>]>;
     expect(firstQuery[0].customerId).toBe("c1");
     expect(secondQuery[0].customerId).toBe("c2");
     expect(firstQuery[0]).not.toHaveProperty("customerPhone");
@@ -397,8 +436,16 @@ describe("número compartilhado no cadastro exige escolha explícita", () => {
     calendarGetCalendar.mockResolvedValue(calendarStateFixture());
     customersListCandidatesByPhone.mockResolvedValue({
       items: [
-        customerFixture({ id: "c1", name: "Marina Duarte", phone: "11999990000" }),
-        customerFixture({ id: "c2", name: "Bruno Alves", phone: "11999990000" }),
+        customerFixture({
+          id: "c1",
+          name: "Marina Duarte",
+          phone: "11999990000",
+        }),
+        customerFixture({
+          id: "c2",
+          name: "Bruno Alves",
+          phone: "11999990000",
+        }),
       ],
       managedExternally: false,
       source: "AVENLY",
@@ -415,7 +462,10 @@ describe("número compartilhado no cadastro exige escolha explícita", () => {
     );
 
     await user.type(await screen.findByLabelText("Nome"), "Cliente Novo");
-    await user.type(screen.getByLabelText("Telefone (opcional)"), "11999990000");
+    await user.type(
+      screen.getByLabelText("Telefone (opcional)"),
+      "11999990000",
+    );
     await user.click(screen.getByRole("button", { name: "Salvar cliente" }));
 
     expect(
@@ -429,7 +479,9 @@ describe("número compartilhado no cadastro exige escolha explícita", () => {
     expect(customersCreate).not.toHaveBeenCalled();
 
     await user.click(
-      screen.getByRole("button", { name: "Cadastrar Cliente Novo como nova pessoa" }),
+      screen.getByRole("button", {
+        name: "Cadastrar Cliente Novo como nova pessoa",
+      }),
     );
     expect(customersCreate).toHaveBeenCalledWith({
       name: "Cliente Novo",
@@ -442,7 +494,11 @@ describe("número compartilhado no cadastro exige escolha explícita", () => {
     calendarGetCalendar.mockResolvedValue(calendarStateFixture());
     customersListCandidatesByPhone.mockResolvedValue({
       items: [
-        customerFixture({ id: "c1", name: "Marina Duarte", phone: "11999990000" }),
+        customerFixture({
+          id: "c1",
+          name: "Marina Duarte",
+          phone: "11999990000",
+        }),
       ],
       managedExternally: false,
       source: "AVENLY",
@@ -456,14 +512,19 @@ describe("número compartilhado no cadastro exige escolha explícita", () => {
     );
 
     await user.type(await screen.findByLabelText("Nome"), "Cliente Novo");
-    await user.type(screen.getByLabelText("Telefone (opcional)"), "11999990000");
+    await user.type(
+      screen.getByLabelText("Telefone (opcional)"),
+      "11999990000",
+    );
     await user.click(screen.getByRole("button", { name: "Salvar cliente" }));
 
     await screen.findByText(/Encontramos 1 cadastro com o telefone/);
     await user.click(screen.getByRole("button", { name: "Revisar dados" }));
 
     expect(screen.getByLabelText("Nome")).toHaveValue("Cliente Novo");
-    expect(screen.getByLabelText("Telefone (opcional)")).toHaveValue("+55 (11) 99999-0000");
+    expect(screen.getByLabelText("Telefone (opcional)")).toHaveValue(
+      "+55 (11) 99999-0000",
+    );
   });
 });
 
@@ -583,10 +644,7 @@ describe("itens de lista continuam sendo link e botão para o leitor de tela", (
     const list = await screen.findByRole("list", { name: "Clientes" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(2);
     const link = within(list).getByRole("link", { name: /Marina Duarte/ });
-    expect(link).toHaveAttribute(
-      "href",
-      "/clientes/detalhes?id=c1",
-    );
+    expect(link).toHaveAttribute("href", "/clientes/detalhes?id=c1");
   });
 
   test("no seletor de responsável cada candidato é um listitem e continua sendo um botão", async () => {
@@ -607,6 +665,7 @@ describe("itens de lista continuam sendo link e botão para o leitor de tela", (
     );
 
     await screen.findByRole("heading", { name: "Marina Duarte" });
+    await openGuardianPanel(user);
     await user.click(
       screen.getByRole("button", { name: "Propor responsável" }),
     );

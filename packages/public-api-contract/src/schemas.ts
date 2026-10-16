@@ -312,6 +312,15 @@ export const customerAppointmentSummarySchema = z.object({
   date: dateSchema,
   startTime: timeSchema,
   status: z.string(),
+  // Só no próximo atendimento do detalhe do cliente (2026-10-16), como no
+  // quadro CL5: serviços, duração, total do acordo e quem marcou. Opcionais:
+  // a lista de clientes e a resposta anterior seguem válidas sem eles.
+  serviceNames: z.array(z.string()).optional(),
+  title: z.string().nullable().optional(),
+  durationMinutes: z.number().int().nonnegative().optional(),
+  totalPrice: z.number().nonnegative().nullable().optional(),
+  totalPriceType: z.enum(["FIXED", "STARTING_AT", "NONE"]).optional(),
+  source: z.enum(["AI", "USER", "INTEGRATION"]).optional(),
 });
 
 export const customerSchema = z.object({

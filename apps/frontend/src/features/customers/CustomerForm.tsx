@@ -34,7 +34,6 @@ export function CustomerForm() {
   const [phoneInput, setPhoneInput] = useState(() =>
     maskPhoneInput(prefill.phone),
   );
-  const [guardianHint, setGuardianHint] = useState(false);
   const phoneId = useId();
   const phoneHelpId = useId();
 
@@ -240,27 +239,8 @@ export function CustomerForm() {
               </p>
             </div>
           </div>
-          <button
-            className="customer-form-guardian"
-            onClick={() => setGuardianHint(true)}
-            type="button"
-          >
-            <span className="customer-form-guardian-copy">
-              <span className="customer-form-guardian-title">
-                Alguém agenda por esta pessoa?
-              </span>
-              <span className="customer-form-guardian-sub">
-                Vincule um responsável, como mãe ou pai
-              </span>
-            </span>
-            <Icon name="chevron-right" />
-          </button>
-          {guardianHint && (
-            <p className="customer-form-guardian-hint" role="status">
-              O vínculo com o responsável é feito no perfil, depois de salvar o
-              cliente.
-            </p>
-          )}
+          {/* "Alguém agenda por esta pessoa?" saiu do cadastro (pedido de
+              2026-10-16): o responsável é escolhido no perfil, pelo menu. */}
           {message && (
             <div className="customer-inline-error" role="alert">
               {message}

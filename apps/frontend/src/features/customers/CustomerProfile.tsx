@@ -28,6 +28,7 @@ import { runViewTransition } from "@/shared/motion/viewTransition";
 import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { ContactPhoto, customerPhotoUrl } from "@/shared/ui/ContactPhoto";
+import { Dialog } from "@/shared/ui/Dialog";
 import { Field } from "@/shared/ui/Field";
 import { StatePanel } from "@/shared/ui/States";
 
@@ -35,7 +36,7 @@ import { CustomerAgenda } from "./CustomerAgenda";
 import { CustomerListPanel } from "./CustomerList";
 import { CustomerMemory } from "./CustomerMemory";
 import { CustomerNotes } from "./CustomerNotes";
-import { CustomerNextAppointment, CustomerSummary } from "./CustomerSummary";
+import { CustomerHistory, CustomerNextAppointment } from "./CustomerSummary";
 import { CustomerTags } from "./CustomerTags";
 import { firstName, GuardianCard } from "./GuardianCard";
 import { initials } from "./initials";
@@ -91,6 +92,7 @@ export function CustomerProfile({
   // `customer-swap` (pedido de 2026-10-16): a anterior sai enquanto a nova
   // entra, sem passar pelo painel vazio. Trocar de aba não repete a entrada.
   const [enterId, setEnterId] = useState<string | null>(null);
+  const [guardianOpen, setGuardianOpen] = useState(false);
   const shownIdRef = useRef<string | null>(null);
   const notesPanelRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -253,9 +255,20 @@ export function CustomerProfile({
     window.history.replaceState(null, "", url);
   }
 
+  // O responsável principal saiu do Resumo para o menu (pedido de
+  // 2026-10-16, como no quadro CL5): abre numa janela própria. Confirmado,
+  // ele continua à vista no cartão do topo (CL8).
   const menuItems =
-    customer && editable && !editing
-      ? [{ label: "Editar dados", onSelect: () => setEditing(true) }]
+    customer && !editing
+      ? [
+          ...(editable
+            ? [{ label: "Editar dados", onSelect: () => setEditing(true) }]
+            : []),
+          {
+            label: "Responsável principal",
+            onSelect: () => setGuardianOpen(true),
+          },
+        ]
       : undefined;
 
   const refreshing = Boolean(
@@ -488,11 +501,26 @@ export function CustomerProfile({
               role="tabpanel"
               tabIndex={0}
             >
+              {customer.primaryGuardian?.status === "PROPOSED" && (
+                <p className="resume-guardian-pending" role="status">
+                  Responsável proposto:{" "}
+                  <strong>
+                    {customer.primaryGuardian.guardian.name ?? "sem nome"}
+                  </strong>
+                  .{" "}
+                  <button
+                    className="resume-link"
+                    onClick={() => setGuardianOpen(true)}
+                    type="button"
+                  >
+                    Revisar
+                  </button>
+                </p>
+              )}
               <div className="resume-body">
-                <CustomerSummary
-                  customerId={customer.id}
-                  stats={customer.appointmentStats}
-                />
+                <div className="resume-main">
+                  <CustomerHistory stats={customer.appointmentStats} />
+                </div>
                 <div className="resume-side">
                   <CustomerNextAppointment
                     appointment={customer.nextAppointment}
@@ -500,14 +528,21 @@ export function CustomerProfile({
                   <CustomerMemory customerId={customer.id} />
                 </div>
               </div>
-              <PrimaryGuardianPanel
-                customerId={customer.id}
-                editable={editable}
-                guardian={customer.primaryGuardian}
-                onChange={applyGuardian}
-              />
             </div>
           )}
+          <Dialog
+            onClose={() => setGuardianOpen(false)}
+            open={guardianOpen}
+            title="Responsável principal"
+          >
+            <PrimaryGuardianPanel
+              customerId={customer.id}
+              editable={editable}
+              embedded
+              guardian={customer.primaryGuardian}
+              onChange={applyGuardian}
+            />
+          </Dialog>
 
           {tab === "atendimentos" && (
             <div

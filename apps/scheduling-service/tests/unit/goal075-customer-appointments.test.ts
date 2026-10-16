@@ -12,7 +12,10 @@ import { createDatabaseDouble } from "./support/database-double.js";
 const tenantId = "tenant-a";
 const DAY_MS = 24 * 60 * 60_000;
 
-function customersService(database = createDatabaseDouble(), tenant = tenantId) {
+function customersService(
+  database = createDatabaseDouble(),
+  tenant = tenantId,
+) {
   return new AvenlyCustomerService(database.client as never, tenant);
 }
 
@@ -172,10 +175,10 @@ describe("appointmentStats (Goal075, WU-01)", () => {
       new Date("2026-01-01T12:00:00.000Z"),
       "COMPLETED",
     );
-    const stats = await customersService(
-      database,
-      "tenant-a",
-    ).appointmentStats(customerA.id, "America/Sao_Paulo");
+    const stats = await customersService(database, "tenant-a").appointmentStats(
+      customerA.id,
+      "America/Sao_Paulo",
+    );
     expect(stats.completed).toBe(1);
   });
 });
@@ -204,9 +207,8 @@ describe("list sem timezone (Goal075, WU-01)", () => {
         normalizedPhone: "5511966665555",
       },
     });
-    const candidates = await customersService(database).findCandidatesByPhone(
-      "5511966665555",
-    );
+    const candidates =
+      await customersService(database).findCandidatesByPhone("5511966665555");
     expect(candidates.map((candidate) => candidate.id)).toEqual([maria.id]);
   });
 });
@@ -316,6 +318,21 @@ describe("appointmentHighlights (Goal075, blocker 1 da rodada 1)", () => {
           },
         ];
       },
+      appointment: {
+        findFirst: async () => ({
+          source: "AI",
+          title: null,
+          startAt: new Date("2026-06-15T02:45:00.000Z"),
+          endAt: new Date("2026-06-15T03:30:00.000Z"),
+          items: [
+            {
+              serviceNameSnapshot: "Corte feminino",
+              priceTypeSnapshot: "FIXED",
+              priceSnapshot: "90.00",
+            },
+          ],
+        }),
+      },
     };
     const service = new AvenlyCustomerService(fakeDatabase as never, tenantId);
     const highlights = await service.appointmentHighlights(customerId, {
@@ -327,6 +344,13 @@ describe("appointmentHighlights (Goal075, blocker 1 da rodada 1)", () => {
         date: "2026-06-14",
         startTime: "23:45",
         status: "CONFIRMED",
+        // O que o perfil mostra junto da hora (2026-10-16, quadro CL5).
+        serviceNames: ["Corte feminino"],
+        title: null,
+        durationMinutes: 45,
+        totalPrice: 90,
+        totalPriceType: "FIXED",
+        source: "AI",
       },
       lastAppointment: {
         date: "2026-06-14",
@@ -339,6 +363,48 @@ describe("appointmentHighlights (Goal075, blocker 1 da rodada 1)", () => {
       expect(values).toContain(tenantId);
       expect(values).toContain(customerId);
     }
+  });
+
+  it("item sob consulta derruba o total do próximo atendimento, sem inventar valor", async () => {
+    const startAt = new Date("2026-06-20T13:00:00.000Z");
+    const fakeDatabase = {
+      $queryRaw: async (query: { strings?: string[] }) =>
+        query.strings?.join("").includes("<=")
+          ? []
+          : [{ customerId: "customer-1", startAt, status: "CONFIRMED" }],
+      appointment: {
+        findFirst: async () => ({
+          source: "USER",
+          title: null,
+          startAt,
+          endAt: new Date("2026-06-20T14:30:00.000Z"),
+          items: [
+            {
+              serviceNameSnapshot: "Corte",
+              priceTypeSnapshot: "FIXED",
+              priceSnapshot: "50.00",
+            },
+            {
+              serviceNameSnapshot: "Hidratação",
+              priceTypeSnapshot: "ON_REQUEST",
+              priceSnapshot: null,
+            },
+          ],
+        }),
+      },
+    };
+    const service = new AvenlyCustomerService(fakeDatabase as never, tenantId);
+    const { nextAppointment } = await service.appointmentHighlights(
+      "customer-1",
+      { timezone: "America/Sao_Paulo" },
+    );
+    expect(nextAppointment).toMatchObject({
+      serviceNames: ["Corte", "Hidratação"],
+      durationMinutes: 90,
+      totalPrice: null,
+      totalPriceType: "NONE",
+      source: "USER",
+    });
   });
 
   it("sem agendamento, os dois ficam null", async () => {

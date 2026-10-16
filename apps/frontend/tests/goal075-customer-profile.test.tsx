@@ -7,7 +7,7 @@
  * rodada 1).
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -122,7 +122,9 @@ function customerDetailFixture(
   };
 }
 
-function calendarFixture(overrides: Partial<CalendarState> = {}): CalendarState {
+function calendarFixture(
+  overrides: Partial<CalendarState> = {},
+): CalendarState {
   return {
     capabilities: {
       createAppointments: true,
@@ -234,10 +236,7 @@ describe("§6.8 — Conversa e Agendar no cabeçalho", () => {
     );
 
     const agendarLink = screen.getByRole("link", { name: /Agendar/ });
-    expect(agendarLink).toHaveAttribute(
-      "href",
-      "/agenda/novo?customerId=c1",
-    );
+    expect(agendarLink).toHaveAttribute("href", "/agenda/novo?customerId=c1");
   });
 
   test("sem conversa da pessoa, 'Conversa' não aparece", async () => {
@@ -314,16 +313,16 @@ describe("§6.10 — três abas: clique, seta e endereço direto", () => {
       "aria-selected",
       "true",
     );
-    expect(
-      await screen.findByText("Nenhum agendamento futuro."),
-    ).toBeVisible();
+    expect(await screen.findByText("Nenhum agendamento futuro.")).toBeVisible();
 
     await user.click(screen.getByRole("tab", { name: "Notas" }));
     expect(screen.getByRole("tab", { name: "Notas" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Nova observação" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Nova observação" }),
+    ).toBeVisible();
   });
 
   test("trocam por seta do teclado, com roving tabindex", async () => {
@@ -354,7 +353,9 @@ describe("§6.10 — três abas: clique, seta e endereço direto", () => {
       "aria-selected",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Nova observação" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Nova observação" }),
+    ).toBeVisible();
   });
 
   test("aberto pela conversa: abre na aba Atendimentos e volta para a conversa", async () => {
@@ -400,18 +401,29 @@ describe("§6.10 — três abas: clique, seta e endereço direto", () => {
     ).toHaveAttribute("href", "/clientes");
   });
 
-  test("os quatro números aparecem em Resumo", async () => {
+  test("os números aparecem no Histórico em frases (pedido de 2026-10-16)", async () => {
     renderProfile();
     await screen.findByRole("heading", { name: "Ana Paula" });
 
-    expect(screen.getByText("9")).toBeVisible();
-    expect(screen.getByText("atendimentos")).toBeVisible();
-    expect(screen.getByText("7 sem")).toBeVisible();
-    expect(screen.getByText("a cada")).toBeVisible();
-    expect(screen.getByText("0")).toBeVisible();
-    expect(screen.getByText("faltas")).toBeVisible();
-    expect(screen.getByText("1")).toBeVisible();
-    expect(screen.getByText("cancelamento")).toBeVisible();
+    const history = screen.getByRole("region", { name: "Histórico" });
+    expect(history).toHaveTextContent(/9 atendimentos/);
+    expect(
+      within(history).getByText("Volta a cada 7 semanas, em média."),
+    ).toBeVisible();
+    // Falta e cancelamento dizem o que houve; só o que aconteceu ganha cor.
+    expect(within(history).getByText("Nenhuma falta")).toBeVisible();
+    const cancelled = within(history).getByText("1 cancelamento");
+    expect(cancelled.closest("li")).toHaveClass("is-warning");
+    expect(
+      within(history).getByText("Nenhuma falta").closest("li"),
+    ).not.toHaveClass("is-alert");
+  });
+
+  test("o Resumo da IA saiu do perfil (D-174)", async () => {
+    renderProfile();
+    await screen.findByRole("heading", { name: "Ana Paula" });
+    expect(screen.queryByText("Resumo da IA")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Gerar resumo" })).toBeNull();
   });
 
   test("cada capacidade listada continua alcançável, cada uma na aba certa", async () => {
@@ -423,27 +435,41 @@ describe("§6.10 — três abas: clique, seta e endereço direto", () => {
     await user.click(
       screen.getByRole("button", { name: "Mais ações do cliente" }),
     );
-    expect(screen.getByRole("menuitem", { name: "Editar dados" })).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "Editar dados" }),
+    ).toBeVisible();
     await user.keyboard("{Escape}");
 
-    // Resumo: preferência (memória), resumo sob demanda, responsável principal.
+    // Resumo: preferência (memória). O responsável principal abre pelo menu
+    // "⋯" (pedido de 2026-10-16).
     expect(
       screen.getByRole("button", { name: "Cadastrar preferência" }),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Gerar resumo" })).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "Mais ações do cliente" }),
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "Responsável principal" }),
+    );
+    const guardianDialog = screen.getByRole("dialog", {
+      name: "Responsável principal",
+    });
     expect(
-      screen.getByRole("button", { name: "Propor responsável" }),
+      within(guardianDialog).getByRole("button", {
+        name: "Propor responsável",
+      }),
     ).toBeVisible();
+    await user.keyboard("{Escape}");
 
     // Atendimentos.
     await user.click(screen.getByRole("tab", { name: "Atendimentos" }));
-    expect(
-      await screen.findByText("Nenhum agendamento futuro."),
-    ).toBeVisible();
+    expect(await screen.findByText("Nenhum agendamento futuro.")).toBeVisible();
 
     // Notas: observação e tag.
     await user.click(screen.getByRole("tab", { name: "Notas" }));
-    expect(screen.getByRole("button", { name: "Nova observação" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Nova observação" }),
+    ).toBeVisible();
     expect(screen.getByRole("button", { name: "Adicionar tag" })).toBeVisible();
   });
 
@@ -497,7 +523,11 @@ describe("§6.11 — nenhuma copy técnica proibida, e a preferência mostra a o
 
   test("a preferência mostra a origem por extenso, para cada uma das três origens", async () => {
     customersListMemory.mockResolvedValue([
-      memoryFixture({ id: "mem-1", origin: "AI_INFERRED", value: "Fim da tarde" }),
+      memoryFixture({
+        id: "mem-1",
+        origin: "AI_INFERRED",
+        value: "Fim da tarde",
+      }),
       memoryFixture({
         id: "mem-2",
         origin: "CUSTOMER_STATED",
@@ -526,12 +556,10 @@ describe("§6.11 — nenhuma copy técnica proibida, e a preferência mostra a o
  * HTTP do frontend faz, para a fixture não carregar campo que o backend não
  * devolve.
  */
-function customerDetailFromBackend(
-  highlights: {
-    nextAppointment: Record<string, unknown> | null;
-    lastAppointment: Record<string, unknown> | null;
-  },
-): CustomerDetail {
+function customerDetailFromBackend(highlights: {
+  nextAppointment: Record<string, unknown> | null;
+  lastAppointment: Record<string, unknown> | null;
+}): CustomerDetail {
   return customerDetailSchema.parse({
     id: "c1",
     name: "Ana Paula",

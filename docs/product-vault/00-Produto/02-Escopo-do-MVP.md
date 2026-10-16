@@ -85,8 +85,7 @@ Não criar infraestrutura especial de beta apenas para esse momento.
 - tags;
 - preferências;
 - relações entre clientes;
-- resumo por IA;
-- métricas básicas do cliente;
+- métricas básicas do cliente, em linguagem natural no perfil;
 - cliente sem telefone em casos manuais específicos.
 
 ### Migração

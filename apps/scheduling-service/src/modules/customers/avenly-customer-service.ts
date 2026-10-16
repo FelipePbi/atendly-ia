@@ -48,6 +48,13 @@ export interface AppointmentSummary {
   date: string;
   startTime: string;
   status: string;
+  /** Só no próximo atendimento do detalhe do cliente (2026-10-16). */
+  serviceNames?: string[];
+  title?: string | null;
+  durationMinutes?: number;
+  totalPrice?: number | null;
+  totalPriceType?: "FIXED" | "STARTING_AT" | "NONE";
+  source?: "AI" | "USER" | "INTEGRATION";
 }
 
 /** Números do histórico inteiro do cliente, no fuso do negócio (Goal075). */
@@ -408,9 +415,75 @@ export class AvenlyCustomerService {
       this.nextAppointmentsByCustomer([customerId], now),
       this.lastAppointmentsByCustomer([customerId], now),
     ]);
+    const next = appointmentSummary(nextRows[0], options.timezone);
     return {
-      nextAppointment: appointmentSummary(nextRows[0], options.timezone),
+      nextAppointment:
+        next && nextRows[0]
+          ? {
+              ...next,
+              ...(await this.appointmentDetails(customerId, nextRows[0])),
+            }
+          : next,
       lastAppointment: appointmentSummary(lastRows[0], options.timezone),
+    };
+  }
+
+  /**
+   * O que o perfil mostra junto da hora do próximo atendimento (2026-10-16,
+   * quadro CL5): serviços, duração, total do acordo e quem marcou. O total
+   * segue a regra única do acordo: item sob consulta ou sem preço derruba o
+   * total, e nada é inferido.
+   */
+  private async appointmentDetails(
+    customerId: string,
+    row: AppointmentRow,
+  ): Promise<Partial<AppointmentSummary>> {
+    const appointment = await this.database.appointment.findFirst({
+      where: { tenantId: this.tenantId, customerId, startAt: row.startAt },
+      select: {
+        source: true,
+        title: true,
+        startAt: true,
+        endAt: true,
+        items: {
+          select: {
+            serviceNameSnapshot: true,
+            priceTypeSnapshot: true,
+            priceSnapshot: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+    if (!appointment) return {};
+    const items = appointment.items;
+    const unpriced =
+      items.length === 0 ||
+      items.some(
+        (item) =>
+          item.priceTypeSnapshot === "ON_REQUEST" ||
+          item.priceTypeSnapshot === "NOT_INFORMED",
+      );
+    const total = unpriced
+      ? null
+      : items.reduce((sum, item) => sum + Number(item.priceSnapshot ?? 0), 0);
+    return {
+      serviceNames: items.map((item) => item.serviceNameSnapshot),
+      title: appointment.title,
+      durationMinutes: Math.max(
+        0,
+        Math.round(
+          (appointment.endAt.getTime() - appointment.startAt.getTime()) / 60000,
+        ),
+      ),
+      totalPrice: total,
+      totalPriceType:
+        total === null
+          ? "NONE"
+          : items.every((item) => item.priceTypeSnapshot === "FIXED")
+            ? "FIXED"
+            : "STARTING_AT",
+      source: appointment.source,
     };
   }
 
@@ -715,7 +788,11 @@ export class AvenlyCustomerService {
     await this.get(customerId);
     const body = input.body.trim();
     if (!body) {
-      throw new AppError("VALIDATION_ERROR", "Note body must not be empty.", 400);
+      throw new AppError(
+        "VALIDATION_ERROR",
+        "Note body must not be empty.",
+        400,
+      );
     }
     const authorized = input.aiAuthorized === true;
     return this.database.customerNote.create({

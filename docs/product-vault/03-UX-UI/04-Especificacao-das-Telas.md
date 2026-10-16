@@ -227,14 +227,15 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 
 ### Perfil
 
-- resumo;
+- resumo: Histórico em frases (total e desde quando, frequência média, faltas e cancelamentos), próximo atendimento com serviço, duração, valor e quem marcou, e preferências — sem resumo por IA (D-174);
 - dados;
 - próximos atendimentos;
 - histórico;
 - observações;
 - preferências;
 - tags;
-- métricas.
+- responsável principal: no menu ⋯ do perfil, numa janela; confirmado, aparece no cartão do topo; proposto, um aviso no Resumo leva à janela;
+- trocar de cliente com a lista ao lado: crossfade, sem esqueleto.
 
 ## Serviços
 

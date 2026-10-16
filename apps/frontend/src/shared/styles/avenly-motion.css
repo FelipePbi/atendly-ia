@@ -466,6 +466,15 @@ html.vt-appointment-swap::view-transition-new(appointment-panel) {
     both;
   mix-blend-mode: normal;
 }
+/* Trocar de atendimento (2026-10-16) só muda o painel: a lista do Dia e a
+   barra ficam paradas, sem fade (antes `agenda-content` inteiro esmaecia e
+   voltava, e a tela parecia recarregar). Entre dois atendimentos, só o
+   conteúdo (`appointment-panel`) faz o crossfade; a moldura do painel não
+   muda e não esmaece junto. */
+html.vt-appointment-swap .motion-stepped,
+html.vt-appointment-swap .agenda-day-detail.is-appointment {
+  view-transition-name: none;
+}
 
 /* Numa troca de TELA, o conteúdo, o painel e o indicador das abas viajam
    dentro da foto da página (`page-content`), não por conta própria: as

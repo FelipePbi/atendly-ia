@@ -236,6 +236,8 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 - tags;
 - responsável principal: no menu ⋯ do perfil, numa janela; confirmado, aparece no cartão do topo; proposto, um aviso no Resumo leva à janela;
 - trocar de cliente com a lista ao lado: crossfade, sem esqueleto.
+- cabeçalho igual em Resumo, Atendimentos e Notas (nome, telefone, desde quando, tags, responsável confirmado, "Conversa" e "Agendar"): trocar de aba só troca o conteúdo abaixo;
+- "Conversa" fica sempre ao lado de "Agendar" e leva direto ao chat da pessoa (ou do responsável, se ela não tem telefone próprio); sem conversa ainda, aparece desabilitado.
 
 ## Serviços
 

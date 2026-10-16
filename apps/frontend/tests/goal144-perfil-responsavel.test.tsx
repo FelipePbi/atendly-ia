@@ -215,18 +215,15 @@ describe("O cartão do responsável (escolhas 2 e 3)", () => {
     expect(screen.queryByRole("region", { name: CARD_NAME })).toBeNull();
   });
 
-  test("só no Resumo: Atendimentos e Notas não mostram o cartão", async () => {
+  test("o cartão faz parte do cabeçalho e fica nas três abas (2026-10-16)", async () => {
     const user = userEvent.setup();
     await renderProfile();
     expect(card()).toBeVisible();
 
     await user.click(screen.getByRole("tab", { name: "Atendimentos" }));
-    expect(screen.queryByRole("region", { name: CARD_NAME })).toBeNull();
+    expect(card()).toBeVisible();
 
     await user.click(screen.getByRole("tab", { name: "Notas" }));
-    expect(screen.queryByRole("region", { name: CARD_NAME })).toBeNull();
-
-    await user.click(screen.getByRole("tab", { name: "Resumo" }));
     expect(card()).toBeVisible();
   });
 
@@ -510,14 +507,17 @@ describe("A linha sob o nome (escolha 5)", () => {
     expect(screen.queryByText(/Sem telefone próprio/)).toBeNull();
   });
 
-  test("as outras abas mantêm o cabeçalho compacto de antes", async () => {
+  test("a linha sob o nome é a mesma nas três abas (2026-10-16)", async () => {
     const user = userEvent.setup();
     await renderProfile();
+    const line = "Sem telefone próprio · cliente desde ago 2026";
+    expect(screen.getByText(line)).toBeVisible();
 
     await user.click(screen.getByRole("tab", { name: "Atendimentos" }));
+    expect(screen.getByText(line)).toBeVisible();
 
-    expect(screen.getByText("2 atendimentos · desde ago 2026")).toBeVisible();
-    expect(screen.queryByText(/Sem telefone próprio/)).toBeNull();
+    await user.click(screen.getByRole("tab", { name: "Notas" }));
+    expect(screen.getByText(line)).toBeVisible();
   });
 });
 

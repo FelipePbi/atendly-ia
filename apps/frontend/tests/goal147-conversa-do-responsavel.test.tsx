@@ -269,6 +269,23 @@ describe("De quem é a conversa do perfil (escolha 2)", () => {
   });
 });
 
+describe("Acesso rápido ao chat ao lado de Agendar (2026-10-16)", () => {
+  test("sem conversa, o botão fica desabilitado em vez de sumir, nas três abas", async () => {
+    const user = userEvent.setup();
+    conversationsList.mockResolvedValue([]);
+    await renderProfile(detailFixture({ primaryGuardian: null }));
+
+    const disabled = () => screen.getByRole("button", { name: /^Conversa/ });
+    await waitFor(() => expect(disabled()).toBeDisabled());
+    expect(screen.getByRole("link", { name: /Agendar/ })).toBeVisible();
+
+    await user.click(screen.getByRole("tab", { name: "Atendimentos" }));
+    expect(disabled()).toBeDisabled();
+    await user.click(screen.getByRole("tab", { name: "Notas" }));
+    expect(disabled()).toBeDisabled();
+  });
+});
+
 describe("O rótulo e o destino (escolha 3)", () => {
   test("dependente: 'Conversa com Maria' leva para a conversa da Maria", async () => {
     conversationsByOwner({ "maria-1": "conv-9" });

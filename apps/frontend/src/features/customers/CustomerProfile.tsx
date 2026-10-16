@@ -319,16 +319,13 @@ export function CustomerProfile({
         />
       ) : (
         <Fragment key={customer.id}>
-          <section
-            className={clsx(
-              "directory-detail-hero",
-              tab !== "resumo" && "is-compact",
-            )}
-          >
+          {/* O cabeçalho é o mesmo nas três abas (pedido de 2026-10-16): trocar
+              de aba só troca o conteúdo abaixo, sem o topo mudar de tamanho. */}
+          <section className="directory-detail-hero">
             <div
               className={clsx(
                 "directory-detail-identity",
-                tab === "resumo" && dependent && "is-dependent",
+                dependent && "is-dependent",
               )}
             >
               <span className="avatar" aria-hidden="true">
@@ -338,21 +335,19 @@ export function CustomerProfile({
               <div>
                 <h1>{customer.name || "Cliente sem nome"}</h1>
                 <p className="directory-detail-phone">
-                  {tab === "resumo"
-                    ? [
-                        customer.phone
-                          ? (formatBrazilianPhone(customer.phone, "plus") ??
-                            customer.phone)
-                          : dependent
-                            ? "Sem telefone próprio"
-                            : "Telefone não informado",
-                        sinceLabel(customer),
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")
-                    : compactSubtitle(customer)}
+                  {[
+                    customer.phone
+                      ? (formatBrazilianPhone(customer.phone, "plus") ??
+                        customer.phone)
+                      : dependent
+                        ? "Sem telefone próprio"
+                        : "Telefone não informado",
+                    sinceLabel(customer),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </p>
-                {tab === "resumo" && customer.tags.length > 0 && (
+                {customer.tags.length > 0 && (
                   <ul
                     aria-label="Tags do cliente"
                     className="customer-header-tags"
@@ -366,7 +361,7 @@ export function CustomerProfile({
                 )}
               </div>
             </div>
-            {tab === "resumo" && confirmedGuardian && (
+            {confirmedGuardian && (
               <GuardianCard
                 customer={customer}
                 guardian={confirmedGuardian}
@@ -378,9 +373,11 @@ export function CustomerProfile({
                 "directory-detail-actions",
                 dependent && "is-dependent",
               )}
-              hidden={tab !== "resumo"}
             >
-              {conversationId && (
+              {/* Acesso rápido ao chat (2026-10-16): sempre ao lado de
+                  "Agendar". Sem conversa ainda, o botão fica desabilitado em
+                  vez de sumir, e o cabeçalho não muda de forma. */}
+              {conversationId ? (
                 <Link
                   className="btn btn-secondary"
                   href={`/conversas/${encodeURIComponent(conversationId)}`}
@@ -388,6 +385,20 @@ export function CustomerProfile({
                   <Icon name="nav-chat" />
                   {conversationLabel}
                 </Link>
+              ) : (
+                <button
+                  className="btn btn-secondary"
+                  disabled
+                  title={
+                    conversation === null
+                      ? "Procurando a conversa"
+                      : "Ainda não há conversa no WhatsApp com esta pessoa"
+                  }
+                  type="button"
+                >
+                  <Icon name="nav-chat" />
+                  {conversationLabel}
+                </button>
               )}
               {canSchedule && (
                 <Link
@@ -712,17 +723,6 @@ function sinceMonth(customer: CustomerDetail): string | null {
 function sinceLabel(customer: CustomerDetail): string | null {
   const month = sinceMonth(customer);
   return month ? `cliente desde ${month}` : null;
-}
-
-function compactSubtitle(customer: CustomerDetail): string {
-  const completed = customer.appointmentStats?.completed ?? 0;
-  const month = sinceMonth(customer);
-  return [
-    `${completed} ${completed === 1 ? "atendimento" : "atendimentos"}`,
-    month ? `desde ${month}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
 }
 
 function requestError(error: unknown, fallback: string): string {

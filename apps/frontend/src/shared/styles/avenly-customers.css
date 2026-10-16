@@ -1307,32 +1307,8 @@
   }
 }
 
-/* Perfil · cabeçalho compacto das abas Atendimentos e Notas (CL6, CL7) */
-.customer-profile .directory-detail-hero.is-compact .directory-detail-identity {
-  align-items: center;
-}
-.customer-profile
-  .directory-detail-hero.is-compact
-  .directory-detail-identity
-  > div {
-  gap: 0;
-}
-.customer-profile .directory-detail-hero.is-compact .avatar {
-  width: 44px;
-  height: 44px;
-  font-family: inherit;
-  font-size: 15px;
-  font-weight: 600;
-}
-.customer-profile .directory-detail-hero.is-compact h1 {
-  font-size: 22px;
-}
-.customer-profile .directory-detail-hero.is-compact .directory-detail-phone {
-  margin-top: 2px;
-  font-size: 13px;
-  line-height: 17px;
-  white-space: nowrap;
-}
+/* Perfil: o cabeçalho é o mesmo em Resumo, Atendimentos e Notas (2026-10-16);
+   o modo compacto das abas CL6 e CL7 saiu. */
 .customer-profile .customer-appts-panel {
   padding-top: 14px;
 }

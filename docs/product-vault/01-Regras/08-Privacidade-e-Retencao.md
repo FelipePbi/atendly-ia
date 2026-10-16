@@ -80,6 +80,10 @@ Campo interno aceita texto livre, com orientação para evitar dados desnecessá
 
 Uso pela IA exige autorização explícita da observação.
 
+## Foto de perfil das clientes
+
+A foto de perfil do WhatsApp da cliente é exibida, não armazenada. É buscada no momento em que a tela precisa dela, fica só em memória por algumas horas e no cache do navegador da profissional por um dia, e não entra em banco nem backup. Só aparece o que o próprio WhatsApp já mostra ao número conectado: se a cliente esconde a foto, a Avenly também não a vê. Ver [[01-Regras/04-Clientes-e-Memoria]].
+
 ## Logs e mensagens de erro
 
 Logs e mensagens exibidas ao profissional não devem expor segredos, credenciais ou detalhes internos sensíveis.

@@ -153,6 +153,17 @@
 .motion-enter.is-fast {
   animation-duration: var(--at-duration-fast);
 }
+/* Perfil do cliente: cada cliente que chega entra curto; na troca com a lista
+   ao lado, o conteúdo anterior fica esmaecido até o novo chegar. */
+.customer-profile.is-entering > :not(.pushed-bar) {
+  animation: motion-rise-in var(--at-duration-fast) var(--at-ease-standard) both;
+}
+.customer-profile > :not(.pushed-bar) {
+  transition: opacity var(--at-duration-fast) var(--at-ease-standard);
+}
+.customer-profile.is-refreshing > :not(.pushed-bar) {
+  opacity: 0.55;
+}
 /* Tela empurrada no celular, sem View Transitions: entra da direita. */
 .motion-enter-forward {
   animation: motion-slide-in-from-right var(--at-duration-moderate)
@@ -402,6 +413,7 @@ html.is-view-transition .agenda-page .agenda-day-empty,
 html.is-view-transition .agenda-page .week-map,
 html.is-view-transition .agenda-page .month-map,
 html.is-view-transition .motion-enter,
+html.is-view-transition .customer-profile.is-entering > :not(.pushed-bar),
 html.is-view-transition .motion-enter-fade,
 html.is-view-transition .motion-enter-forward,
 html.is-view-transition .motion-enter-back {
@@ -506,6 +518,7 @@ html.is-view-transition .motion-enter-back {
    o bloqueio global (`*`) não alcança. */
 @media (prefers-reduced-motion: reduce) {
   .motion-enter,
+  .customer-profile.is-entering > :not(.pushed-bar),
   .motion-enter-fade,
   .motion-enter-forward,
   .motion-enter-back,
@@ -516,7 +529,8 @@ html.is-view-transition .motion-enter-back {
     animation: none;
   }
   .motion-press,
-  .tab {
+  .tab,
+  .customer-profile > :not(.pushed-bar) {
     transition: none;
   }
   /* A apresentação depois do splash não acontece: a tela aparece inteira no

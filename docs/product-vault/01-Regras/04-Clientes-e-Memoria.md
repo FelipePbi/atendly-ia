@@ -97,6 +97,15 @@ O perfil deve reunir:
 - métricas básicas;
 - resumo gerado por IA.
 
+## Foto de perfil
+
+Quando a cliente tem foto de perfil no WhatsApp visível para o número conectado, ela aparece no lugar das iniciais em todo avatar da cliente: Conversas (lista, chat e contexto da conversa), Clientes (lista e perfil) e Agenda. Sem foto, com foto escondida pela privacidade da cliente ou com falha ao carregar, ficam as iniciais.
+
+- A foto é buscada sob demanda e nunca gravada pela Avenly — ver [[01-Regras/08-Privacidade-e-Retencao]].
+- Cliente cadastrada à mão começa sem foto; a busca é tentada de novo depois de alguns minutos, e a foto pode aparecer a partir da primeira conversa pelo WhatsApp.
+- Dependente sem telefone próprio fica com as iniciais: a foto do telefone do responsável não é usada para ela.
+- O navegador guarda a foto por um dia para não buscar a cada tela; troca de foto pela cliente pode levar esse tempo para aparecer.
+
 ## Métricas do cliente
 
 Podem incluir:

@@ -7,6 +7,7 @@ import { BffHttpError } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { ContactPhoto, conversationPhotoUrl } from "@/shared/ui/ContactPhoto";
 
 /** Espera da busca antes de ler de novo: digitar não pede uma leitura por tecla. */
 const SEARCH_DEBOUNCE_MS = 250;
@@ -392,6 +393,7 @@ export function OnboardingIgnoredContacts({
                       className={`ignored-avatar${conversation.customerId ? " is-linked" : ""}`}
                     >
                       {initials || <Icon name="user" />}
+                      <ContactPhoto src={conversationPhotoUrl(conversation)} />
                     </span>
                     <span className="ignored-text">
                       <span className="ignored-name" id={nameId}>

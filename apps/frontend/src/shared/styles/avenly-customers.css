@@ -1996,3 +1996,18 @@
     animation: none;
   }
 }
+
+/* Foto de perfil do WhatsApp por cima das iniciais do avatar (ContactPhoto).
+   As iniciais ficam por baixo: aparecem enquanto a foto carrega e quando não
+   há foto. */
+:has(> .contact-photo) {
+  position: relative;
+}
+.contact-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}

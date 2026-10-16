@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { type CustomerDetail } from "@/data";
 import { formatBrazilianPhone } from "@/shared/phone";
+import { ContactPhoto, customerPhotoUrl } from "@/shared/ui/ContactPhoto";
 
 import { dayMonthLabel } from "../settings/dayMonth";
 import { initials } from "./initials";
@@ -57,6 +58,7 @@ export function GuardianCard({
       <div className="customer-guardian-card">
         <span aria-hidden="true" className="customer-guardian-avatar">
           {initials(name)}
+          <ContactPhoto src={customerPhotoUrl(person.id)} />
         </span>
         <div className="customer-guardian-copy">
           <span className="customer-guardian-title">

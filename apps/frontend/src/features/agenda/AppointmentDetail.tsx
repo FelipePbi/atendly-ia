@@ -16,6 +16,7 @@ import { SkeletonSettle } from "@/shared/motion/SkeletonSettle";
 import { runViewTransition } from "@/shared/motion/viewTransition";
 import { displayPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { ContactPhoto, customerPhotoUrl } from "@/shared/ui/ContactPhoto";
 import { Skeleton, StatePanel } from "@/shared/ui/States";
 
 import { appointmentBackHref, appointmentFlowHref } from "./agendaLinks";
@@ -559,6 +560,7 @@ function AppointmentCustomer({ appointment }: { appointment: Appointment }) {
     <div className="agenda-appt-customer">
       <span aria-hidden="true" className="agenda-appt-avatar">
         {initials(name)}
+        <ContactPhoto src={customerPhotoUrl(customerId)} />
       </span>
       <div className="agenda-appt-customer-text">
         <h2>{name}</h2>

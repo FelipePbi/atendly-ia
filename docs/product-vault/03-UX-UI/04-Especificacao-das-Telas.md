@@ -181,6 +181,7 @@ Abas:
 
 Cada linha:
 
+- foto de perfil do WhatsApp quando disponível, senão iniciais;
 - nome;
 - última mensagem;
 - horário;
@@ -209,6 +210,7 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 ### Lista
 
 - busca;
+- foto de perfil do WhatsApp quando disponível, senão iniciais;
 - nome;
 - telefone;
 - último/próximo atendimento;

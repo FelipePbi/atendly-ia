@@ -730,6 +730,14 @@ O que a transcrição garante: quando `transcriptStatus` é `DONE`, `transcript`
 
 `GET /v1/conversations/:id/messages/:messageId/media` devolve o **corpo bruto** da mídia (não JSON), com `content-type` e, quando a origem informou, `content-disposition` com o nome do arquivo — proxy fino para a rota interna equivalente da IA, resolvendo o tenant pela sessão autenticada como as demais rotas, sem CSRF por ser leitura. Recusas próprias da IA (mensagem sem attachment, attachment `tooLarge`, mídia indisponível na origem) chegam pelo mesmo envelope de `UPSTREAM_ERROR` com `upstreamCode` das demais rotas desta API, nunca um `500` genérico; o consumidor deve tratar essas recusas como estado de exibição (ex.: "mídia indisponível"), não como falha do próprio BFF.
 
+## Foto de perfil do WhatsApp da cliente
+
+`GET /v1/customers/:id/avatar` e `GET /v1/conversations/:id/avatar` devolvem o **corpo bruto** da miniatura da foto de perfil do WhatsApp (não JSON), com o `content-type` da imagem e `cache-control: private, max-age=86400`. A rota do cliente usa o telefone da própria pessoa; a da conversa usa o contato da conversa e serve para a conversa ainda sem pessoa vinculada (com `customerId`, a tela usa a rota do cliente). Leitura, sem CSRF, tenant pela sessão.
+
+Sem foto é `204` sem corpo, com `cache-control: private, max-age=600`: pessoa sem telefone (dependente), número sem WhatsApp conectado, foto inexistente ou escondida do número da profissional, ou falha na consulta. O consumidor mostra as iniciais; não é erro. Cliente ou conversa de outro negócio segue as recusas normais da rota de detalhe (`404`).
+
+A foto nunca é gravada: o BFF pede o link à Evolution, baixa a imagem só da CDN do WhatsApp e a guarda apenas em memória (foto por 6 h, "sem foto" por 10 min), com no máximo 3 consultas ao WhatsApp ao mesmo tempo. O link assinado da CDN nunca sai do BFF.
+
 ## Conversa: eventos de agenda que a IA fez (Goal070)
 
 `GET /v1/conversations/:id/events` devolve, em ordem cronológica, o que a IA fez na agenda dentro desta conversa — proxy fino para a rota interna equivalente, igual a `GET .../messages`. Cada item é um de três tipos, discriminados por `type`:

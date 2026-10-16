@@ -2,7 +2,14 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { type FormEvent } from "react";
 
 import { BffHttpError, type CalendarState, type CustomerDetail } from "@/data";
@@ -13,6 +20,7 @@ import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { ContactPhoto, customerPhotoUrl } from "@/shared/ui/ContactPhoto";
 import { Field } from "@/shared/ui/Field";
 import { StatePanel } from "@/shared/ui/States";
 
@@ -71,6 +79,11 @@ export function CustomerProfile({
     id: string | null;
   } | null>(null);
   const [savedNotice, setSavedNotice] = useState(false);
+  // Cada cliente que chega entra com uma animação curta, na primeira carga e
+  // em cada troca com a lista ao lado (pedido de 2026-10-15). Na troca, o
+  // conteúdo anterior fica esmaecido até o novo chegar; trocar de aba depois
+  // não repete a entrada.
+  const [enterId, setEnterId] = useState<string | null>(null);
   const notesPanelRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const tabsId = useId();
@@ -84,6 +97,7 @@ export function CustomerProfile({
       services.calendar.getCalendar(controller.signal),
     ])
       .then(([nextCustomer, nextCalendar]) => {
+        setEnterId(nextCustomer.id);
         setCustomer(nextCustomer);
         setCalendar(nextCalendar);
       })
@@ -211,6 +225,7 @@ export function CustomerProfile({
 
   function selectTab(next: ProfileTab) {
     setTab(next);
+    setEnterId(null);
     setSavedNotice(false);
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -223,12 +238,22 @@ export function CustomerProfile({
       ? [{ label: "Editar dados", onSelect: () => setEditing(true) }]
       : undefined;
 
+  const refreshing = Boolean(
+    customer && customerId && customer.id !== customerId && !error,
+  );
+
   const profile = (
     <section
       className={clsx(
         "directory-page customer-profile",
         customer && tab !== "resumo" && "is-fill",
+        // A entrada segura a opacidade no fim; durante a troca ela sai para
+        // o conteúdo anterior poder esmaecer.
+        refreshing
+          ? "is-refreshing"
+          : customer && enterId === customer.id && "is-entering",
       )}
+      aria-busy={refreshing || undefined}
     >
       <PushedBar
         backHref={back.href}
@@ -238,7 +263,11 @@ export function CustomerProfile({
       />
 
       {!customer && !error ? (
-        <ProfileLoading />
+        // Ao lado da lista o painel fica vazio até a cliente chegar, sem
+        // esqueleto (pedido de 2026-10-15); a tela empurrada mantém o seu.
+        wide ? null : (
+          <ProfileLoading />
+        )
       ) : error || !customer ? (
         <StatePanel
           actionLabel={customerId ? "Tentar novamente" : undefined}
@@ -256,7 +285,7 @@ export function CustomerProfile({
           tone="error"
         />
       ) : (
-        <>
+        <Fragment key={customer.id}>
           <section
             className={clsx(
               "directory-detail-hero",
@@ -271,6 +300,7 @@ export function CustomerProfile({
             >
               <span className="avatar" aria-hidden="true">
                 {initials(customer.name)}
+                <ContactPhoto src={customerPhotoUrl(customer.id)} />
               </span>
               <div>
                 <h1>{customer.name || "Cliente sem nome"}</h1>
@@ -509,7 +539,7 @@ export function CustomerProfile({
               </div>
             </div>
           )}
-        </>
+        </Fragment>
       )}
     </section>
   );

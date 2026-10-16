@@ -14,6 +14,7 @@ import {
   requireTenantContext,
 } from "../../lib/tenant-context.js";
 import { internalContext } from "../tenant/context.js";
+import { replyContactPhoto } from "../whatsapp/contact-photo.js";
 import { findLinkedInstance } from "../whatsapp/instance-link.js";
 
 const idSchema = z.object({ id: z.string().trim().min(1).max(128) });
@@ -152,6 +153,23 @@ export async function registerV1ConversationRoutes(
         );
       }
       return reply.send(media.body);
+    },
+  );
+
+  /**
+   * Foto de perfil do WhatsApp do contato da conversa, para a conversa ainda
+   * sem pessoa vinculada; com `customerId`, a tela usa a rota do cliente.
+   */
+  app.get(
+    "/v1/conversations/:id/avatar",
+    { preHandler: requireTenantContext },
+    async (request, reply) => {
+      const { id } = parseParams(idSchema, request.params);
+      const conversation = await ai.getConversation(
+        internalContext(request),
+        id,
+      );
+      return replyContactPhoto(request, reply, conversation.externalContactId);
     },
   );
 

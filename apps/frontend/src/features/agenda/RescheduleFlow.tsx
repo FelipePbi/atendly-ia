@@ -14,6 +14,7 @@ import { Icon } from "@/shared/icons/Icon";
 import { PushedBar } from "@/shared/layout/PushedBar";
 import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { ContactPhoto, customerPhotoUrl } from "@/shared/ui/ContactPhoto";
 import { DatePicker } from "@/shared/ui/pickers/DatePicker";
 import { TimeField } from "@/shared/ui/pickers/PickerFields";
 import { PickerPopover } from "@/shared/ui/pickers/PickerPopover";
@@ -410,6 +411,9 @@ export function RescheduleFlow({
                     <div className="agenda-rs-summary">
                       <span aria-hidden="true" className="agenda-rs-avatar">
                         {initials(customerLabel(appointment))}
+                        <ContactPhoto
+                          src={customerPhotoUrl(appointment.customerId)}
+                        />
                       </span>
                       <span className="agenda-rs-summary-text">
                         <strong>

@@ -12,6 +12,11 @@ import {
   type CustomerDetail,
 } from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import {
+  ContactPhoto,
+  conversationPhotoUrl,
+  customerPhotoUrl,
+} from "@/shared/ui/ContactPhoto";
 
 import { ChatSheetShell } from "./ConversationActionsSheet";
 import {
@@ -74,6 +79,7 @@ export function ConversationCustomerSheet({
         <>
           <CustomerHead
             person={person}
+            photo={conversationPhotoUrl(conversation)}
             subtitle={formatInboxPhone(conversation.externalContactId)}
           />
           <p className="customer-sheet-empty">
@@ -98,16 +104,19 @@ export function ConversationCustomerSheet({
 function CustomerHead({
   action,
   person,
+  photo,
   subtitle,
 }: {
   action?: ReactNode;
   person: string;
+  photo: string | null;
   subtitle: string;
 }) {
   return (
     <div className="customer-sheet-head">
       <span aria-hidden="true" className="customer-sheet-avatar">
         {initials(person)}
+        <ContactPhoto src={photo} />
       </span>
       <div className="customer-sheet-who">
         <span className="customer-sheet-name">{person}</span>
@@ -188,7 +197,11 @@ function CustomerSection({
   if (load.status === "loading") {
     return (
       <div aria-busy="true" className="customer-sheet-customer">
-        <CustomerHead person={person} subtitle="Carregando cliente…" />
+        <CustomerHead
+          person={person}
+          photo={customerPhotoUrl(customerId)}
+          subtitle="Carregando cliente…"
+        />
         <span className="sr-only" role="status">
           Carregando cliente
         </span>
@@ -201,6 +214,7 @@ function CustomerSection({
       <div className="customer-sheet-customer">
         <CustomerHead
           person={person}
+          photo={customerPhotoUrl(customerId)}
           subtitle={formatInboxPhone(fallbackPhone)}
         />
         <p className="chat-sheet-error" role="alert">
@@ -238,6 +252,7 @@ function CustomerSection({
           </Link>
         }
         person={person}
+        photo={customerPhotoUrl(customer.id)}
         subtitle={subtitle}
       />
       {(next || last) && (

@@ -59,6 +59,12 @@ const contactDataSchema = z
   })
   .loose();
 
+const avatarDataSchema = z
+  .object({
+    url: z.string().optional(),
+  })
+  .loose();
+
 const envelope = <T extends z.ZodType>(data: T) =>
   z
     .object({
@@ -218,6 +224,28 @@ export class EvolutionClient {
       schema: envelope(z.array(contactDataSchema).nullable()),
     });
     return response.data ?? [];
+  }
+
+  /**
+   * Link da miniatura da foto de perfil de um número, na CDN do WhatsApp. O
+   * link é assinado e expira; serve só para baixar a imagem na hora. Sem foto
+   * ou com foto escondida do número conectado, a Evolution responde erro (os
+   * dois casos sem código próprio), e quem chama trata como "sem foto".
+   */
+  async getAvatarUrl(
+    instanceToken: string,
+    phone: string,
+    requestId?: string,
+  ): Promise<string | null> {
+    const response = await this.http.request({
+      method: "POST",
+      path: "/user/avatar",
+      headers: { apikey: instanceToken },
+      requestId,
+      body: { number: phone, preview: true },
+      schema: envelope(avatarDataSchema.nullable()),
+    });
+    return response.data?.url || null;
   }
 
   logoutInstance(instanceToken: string, requestId?: string) {

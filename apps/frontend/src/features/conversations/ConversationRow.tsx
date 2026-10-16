@@ -4,6 +4,7 @@ import clsx from "clsx";
 import Link from "next/link";
 
 import type { Conversation } from "@/data";
+import { ContactPhoto, conversationPhotoUrl } from "@/shared/ui/ContactPhoto";
 
 import { conversationState, conversationStateView } from "./conversationState";
 import {
@@ -98,6 +99,7 @@ function InboxRow({
             <path d="M5 20a7 7 0 0 1 14 0" />
           </svg>
         )}
+        <ContactPhoto src={conversationPhotoUrl(conversation)} />
       </span>
       <span className="conversation-row-main">
         <span className="conversation-row-top">

@@ -865,6 +865,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Avenly.
 751a. **Contatos do aparelho na escolha dos ignorados?** — **Sim (validação de 2026-10-11).** Conversas + contatos do WhatsApp do número conectado (lidos na hora, nunca gravados) + número manual. Sem a lista do aparelho, vale a 751. **Vigente.**
 752. **Tela WhatsApp conectada mostra o quê?** — **A — Número, estado da conexão, estado da IA, última conexão, trocar/desconectar.** **Vigente.**
 753. **Mostrar nome/foto do perfil?** — **A — Sim quando disponíveis.** **Vigente.**
+753a. **Mostrar a foto de perfil do WhatsApp das clientes?** — **Sim (decisão de 2026-10-15).** Em todo avatar de cliente (Conversas, Clientes, Agenda), buscada sob demanda pelo número conectado e nunca gravada; sem foto, foto escondida ou falha, ficam as iniciais. Cliente cadastrada à mão começa sem foto e a busca é tentada de novo depois, inclusive após a primeira conversa. O navegador guarda a foto para não buscar a cada tela. **Vigente.**
 754. **Desconectar WhatsApp?** — **B — Área de perigo com confirmação.** **Vigente.**
 755. **Copy de confirmação?** — **A — Explicar que IA para, mas dados permanecem.** **Vigente.**
 756. **Depois de desconectar manualmente?** — **A — IA desativada e nova vinculação exige teste.** **Vigente.**

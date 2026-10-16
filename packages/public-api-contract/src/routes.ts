@@ -143,6 +143,8 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
   { method: "GET", pathPattern: "/v1/conversations/:id/events", schema: z.array(conversationEventSchema) },
   // Raw media bytes (`reply.send(media.body)`); never wrapped in the `{ data, requestId }` envelope.
   { method: "GET", pathPattern: "/v1/conversations/:id/messages/:messageId/media", schema: z.unknown() },
+  // Raw WhatsApp profile photo bytes, or `204` with no body when there is none.
+  { method: "GET", pathPattern: "/v1/conversations/:id/avatar", schema: z.unknown() },
   { method: "POST", pathPattern: "/v1/conversations/:id/messages", schema: messageSchema },
   { method: "PUT", pathPattern: "/v1/conversations/:id/category", schema: conversationSchema },
   { method: "PUT", pathPattern: "/v1/conversations/:id/ignore", schema: conversationSchema },
@@ -156,6 +158,8 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
   // customers
   { method: "GET", pathPattern: "/v1/customers", schema: customerListSchema },
   { method: "GET", pathPattern: "/v1/customers/:id", schema: customerDetailSchema },
+  // Raw WhatsApp profile photo bytes, or `204` with no body when there is none.
+  { method: "GET", pathPattern: "/v1/customers/:id/avatar", schema: z.unknown() },
   { method: "POST", pathPattern: "/v1/customers", schema: customerSchema },
   { method: "PATCH", pathPattern: "/v1/customers/:id", schema: customerSchema },
   { method: "PUT", pathPattern: "/v1/customers/:id/primary-guardian", schema: customerPrimaryGuardianSchema },

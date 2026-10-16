@@ -24,6 +24,7 @@ import {
   getProductServices,
   useProductRuntime,
 } from "@/shared/runtime/ProductRuntime";
+import { ContactPhoto, conversationPhotoUrl } from "@/shared/ui/ContactPhoto";
 import { Dialog } from "@/shared/ui/Dialog";
 import { StatePanel } from "@/shared/ui/States";
 
@@ -521,6 +522,9 @@ export function ConversationThread({
             className={clsx("chat-avatar", avatarTone(state))}
           >
             {initials(person)}
+            <ContactPhoto
+              src={conversation && conversationPhotoUrl(conversation)}
+            />
           </span>
           <div className="chat-header-copy">
             <button

@@ -12,6 +12,7 @@ import {
 } from "../../lib/http.js";
 import { requireTenantContext } from "../../lib/tenant-context.js";
 import { internalContext } from "../tenant/context.js";
+import { replyContactPhoto } from "../whatsapp/contact-photo.js";
 
 const idSchema = z.object({ id: z.string().trim().min(1).max(128) });
 const childSchema = z.object({
@@ -113,6 +114,16 @@ export async function registerV1CustomerRoutes(
       request,
       await scheduling.getCustomer(internalContext(request), id),
     );
+  });
+
+  /**
+   * Foto de perfil do WhatsApp pelo telefone da própria pessoa; sem
+   * telefone (dependente), `204`.
+   */
+  app.get("/v1/customers/:id/avatar", authenticated, async (request, reply) => {
+    const { id } = parseParams(idSchema, request.params);
+    const customer = await scheduling.getCustomer(internalContext(request), id);
+    return replyContactPhoto(request, reply, customer.phone);
   });
 
   app.post("/v1/customers", authenticated, async (request, reply) => {

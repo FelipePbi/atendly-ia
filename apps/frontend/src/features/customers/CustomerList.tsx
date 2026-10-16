@@ -16,6 +16,7 @@ import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { ContactPhoto, customerPhotoUrl } from "@/shared/ui/ContactPhoto";
 import { Field } from "@/shared/ui/Field";
 
 import { CustomerEmptyState, CustomerErrorState } from "./CustomerStates";
@@ -368,6 +369,7 @@ function CustomerRow({
           <>
             <span className="customer-panel-avatar" aria-hidden="true">
               {initials(customer.name)}
+              <ContactPhoto src={customerPhotoUrl(customer.id)} />
             </span>
             <span className="customer-panel-main">
               <span className="customer-panel-name list-item-title">
@@ -408,6 +410,7 @@ function CustomerRow({
               aria-hidden="true"
             >
               <Icon name="nav-user" />
+              <ContactPhoto src={customerPhotoUrl(customer.id)} />
             </span>
             <span className="customer-panel-main">
               <span className="customer-panel-name list-item-title customer-panel-phone-title">

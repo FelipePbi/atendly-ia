@@ -5,6 +5,7 @@ import { useId } from "react";
 import { type Customer, type CustomerList } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { displayPhone } from "@/shared/phone";
+import { ContactPhoto, customerPhotoUrl } from "@/shared/ui/ContactPhoto";
 
 import { parseDate } from "./occupancy";
 
@@ -115,6 +116,7 @@ export function CustomerField({
           <span className="agenda-new-customer-chip">
             <span aria-hidden="true" className="agenda-new-avatar">
               {initials(personLabel(selected))}
+              <ContactPhoto src={customerPhotoUrl(selected.id)} />
             </span>
             {personLabel(selected)}
             <button
@@ -170,6 +172,7 @@ export function CustomerField({
                   >
                     <span aria-hidden="true" className="agenda-new-avatar">
                       {initials(personLabel(item))}
+                      <ContactPhoto src={customerPhotoUrl(item.id)} />
                     </span>
                     <span>{personLabel(item)}</span>
                     {item.name && item.phone && (

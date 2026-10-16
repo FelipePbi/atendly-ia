@@ -235,6 +235,24 @@ describe("runViewTransition", () => {
     expect(stub.calls).toHaveLength(0);
     stub.restore();
   });
+
+  test("com movimento reduzido e fadeOnReducedMotion (D-173), chama a API", async () => {
+    stubMatchMedia(true);
+    const stub = stubViewTransition();
+    const update = vi.fn();
+    const done = runViewTransition(update, {
+      fadeOnReducedMotion: true,
+      types: ["customer-swap"],
+    });
+    expect(stub.calls).toHaveLength(1);
+    expect(
+      document.documentElement.classList.contains("vt-customer-swap"),
+    ).toBe(true);
+    expect(update).toHaveBeenCalledTimes(1);
+    stub.calls[0].resolve();
+    await done;
+    stub.restore();
+  });
 });
 
 describe("PageTransition (template da seção)", () => {

@@ -31,6 +31,8 @@
    `prefers-reduced-motion: reduce` desliga tudo (regra do produto): além do
    bloqueio global de `tokens.css`, cada animação daqui é zerada
    explicitamente no fim deste arquivo, e `runViewTransition` nem chama a API.
+   Exceção (D-173): a troca de item no painel ao lado da lista roda com fade
+   só de opacidade, também no fim deste arquivo.
    ========================================================================== */
 
 :root {
@@ -584,7 +586,6 @@ html.is-view-transition .motion-enter-back {
    o bloqueio global (`*`) não alcança. */
 @media (prefers-reduced-motion: reduce) {
   .motion-enter,
-  .customer-profile.is-entering > :not(.pushed-bar),
   .motion-enter-fade,
   .motion-enter-forward,
   .motion-enter-back,
@@ -599,6 +600,15 @@ html.is-view-transition .motion-enter-back {
   .customer-profile > :not(.pushed-bar),
   .conversation-detail-panel .conversation-chat {
     transition: none;
+  }
+  /* Sem fade, esmaecer o item anterior enquanto o novo carrega vira um pisca:
+     escurece de uma vez e o novo surge por cima (o vídeo de 2026-10-16, com
+     as animações do Windows desligadas). Aqui o anterior fica inteiro até o
+     novo trocar no mesmo quadro. */
+  .customer-profile.is-refreshing > :not(.pushed-bar),
+  .conversation-detail-panel.is-refreshing .conversation-chat,
+  .service-form-screen.is-refreshing > :not(.pushed-bar) {
+    opacity: 1;
   }
   /* A apresentação depois do splash não acontece: a tela aparece inteira no
      mesmo quadro (o código nem liga `is-presenting`; aqui é a garantia). */
@@ -628,5 +638,26 @@ html.is-view-transition .motion-enter-back {
   ::view-transition-old(*),
   ::view-transition-new(*) {
     animation: none !important;
+  }
+  /* Exceção pedida pelo usuário (D-173, 2026-10-16): o item que abre no
+     painel ao lado da lista (cliente, conversa, serviço) troca com fade
+     mesmo com movimento reduzido — só opacidade, sem deslocamento. O
+     `!important` e a especificidade vencem o bloqueio acima e o de
+     `tokens.css`. */
+  html.vt-customer-swap::view-transition-old(customer-panel),
+  html.vt-conversation-swap::view-transition-old(conversation-panel),
+  html.vt-service-swap::view-transition-old(service-panel) {
+    animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both !important;
+  }
+  html.vt-customer-swap::view-transition-new(customer-panel),
+  html.vt-conversation-swap::view-transition-new(conversation-panel),
+  html.vt-service-swap::view-transition-new(service-panel) {
+    animation: motion-fade-in var(--at-duration-moderate)
+      var(--at-ease-standard) both !important;
+  }
+  .customer-profile.is-entering > :not(.pushed-bar),
+  .service-form-screen.is-entering > :not(.pushed-bar) {
+    animation: motion-fade-in var(--at-duration-moderate)
+      var(--at-ease-standard) both !important;
   }
 }

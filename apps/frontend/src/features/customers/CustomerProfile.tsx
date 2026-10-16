@@ -108,7 +108,10 @@ export function CustomerProfile({
           setCalendar(nextCalendar);
         };
         if (swapping)
-          void runViewTransition(show, { types: ["customer-swap"] });
+          void runViewTransition(show, {
+            fadeOnReducedMotion: true,
+            types: ["customer-swap"],
+          });
         else show();
       })
       .catch((caught: unknown) => {

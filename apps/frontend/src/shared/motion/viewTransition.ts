@@ -14,7 +14,10 @@ import { prefersReducedMotion } from "./reducedMotion";
  * que o CSS escolhe a direção (`vt-nav-forward`, `vt-step-prev`, ...).
  *
  * Sem suporte à API, ou com `prefers-reduced-motion: reduce`, `update` roda
- * na hora, de forma síncrona, sem animação: o comportamento de antes.
+ * na hora, de forma síncrona, sem animação: o comportamento de antes. A
+ * exceção é `fadeOnReducedMotion` (D-173): a troca de item no painel ao lado
+ * da lista roda mesmo com movimento reduzido, e o CSS a reduz a um fade só de
+ * opacidade, sem deslocamento.
  */
 export const VIEW_TRANSITION_CLASS = "is-view-transition";
 
@@ -35,6 +38,11 @@ export type ViewTransitionOptions = {
    * `update` devolve é quem diz quando o DOM novo está pronto.
    */
   flush?: boolean;
+  /**
+   * Roda também com `prefers-reduced-motion: reduce` (D-173). Só para trocas
+   * que o CSS anima apenas com opacidade no bloco de movimento reduzido.
+   */
+  fadeOnReducedMotion?: boolean;
   types?: ViewTransitionType[];
 };
 
@@ -71,7 +79,8 @@ export function runViewTransition(
     typeof document === "undefined" ? null : startViewTransitionOf(document);
   // Uma atualização pedida de dentro de outra (escolher o dia no calendário
   // fecha a folha E move a Agenda) entra na foto da transição em andamento.
-  if (!start || updating || prefersReducedMotion()) {
+  const reduced = prefersReducedMotion() && !options.fadeOnReducedMotion;
+  if (!start || updating || reduced) {
     return Promise.resolve(update()).then(() => undefined);
   }
   const root = document.documentElement;

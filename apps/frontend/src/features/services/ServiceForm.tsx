@@ -263,7 +263,11 @@ export function ServiceForm({
           setAiInstructionOriginal(instruction.content);
           setAiInstructionReadError(instruction.readError);
         };
-        if (swapping) void runViewTransition(show, { types: ["service-swap"] });
+        if (swapping)
+          void runViewTransition(show, {
+            fadeOnReducedMotion: true,
+            types: ["service-swap"],
+          });
         else show();
       });
     return () => controller.abort();

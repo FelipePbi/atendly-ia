@@ -7724,3 +7724,22 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Consequências:** um ponto único de falha (a VM), aceito para a escala atual; o backup fora da VM fica no mesmo provedor; as `AVENLY_*` e a `API_URL` entram no build do frontend, então mudar uma delas exige deploy; o número oficial da plataforma (`PLATFORM_WHATSAPP_*`) e a credencial da Minha Agenda seguem vazios até o dono configurá-los.
 
 **Revisar se:** o uso passar de algumas dezenas de negócios ativos, a VM ficar sem folga de CPU ou memória, a Oracle mudar a camada Always Free, ou o produto precisar de alta disponibilidade.
+
+## D-173 — Com movimento reduzido, a troca de item no painel ao lado da lista continua com fade, só de opacidade
+
+**Status:** ACCEPTED em 2026-10-16, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Regra em `docs/product-vault/03-UX-UI/05-Design-System-Conceitual.md` (seção de movimento).
+
+**Contexto:** a regra de movimento (D-168) desliga toda animação com `prefers-reduced-motion: reduce`. O Windows do usuário está com "Efeitos de animação" desligado, então o navegador pede movimento reduzido. Em Clientes, Conversas e Serviços isso fazia a troca de item piscar: sem crossfade, o item anterior esmaecia de uma vez enquanto o novo carregava, e o novo surgia por cima. O usuário pediu o fade suave mesmo assim, só com opacidade e sem deslocamento.
+
+**Decisão:**
+
+1. A troca de item no painel ao lado da lista (`customer-swap`, `conversation-swap`, `service-swap`) roda a View Transition também com movimento reduzido (`runViewTransition(..., { fadeOnReducedMotion: true })`). O CSS a reduz a fade de opacidade: sai em 160 ms e entra em 240 ms.
+2. A primeira entrada do item no painel é fade de 240 ms, sem os 8 px de subida.
+3. Com movimento reduzido, o item anterior não esmaece enquanto o novo carrega.
+4. O resto continua desligado com movimento reduzido: navegação entre telas, folhas, abas, apresentação depois do splash, deslocamentos e escalas.
+
+**Alternativas:** manter a troca seca, sem fade, como manda a D-168 (rejeitada pelo usuário); ligar todas as animações ignorando a preferência do sistema (deslocamento e escala são justamente o que a preferência pede para evitar).
+
+**Consequências:** a exceção vale só para fades de opacidade nessas três trocas. Uma tela nova que queira o mesmo usa `fadeOnReducedMotion` e acrescenta o par de regras `::view-transition-old/new` no bloco de movimento reduzido de `avenly-motion.css`.
+
+**Revisar se:** surgir pedido de acessibilidade para desligar também esses fades, ou se o produto ganhar uma preferência própria de animação.

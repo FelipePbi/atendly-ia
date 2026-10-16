@@ -101,6 +101,7 @@ export function ConversationsWorkspace({ children }: { children: ReactNode }) {
       // para a primeira e de uma conversa para a outra.
       if (wide) {
         void runViewTransition(() => setShown(next), {
+          fadeOnReducedMotion: true,
           types: ["conversation-swap"],
         });
       } else {

@@ -1,7 +1,9 @@
 /**
  * Preferência do sistema por menos movimento. Regra do produto: com
  * `prefers-reduced-motion: reduce` as animações ficam desligadas por padrão —
- * o CSS zera as durações e o código nem dispara uma View Transition.
+ * o CSS zera as durações e o código nem dispara uma View Transition. Exceção:
+ * a troca de item no painel ao lado da lista, que fica com fade só de
+ * opacidade (D-173, `fadeOnReducedMotion` em `runViewTransition`).
  */
 export function prefersReducedMotion(): boolean {
   if (

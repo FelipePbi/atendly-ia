@@ -26,6 +26,11 @@ export type CustomerPages = {
   /** Falha de uma leva seguinte: o que já veio continua na tela. */
   moreError: CustomerPagesError | null;
   loadMore: () => void;
+  /**
+   * Busca de novo o que já está na tela, sem esqueleto: a lista continua
+   * visível até a resposta chegar. Para quando o cadastro mudou.
+   */
+  refresh: () => void;
   retry: () => void;
 };
 
@@ -151,6 +156,43 @@ export function useCustomerPages(
     else setReload((value) => value + 1);
   }, [fetchMore, moreError]);
 
+  const loadedCount = state.items.length;
+  const refresh = useCallback(() => {
+    if (!enabled) return;
+    if (!loaded) {
+      setReload((value) => value + 1);
+      return;
+    }
+    const controller = new AbortController();
+    moreController.current?.abort();
+    moreController.current = controller;
+    getProductServices()
+      .customers.list(
+        {
+          // As mesmas pessoas que já estavam na tela, até o teto da rota.
+          limit: Math.min(100, Math.max(CUSTOMER_PAGE_SIZE, loadedCount)),
+          q: search || undefined,
+        },
+        controller.signal,
+      )
+      .then((page) => {
+        setState((previous) =>
+          previous.key === key
+            ? {
+                ...previous,
+                items: unique(page.items),
+                total: page.total ?? page.items.length,
+                nextCursor: page.nextCursor ?? null,
+                loadingMore: false,
+                moreError: null,
+              }
+            : previous,
+        );
+      })
+      // Falha aqui não apaga nada: a lista que estava na tela continua.
+      .catch(() => undefined);
+  }, [enabled, key, loaded, loadedCount, search]);
+
   return {
     items: state.items,
     total: state.total,
@@ -161,6 +203,7 @@ export function useCustomerPages(
     loadingMore: state.loadingMore,
     moreError: state.moreError,
     loadMore,
+    refresh,
     retry,
   };
 }

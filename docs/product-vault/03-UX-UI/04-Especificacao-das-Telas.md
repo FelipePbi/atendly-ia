@@ -213,7 +213,9 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 - telefone;
 - último/próximo atendimento;
 - criar cliente;
-- carregamento sob demanda: cerca de 15 por vez, mais ao chegar perto do fim da lista; a busca e o total no cabeçalho valem para todos os clientes, não só os já carregados.
+- carregamento sob demanda: cerca de 15 por vez, mais ao chegar perto do fim da lista; a busca e o total no cabeçalho valem para todos os clientes, não só os já carregados;
+- título, total, "+" e busca ficam fixos; só os itens rolam;
+- abrir ou trocar de cliente não recarrega a lista: ela mantém o que já carregou, a busca e a rolagem, e só atualiza quando o cadastro muda.
 
 ### Perfil
 

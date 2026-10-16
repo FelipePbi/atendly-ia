@@ -2,7 +2,16 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { type CustomerAppointmentSummary, type CustomerListItem } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
@@ -22,7 +31,7 @@ import {
   useCustomerPages,
 } from "./useCustomerPages";
 
-type CustomerListData = {
+export type CustomerListData = {
   canCreate: boolean;
   /** Clientes já carregados da lista sem busca. */
   customers: CustomerListItem[];
@@ -34,9 +43,15 @@ type CustomerListData = {
   list: CustomerPages;
   loading: boolean;
   query: string;
+  /** Busca de novo o que está na tela, sem esqueleto (cadastro mudou). */
+  refresh: () => void;
+  /** Guarda onde a lista sem busca estava rolada. */
+  rememberScroll: (top: number) => void;
   /** Busca paginada; vale enquanto há texto no campo. */
   results: CustomerPages;
   retry: () => void;
+  /** Onde a lista sem busca estava rolada, para voltar ao mesmo ponto. */
+  savedScroll: () => number;
   /** A busca digitada ainda não tem resposta. */
   searchPending: boolean;
   setQuery: (value: string) => void;
@@ -48,8 +63,27 @@ type CustomerListData = {
 /** Espera entre a digitação e a busca no servidor. */
 const SEARCH_DEBOUNCE_MS = 250;
 
-/** `enabled=false` não busca nada: o painel que não cabe na janela nunca consome o BFF. */
+const CustomerListContext = createContext<CustomerListData | null>(null);
+
+/**
+ * Dados da lista mantidos acima das telas: o layout de `/clientes` os guarda
+ * enquanto a pessoa vai da lista ao detalhe e volta, sem buscar de novo.
+ */
+export const CustomerListProvider = CustomerListContext.Provider;
+
+/**
+ * Dados da lista: os do layout de `/clientes`, quando a tela está dentro dele;
+ * senão, próprios. `enabled=false` não busca nada: o painel que não cabe na
+ * janela nunca consome o BFF.
+ */
 export function useCustomerListData(enabled = true): CustomerListData {
+  const shared = useContext(CustomerListContext);
+  const own = useCustomerListState(enabled && !shared);
+  return shared ?? own;
+}
+
+/** Estado da lista: levas carregadas, busca, fuso e rolagem. */
+export function useCustomerListState(enabled = true): CustomerListData {
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [query, setQuery] = useState("");
   const searchText = query.trim();
@@ -78,6 +112,17 @@ export function useCustomerListData(enabled = true): CustomerListData {
   const list = useCustomerPages("", enabled);
   const results = useCustomerPages(search, enabled && search !== "");
   const groups = useMemo(() => groupAlphabetically(list.items), [list.items]);
+  const scroll = useRef(0);
+  const rememberScroll = useCallback((top: number) => {
+    scroll.current = top;
+  }, []);
+  const savedScroll = useCallback(() => scroll.current, []);
+  const { refresh: refreshList } = list;
+  const { refresh: refreshResults } = results;
+  const refresh = useCallback(() => {
+    refreshList();
+    refreshResults();
+  }, [refreshList, refreshResults]);
 
   return {
     canCreate: !list.loading && !list.error && !list.managedExternally,
@@ -88,8 +133,11 @@ export function useCustomerListData(enabled = true): CustomerListData {
     list,
     loading: list.loading,
     query,
+    refresh,
+    rememberScroll,
     results,
     retry: list.retry,
+    savedScroll,
     searchPending: searchText !== search || results.loading,
     setQuery,
     today: todayWallDate(timezone),
@@ -146,7 +194,7 @@ export function CustomerListPanel({ openId }: { openId?: string }) {
   return <CustomerListPanelView data={data} heading="h2" openId={openId} />;
 }
 
-function CustomerListPanelView({
+export function CustomerListPanelView({
   data,
   heading: Heading = "h1",
   openId,
@@ -162,6 +210,16 @@ function CustomerListPanelView({
   const showingState = Boolean(error) || (!loading && customers.length === 0);
   const searchText = data.query.trim();
   const searching = !showingState && !loading && searchText !== "";
+  // Só os itens rolam (o cabeçalho e a busca ficam parados); a lista volta ao
+  // ponto em que estava quando a área de itens é montada de novo — ao sair da
+  // busca ou voltar do detalhe no celular.
+  const { savedScroll } = data;
+  const restoreScroll = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (element) element.scrollTop = savedScroll();
+    },
+    [savedScroll],
+  );
   return (
     <div
       className={clsx(
@@ -227,19 +285,30 @@ function CustomerListPanelView({
             )}
           </div>
           {loading ? (
-            <CustomerListSkeleton />
+            <div className="customer-panel-scroll" key="loading">
+              <CustomerListSkeleton />
+            </div>
           ) : searching ? (
-            <CustomerSearchResults
-              canCreate={canCreate}
-              customers={filtered}
-              open={openId}
-              pages={data.results}
-              pending={data.searchPending}
-              query={searchText}
-              today={today}
-            />
+            <div className="customer-panel-scroll" key="search">
+              <CustomerSearchResults
+                canCreate={canCreate}
+                customers={filtered}
+                open={openId}
+                pages={data.results}
+                pending={data.searchPending}
+                query={searchText}
+                today={today}
+              />
+            </div>
           ) : (
-            <>
+            <div
+              className="customer-panel-scroll"
+              key="list"
+              onScroll={(event) =>
+                data.rememberScroll(event.currentTarget.scrollTop)
+              }
+              ref={restoreScroll}
+            >
               <div
                 aria-label="Clientes"
                 className="customer-panel-list"
@@ -265,7 +334,7 @@ function CustomerListPanelView({
                 ))}
               </div>
               <CustomerListMore pages={data.list} />
-            </>
+            </div>
           )}
         </>
       )}

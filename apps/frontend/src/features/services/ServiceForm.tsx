@@ -1,18 +1,22 @@
 "use client";
 
+import clsx from "clsx";
 import { useRouter } from "next/navigation";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
-
 import {
-  type Service,
-  type ServiceColorToken,
-  type ServiceList as ServiceListResult,
-} from "@/data";
+  type FormEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import { type Service, type ServiceColorToken } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { PushedBar } from "@/shared/layout/PushedBar";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
+import { runViewTransition } from "@/shared/motion/viewTransition";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { CurrencyInput } from "@/shared/ui/CurrencyInput";
 
@@ -22,7 +26,12 @@ import {
   formatServicePrice,
   formatServiceRecurrence,
 } from "./serviceFormatting";
-import { DirectoryState, requestError, ServiceListPanel } from "./ServiceList";
+import {
+  DirectoryState,
+  requestError,
+  ServiceListPanel,
+  useServiceListData,
+} from "./ServiceList";
 
 const priceTypeOptions: Array<{
   value: Service["priceType"];
@@ -159,7 +168,10 @@ export function ServiceForm({
   const wide = useWideLayout();
   const router = useRouter();
   const [dirty, setDirty] = useState(false);
-  const [catalog, setCatalog] = useState<ServiceListResult | null>(null);
+  // O catálogo vem da lista que o layout de `/servicos` guarda: abrir ou
+  // trocar de serviço não busca a lista de novo.
+  const list = useServiceListData();
+  const catalog = list.result;
   const [service, setService] = useState<Service | null>(null);
   const [name, setName] = useState("");
   const [durationValue, setDurationValue] = useState("");
@@ -180,13 +192,18 @@ export function ServiceForm({
     bufferAfter: "0",
     bufferBefore: "0",
   });
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [aiInstructionValue, setAiInstructionValue] = useState("");
   const [aiInstructionOriginal, setAiInstructionOriginal] = useState("");
   const [aiInstructionReadError, setAiInstructionReadError] = useState(false);
   const [createdServiceId, setCreatedServiceId] = useState<string | null>(null);
+  // O primeiro serviço entra com uma animação curta. A troca de um serviço por
+  // outro com a lista ao lado é um crossfade da View Transition `service-swap`:
+  // o anterior fica até o novo chegar e sai enquanto ele entra, sem passar
+  // por painel vazio nem esqueleto (mesmo ajuste do perfil de Clientes).
+  const [enterId, setEnterId] = useState<string | null>(null);
+  const shownIdRef = useRef<string | null>(null);
 
   const reviewMode =
     edit &&
@@ -194,61 +211,63 @@ export function ServiceForm({
     (service.needsReview || service.durationMinutes === null);
 
   useEffect(() => {
+    if (!edit || !catalog) return;
+    const found = catalog.items.find((item) => item.id === serviceId);
+    if (!found) return;
+    // O catálogo atualizado (outro aviso de mudança) não apaga o que a pessoa
+    // já digitou no serviço aberto.
+    if (found.id === shownIdRef.current) return;
     const controller = new AbortController();
-    getProductServices()
-      .serviceCatalog.list(controller.signal)
-      .then((next) => {
-        setCatalog(next);
-        if (!edit) return;
-        const found = next.items.find((item) => item.id === serviceId);
-        if (!found) {
-          setError(
-            serviceId
-              ? "Serviço não encontrado."
-              : "Selecione um serviço na lista para editar.",
+    void getProductServices()
+      .serviceCatalog.getAiInstruction(found.id, controller.signal)
+      .then(
+        (result) => ({ content: result.content, readError: false }),
+        () => ({ content: "", readError: true }),
+      )
+      .then((instruction) => {
+        if (controller.signal.aborted) return;
+        const swapping = shownIdRef.current !== null;
+        shownIdRef.current = found.id;
+        const show = () => {
+          setEnterId(swapping ? null : found.id);
+          setService(found);
+          setDirty(false);
+          setMessage(null);
+          setPriceError(null);
+          setColorError(null);
+          setCreatedServiceId(null);
+          setEssentialsOpen(ESSENTIALS_OPEN_ON_EDIT);
+          setOpenOptions(new Set());
+          setRecurrenceFieldOpen(false);
+          setPriceTypesOpen(false);
+          setName(found.name);
+          setDurationValue(
+            found.durationMinutes === null ? "" : String(found.durationMinutes),
           );
-          return;
-        }
-        setService(found);
-        setName(found.name);
-        setDurationValue(
-          found.durationMinutes === null ? "" : String(found.durationMinutes),
-        );
-        setPriceType(found.priceType);
-        setPriceCents(
-          found.price === null ? null : Math.round(found.price * 100),
-        );
-        setColorToken(found.colorToken ?? "");
-        setDescription(found.description ?? "");
-        setRecurrenceValue(
-          found.recurrenceIntervalDays === null
-            ? ""
-            : String(found.recurrenceIntervalDays),
-        );
-        setBuffers({
-          bufferAfter: String(found.bufferAfterMinutes ?? 0),
-          bufferBefore: String(found.bufferBeforeMinutes ?? 0),
-        });
-        getProductServices()
-          .serviceCatalog.getAiInstruction(found.id, controller.signal)
-          .then((result) => {
-            if (controller.signal.aborted) return;
-            setAiInstructionValue(result.content);
-            setAiInstructionOriginal(result.content);
-          })
-          .catch((_caught: unknown) => {
-            if (controller.signal.aborted) return;
-            setAiInstructionReadError(true);
+          setPriceType(found.priceType);
+          setPriceCents(
+            found.price === null ? null : Math.round(found.price * 100),
+          );
+          setColorToken(found.colorToken ?? "");
+          setDescription(found.description ?? "");
+          setRecurrenceValue(
+            found.recurrenceIntervalDays === null
+              ? ""
+              : String(found.recurrenceIntervalDays),
+          );
+          setBuffers({
+            bufferAfter: String(found.bufferAfterMinutes ?? 0),
+            bufferBefore: String(found.bufferBeforeMinutes ?? 0),
           });
-      })
-      .catch((caught: unknown) => {
-        if (!controller.signal.aborted)
-          setError(
-            requestError(caught, "Não foi possível carregar o serviço."),
-          );
+          setAiInstructionValue(instruction.content);
+          setAiInstructionOriginal(instruction.content);
+          setAiInstructionReadError(instruction.readError);
+        };
+        if (swapping) void runViewTransition(show, { types: ["service-swap"] });
+        else show();
       });
     return () => controller.abort();
-  }, [edit, serviceId]);
+  }, [catalog, edit, serviceId]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -387,9 +406,21 @@ export function ServiceForm({
     });
   }
 
+  // Sem o catálogo não há o que editar: a falha da lista é a falha da tela.
+  const missing =
+    edit && catalog && !catalog.items.some((item) => item.id === serviceId)
+      ? serviceId
+        ? "Serviço não encontrado."
+        : "Selecione um serviço na lista para editar."
+      : null;
+  const failure = missing ?? (catalog ? null : list.error);
+  const refreshing = Boolean(
+    edit && service && serviceId !== service.id && !failure,
+  );
+
   useShellConfig({
     active: "servicos",
-    loading: !catalog && !error,
+    loading: !catalog && !failure,
     module: "directory",
     pushed: true,
     title: edit ? "Editar serviço" : "Novo serviço",
@@ -547,7 +578,17 @@ export function ServiceForm({
 
   const barTitle = edit ? (service?.name ?? "Editar serviço") : "Novo serviço";
   const screen = (
-    <section className="directory-page is-form-page service-form-screen">
+    <section
+      aria-busy={refreshing || undefined}
+      className={clsx(
+        "directory-page is-form-page service-form-screen",
+        // Durante a troca a entrada sai, para o serviço anterior poder
+        // esmaecer se o novo demorar.
+        refreshing
+          ? "is-refreshing"
+          : service && enterId === service.id && "is-entering",
+      )}
+    >
       <PushedBar
         backHref="/servicos"
         backIcon={reviewMode ? "chevron-left" : "x"}
@@ -557,26 +598,30 @@ export function ServiceForm({
         title={barTitle}
       />
       <div className="service-form-body">
-        {error ? (
+        {failure ? (
           <DirectoryState
             actionHref="/servicos"
             actionLabel="Voltar para serviços"
-            description={error}
+            description={failure}
             error
             title="Serviço indisponível"
           />
         ) : !catalog || (edit && !service) ? (
-          <div className="directory-loading-shell" aria-busy="true">
-            <div className="directory-loading-row">
-              <span className="skeleton directory-loading-avatar" />
-              <span className="directory-loading-copy">
-                <span className="skeleton skeleton-title" />
+          // Ao lado da lista o editor fica vazio até o serviço chegar, sem
+          // esqueleto; a tela empurrada do celular mantém o seu.
+          wide ? null : (
+            <div className="directory-loading-shell" aria-busy="true">
+              <div className="directory-loading-row">
+                <span className="skeleton directory-loading-avatar" />
+                <span className="directory-loading-copy">
+                  <span className="skeleton skeleton-title" />
+                  <span className="skeleton skeleton-line" />
+                </span>
                 <span className="skeleton skeleton-line" />
-              </span>
-              <span className="skeleton skeleton-line" />
-              <span className="skeleton skeleton-line" />
+                <span className="skeleton skeleton-line" />
+              </div>
             </div>
-          </div>
+          )
         ) : !catalog.editable ? (
           <DirectoryState
             actionHref="/servicos"
@@ -587,6 +632,7 @@ export function ServiceForm({
         ) : reviewMode ? (
           <form
             className="directory-form-card service-form-review"
+            key={service?.id ?? "new"}
             onChange={() => setDirty(true)}
             onSubmit={(event) => void submit(event)}
           >
@@ -784,6 +830,7 @@ export function ServiceForm({
                 ? "directory-form-card service-form-edit"
                 : "directory-form-card service-form-split"
             }
+            key={service?.id ?? "new"}
             onChange={() => setDirty(true)}
             onSubmit={(event) => void submit(event)}
           >

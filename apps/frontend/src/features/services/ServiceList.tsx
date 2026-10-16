@@ -2,7 +2,15 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   BffHttpError,
@@ -24,17 +32,45 @@ type ServiceGroups = {
   review: Service[];
 };
 
-type ServiceListState = {
+export type ServiceListState = {
   error: string | null;
   filtered: Service[];
   groups: ServiceGroups;
   query: string;
+  /** Busca de novo, sem esqueleto: a lista atual fica até a nova chegar. */
+  refresh: () => void;
+  /** Guarda onde a lista estava rolada. */
+  rememberScroll: (top: number) => void;
   result: ServiceListResult | null;
   retry: () => void;
+  /** Onde a lista estava rolada, para voltar ao mesmo ponto. */
+  savedScroll: () => number;
   setQuery: (value: string) => void;
 };
 
-/** `enabled=false` não busca nada: o painel que não cabe na janela nunca consome o BFF. */
+const ServiceListContext = createContext<ServiceListState | null>(null);
+
+/**
+ * Dados da lista mantidos acima das telas: o layout de `/servicos` os guarda
+ * enquanto a pessoa vai da lista ao editor e volta, sem buscar de novo.
+ */
+export const ServiceListProvider = ServiceListContext.Provider;
+
+/**
+ * Dados da lista: os do layout de `/servicos`, quando a tela está dentro dele;
+ * senão, próprios. `enabled=false` não busca nada: o painel que não cabe na
+ * janela nunca consome o BFF.
+ */
+export function useServiceListData(enabled = true): ServiceListState {
+  const shared = useContext(ServiceListContext);
+  const own = useServiceListState(enabled && !shared);
+  return shared ?? own;
+}
+
+/**
+ * Estado da lista: catálogo, busca e rolagem. O catálogo de um profissional
+ * autônomo é curto, então vem inteiro numa resposta só, sem paginação.
+ */
 export function useServiceListState(enabled = true): ServiceListState {
   const [result, setResult] = useState<ServiceListResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,23 +110,34 @@ export function useServiceListState(enabled = true): ServiceListState {
     return { active, inactive, review };
   }, [filtered]);
 
+  const scroll = useRef(0);
+  const rememberScroll = useCallback((top: number) => {
+    scroll.current = top;
+  }, []);
+  const savedScroll = useCallback(() => scroll.current, []);
+  const refresh = useCallback(() => setReload((value) => value + 1), []);
+  const retry = useCallback(() => {
+    setError(null);
+    setReload((value) => value + 1);
+  }, []);
+
   return {
     error,
     filtered,
     groups,
     query,
+    refresh,
+    rememberScroll,
     result,
-    retry: () => {
-      setError(null);
-      setReload((value) => value + 1);
-    },
+    retry,
+    savedScroll,
     setQuery,
   };
 }
 
 export function ServiceList() {
   const wide = useWideLayout();
-  const state = useServiceListState();
+  const state = useServiceListData();
   const { error, result } = state;
   const emptyList = !error && result !== null && result.items.length === 0;
 
@@ -115,7 +162,9 @@ export function ServiceList() {
     );
   }
 
-  return <ServiceListPanelView heading="h1" showAdd={false} state={state} />;
+  return (
+    <ServiceListPanelView heading="h1" screen showAdd={false} state={state} />
+  );
 }
 
 /**
@@ -123,18 +172,21 @@ export function ServiceList() {
  * e nunca chama `useShellConfig` (a tela que a hospeda já declarou a casca).
  */
 export function ServiceListPanel({ openId }: { openId?: string }) {
-  const state = useServiceListState();
+  const state = useServiceListData();
   return <ServiceListPanelView heading="h2" openId={openId} state={state} />;
 }
 
-function ServiceListPanelView({
+export function ServiceListPanelView({
   heading: Heading,
   openId,
+  screen = false,
   showAdd = true,
   state,
 }: {
   heading: "h1" | "h2";
   openId?: string;
+  /** Lista como tela inteira (celular), sem a coluna do detalhe. */
+  screen?: boolean;
   showAdd?: boolean;
   state: ServiceListState;
 }) {
@@ -142,7 +194,13 @@ function ServiceListPanelView({
   const summary = result && result.items.length > 0 ? summaryLine(groups) : "";
   const emptyList = !error && result !== null && result.items.length === 0;
   return (
-    <div className={clsx("service-panel", emptyList && "has-state")}>
+    <div
+      className={clsx(
+        "service-panel",
+        screen && "service-list-screen",
+        emptyList && "has-state",
+      )}
+    >
       <div className="service-panel-header">
         <div className="service-panel-title">
           <Heading>Serviços</Heading>
@@ -170,8 +228,24 @@ function ServiceListContent({
   openId?: string;
   state: ServiceListState;
 }) {
-  const { error, filtered, groups, query, result, setQuery } = state;
-  if (!result && !error) return <DirectoryLoading />;
+  const { error, filtered, groups, query, result, savedScroll, setQuery } =
+    state;
+  // Só os itens rolam (título, resumo, "+" e busca ficam parados); a lista
+  // volta ao ponto em que estava quando é montada de novo — ao voltar do
+  // editor no celular.
+  const restoreScroll = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (element) element.scrollTop = savedScroll();
+    },
+    [savedScroll],
+  );
+  if (!result && !error) {
+    return (
+      <div className="service-panel-scroll">
+        <DirectoryLoading />
+      </div>
+    );
+  }
   if (error) {
     return (
       <DirectoryState
@@ -202,38 +276,46 @@ function ServiceListContent({
           />
         </label>
       </section>
-      <section className="directory-list-surface">
-        {!editable && (
-          <p className="service-list-readonly-note">
-            Serviços não podem ser editados aqui.
-          </p>
-        )}
-        <ServiceGroup
-          editable={editable}
-          heading="Ativos"
-          hideHeading
-          openId={openId}
-          services={groups.active}
-        />
-        <ServiceGroup
-          editable={editable}
-          heading="Precisa de revisão"
-          hideHeading
-          openId={openId}
-          services={groups.review}
-        />
-        <ServiceGroup
-          editable={editable}
-          heading="Inativos"
-          openId={openId}
-          services={groups.inactive}
-        />
-        {filtered.length === 0 && (
-          <p className="directory-no-results">
-            Nenhum serviço corresponde à busca.
-          </p>
-        )}
-      </section>
+      <div
+        className="service-panel-scroll"
+        onScroll={(event) =>
+          state.rememberScroll(event.currentTarget.scrollTop)
+        }
+        ref={restoreScroll}
+      >
+        <section className="directory-list-surface">
+          {!editable && (
+            <p className="service-list-readonly-note">
+              Serviços não podem ser editados aqui.
+            </p>
+          )}
+          <ServiceGroup
+            editable={editable}
+            heading="Ativos"
+            hideHeading
+            openId={openId}
+            services={groups.active}
+          />
+          <ServiceGroup
+            editable={editable}
+            heading="Precisa de revisão"
+            hideHeading
+            openId={openId}
+            services={groups.review}
+          />
+          <ServiceGroup
+            editable={editable}
+            heading="Inativos"
+            openId={openId}
+            services={groups.inactive}
+          />
+          {filtered.length === 0 && (
+            <p className="directory-no-results">
+              Nenhum serviço corresponde à busca.
+            </p>
+          )}
+        </section>
+      </div>
     </>
   );
 }

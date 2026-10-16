@@ -55,6 +55,27 @@ export function routeSchema<T>(
   return route.schema as unknown as z.ZodType<T>;
 }
 
+/**
+ * Aviso de que alguma chamada fora de `/v1/auth/*` voltou 401 (2026-10-16):
+ * a sessão pode ter acabado. Quem guarda a sessão (ProductRuntime) a relê
+ * para decidir; as rotas de login ficam de fora, porque nelas 401 é senha
+ * errada, não sessão vencida.
+ */
+type UnauthorizedListener = () => void;
+const unauthorizedListeners = new Set<UnauthorizedListener>();
+
+export function onUnauthorized(listener: UnauthorizedListener): () => void {
+  unauthorizedListeners.add(listener);
+  return () => {
+    unauthorizedListeners.delete(listener);
+  };
+}
+
+function reportUnauthorized(path: string, status: number): void {
+  if (status !== 401 || path.startsWith("/v1/auth/")) return;
+  for (const listener of unauthorizedListeners) listener();
+}
+
 export class BffHttpError extends Error {
   readonly code: string;
   readonly details?: unknown;
@@ -314,6 +335,7 @@ export class BffHttpClient {
     const responseRequestId = response.requestId || requestId;
 
     if (!response.ok) {
+      reportUnauthorized(options.path, response.status);
       const parsedError = errorEnvelopeSchema.safeParse(payload);
       if (parsedError.success) {
         throw new BffHttpError({

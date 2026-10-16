@@ -8,6 +8,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -15,6 +16,7 @@ import {
   BffHttpError,
   type BffServiceRegistry,
   createBffServiceRegistry,
+  onUnauthorized,
   type Session,
 } from "@/data";
 import {
@@ -40,6 +42,9 @@ const ProductRuntimeContext = createContext<ProductRuntimeValue | null>(null);
 
 let registry: BffServiceRegistry | undefined;
 
+/** Intervalo mínimo entre duas conferências da sessão ao voltar para a aba. */
+const SESSION_RECHECK_MS = 60_000;
+
 export function getProductServices(): BffServiceRegistry {
   registry ??= createBffServiceRegistry();
   return registry;
@@ -56,7 +61,13 @@ export function ProductRuntimeProvider({ children }: { children: ReactNode }) {
       const nextSession = await getProductServices().auth.session();
       // Outra pessoa ou outro negócio nunca vê o que a sessão anterior leu (D-167).
       claimSessionMemory(`${nextSession.user.id}:${nextSession.tenant.id}`);
-      setSession(nextSession);
+      // A mesma sessão de antes não troca de objeto: a tela não re-renderiza
+      // inteira só porque a sessão foi conferida.
+      setSession((current) =>
+        current && JSON.stringify(current) === JSON.stringify(nextSession)
+          ? current
+          : nextSession,
+      );
       setPhase(
         nextSession.onboardingCompleted ? "authenticated" : "onboarding",
       );
@@ -80,12 +91,37 @@ export function ProductRuntimeProvider({ children }: { children: ReactNode }) {
     setPhase("unauthenticated");
   }, []);
 
+  // A sessão é lida uma vez ao abrir o app, não a cada mudança de URL
+  // (2026-10-16: antes cada clique gerava um GET /v1/auth/session). Login,
+  // logout e onboarding a releem pelo próprio fluxo. Depois disso ela é
+  // conferida de novo só quando a pessoa volta para a aba (no máximo uma vez
+  // por minuto) e quando alguma chamada volta 401.
+  const lastCheck = useRef(0);
+  const checkSession = useCallback(() => {
+    lastCheck.current = Date.now();
+    void refreshSession().catch(() => undefined);
+  }, [refreshSession]);
+
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void refreshSession().catch(() => undefined);
-    }, 0);
+    const timer = window.setTimeout(checkSession, 0);
     return () => window.clearTimeout(timer);
-  }, [pathname, refreshSession]);
+  }, [checkSession]);
+
+  useEffect(() => {
+    function onReturn() {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastCheck.current < SESSION_RECHECK_MS) return;
+      checkSession();
+    }
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
+  }, [checkSession]);
+
+  useEffect(() => onUnauthorized(checkSession), [checkSession]);
 
   useEffect(() => {
     if (phase === "checking" || phase === "error" || isPublicDocument(pathname))

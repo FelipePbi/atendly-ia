@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import type { SettingsState } from "@/data";
 import { ReminderSettingsSection } from "@/features/reminders/ReminderSettingsSection";
@@ -8,7 +8,6 @@ import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
-import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { BrandLoader } from "@/shared/ui/Brand";
 
 import { AccountDeletionScreen } from "./AccountDeletionScreen";
@@ -22,6 +21,7 @@ import { ConversationsSettings } from "./ConversationsSettings";
 import { IgnoredContactsScreen } from "./IgnoredContactsScreen";
 import { OfferRulesSettings } from "./OfferRulesSettings";
 import { SettingsHub, SettingsHubPanel } from "./SettingsHub";
+import { useSettingsData } from "./SettingsWorkspace";
 import { SettingsMessage, SettingsPage } from "./shared/SettingsPage";
 import type { SettingsScenario } from "./types";
 import { WhatsAppSettings } from "./WhatsAppSettings";
@@ -31,27 +31,10 @@ export function ProductSettingsScreen({
 }: {
   scenario: SettingsScenario;
 }) {
-  const [settings, setSettings] = useState<SettingsState | null>(null);
+  // Debaixo de `SettingsWorkspace`, lidas uma vez para todas as seções: trocar
+  // de seção não busca de novo nem passa por "Carregando".
+  const { error, setSettings, settings } = useSettingsData();
   const [, setWhatsappConnected] = useState(false);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    getProductServices()
-      .settings.get(controller.signal)
-      .then(setSettings)
-      .catch(() => {
-        if (controller.signal.aborted) return;
-        setError(true);
-      });
-    getProductServices()
-      .whatsapp.get(controller.signal)
-      .then((connection) =>
-        setWhatsappConnected(connection?.status === "CONNECTED"),
-      )
-      .catch(() => setWhatsappConnected(false));
-    return () => controller.abort();
-  }, []);
 
   useShellConfig({
     active: "configuracoes",

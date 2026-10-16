@@ -4,10 +4,10 @@
  *
  * `implementationHints` desta unidade é direto: "teste que passe sobre
  * componente sem importador não prova fluxo entregue". Esta suíte monta a
- * rota real `app/(platform)/importacao/page.tsx` — não `ImportsScreen`
+ * rota real `app/(platform)/(configuracoes)/importacao/page.tsx` — não `ImportsScreen`
  * importado direto — pelas quatro etapas da jornada (conexão, análise com
  * conflitos, execução com pendências, histórico concluído), e a rota real
- * `app/(platform)/configuracoes/page.tsx` (hub), provando que o ponto de
+ * `app/(platform)/(configuracoes)/configuracoes/page.tsx` (hub), provando que o ponto de
  * entrada de Configurações aponta para `/importacao` com o mesmo `href` que
  * a entrada "Mais" da navegação declara. Desde o Goal024/WU-02 esse ponto de
  * entrada vive só no hub — `ImportSettingsSection` não é mais montada dentro
@@ -96,8 +96,8 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
   }),
 }));
 
-import SettingsHubPage from "@/app/(platform)/configuracoes/page";
-import ImportacaoPage from "@/app/(platform)/importacao/page";
+import SettingsHubPage from "@/app/(platform)/(configuracoes)/configuracoes/page";
+import ImportacaoPage from "@/app/(platform)/(configuracoes)/importacao/page";
 
 function availableStateFixture(): ImportState {
   return {

@@ -3702,3 +3702,44 @@ a.account-danger-card {
   font-size: 12px;
   line-height: 1.4;
 }
+
+/* Troca de seção com a lista de Configurações ao lado (2026-10-16): a lista
+   fica montada (`SettingsWorkspace`) e só o painel da seção troca, num
+   crossfade (`vt-settings-swap`): a anterior sai em 160 ms enquanto a nova
+   entra em 240 ms. Mesmo ajuste de Clientes, Conversas e Serviços. Abaixo de
+   1024 px a seção é tela empurrada, sem a lista. */
+@media (min-width: 1024px) {
+  .list-detail:has(> .list-detail-list > .hub-panel) > .list-detail-panel {
+    view-transition-name: settings-panel;
+  }
+}
+::view-transition-group(settings-panel) {
+  animation: none;
+}
+::view-transition-image-pair(settings-panel) {
+  isolation: auto;
+}
+::view-transition-old(settings-panel),
+::view-transition-new(settings-panel) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html.vt-settings-swap::view-transition-old(settings-panel) {
+  animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both;
+}
+html.vt-settings-swap::view-transition-new(settings-panel) {
+  animation: motion-fade-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+}
+/* Exceção pedida pelo usuário (D-173): com movimento reduzido a troca de
+   seção continua um fade só de opacidade, sem deslocamento. O `!important` e
+   a especificidade vencem o bloqueio de `avenly-motion.css` e `tokens.css`. */
+@media (prefers-reduced-motion: reduce) {
+  html.vt-settings-swap::view-transition-old(settings-panel) {
+    animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both !important;
+  }
+  html.vt-settings-swap::view-transition-new(settings-panel) {
+    animation: motion-fade-in var(--at-duration-moderate)
+      var(--at-ease-standard) both !important;
+  }
+}

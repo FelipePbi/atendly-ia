@@ -269,6 +269,8 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 
 ## Mais / Configurações
 
+A partir de 1024 px, a lista de Configurações fica ao lado da seção aberta, inclusive em Importação. Trocar de seção mantém a lista montada e troca só o painel, com um crossfade curto, sem passar por "Carregando configurações". Cada seção busca só o próprio dado quando abre. As configurações já lidas na aba aparecem na hora e são relidas em segundo plano.
+
 ### Negócio
 
 - nome;

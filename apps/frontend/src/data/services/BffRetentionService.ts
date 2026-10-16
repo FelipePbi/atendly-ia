@@ -3,6 +3,7 @@ import type {
   RetentionDays,
   RetentionSettings,
 } from "../mappers/publicApiSchemas";
+import { notifyRetentionChanged } from "./retentionChanges";
 
 export interface RetentionPatchInput {
   commercialRetentionDays?: RetentionDays;
@@ -29,6 +30,9 @@ export class BffRetentionService {
       path: "/v1/settings/retention",
       schema: routeSchema<RetentionSettings>("PATCH", "/v1/settings/retention"),
       signal,
+    }).then((value) => {
+      notifyRetentionChanged();
+      return value;
     });
   }
 }

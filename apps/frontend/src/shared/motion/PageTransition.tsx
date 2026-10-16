@@ -5,7 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
 
 import { prefersReducedMotion } from "./reducedMotion";
-import { runViewTransition, supportsViewTransition } from "./viewTransition";
+import {
+  runViewTransition,
+  supportsViewTransition,
+  type ViewTransitionOptions,
+} from "./viewTransition";
 
 /**
  * Transição entre as telas de uma seção (pedido do usuário, 2026-10-12).
@@ -50,18 +54,34 @@ function waitForCommit(): Promise<void> {
   });
 }
 
-function depthOf(pathname: string): number {
-  return pathname.split("/").filter(Boolean).length;
+/**
+ * Navega com `router.push` dentro de uma View Transition: a foto antiga é a
+ * tela de agora e a nova só é tirada quando a rota nova monta (quem chama
+ * precisa de `useSettleNavigation` numa árvore que persiste na troca).
+ */
+export function pushWithViewTransition(
+  router: ReturnType<typeof useRouter>,
+  href: string,
+  options: Omit<ViewTransitionOptions, "flush"> = {},
+): Promise<void> {
+  return runViewTransition(
+    () => {
+      const commit = waitForCommit();
+      router.push(href);
+      return commit;
+    },
+    { ...options, flush: false },
+  );
 }
 
-export function directionBetween(from: string, to: string): Direction {
-  const delta = depthOf(to) - depthOf(from);
-  if (delta > 0) return "forward";
-  if (delta < 0) return "back";
-  return "fade";
+/** A tela nova está no DOM: a transição que a esperava pode fotografá-la. */
+export function useSettleNavigation(pathname: string): void {
+  useLayoutEffect(() => {
+    settleCommit?.();
+  }, [pathname]);
 }
 
-function isPlainLeftClick(event: MouseEvent): boolean {
+export function isPlainLeftClick(event: MouseEvent): boolean {
   return (
     event.button === 0 &&
     !event.defaultPrevented &&
@@ -72,10 +92,21 @@ function isPlainLeftClick(event: MouseEvent): boolean {
   );
 }
 
-function anchorOf(target: EventTarget | null): HTMLAnchorElement | null {
+export function anchorOf(target: EventTarget | null): HTMLAnchorElement | null {
   if (!(target instanceof Element)) return null;
   const anchor = target.closest("a[href]");
   return anchor instanceof HTMLAnchorElement ? anchor : null;
+}
+
+function depthOf(pathname: string): number {
+  return pathname.split("/").filter(Boolean).length;
+}
+
+export function directionBetween(from: string, to: string): Direction {
+  const delta = depthOf(to) - depthOf(from);
+  if (delta > 0) return "forward";
+  if (delta < 0) return "back";
+  return "fade";
 }
 
 export function PageTransition({
@@ -92,10 +123,7 @@ export function PageTransition({
   const router = useRouter();
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // A tela nova está no DOM: a transição que a esperava pode fotografá-la.
-  useLayoutEffect(() => {
-    settleCommit?.();
-  }, [pathname]);
+  useSettleNavigation(pathname);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -121,13 +149,10 @@ export function PageTransition({
           : directionBetween(current, url.pathname);
       // A navegação continua sendo a do Next: só a foto é tirada antes dela.
       event.preventDefault();
-      void runViewTransition(
-        () => {
-          const commit = waitForCommit();
-          router.push(`${url.pathname}${url.search}${url.hash}`);
-          return commit;
-        },
-        { flush: false, types: [`nav-${direction}`] },
+      void pushWithViewTransition(
+        router,
+        `${url.pathname}${url.search}${url.hash}`,
+        { types: [`nav-${direction}`] },
       );
     }
     // Na captura, antes do `onClick` do `<Link>`: ele respeita `defaultPrevented`.

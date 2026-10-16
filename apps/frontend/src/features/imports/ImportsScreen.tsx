@@ -2,8 +2,8 @@
 
 import { type ReactNode, useEffect, useState } from "react";
 
-import type { SettingsState } from "@/data";
 import { SettingsHubPanel } from "@/features/settings/SettingsHub";
+import { useSettingsData } from "@/features/settings/SettingsWorkspace";
 import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
@@ -86,16 +86,8 @@ export function useImportState(): ImportStateReader {
 export function ImportsScreen() {
   const reader = useImportState();
   const wide = useWideLayout();
-  const [settings, setSettings] = useState<SettingsState | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    getProductServices()
-      .settings.get(controller.signal)
-      .then(setSettings)
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, []);
+  // Debaixo de `SettingsWorkspace`, as configurações já lidas pela lista ao lado.
+  const { settings } = useSettingsData();
 
   useShellConfig({
     active: "configuracoes",

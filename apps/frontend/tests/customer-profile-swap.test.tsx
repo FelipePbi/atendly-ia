@@ -66,7 +66,7 @@ function detail(id: string, name: string): CustomerDetail {
     phone: "11991234567",
     primaryGuardian: null,
     tags: [],
-  } as CustomerDetail;
+  };
 }
 
 const DETAILS: Record<string, CustomerDetail> = {

@@ -37,7 +37,7 @@ function conversationFixture(
     unreadCount: 0,
     updatedAt: "2026-10-15T12:00:00.000Z",
     ...overrides,
-  } as Conversation;
+  };
 }
 
 describe("foto de perfil da cliente", () => {

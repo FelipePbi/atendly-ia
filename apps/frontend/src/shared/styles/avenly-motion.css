@@ -313,6 +313,54 @@ html.vt-nav-back::view-transition-new(page-content) {
   }
 }
 
+/* Trocar de seção pelo menu principal (pedido de 2026-10-16): só a área de
+   conteúdo se move, a casca fica parada. A tela que sai sobe 6 px e some
+   (160 ms) enquanto a nova entra subindo 14 px com fade (240 ms). O que
+   tem nome próprio dentro do conteúdo (painéis, páginas, dias) vai junto na
+   foto da tela, sem animar à parte; o aviso flutuante segue por cima,
+   parado. */
+html.vt-section #main-content {
+  view-transition-name: app-main;
+}
+html.vt-section #main-content *:not(.shell-status-banner) {
+  view-transition-name: none !important;
+}
+::view-transition-group(app-main) {
+  animation: none;
+}
+::view-transition-image-pair(app-main) {
+  isolation: auto;
+}
+::view-transition-old(app-main) {
+  animation: motion-section-out var(--at-duration-fast) var(--at-ease-exit) both;
+  mix-blend-mode: normal;
+}
+::view-transition-new(app-main) {
+  animation: motion-section-in var(--at-duration-moderate)
+    var(--at-ease-standard) both;
+  mix-blend-mode: normal;
+}
+@keyframes motion-section-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@keyframes motion-section-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* Folha modal (ChatSheetShell): entra pelos keyframes `at-sheet`/`at-dialog`
    de sempre; sai em 160 ms pela View Transition que `ChatSheetShell` dispara
    ao fechar — 32 px para baixo no celular, scale .96 de 768 px em diante — e
@@ -746,8 +794,17 @@ html.is-view-transition .motion-enter-back {
   html.vt-service-swap::view-transition-old(service-panel),
   html.vt-appointment-swap::view-transition-old(appointment-panel),
   html.vt-appointment-swap::view-transition-old(agenda-panel),
-  html.vt-settings-swap::view-transition-old(settings-panel) {
+  html.vt-settings-swap::view-transition-old(settings-panel),
+  html.vt-section::view-transition-old(app-main) {
     display: block !important;
+  }
+  /* Troca de seção com movimento reduzido: só o fade, sem subir. */
+  html.vt-section::view-transition-old(app-main) {
+    animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both !important;
+  }
+  html.vt-section::view-transition-new(app-main) {
+    animation: motion-fade-in var(--at-duration-moderate)
+      var(--at-ease-standard) both !important;
   }
   /* Exceção pedida pelo usuário (D-173, 2026-10-16): o item que abre no
      painel ao lado da lista (cliente, conversa, serviço) troca com fade

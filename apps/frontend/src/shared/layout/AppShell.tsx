@@ -11,6 +11,13 @@ import {
 } from "@/features/notifications/NotificationsDrawer";
 import { Icon } from "@/shared/icons/Icon";
 import {
+  anchorOf,
+  isPlainLeftClick,
+  pushWithViewTransition,
+  useSettleNavigation,
+} from "@/shared/motion/PageTransition";
+import { supportsViewTransition } from "@/shared/motion/viewTransition";
+import {
   getProductServices,
   useProductRuntime,
 } from "@/shared/runtime/ProductRuntime";
@@ -84,6 +91,7 @@ function AppShellChrome({
   const showBottomNav = showBottomNavConfig && !hideTabBar;
   const router = useRouter();
   const pathname = usePathname();
+  useSectionTransitions(pathname, router);
   const isCurrent = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
   const { session, setUnauthenticated } = useProductRuntime();
@@ -462,6 +470,54 @@ function AppShellChrome({
       </Dialog>
     </>
   );
+}
+
+/** A seção de uma rota: o primeiro trecho (`/clientes/detalhes` → `clientes`). */
+function sectionOf(path: string): string {
+  return path.split("/").filter(Boolean)[0] ?? "";
+}
+
+/**
+ * Trocar de tela pelo menu principal (barra lateral, barra inferior e folha
+ * "Mais") anima a área de conteúdo (pedido de 2026-10-16): a tela que sai
+ * sobe um pouco e some, a nova entra subindo com fade; a casca fica parada.
+ * Só entre seções diferentes — dentro de uma seção, quem anima é a própria
+ * tela (troca de cliente, de conversa, de agendamento). Com movimento
+ * reduzido, só o fade (D-173).
+ */
+function useSectionTransitions(
+  pathname: string,
+  router: ReturnType<typeof useRouter>,
+): void {
+  useSettleNavigation(pathname);
+  useEffect(() => {
+    function handleClick(event: MouseEvent) {
+      if (!isPlainLeftClick(event)) return;
+      const anchor = anchorOf(event.target);
+      if (
+        !anchor?.closest('nav[aria-label="Navegação principal"], .more-sheet')
+      )
+        return;
+      if (anchor.target && anchor.target !== "_self") return;
+      const url = new URL(anchor.href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      const current = window.location.pathname;
+      if (sectionOf(url.pathname) === sectionOf(current)) return;
+      if (!supportsViewTransition()) return;
+      event.preventDefault();
+      void pushWithViewTransition(
+        router,
+        `${url.pathname}${url.search}${url.hash}`,
+        {
+          fadeOnReducedMotion: true,
+          types: ["section"],
+        },
+      );
+    }
+    // Na captura, antes do `onClick` do `<Link>`: ele respeita `defaultPrevented`.
+    document.addEventListener("click", handleClick, true);
+    return () => document.removeEventListener("click", handleClick, true);
+  }, [router]);
 }
 
 /** Os atalhos em destaque no topo da folha "Mais" do celular. */

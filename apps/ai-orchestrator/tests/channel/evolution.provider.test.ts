@@ -67,6 +67,25 @@ describe("EvolutionProvider", () => {
     });
   });
 
+  it("nao chama o Evolution quando WHATSAPP_OUTBOUND_DISABLED esta ligada", async () => {
+    vi.stubEnv("EVOLUTION_BASE_URL", "http://evolution-go:8080/");
+    vi.stubEnv("WHATSAPP_OUTBOUND_DISABLED", "true");
+    vi.resetModules();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { EvolutionProvider } =
+      await import("../../src/modules/channel/adapters/evolution/EvolutionProvider.js");
+
+    await expect(
+      new EvolutionProvider(undefined, "instance-token", "instance-1").sendText({
+        to: "5511999999999",
+        text: "resposta",
+      }),
+    ).rejects.toMatchObject({ code: "WHATSAPP_OUTBOUND_DISABLED" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("pede o 'digitando…' pelo campo delay so quando typingDelayMs vem", async () => {
     vi.stubEnv("EVOLUTION_BASE_URL", "http://evolution-go:8080/");
     vi.stubEnv("EVOLUTION_SEND_TEXT_PATH", "/send/text");

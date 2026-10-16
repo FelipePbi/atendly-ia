@@ -38,6 +38,10 @@ export function classifySendFailure(error: unknown): SendFailureClassification {
         retryable: false,
       };
     }
+    if (error.code === "WHATSAPP_OUTBOUND_DISABLED") {
+      // Trava local: o request nunca saiu, e retentar so repetiria a recusa.
+      return { state: "FAILED", detail: "outbound_disabled", retryable: false };
+    }
     if (error.code === "EVOLUTION_SEND_TIMEOUT") {
       return { state: "UNKNOWN", detail: "transport_timeout", retryable: false };
     }

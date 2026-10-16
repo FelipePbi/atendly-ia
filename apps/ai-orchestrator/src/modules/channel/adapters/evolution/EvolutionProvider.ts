@@ -34,6 +34,20 @@ export class EvolutionProvider implements WhatsAppProvider {
   ) {}
 
   async sendText(input: SendTextInput): Promise<SendTextResult> {
+    if (env.WHATSAPP_OUTBOUND_DISABLED) {
+      this.logger.warn(
+        {
+          to: maskPhone(input.to),
+          correlationId: input.correlationId,
+          requestId: input.requestId,
+        },
+        "EvolutionProvider blocked outbound text: WHATSAPP_OUTBOUND_DISABLED",
+      );
+      throw new AppError("WhatsApp outbound is disabled in this environment.", {
+        statusCode: 503,
+        code: "WHATSAPP_OUTBOUND_DISABLED",
+      });
+    }
     requireEnv(["EVOLUTION_BASE_URL"]);
     const instanceId = this.instanceIdOverride;
     // Sem queda para EVOLUTION_API_KEY: a chave global não substitui a

@@ -108,6 +108,11 @@ const envSchema = z.object({
   // seguem gravados na inbox, mas a IA nao responde, como contato ignorado.
   // Vazio (producao): sem filtro.
   AI_REPLY_ONLY_PHONES: stringEnv(""),
+  // Trava de transporte para teste local com o WhatsApp real: ligada, nenhuma
+  // mensagem sai pelo Evolution (IA, profissional, lembrete, teste de
+  // ativacao). A tentativa fica gravada como FAILED com motivo. Sempre
+  // desligada em producao.
+  WHATSAPP_OUTBOUND_DISABLED: boolEnv(false),
   // Sessao de conversa: inatividade **do contato** que expira a sessao
   // (~24 h). E fronteira configuravel e testada; mudar este valor muda o
   // relogio da sessao, nunca em silencio (D-009).

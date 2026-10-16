@@ -18,6 +18,20 @@ describe("outbound send failure classification", () => {
     });
   });
 
+  it("treats the local outbound kill switch as a non-retryable failure", () => {
+    const classification = classifySendFailure(
+      new AppError("WhatsApp outbound is disabled in this environment.", {
+        statusCode: 503,
+        code: "WHATSAPP_OUTBOUND_DISABLED",
+      }),
+    );
+    expect(classification).toEqual({
+      state: "FAILED",
+      detail: "outbound_disabled",
+      retryable: false,
+    });
+  });
+
   it("treats a timeout as unknown, never as a failure to retry", () => {
     const classification = classifySendFailure(
       new AppError("Evolution Go send timed out.", {

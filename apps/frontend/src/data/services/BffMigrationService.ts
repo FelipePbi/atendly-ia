@@ -13,6 +13,7 @@ import {
   type ImportState,
   type ImportWorkStart,
 } from "../mappers/publicApiSchemas";
+import { notifyImportChanged } from "./importChanges";
 
 export interface StartImportInput {
   sourceAccountId: string;
@@ -50,6 +51,12 @@ export interface ExecuteImportInput {
  * Sem tela: a experiência é do Goal019, e o que esta camada entrega é só o
  * contrato do ciclo de importação abaixo.
  */
+/** Mutação que muda o estado da importação avisa quem o mostra (Configurações). */
+function changed<T>(value: T): T {
+  notifyImportChanged();
+  return value;
+}
+
 export class BffMigrationService {
   constructor(private readonly http: BffHttpClient) {}
 
@@ -75,7 +82,7 @@ export class BffMigrationService {
       path: "/v1/calendar/imports",
       schema: routeSchema<ImportSessionStart>("POST", "/v1/calendar/imports"),
       signal,
-    });
+    }).then(changed);
   }
 
   /**
@@ -98,7 +105,7 @@ export class BffMigrationService {
         "/v1/calendar/imports/:sessionId/analyze",
       ),
       signal,
-    });
+    }).then(changed);
   }
 
   /** Lê o preview gravado pela última análise, sem reler a origem (Goal061 §4). */
@@ -194,7 +201,7 @@ export class BffMigrationService {
         "/v1/calendar/imports/:sessionId/execute",
       ),
       signal,
-    });
+    }).then(changed);
   }
 
   /** Progresso real, lido do banco a cada chamada. */
@@ -229,6 +236,6 @@ export class BffMigrationService {
         "/v1/calendar/imports/:sessionId/complete",
       ),
       signal,
-    });
+    }).then(changed);
   }
 }

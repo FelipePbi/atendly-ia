@@ -4,13 +4,20 @@ import clsx from "clsx";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import type { RetentionSettings, SettingsState } from "@/data";
+import {
+  onImportChanged,
+  onRetentionChanged,
+  onServicesChanged,
+  type RetentionSettings,
+  type SettingsState,
+} from "@/data";
 import { Icon, type IconName } from "@/shared/icons/Icon";
 import { formatBrazilianPhone } from "@/shared/phone";
 import {
   getProductServices,
   useProductRuntime,
 } from "@/shared/runtime/ProductRuntime";
+import { recall, remember } from "@/shared/runtime/sessionMemory";
 import {
   aiCardView,
   useSystemStatus,
@@ -44,17 +51,28 @@ type HubReadings = {
   services: { active: boolean; needsReview: boolean }[] | null;
 };
 
+const HUB_MEMORY_KEY = "settings:hub";
+
+const EMPTY_READINGS: HubReadings = {
+  importState: null,
+  retention: null,
+  services: null,
+};
+
 /**
  * Cada leitura é independente e opcional: uma que falha ou ainda carrega deixa
  * a linha sem segunda linha. O hub nunca espera por elas nem exibe um valor
  * que não veio do BFF.
+ *
+ * O que já foi lido nesta aba aparece na hora (D-167) e é relido quando a
+ * lista monta. Ao lado da seção aberta a lista fica montada entre as seções
+ * (`SettingsWorkspace`) e só relê a leitura cujo dado mudou, pelo aviso de
+ * mudança: serviços, importação ou retenção.
  */
 function useHubReadings(): HubReadings {
-  const [readings, setReadings] = useState<HubReadings>({
-    importState: null,
-    retention: null,
-    services: null,
-  });
+  const [readings, setReadings] = useState<HubReadings>(
+    () => recall<HubReadings>(HUB_MEMORY_KEY) ?? EMPTY_READINGS,
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -62,22 +80,40 @@ function useHubReadings(): HubReadings {
     const keep =
       <K extends keyof HubReadings>(key: K) =>
       (value: HubReadings[K]) =>
-        setReadings((current) => ({ ...current, [key]: value }));
+        setReadings((current) => {
+          const next = { ...current, [key]: value };
+          remember(HUB_MEMORY_KEY, next);
+          return next;
+        });
     const ignore = () => undefined;
 
-    services.serviceCatalog
-      .list(controller.signal)
-      .then((result) => keep("services")(result.items))
-      .catch(ignore);
-    services.migration
-      .getImportState(controller.signal)
-      .then(keep("importState"))
-      .catch(ignore);
-    services.retention
-      .get(controller.signal)
-      .then(keep("retention"))
-      .catch(ignore);
-    return () => controller.abort();
+    const readServices = () =>
+      services.serviceCatalog
+        .list(controller.signal)
+        .then((result) => keep("services")(result.items))
+        .catch(ignore);
+    const readImportState = () =>
+      services.migration
+        .getImportState(controller.signal)
+        .then(keep("importState"))
+        .catch(ignore);
+    const readRetention = () =>
+      services.retention
+        .get(controller.signal)
+        .then(keep("retention"))
+        .catch(ignore);
+    void readServices();
+    void readImportState();
+    void readRetention();
+    const unsubscribe = [
+      onServicesChanged(() => void readServices()),
+      onImportChanged(() => void readImportState()),
+      onRetentionChanged(() => void readRetention()),
+    ];
+    return () => {
+      controller.abort();
+      for (const stop of unsubscribe) stop();
+    };
   }, []);
 
   return readings;

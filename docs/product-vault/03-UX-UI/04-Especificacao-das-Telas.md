@@ -244,7 +244,10 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 - duração;
 - preço;
 - status;
-- indicador de pendência quando incompleto.
+- indicador de pendência quando incompleto;
+- título, resumo, "+" e busca ficam fixos; só os itens rolam;
+- abrir ou trocar de serviço não recarrega a lista: ela mantém a busca e a rolagem, e só atualiza quando o catálogo muda;
+- sem paginação: o catálogo de um profissional autônomo é curto e vem inteiro.
 
 ### Criar/editar
 
@@ -258,7 +261,8 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 - recorrência;
 - buffers;
 - regras privadas para IA;
-- modalidade por serviço quando aplicável.
+- modalidade por serviço quando aplicável;
+- ao lado da lista (a partir de 1024 px), trocar de serviço mantém o anterior até o novo chegar e troca com um crossfade curto, sem esqueleto.
 
 ## Mais / Configurações
 

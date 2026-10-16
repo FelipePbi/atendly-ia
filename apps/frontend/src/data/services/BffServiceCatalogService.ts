@@ -4,6 +4,7 @@ import type {
   ServiceAiInstruction,
   ServiceList,
 } from "../mappers/publicApiSchemas";
+import { notifyServicesChanged } from "./serviceChanges";
 
 export type ServiceColorToken =
   "ROSE" | "AMBER" | "EMERALD" | "SKY" | "VIOLET" | "SLATE";
@@ -26,6 +27,12 @@ export interface ServiceInput {
 
 export type UpdateServiceInput = Partial<ServiceInput>;
 
+/** Mutação que muda o que a lista de Serviços mostra avisa quem a mantém. */
+function changed<T>(value: T): T {
+  notifyServicesChanged();
+  return value;
+}
+
 export class BffServiceCatalogService {
   constructor(private readonly http: BffHttpClient) {}
 
@@ -38,23 +45,27 @@ export class BffServiceCatalogService {
   }
 
   create(input: ServiceInput, signal?: AbortSignal) {
-    return this.http.request({
-      body: input,
-      method: "POST",
-      path: "/v1/services",
-      schema: routeSchema<Service>("POST", "/v1/services"),
-      signal,
-    });
+    return this.http
+      .request({
+        body: input,
+        method: "POST",
+        path: "/v1/services",
+        schema: routeSchema<Service>("POST", "/v1/services"),
+        signal,
+      })
+      .then(changed);
   }
 
   update(id: string, input: UpdateServiceInput, signal?: AbortSignal) {
-    return this.http.request({
-      body: input,
-      method: "PATCH",
-      path: `/v1/services/${encodeURIComponent(id)}`,
-      schema: routeSchema<Service>("PATCH", "/v1/services/:id"),
-      signal,
-    });
+    return this.http
+      .request({
+        body: input,
+        method: "PATCH",
+        path: `/v1/services/${encodeURIComponent(id)}`,
+        schema: routeSchema<Service>("PATCH", "/v1/services/:id"),
+        signal,
+      })
+      .then(changed);
   }
 
   getAiInstruction(id: string, signal?: AbortSignal) {

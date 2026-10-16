@@ -351,10 +351,55 @@
   }
 }
 
-/* Goal088 (D-103): lista em painel + editor como tela empurrada */
+/* Goal088 (D-103): lista em painel + editor como tela empurrada.
+   Cabeçalho fixo: título, resumo, "+" e busca ficam parados; só a área dos
+   itens (`.service-panel-scroll`) rola, e a barra de rolagem começa abaixo da
+   busca. O painel ocupa a altura de quem o contém: a coluna da lista no
+   desktop (que deixa de rolar) e `.service-list-screen` no celular. A área
+   que rola vai de borda a borda do painel, para o destaque da linha aberta
+   (`.service-row.is-open`) não ser cortado. */
 .service-panel {
   --service-panel-inline: 20px;
-  padding: 24px var(--service-panel-inline) 32px;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 24px var(--service-panel-inline) 0;
+}
+.service-panel-header,
+.service-panel > .directory-toolbar {
+  flex: none;
+}
+.service-panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-inline: calc(var(--service-panel-inline) * -1);
+  padding: 0 var(--service-panel-inline) 32px;
+}
+.list-detail-list:has(> .service-panel) {
+  overflow-y: hidden;
+}
+/* Lista como tela (celular): altura da janela menos a barra inferior da casca
+   (65 px; 81 px a partir de 768 px), para a área dos itens rolar sozinha. O
+   respiro no fim deixa a última linha acima do "+". */
+.service-list-screen:not(.has-state) {
+  height: calc(100dvh - 65px - env(safe-area-inset-bottom));
+}
+.service-list-screen .service-panel-scroll {
+  padding-bottom: 88px;
+}
+@media (min-width: 768px) {
+  .service-list-screen:not(.has-state) {
+    height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+  }
+}
+@media (min-width: 1100px) {
+  .service-list-screen:not(.has-state) {
+    height: 100dvh;
+  }
 }
 .service-panel-header {
   margin-bottom: 14px;
@@ -799,7 +844,12 @@
 .service-option.is-open .service-option-chevron {
   display: none;
 }
-.service-option.is-open:is([data-option="buffers"], [data-option="instruction"], [data-option="recurrence"]) .service-option-value {
+.service-option.is-open:is(
+    [data-option="buffers"],
+    [data-option="instruction"],
+    [data-option="recurrence"]
+  )
+  .service-option-value {
   display: none;
 }
 .service-option-value-action {
@@ -1432,4 +1482,57 @@
 .service-form-body .service-form-review label.field > .input {
   height: 54px;
   min-height: 0;
+}
+
+/* Editor de serviço ao lado da lista: o primeiro serviço entra curto. A troca
+   por outro é um crossfade (`vt-service-swap`): o anterior sai em 160 ms
+   enquanto o novo entra em 240 ms, sem o painel passar por vazio. Se o novo
+   demorar, o anterior esmaece devagar; carga rápida nunca chega a esmaecer.
+   Mesmo ajuste do perfil de Clientes (`customer-panel`, avenly-motion.css). */
+.service-form-screen.is-entering > :not(.pushed-bar) {
+  animation: motion-rise-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+}
+html.is-view-transition .service-form-screen.is-entering > :not(.pushed-bar) {
+  animation-delay: -1s;
+}
+.service-form-screen > :not(.pushed-bar) {
+  transition: opacity var(--at-duration-moderate) var(--at-ease-standard);
+}
+.service-form-screen.is-refreshing > :not(.pushed-bar) {
+  opacity: 0.6;
+  transition-delay: 180ms;
+}
+/* Só com a lista ao lado: abaixo de 1024 px o editor é tela empurrada e se
+   move junto com `page-content`. */
+@media (min-width: 1024px) {
+  .service-form-screen {
+    view-transition-name: service-panel;
+  }
+}
+::view-transition-group(service-panel) {
+  animation: none;
+}
+::view-transition-image-pair(service-panel) {
+  isolation: auto;
+}
+::view-transition-old(service-panel),
+::view-transition-new(service-panel) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html.vt-service-swap::view-transition-old(service-panel) {
+  animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both;
+}
+html.vt-service-swap::view-transition-new(service-panel) {
+  animation: motion-fade-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .service-form-screen.is-entering > :not(.pushed-bar) {
+    animation: none;
+  }
+  .service-form-screen > :not(.pushed-bar) {
+    transition: none;
+  }
 }

@@ -38,83 +38,36 @@ import {
 } from "@/features/notifications/NotificationsDrawer";
 import { Icon, type IconName } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import {
   getProductServices,
   useProductRuntime,
 } from "@/shared/runtime/ProductRuntime";
+import { recall, remember } from "@/shared/runtime/sessionMemory";
 import {
   type StatusView,
   useSystemStatus,
   type UseSystemStatusResult,
 } from "@/shared/runtime/systemStatus";
-import { Skeleton, StatePanel } from "@/shared/ui/States";
+import { BrandLoader } from "@/shared/ui/Brand";
+import { StatePanel } from "@/shared/ui/States";
 
-function LoadingDashboard() {
-  return (
-    <div
-      className="dashboard-page"
-      aria-busy="true"
-      aria-label="Carregando painel inicial"
-    >
-      <header className="dashboard-header">
-        <div style={{ width: "min(100%, 320px)" }}>
-          <div className="skeleton skeleton-title" />
-          <div
-            className="skeleton skeleton-line"
-            style={{ marginTop: 10, width: "58%" }}
-          />
-        </div>
-        <Skeleton style={{ height: 40, width: 40, borderRadius: "50%" }} />
-      </header>
-      <section className="operational-strip">
-        <Skeleton style={{ height: 40, width: 40 }} />
-        <div className="dashboard-skeleton-grid">
-          <Skeleton className="skeleton-title" />
-          <Skeleton className="skeleton-line" style={{ width: "74%" }} />
-        </div>
-        <span className="badge">Verificando</span>
-      </section>
-      <div className="dashboard-body">
-        <article className="card dashboard-card attention-card">
-          <div className="dashboard-card-head">
-            <Skeleton className="skeleton-title" />
-          </div>
-          <div className="dashboard-skeleton-grid">
-            <div className="dashboard-skeleton-block">
-              <Skeleton className="skeleton-title" />
-              <Skeleton className="skeleton-line" />
-            </div>
-          </div>
-        </article>
-        <article className="card dashboard-card today-card">
-          <div className="dashboard-card-head">
-            <Skeleton className="skeleton-title" />
-          </div>
-          <div className="dashboard-skeleton-grid">
-            {[0, 1].map((item) => (
-              <div className="dashboard-skeleton-block" key={item}>
-                <Skeleton className="skeleton-title" />
-                <Skeleton className="skeleton-line" />
-              </div>
-            ))}
-          </div>
-        </article>
-        <article className="card dashboard-card week-card">
-          <div className="dashboard-card-head">
-            <Skeleton className="skeleton-title" />
-          </div>
-          <Skeleton style={{ height: 48, width: "100%" }} />
-        </article>
-      </div>
-      <span className="sr-only" role="status">
-        Carregando dados do início.
-      </span>
-    </div>
-  );
-}
+/** A última leitura do Início na aba (D-167): voltar à Home mostra na hora. */
+const DASHBOARD_MEMORY_KEY = "dashboard:home";
 
+/**
+ * Início sem esqueleto (vídeo de 2026-10-16, o mesmo ajuste de Serviços e
+ * Conversas): a última leitura da aba aparece na hora e é revalidada em
+ * segundo plano. Sem ela, a área fica vazia; se a leitura passar de ~150 ms
+ * (D-168), o "A" animado aparece no centro do conteúdo. Quando o dado chega,
+ * o painel entra com fade, também com movimento reduzido (D-173).
+ */
 export function ProductDashboardScreen() {
-  const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [dashboard, setDashboard] = useState<Dashboard | null>(
+    () => recall<Dashboard>(DASHBOARD_MEMORY_KEY) ?? null,
+  );
+  // Só a primeira leitura desta visita entra com fade; a lembrada, não.
+  const [arriving] = useState(() => !recall(DASHBOARD_MEMORY_KEY));
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const status = useSystemStatus();
@@ -124,6 +77,7 @@ export function ProductDashboardScreen() {
     getProductServices()
       .dashboard.get(controller.signal)
       .then((result) => {
+        remember(DASHBOARD_MEMORY_KEY, result);
         setDashboard(result);
         setError(null);
       })
@@ -163,8 +117,11 @@ export function ProductDashboardScreen() {
         },
   );
 
+  const showLoader = useDeferredLoading(!dashboard && !error);
   if (!dashboard && !error) {
-    return <LoadingDashboard />;
+    return showLoader ? (
+      <BrandLoader inline label="Carregando dados do início" />
+    ) : null;
   }
 
   if (!dashboard) {
@@ -189,6 +146,7 @@ export function ProductDashboardScreen() {
 
   return (
     <RealDashboard
+      arriving={arriving}
       dashboard={dashboard}
       onRetry={() => setReload((value) => value + 1)}
       status={status}
@@ -888,10 +846,12 @@ function PauseConfirmation({
 }
 
 function RealDashboard({
+  arriving,
   dashboard,
   onRetry,
   status,
 }: {
+  arriving: boolean;
   dashboard: Dashboard;
   onRetry: () => void;
   status: UseSystemStatusResult;
@@ -1095,7 +1055,7 @@ function RealDashboard({
   }
 
   return (
-    <div className="dashboard-page">
+    <div className={clsx("dashboard-page", arriving && "is-arriving")}>
       <header className="dashboard-header">
         <div>
           <h1>{greeting}</h1>

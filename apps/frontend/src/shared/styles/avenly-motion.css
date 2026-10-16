@@ -163,6 +163,14 @@
     both;
 }
 
+/* Início na entrada (2026-10-16): sem esqueleto. A área fica vazia (ou com
+   o "A" animado, se a leitura demorar) e o painel entra com fade quando a
+   primeira leitura chega — também com movimento reduzido (D-173). */
+.dashboard-page.is-arriving {
+  animation: motion-fade-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+}
+
 /* Conversas na entrada (2026-10-16): sem esqueleto. O título já está no
    lugar; abas, nota e lista entram com o mesmo fade quando a primeira leitura
    chega — também com movimento reduzido (D-173). */
@@ -829,6 +837,7 @@ html.is-view-transition .motion-enter-back {
   .customer-profile.is-entering > :not(.pushed-bar),
   .service-form-screen.is-entering > :not(.pushed-bar),
   .service-list-arrive,
+  .dashboard-page.is-arriving,
   .conversation-list-page.is-arriving > .conversation-tabs,
   .conversation-list-page.is-arriving > .conversation-lens-note,
   .conversation-list-page.is-arriving > .conversation-list-surface {

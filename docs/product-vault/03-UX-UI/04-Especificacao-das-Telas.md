@@ -82,6 +82,12 @@ Telas previstas:
 
 Pode adicionar mais contexto e métricas simples.
 
+### Carregamento
+
+- sem esqueleto: enquanto a primeira leitura não chega, a área do conteúdo fica vazia; se passar de ~150 ms, aparece o "A" animado no centro (o carregamento padrão);
+- quando o dado chega, o painel entra com fade curto, também com movimento reduzido (só opacidade);
+- voltar ao Início mostra na hora a última leitura da aba, sem fade, e a revalida no lugar.
+
 ## Agenda
 
 ### Agenda — visualização Dia

@@ -7091,21 +7091,6 @@ main#main-content:focus-visible {
   color: var(--fg-soft);
   font-size: 12px;
 }
-.dashboard-skeleton-grid {
-  display: grid;
-  gap: 14px;
-}
-.dashboard-skeleton-block {
-  min-height: 72px;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-input);
-  display: grid;
-  gap: 12px;
-}
-.dashboard-skeleton-block .skeleton-line:last-child {
-  width: 64%;
-}
 
 @media (max-width: 767px) {
   .dashboard-page {

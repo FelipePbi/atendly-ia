@@ -816,3 +816,83 @@ describe("Goal117: checklist e faixa do H4", () => {
 function statusFixtureFor(aiOn: boolean, whatsapp = true) {
   statusGet.mockResolvedValue(statusFixture({ aiOn, whatsapp }));
 }
+
+/**
+ * Início sem esqueleto (vídeo de 2026-10-16): entrar na Home não mostra mais
+ * blocos cinza. A área fica vazia; se a leitura demorar, o "A" animado
+ * aparece no centro; o painel entra com fade; e a volta à Home mostra a
+ * última leitura da aba na hora, revalidando em segundo plano.
+ */
+describe("Início sem esqueleto", () => {
+  function pending<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => {
+      resolve = done;
+    });
+    return { promise, resolve };
+  }
+
+  function home() {
+    return (
+      <ShellConfigProvider>
+        <SystemStatusProvider>
+          <ProductDashboardScreen />
+        </SystemStatusProvider>
+      </ShellConfigProvider>
+    );
+  }
+
+  test("leitura rápida: nem esqueleto nem carregando, e o painel entra com fade", async () => {
+    statusFixtureFor(true);
+    dashboardGet.mockResolvedValue(dashboardFixture());
+    const { container } = render(home());
+
+    expect(container.querySelector(".skeleton")).toBeNull();
+    expect(screen.queryByText("Carregando dados do início")).toBeNull();
+    await screen.findByRole("heading", { level: 1 });
+    expect(container.querySelector(".dashboard-page")).toHaveClass(
+      "is-arriving",
+    );
+    expect(screen.queryByText("Carregando dados do início")).toBeNull();
+  });
+
+  test("leitura lenta: depois de ~150 ms, o A animado, nunca o esqueleto", async () => {
+    statusFixtureFor(true);
+    const read = pending<Dashboard>();
+    dashboardGet.mockReturnValue(read.promise);
+    const { container } = render(home());
+
+    expect(screen.queryByText("Carregando dados do início")).toBeNull();
+    expect(
+      await screen.findByText("Carregando dados do início"),
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector(".brand-loader-screen.is-inline"),
+    ).not.toBeNull();
+    expect(container.querySelector(".skeleton")).toBeNull();
+
+    read.resolve(dashboardFixture());
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByText("Carregando dados do início")).toBeNull();
+  });
+
+  test("voltar à Home mostra a última leitura na hora, sem fade, e revalida", async () => {
+    statusFixtureFor(true);
+    dashboardGet.mockResolvedValue(dashboardFixture());
+    const first = render(home());
+    await screen.findByRole("heading", { level: 1 });
+    first.unmount();
+
+    const read = pending<Dashboard>();
+    dashboardGet.mockReturnValue(read.promise);
+    const { container } = render(home());
+
+    // Na hora, sem esperar a rede.
+    expect(screen.getByRole("heading", { level: 1 })).toBeVisible();
+    expect(container.querySelector(".dashboard-page")).not.toHaveClass(
+      "is-arriving",
+    );
+    expect(dashboardGet).toHaveBeenCalledTimes(2);
+    read.resolve(dashboardFixture());
+  });
+});

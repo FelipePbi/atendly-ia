@@ -163,6 +163,16 @@
     both;
 }
 
+/* Conversas na entrada (2026-10-16): sem esqueleto. O título já está no
+   lugar; abas, nota e lista entram com o mesmo fade quando a primeira leitura
+   chega — também com movimento reduzido (D-173). */
+.conversation-list-page.is-arriving > .conversation-tabs,
+.conversation-list-page.is-arriving > .conversation-lens-note,
+.conversation-list-page.is-arriving > .conversation-list-surface {
+  animation: motion-fade-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+}
+
 /* Perfil do cliente: a primeira cliente entra curto. A troca por outra é um
    crossfade (`vt-customer-swap`): a anterior sai em 160 ms enquanto a nova
    entra em 240 ms, sem o painel passar por vazio (2026-10-16). Se a cliente
@@ -761,7 +771,10 @@ html.is-view-transition .motion-enter-back {
   }
   .customer-profile.is-entering > :not(.pushed-bar),
   .service-form-screen.is-entering > :not(.pushed-bar),
-  .service-list-arrive {
+  .service-list-arrive,
+  .conversation-list-page.is-arriving > .conversation-tabs,
+  .conversation-list-page.is-arriving > .conversation-lens-note,
+  .conversation-list-page.is-arriving > .conversation-list-surface {
     animation: motion-fade-in var(--at-duration-moderate)
       var(--at-ease-standard) both !important;
   }

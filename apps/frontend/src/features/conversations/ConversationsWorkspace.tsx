@@ -65,9 +65,13 @@ export function ConversationsWorkspace({ children }: { children: ReactNode }) {
 
   const { whatsappView } = useSystemStatus();
   const probe = useNoWhatsappProbe(whatsappView);
-  const inboxTabs =
-    whatsappView !== "loading" && probe !== "loading" && probe !== "empty";
-  const split = wide && (targetId ? true : inboxTabs && !list.connectedEmpty);
+  // A tela já nasce dividida de 1024 px em diante (2026-10-16): esperar o
+  // status do WhatsApp para dividir fazia o layout mudar no meio da entrada.
+  // Enquanto o status não responde, a coluna mostra só o título (sem abas,
+  // Goal096); só o C5 (sem WhatsApp e sem conversa) tira a divisão.
+  const statusPending = whatsappView === "loading" || probe === "loading";
+  const split =
+    wide && (targetId ? true : probe !== "empty" && !list.connectedEmpty);
 
   const cache = useRef(new Map<string, ThreadSnapshot>());
   const remember = useCallback(
@@ -178,6 +182,7 @@ export function ConversationsWorkspace({ children }: { children: ReactNode }) {
             role="complementary"
           >
             <ConversationListColumn
+              pending={statusPending}
               list={list}
               selectedId={targetId ?? undefined}
             />

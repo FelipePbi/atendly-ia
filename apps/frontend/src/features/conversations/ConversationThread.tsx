@@ -456,7 +456,8 @@ export function ConversationThread({
     active: "conversas",
     attention: earlyState ? needsAttention(earlyState) : false,
     loading,
-    mainClassName: ready ? "conversation-detail-main" : undefined,
+    // Na casca dividida, a moldura é a mesma desde a caixa de entrada.
+    mainClassName: ready || hosted ? "conversation-detail-main" : undefined,
     module: "conversations",
     pushed: ready,
     title: conversation ? conversationLabel(conversation) : "Conversas",

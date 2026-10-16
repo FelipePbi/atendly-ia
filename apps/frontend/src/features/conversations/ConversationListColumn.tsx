@@ -10,7 +10,6 @@ import { useProductRuntime } from "@/shared/runtime/ProductRuntime";
 import { useSystemStatus } from "@/shared/runtime/systemStatus";
 import { StatePanel } from "@/shared/ui/States";
 
-import { ConversationLoading } from "./ConversationLoading";
 import { ConversationRow } from "./ConversationRow";
 import { DEFAULT_BUSINESS_TIMEZONE } from "./format";
 import {
@@ -92,9 +91,15 @@ export function useConversationList(
  */
 export function ConversationListColumn({
   list,
+  pending = false,
   selectedId,
 }: {
   list: ConversationListState;
+  /**
+   * O status do WhatsApp ainda não respondeu: só o título, sem abas (Goal096)
+   * e sem esqueleto; o resto entra com fade quando chega (2026-10-16).
+   */
+  pending?: boolean;
   selectedId?: string;
 }) {
   const {
@@ -131,6 +136,13 @@ export function ConversationListColumn({
     searchToggle.current?.focus();
   };
 
+  // A primeira leitura entra com fade, sem esqueleto antes (2026-10-16): a
+  // classe fica só na leva que chegou depois de a tela abrir carregando.
+  const [arrived, setArrived] = useState(false);
+  const [waited, setWaited] = useState(loading || pending);
+  if ((loading || pending) && !waited) setWaited(true);
+  if (waited && !loading && !pending && !arrived) setArrived(true);
+
   const groups = groupInbox(lens, conversations, timezone);
   const showRows = !loading && !error && conversations.length > 0;
   const noResults =
@@ -142,169 +154,184 @@ export function ConversationListColumn({
       className={clsx(
         "conversation-list-page is-inbox",
         connectedEmpty && "is-connected-empty",
+        arrived && "is-arriving",
       )}
     >
       <header className="conversation-page-header">
         <h1>Conversas</h1>
-        <button
-          aria-controls={searchOpen ? searchPanelId : undefined}
-          aria-expanded={searchOpen}
-          aria-label="Buscar conversas"
-          className="conversation-search-toggle"
-          onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
-          ref={searchToggle}
-          type="button"
-        >
-          <span className="conversation-search-toggle-disc">
-            <svg
-              aria-hidden="true"
-              fill="none"
-              height="20"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.75"
-              viewBox="0 0 24 24"
-              width="20"
-            >
-              {searchOpen ? (
-                <path d="M6 6l12 12M18 6L6 18" />
-              ) : (
-                <>
-                  <circle cx="11" cy="11" r="6.5" />
-                  <path d="M20 20l-4.2-4.2" />
-                </>
-              )}
-            </svg>
-          </span>
-        </button>
-      </header>
-
-      {searchOpen && (
-        <div className="conversation-search-panel" id={searchPanelId}>
-          <div className="conversation-search">
-            <label className="sr-only" htmlFor="conversation-search">
-              Buscar por nome ou telefone
-            </label>
-            <Icon name="search" />
-            <input
-              className="input"
-              id="conversation-search"
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") closeSearch();
-              }}
-              placeholder="Buscar por nome ou telefone"
-              ref={searchInput}
-              type="search"
-              value={search}
-            />
-          </div>
+        {!pending && (
           <button
-            aria-pressed={lens === "ignored"}
-            className={clsx(
-              "chip conversation-lens",
-              lens === "ignored" && "is-active",
-            )}
-            onClick={() => setLens("ignored")}
+            aria-controls={searchOpen ? searchPanelId : undefined}
+            aria-expanded={searchOpen}
+            aria-label="Buscar conversas"
+            className="conversation-search-toggle"
+            onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
+            ref={searchToggle}
             type="button"
           >
-            <Icon name="eye" />
-            Ignorados
+            <span className="conversation-search-toggle-disc">
+              <svg
+                aria-hidden="true"
+                fill="none"
+                height="20"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.75"
+                viewBox="0 0 24 24"
+                width="20"
+              >
+                {searchOpen ? (
+                  <path d="M6 6l12 12M18 6L6 18" />
+                ) : (
+                  <>
+                    <circle cx="11" cy="11" r="6.5" />
+                    <path d="M20 20l-4.2-4.2" />
+                  </>
+                )}
+              </svg>
+            </span>
           </button>
-        </div>
-      )}
-
-      <InboxTabs
-        attention={commercialAttention}
-        lens={lens}
-        onSelect={setLens}
-      />
-
-      {note && <div className="conversation-lens-note">{note}</div>}
-
-      <section
-        aria-busy={loading || undefined}
-        aria-label={`Conversas · ${lensLabels[lens]}`}
-        className={clsx(
-          "conversation-list-surface",
-          (loading || error || conversations.length === 0) &&
-            !connectedEmpty &&
-            "conversation-list-state",
-          emptyTab && !connectedEmpty && "conversation-empty-surface",
         )}
-        role="tabpanel"
-      >
-        {loading && searching && (
-          <p className="conversation-searching" role="status">
-            Buscando conversas em {lensLabels[lens]}…
-          </p>
-        )}
-        {loading && !searching && <ConversationLoading />}
-
-        {!loading && error && (
-          <StatePanel
-            actionLabel="Tentar novamente"
-            description={error}
-            icon="alert"
-            onAction={reload}
-            title="Não foi possível carregar as conversas"
-            tone="error"
-          />
-        )}
-
-        {noResults && (
-          <p className="conversation-no-results" role="status">
-            Nenhuma conversa em {lensLabels[lens]} corresponde a {`“${term}”`}.
-          </p>
-        )}
-
-        {connectedEmpty && <ConnectedEmpty phone={connectedPhone} />}
-
-        {emptyTab && !connectedEmpty && (
-          <StatePanel
-            actionLabel="Atualizar lista"
-            description={emptyStates[lens].description}
-            icon="chat"
-            onAction={reload}
-            title={emptyStates[lens].title}
-          />
-        )}
-
-        {showRows &&
-          groups.map((group, index) => (
-            <div
-              className={clsx(
-                "conversation-group",
-                `is-${group.key}`,
-                group.key === "earlier" &&
-                  group.labelHidden &&
-                  index > 0 &&
-                  "is-continued",
-              )}
-              key={group.key}
-            >
-              {group.label && (
-                <h2
-                  className={clsx(
-                    "conversation-group-label",
-                    group.labelHidden && "sr-only",
-                  )}
-                >
-                  {group.label}
-                </h2>
-              )}
-              {group.conversations.map((conversation) => (
-                <ConversationRow
-                  conversation={conversation}
-                  key={conversation.id}
-                  selected={conversation.id === selectedId}
-                  timezone={timezone}
+      </header>
+      {pending ? (
+        <p className="sr-only" role="status">
+          Carregando conversas
+        </p>
+      ) : (
+        <>
+          {searchOpen && (
+            <div className="conversation-search-panel" id={searchPanelId}>
+              <div className="conversation-search">
+                <label className="sr-only" htmlFor="conversation-search">
+                  Buscar por nome ou telefone
+                </label>
+                <Icon name="search" />
+                <input
+                  className="input"
+                  id="conversation-search"
+                  onChange={(event) => setSearch(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") closeSearch();
+                  }}
+                  placeholder="Buscar por nome ou telefone"
+                  ref={searchInput}
+                  type="search"
+                  value={search}
                 />
-              ))}
+              </div>
+              <button
+                aria-pressed={lens === "ignored"}
+                className={clsx(
+                  "chip conversation-lens",
+                  lens === "ignored" && "is-active",
+                )}
+                onClick={() => setLens("ignored")}
+                type="button"
+              >
+                <Icon name="eye" />
+                Ignorados
+              </button>
             </div>
-          ))}
-      </section>
+          )}
+
+          <InboxTabs
+            attention={commercialAttention}
+            lens={lens}
+            onSelect={setLens}
+          />
+
+          {note && <div className="conversation-lens-note">{note}</div>}
+
+          <section
+            aria-busy={loading || undefined}
+            aria-label={`Conversas · ${lensLabels[lens]}`}
+            className={clsx(
+              "conversation-list-surface",
+              (loading || error || conversations.length === 0) &&
+                !connectedEmpty &&
+                "conversation-list-state",
+              emptyTab && !connectedEmpty && "conversation-empty-surface",
+            )}
+            role="tabpanel"
+          >
+            {loading && searching && (
+              <p className="conversation-searching" role="status">
+                Buscando conversas em {lensLabels[lens]}…
+              </p>
+            )}
+            {loading && !searching && (
+              <p className="sr-only" role="status">
+                Carregando conversas
+              </p>
+            )}
+
+            {!loading && error && (
+              <StatePanel
+                actionLabel="Tentar novamente"
+                description={error}
+                icon="alert"
+                onAction={reload}
+                title="Não foi possível carregar as conversas"
+                tone="error"
+              />
+            )}
+
+            {noResults && (
+              <p className="conversation-no-results" role="status">
+                Nenhuma conversa em {lensLabels[lens]} corresponde a{" "}
+                {`“${term}”`}.
+              </p>
+            )}
+
+            {connectedEmpty && <ConnectedEmpty phone={connectedPhone} />}
+
+            {emptyTab && !connectedEmpty && (
+              <StatePanel
+                actionLabel="Atualizar lista"
+                description={emptyStates[lens].description}
+                icon="chat"
+                onAction={reload}
+                title={emptyStates[lens].title}
+              />
+            )}
+
+            {showRows &&
+              groups.map((group, index) => (
+                <div
+                  className={clsx(
+                    "conversation-group",
+                    `is-${group.key}`,
+                    group.key === "earlier" &&
+                      group.labelHidden &&
+                      index > 0 &&
+                      "is-continued",
+                  )}
+                  key={group.key}
+                >
+                  {group.label && (
+                    <h2
+                      className={clsx(
+                        "conversation-group-label",
+                        group.labelHidden && "sr-only",
+                      )}
+                    >
+                      {group.label}
+                    </h2>
+                  )}
+                  {group.conversations.map((conversation) => (
+                    <ConversationRow
+                      conversation={conversation}
+                      key={conversation.id}
+                      selected={conversation.id === selectedId}
+                      timezone={timezone}
+                    />
+                  ))}
+                </div>
+              ))}
+          </section>
+        </>
+      )}
     </div>
   );
 }

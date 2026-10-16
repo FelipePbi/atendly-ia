@@ -11,7 +11,6 @@ import {
   ConversationListColumn,
   useConversationList,
 } from "./ConversationListColumn";
-import { ConversationLoading } from "./ConversationLoading";
 import { useConversationsWorkspace } from "./conversationsWorkspaceContext";
 import { useNoWhatsappProbe } from "./inboxLenses";
 
@@ -35,14 +34,24 @@ export function ConversationInbox() {
   return <InboxWithTabs />;
 }
 
+/**
+ * Enquanto o status ou a sondagem respondem: só o título, sem abas (Goal096)
+ * e sem esqueleto (pedido de 2026-10-16) — o conteúdo entra com fade quando
+ * chega. Na casca dividida, a coluna é dela e aqui fica o painel vazio.
+ */
 function InboxPending() {
+  const workspace = useConversationsWorkspace();
   useShellConfig({
     active: "conversas",
     loading: true,
+    mainClassName: workspace?.hosted ? "conversation-detail-main" : undefined,
     module: "conversations",
     title: "Conversas",
   });
 
+  if (workspace?.hosted) {
+    return <ListDetailEmpty>Selecione uma conversa</ListDetailEmpty>;
+  }
   return (
     <div className="conversation-list-page is-inbox">
       <header className="conversation-page-header">
@@ -53,7 +62,9 @@ function InboxPending() {
         aria-label="Conversas"
         className="conversation-list-surface conversation-list-state"
       >
-        <ConversationLoading />
+        <p className="sr-only" role="status">
+          Carregando conversas
+        </p>
       </section>
     </div>
   );
@@ -135,6 +146,9 @@ function InboxWithTabs() {
     active: "conversas",
     attention: list.attention,
     loading: list.loading,
+    // A mesma moldura do chat: abrir a primeira conversa não muda o layout
+    // da tela (pedido de 2026-10-16).
+    mainClassName: workspace?.hosted ? "conversation-detail-main" : undefined,
     module: "conversations",
     title: "Conversas",
   });

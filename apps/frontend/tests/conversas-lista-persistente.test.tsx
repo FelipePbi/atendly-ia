@@ -10,11 +10,15 @@
  * (sem esqueleto) e a troca é a View Transition `conversation-swap`.
  */
 
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { Conversation, Message } from "@/data";
-import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
+import {
+  ShellConfigProvider,
+  useShellConfigValue,
+} from "@/shared/layout/ShellConfig";
 import { SystemStatusProvider } from "@/shared/runtime/systemStatus";
 
 let currentPath = "/conversas/conv-1";
@@ -57,6 +61,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 
 import ConversationDetailPage from "@/app/(platform)/conversas/[id]/page";
 import ConversasLayout from "@/app/(platform)/conversas/layout";
+import ConversationsPage from "@/app/(platform)/conversas/page";
 
 function conversation(id: string, customerName: string): Conversation {
   return {
@@ -208,5 +213,78 @@ describe("trocar de conversa ao lado da lista", () => {
       column,
     );
     expect(listConversations.mock.calls.length).toBe(listCalls);
+  });
+});
+
+/** A classe que a tela pediu para o `<main>` da casca. */
+const shell: { mainClass?: string } = {};
+function MainClassProbe() {
+  const value = useShellConfigValue()?.mainClassName;
+  useEffect(() => {
+    shell.mainClass = value;
+  });
+  return null;
+}
+
+function inbox() {
+  return (
+    <SystemStatusProvider>
+      <ShellConfigProvider>
+        <MainClassProbe />
+        <ConversasLayout>
+          <ConversationsPage />
+        </ConversasLayout>
+      </ShellConfigProvider>
+    </SystemStatusProvider>
+  );
+}
+
+describe("entrar em Conversas e abrir a primeira conversa (vídeo de 2026-10-16)", () => {
+  test("sem esqueleto: a tela já nasce dividida, só com o título até o status responder", () => {
+    currentPath = "/conversas";
+    statusGet.mockImplementation(() => new Promise(() => undefined));
+    listConversations.mockImplementation(() => new Promise(() => undefined));
+    const { container } = render(inbox());
+
+    // Dividida desde o primeiro quadro: a coluna e o painel vazio ao lado.
+    expect(
+      screen.getByRole("complementary", { name: "Conversas" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Selecione uma conversa")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Conversas" }),
+    ).toBeInTheDocument();
+    // Nada de esqueleto nem de abas enquanto o status não responde.
+    expect(container.querySelector(".skeleton")).toBeNull();
+    expect(screen.queryByRole("tab")).toBeNull();
+  });
+
+  test("a lista chega com fade; abrir a primeira conversa não troca a moldura da tela", async () => {
+    currentPath = "/conversas";
+    const view = render(inbox());
+
+    const column = await screen.findByRole("complementary", {
+      name: "Conversas",
+    });
+    await within(column).findByRole("link", { name: /Marina Duarte/ });
+    expect(column.querySelector(".conversation-list-page")).toHaveClass(
+      "is-arriving",
+    );
+    expect(view.container.querySelector(".skeleton")).toBeNull();
+    // A moldura do chat já vale na caixa de entrada dividida.
+    await waitFor(() =>
+      expect(shell.mainClass).toBe("conversation-detail-main"),
+    );
+
+    currentPath = "/conversas/conv-1";
+    view.rerender(inbox());
+    expect(shell.mainClass).toBe("conversation-detail-main");
+    expect(
+      await screen.findByLabelText("Histórico da conversa com Marina Duarte"),
+    ).toBeVisible();
+    expect(shell.mainClass).toBe("conversation-detail-main");
+    expect(screen.getByRole("complementary", { name: "Conversas" })).toBe(
+      column,
+    );
   });
 });

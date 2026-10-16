@@ -42,6 +42,11 @@ const listQuerySchema = z.object({
   // Busca por telefone devolve candidatos, não uma pessoa: o número não prova
   // identidade (D-005).
   phone: z.string().trim().min(6).max(32).optional(),
+  // Busca por nome ou telefone, feita no Scheduling sobre a lista inteira.
+  q: z.string().trim().max(100).optional(),
+  // `limit` ou `cursor` liga a paginação; sem eles a lista sai inteira.
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  cursor: z.string().trim().min(1).max(1_024).optional(),
 });
 // Telefone deixou de ser obrigatório: cliente sem telefone existe (criança,
 // pessoa agendada presencialmente). O que não pode é nascer sem nada.

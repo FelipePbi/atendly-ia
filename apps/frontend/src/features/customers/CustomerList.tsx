@@ -4,89 +4,96 @@ import clsx from "clsx";
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
-import {
-  BffHttpError,
-  type CustomerAppointmentSummary,
-  type CustomerList as CustomerListResult,
-  type CustomerListItem,
-} from "@/data";
+import { type CustomerAppointmentSummary, type CustomerListItem } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { ListDetailEmpty, ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { Button } from "@/shared/ui/Button";
 import { Field } from "@/shared/ui/Field";
 
+import { CustomerListMore } from "./CustomerListMore";
 import { CustomerEmptyState, CustomerErrorState } from "./CustomerStates";
-
-type CustomerListError = { reference: string | null };
+import {
+  type CustomerPages,
+  type CustomerPagesError,
+  useCustomerPages,
+} from "./useCustomerPages";
 
 type CustomerListData = {
   canCreate: boolean;
+  /** Clientes já carregados da lista sem busca. */
   customers: CustomerListItem[];
-  error: CustomerListError | null;
+  error: CustomerPagesError | null;
+  /** Resultado já carregado da busca, feita no servidor. */
   filtered: CustomerListItem[];
   groups: CustomerGroup[];
+  /** Lista sem busca, paginada. */
+  list: CustomerPages;
   loading: boolean;
   query: string;
+  /** Busca paginada; vale enquanto há texto no campo. */
+  results: CustomerPages;
   retry: () => void;
+  /** A busca digitada ainda não tem resposta. */
+  searchPending: boolean;
   setQuery: (value: string) => void;
   today: Date;
+  /** Total real de clientes do negócio, não só o carregado. */
+  total: number;
 };
+
+/** Espera entre a digitação e a busca no servidor. */
+const SEARCH_DEBOUNCE_MS = 250;
 
 /** `enabled=false` não busca nada: o painel que não cabe na janela nunca consome o BFF. */
 export function useCustomerListData(enabled = true): CustomerListData {
-  const [result, setResult] = useState<CustomerListResult | null>(null);
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
-  const [error, setError] = useState<CustomerListError | null>(null);
   const [query, setQuery] = useState("");
-  const [reload, setReload] = useState(0);
+  const searchText = query.trim();
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    // Limpar o campo volta à lista na hora; digitar espera uma pausa.
+    const timer = setTimeout(
+      () => setSearch(searchText),
+      searchText ? SEARCH_DEBOUNCE_MS : 0,
+    );
+    return () => clearTimeout(timer);
+  }, [searchText]);
 
   useEffect(() => {
     if (!enabled) return;
     const controller = new AbortController();
-    const services = getProductServices();
-    Promise.all([
-      services.customers.list(controller.signal),
-      businessTimezone(services, controller.signal),
-    ])
-      .then(([list, zone]) => {
-        setTimezone(zone);
-        setResult(list);
-      })
-      .catch((caught: unknown) => {
-        if (!controller.signal.aborted) setError(requestError(caught));
-      });
-    return () => controller.abort();
-  }, [enabled, reload]);
-
-  const customers = result?.items ?? [];
-  const filtered = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase("pt-BR");
-    if (!normalized) return result?.items ?? [];
-    return (result?.items ?? []).filter((customer) =>
-      `${customer.name ?? ""} ${customer.phone ?? ""}`
-        .toLocaleLowerCase("pt-BR")
-        .includes(normalized),
+    void businessTimezone(getProductServices(), controller.signal).then(
+      (zone) => {
+        if (!controller.signal.aborted) setTimezone(zone);
+      },
     );
-  }, [result, query]);
-  const groups = useMemo(() => groupAlphabetically(filtered), [filtered]);
+    return () => controller.abort();
+  }, [enabled]);
+
+  const list = useCustomerPages("", enabled);
+  const results = useCustomerPages(search, enabled && search !== "");
+  const groups = useMemo(() => groupAlphabetically(list.items), [list.items]);
 
   return {
-    canCreate: Boolean(result) && !result?.managedExternally,
-    customers,
-    error,
-    filtered,
+    canCreate: !list.loading && !list.error && !list.managedExternally,
+    customers: list.items,
+    error: list.error,
+    filtered: results.items,
     groups,
-    loading: enabled && !result && !error,
+    list,
+    loading: list.loading,
     query,
-    retry: () => {
-      setError(null);
-      setReload((value) => value + 1);
-    },
+    results,
+    retry: list.retry,
+    searchPending: searchText !== search || results.loading,
     setQuery,
     today: todayWallDate(timezone),
+    total: list.total,
   };
 }
 
@@ -169,9 +176,9 @@ function CustomerListPanelView({
           <div className="customer-panel-tools">
             {!loading && !error && customers.length > 0 && (
               <span className="customer-panel-count">
-                {customers.length}
+                {data.total}
                 <span className="sr-only">
-                  {customers.length === 1 ? " cliente" : " clientes"}
+                  {data.total === 1 ? " cliente" : " clientes"}
                 </span>
               </span>
             )}
@@ -226,31 +233,39 @@ function CustomerListPanelView({
               canCreate={canCreate}
               customers={filtered}
               open={openId}
+              pages={data.results}
+              pending={data.searchPending}
               query={searchText}
               today={today}
             />
           ) : (
-            <div
-              aria-label="Clientes"
-              className="customer-panel-list"
-              role="list"
-            >
-              {groups.map((group) => (
-                <div className="customer-panel-group" key={group.letter}>
-                  {group.letter !== NO_NAME_LABEL && (
-                    <p className="customer-panel-letter">{group.letter}</p>
-                  )}
-                  {group.customers.map((customer) => (
-                    <CustomerRow
-                      customer={customer}
-                      key={customer.id}
-                      open={customer.id === openId}
-                      today={today}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
+            <>
+              <div
+                aria-label="Clientes"
+                className="customer-panel-list"
+                role="list"
+              >
+                {groups.map((group, index) => (
+                  <div
+                    className="customer-panel-group"
+                    key={`${group.letter}-${index}`}
+                  >
+                    {group.letter !== NO_NAME_LABEL && (
+                      <p className="customer-panel-letter">{group.letter}</p>
+                    )}
+                    {group.customers.map((customer) => (
+                      <CustomerRow
+                        customer={customer}
+                        key={customer.id}
+                        open={customer.id === openId}
+                        today={today}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <CustomerListMore pages={data.list} />
+            </>
           )}
         </>
       )}
@@ -262,16 +277,33 @@ function CustomerSearchResults({
   canCreate,
   customers,
   open,
+  pages,
+  pending,
   query,
   today,
 }: {
   canCreate: boolean;
   customers: CustomerListItem[];
   open?: string;
+  pages: CustomerPages;
+  pending: boolean;
   query: string;
   today: Date;
 }) {
   const create = canCreate ? <CustomerCreateRow query={query} /> : null;
+  if (pages.error) {
+    return (
+      <div className="customer-search-results">
+        <div className="customer-list-more-error" role="alert">
+          <p>Não foi possível buscar agora.</p>
+          <Button onClick={pages.retry} type="button" variant="secondary">
+            Tentar de novo
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  if (pending) return <CustomerListSkeleton label="Buscando clientes" />;
   return (
     <div className="customer-search-results">
       {customers.length === 0 ? (
@@ -292,13 +324,14 @@ function CustomerSearchResults({
               today={today}
             />
           ))}
-          {create && (
+          {create && !pages.hasMore && (
             <div className="customer-panel-row" role="listitem">
               {create}
             </div>
           )}
         </div>
       )}
+      {customers.length > 0 && <CustomerListMore pages={pages} />}
     </div>
   );
 }
@@ -473,11 +506,15 @@ function RelationIcon() {
   );
 }
 
-function CustomerListSkeleton() {
+function CustomerListSkeleton({
+  label = "Carregando clientes",
+}: {
+  label?: string;
+}) {
   return (
     <>
       <p className="sr-only" role="status">
-        Carregando clientes
+        {label}
       </p>
       <div aria-hidden="true" className="customer-skeleton">
         {[0, 1, 2, 3].map((item) => (
@@ -513,12 +550,6 @@ async function businessTimezone(
   }
 }
 
-function requestError(error: unknown): CustomerListError {
-  return {
-    reference: error instanceof BffHttpError ? error.requestId : null,
-  };
-}
-
 function initials(name: string | null): string {
   if (!name?.trim()) return "?";
   return name
@@ -545,17 +576,15 @@ function groupLetter(name: string): string {
 }
 
 /**
- * Ordem alfabética pt-BR por `localeCompare`, sem acento distinguindo letra;
- * cadastro sem nome vai para um separador próprio no fim (Goal075 CL-01).
+ * Agrupa na ordem que o servidor entregou (alfabética, sem acento nem caixa
+ * distinguindo letra): a lista chega em levas, e reordenar aqui faria uma
+ * pessoa da leva nova saltar para o meio do que já está na tela. A letra só
+ * abre grupo novo quando muda, então a leva que continua a mesma letra não
+ * repete o cabeçalho. Cadastro sem nome vai para um separador próprio no fim
+ * (Goal075 CL-01).
  */
 function groupAlphabetically(customers: CustomerListItem[]): CustomerGroup[] {
-  const named = customers
-    .filter((customer) => customer.name?.trim())
-    .sort((a, b) =>
-      (a.name ?? "").localeCompare(b.name ?? "", "pt-BR", {
-        sensitivity: "base",
-      }),
-    );
+  const named = customers.filter((customer) => customer.name?.trim());
   const unnamed = customers.filter((customer) => !customer.name?.trim());
 
   const groups: CustomerGroup[] = [];

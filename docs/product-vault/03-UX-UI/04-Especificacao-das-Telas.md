@@ -212,7 +212,8 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 - nome;
 - telefone;
 - último/próximo atendimento;
-- criar cliente.
+- criar cliente;
+- carregamento sob demanda: cerca de 15 por vez, mais ao chegar perto do fim da lista; a busca e o total no cabeçalho valem para todos os clientes, não só os já carregados.
 
 ### Perfil
 

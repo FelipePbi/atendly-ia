@@ -86,6 +86,91 @@ function compareListPeople(
   );
 }
 
+export interface CustomerListFilter {
+  phone?: string | null;
+  /** Trecho do nome ou dos dígitos do telefone. */
+  search?: string | null;
+}
+
+/** `contains` do Prisma não escapa os curingas do `LIKE`: `%` e `_` são texto. */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/gu, (character) => `\\${character}`);
+}
+
+/** Chave de ordem da lista; também é o que o cursor carrega. */
+interface CustomerListKey {
+  name: string | null;
+  createdAt: Date;
+  id: string;
+}
+
+const NAME_COLLATOR = new Intl.Collator("pt-BR", { sensitivity: "base" });
+
+/** Nome em branco conta como sem nome, como a tela mostra. */
+function sortName(name: string | null): string | null {
+  return name?.trim() || null;
+}
+
+/**
+ * Ordem da lista: nome em pt-BR sem acento nem caixa separando letra (Á com
+ * A, "beatriz" com B), sem nome por último, depois cadastro e `id` — ordem
+ * total, o que o cursor exige. Comparada aqui e não no banco: a colação do
+ * PostgreSQL muda com a imagem (a Alpine local ordena por byte, jogando
+ * "Álvaro" depois de "Zé"), e a lista chega à tela em levas que ela não
+ * reordena.
+ */
+function compareCustomerListKey(
+  left: CustomerListKey,
+  right: CustomerListKey,
+): number {
+  const leftName = sortName(left.name);
+  const rightName = sortName(right.name);
+  if (leftName === null && rightName !== null) return 1;
+  if (leftName !== null && rightName === null) return -1;
+  const byName =
+    leftName !== null && rightName !== null
+      ? NAME_COLLATOR.compare(leftName, rightName)
+      : 0;
+  if (byName !== 0) return byName;
+  const byCreation = left.createdAt.getTime() - right.createdAt.getTime();
+  if (byCreation !== 0) return byCreation;
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
+function encodeCustomerCursor(customer: CustomerListKey): string {
+  return Buffer.from(
+    JSON.stringify([
+      customer.name,
+      customer.createdAt.toISOString(),
+      customer.id,
+    ]),
+  ).toString("base64url");
+}
+
+function decodeCustomerCursor(cursor: string): CustomerListKey {
+  try {
+    const value: unknown = JSON.parse(
+      Buffer.from(cursor, "base64url").toString("utf8"),
+    );
+    if (Array.isArray(value) && value.length === 3) {
+      const [name, createdAt, id] = value as unknown[];
+      const date = typeof createdAt === "string" ? new Date(createdAt) : null;
+      if (
+        (name === null || typeof name === "string") &&
+        date &&
+        !Number.isNaN(date.getTime()) &&
+        typeof id === "string" &&
+        id
+      ) {
+        return { name, createdAt: date, id };
+      }
+    }
+  } catch {
+    // Cai no erro abaixo: cursor que não veio desta lista.
+  }
+  throw new AppError("VALIDATION_ERROR", "Invalid customer cursor.", 400);
+}
+
 /** Ativo o suficiente para contar como próximo atendimento (Goal075). */
 const NEXT_APPOINTMENT_STATUSES = ["CONFIRMED", "SCHEDULED"] as const;
 
@@ -118,19 +203,85 @@ export class AvenlyCustomerService {
    * (Goal149), numa terceira consulta para a lista inteira.
    */
   async list(
-    filter: { phone?: string | null } = {},
+    filter: CustomerListFilter = {},
     options: { timezone?: string; now?: Date } = {},
   ) {
+    return this.withListExtras(await this.sortedList(filter), options);
+  }
+
+  /**
+   * Uma página da lista, na mesma ordem de `list`, continuada por cursor
+   * (scroll infinito da tela de clientes). O cursor carrega a chave da
+   * última pessoa entregue, não um deslocamento: cadastro novo ou removido
+   * no meio não repete nem pula ninguém. `total` conta tudo o que o filtro
+   * casa, não só o que já foi entregue. Próximo/último atendimento e
+   * responsáveis são calculados só para a página — o que custa por cliente
+   * fica restrito a ela; a ordenação lê só o cadastro básico do filtro.
+   */
+  async listPage(
+    filter: CustomerListFilter,
+    page: { limit: number; cursor?: string | null },
+    options: { timezone?: string; now?: Date } = {},
+  ) {
+    const after = page.cursor ? decodeCustomerCursor(page.cursor) : null;
+    const customers = await this.sortedList(filter);
+    const start = after
+      ? customers.findIndex(
+          (customer) => compareCustomerListKey(customer, after) > 0,
+        )
+      : 0;
+    const rows =
+      start < 0 ? [] : customers.slice(start, start + page.limit + 1);
+    const pageRows = rows.slice(0, page.limit);
+    const last = pageRows.at(-1);
+    return {
+      items: await this.withListExtras(pageRows, options),
+      total: customers.length,
+      nextCursor:
+        rows.length > page.limit && last ? encodeCustomerCursor(last) : null,
+    };
+  }
+
+  private async sortedList(filter: CustomerListFilter) {
+    const customers = await this.database.customer.findMany({
+      where: this.listWhere(filter),
+    });
+    return customers.sort(compareCustomerListKey);
+  }
+
+  /**
+   * Telefone devolve candidatos por equivalência de formas (D-005); a busca
+   * livre casa trecho do nome, sem diferenciar maiúscula, ou — quando não
+   * tem letra — trecho dos dígitos do telefone. Tudo no servidor, para nunca
+   * filtrar só o que a tela já carregou.
+   */
+  private listWhere(filter: CustomerListFilter): Prisma.CustomerWhereInput {
     const phoneCandidates = filter.phone
       ? phoneEquivalenceCandidates(normalizePhone(filter.phone))
       : undefined;
-    const customers = await this.database.customer.findMany({
-      where: {
-        tenantId: this.tenantId,
-        ...(phoneCandidates ? { normalizedPhone: { in: phoneCandidates } } : {}),
-      },
-      orderBy: [{ name: "asc" }, { createdAt: "asc" }],
-    });
+    const search = filter.search?.trim();
+    const digits =
+      search && !/\p{L}/u.test(search) ? search.replace(/\D/gu, "") : "";
+    return {
+      tenantId: this.tenantId,
+      ...(phoneCandidates ? { normalizedPhone: { in: phoneCandidates } } : {}),
+      ...(search
+        ? {
+            OR: [
+              {
+                name: { contains: escapeLike(search), mode: "insensitive" },
+              },
+              ...(digits ? [{ normalizedPhone: { contains: digits } }] : []),
+            ],
+          }
+        : {}),
+    };
+  }
+
+  private async withListExtras<T extends { id: string; name: string | null }>(
+    customers: T[],
+    options: { timezone?: string; now?: Date },
+  ) {
     if (!options.timezone || customers.length === 0) return customers;
     const timezone = options.timezone;
     const now = options.now ?? new Date();

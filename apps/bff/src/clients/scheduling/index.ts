@@ -1098,7 +1098,7 @@ export class SchedulingClient {
 
   async listCustomers(
     context: InternalRequestContext,
-    query: { phone?: string } = {},
+    query: { phone?: string; q?: string; limit?: number; cursor?: string } = {},
   ) {
     return this.get(
       context,
@@ -1108,6 +1108,10 @@ export class SchedulingClient {
         source: sourceSchema,
         managedExternally: z.boolean(),
         filteredByPhone: z.boolean().optional(),
+        // Paginação por cursor: `total` é o filtro inteiro, `nextCursor`
+        // nulo é o fim. Opcionais enquanto o Scheduling anterior responde.
+        total: z.number().int().nonnegative().optional(),
+        nextCursor: z.string().nullable().optional(),
       }),
       query,
     );

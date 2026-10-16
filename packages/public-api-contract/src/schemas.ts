@@ -666,6 +666,10 @@ export const customerListSchema = z.object({
   source: calendarSourceSchema,
   managedExternally: z.boolean(),
   filteredByPhone: z.boolean().optional(),
+  // Paginação por cursor (`?limit=&cursor=`): `total` conta o filtro inteiro,
+  // `nextCursor` nulo é o fim. Opcionais: resposta anterior continua válida.
+  total: z.number().int().nonnegative().optional(),
+  nextCursor: z.string().nullable().optional(),
 });
 
 export const serviceListSchema = z.object({

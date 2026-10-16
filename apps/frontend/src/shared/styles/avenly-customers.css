@@ -548,6 +548,37 @@
 .customer-search-results {
   padding-top: 8px;
 }
+/* Scroll infinito: sentinela, leva carregando, falha recuperável e fim da lista. */
+.customer-list-sentinel {
+  height: 1px;
+}
+.customer-skeleton.is-more {
+  padding-top: 14px;
+}
+.customer-list-more-error {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+}
+.customer-list-more-error p {
+  margin: 0;
+}
+.customer-list-more > .btn-tertiary {
+  display: flex;
+  margin: 16px auto 0;
+}
+.customer-list-end {
+  margin: 0;
+  padding: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
 .customer-search-mark {
   border-radius: 3px;
   padding: 0 1px;

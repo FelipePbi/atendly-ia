@@ -25,6 +25,13 @@ export interface CreateCustomerInput {
   phone?: string | null;
 }
 
+export interface CustomerListQuery {
+  limit?: number;
+  cursor?: string | null;
+  /** Trecho do nome ou do telefone. */
+  q?: string;
+}
+
 export interface UpdateCustomerInput {
   name?: string | null;
   phone?: string | null;
@@ -59,9 +66,19 @@ export interface CreateCustomerMemoryInput {
 export class BffCustomerService {
   constructor(private readonly http: BffHttpClient) {}
 
-  list(signal?: AbortSignal) {
+  /**
+   * Sem `limit` nem `cursor`, a lista inteira (seletores de cliente). Com
+   * eles, uma página: `nextCursor` continua, `total` conta o filtro inteiro e
+   * `q` busca no negócio todo, não só no que já foi carregado.
+   */
+  list(query: CustomerListQuery = {}, signal?: AbortSignal) {
+    const params = new URLSearchParams();
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
+    if (query.cursor) params.set("cursor", query.cursor);
+    if (query.q?.trim()) params.set("q", query.q.trim());
+    const search = params.toString();
     return this.http.request({
-      path: "/v1/customers",
+      path: search ? `/v1/customers?${search}` : "/v1/customers",
       schema: routeSchema<CustomerList>("GET", "/v1/customers"),
       signal,
     });

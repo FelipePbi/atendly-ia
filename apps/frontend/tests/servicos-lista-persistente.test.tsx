@@ -245,6 +245,27 @@ describe("Serviços — lista persistente entre lista e editor", () => {
     );
     expect(scroller).not.toContainElement(screen.getByText("3 ativos"));
   });
+
+  test("no celular, a lista em tela cheia também rola só os itens", async () => {
+    setViewport(390);
+    render(route("/servicos"));
+    const row = await screen.findByRole("link", { name: "Editar Escova" });
+
+    // Sem a coluna ao lado: a lista é a própria tela e o "+" é o da casca.
+    expect(
+      screen.queryByRole("complementary", { name: "Serviços" }),
+    ).not.toBeInTheDocument();
+    const scroller = document.querySelector(
+      ".service-list-screen .service-panel-scroll",
+    );
+    expect(scroller).not.toBeNull();
+    expect(scroller).toContainElement(row);
+    expect(scroller).not.toContainElement(screen.getByRole("searchbox"));
+    expect(scroller).not.toContainElement(
+      screen.getByRole("heading", { name: "Serviços" }),
+    );
+    expect(scroller).not.toContainElement(screen.getByText("3 ativos"));
+  });
 });
 
 describe("Serviços — editor ao lado da lista", () => {

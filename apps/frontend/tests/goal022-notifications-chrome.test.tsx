@@ -55,7 +55,12 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 function statusFixture(overrides: Partial<SystemStatus> = {}): SystemStatus {
   return {
     accountDeletion: { status: "NONE", dueAt: null },
-    ai: { desiredEnabled: true, effectiveEnabled: true, reconciled: "CONVERGED", state: "ACTIVE" },
+    ai: {
+      desiredEnabled: true,
+      effectiveEnabled: true,
+      reconciled: "CONVERGED",
+      state: "ACTIVE",
+    },
     degraded: false,
     whatsapp: {
       checkedAt: "2026-09-15T12:00:00.000Z",
@@ -98,7 +103,37 @@ describe("entrada de Notificações", () => {
 
     // Com o diálogo aberto, a lista de "Mais" também lista Notificações:
     // duas entradas no total, uma no chrome e outra dentro do diálogo.
-    expect(screen.getAllByRole("link", { name: /^Notificações/ })).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: /^Notificações/ })).toHaveLength(
+      2,
+    );
+  });
+
+  test("a folha 'Mais' (2026-10-16): atalhos no topo, grupos com título, sem cartão interno, 'Sair' no fim", async () => {
+    renderShell();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Mais" }));
+    const sheet = screen.getByRole("dialog", { name: "Mais" });
+
+    // Sem o cartão interno de antes.
+    expect(sheet.querySelector(".list")).toBeNull();
+    // Notificações e Serviços como atalhos em destaque.
+    const tiles = sheet.querySelectorAll(".more-tile");
+    expect([...tiles].map((tile) => tile.textContent)).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^Notificações/),
+        "Serviços",
+      ]),
+    );
+    // Configurações e conta em grupos com título, para o leitor de tela.
+    const settings = within(sheet).getByRole("region", {
+      name: "Configurações",
+    });
+    expect(
+      within(settings).getByRole("link", { name: "Disponibilidade" }),
+    ).toHaveAttribute("href", "/configuracoes/disponibilidade");
+    const account = within(sheet).getByRole("region", { name: "Sua conta" });
+    expect(within(account).getByRole("link", { name: "Conta" })).toBeVisible();
+    expect(within(account).getByRole("button", { name: "Sair" })).toBeVisible();
   });
 
   test("não vira uma quinta aba do bottom nav mobile", async () => {
@@ -165,7 +200,9 @@ describe("banner persistente (deriva de /v1/status, não da central)", () => {
     renderShell();
 
     const banner = await screen.findByRole("alert");
-    expect(within(banner).getByText("Atendimento automático parado")).toBeVisible();
+    expect(
+      within(banner).getByText("Atendimento automático parado"),
+    ).toBeVisible();
     expect(within(banner).queryByText("WhatsApp desconectado")).toBeNull();
     // Goal085: a sidebar não tem a linha de WhatsApp, mas o cartão da IA diz a
     // desconexão; fora do cartão e do banner, nada mais repete a frase.

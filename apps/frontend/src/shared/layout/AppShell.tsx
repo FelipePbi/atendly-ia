@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 
 import {
   NotificationsDrawerProvider,
@@ -38,7 +38,11 @@ import type { ShellConfig } from "./ShellConfig";
 import { useStatusBannerSnooze } from "./statusBannerSnooze";
 import { useWideLayout } from "./useWideLayout";
 
-export type { PlatformSection, ShellContextualAction, ShellModule } from "./navigation";
+export type {
+  PlatformSection,
+  ShellContextualAction,
+  ShellModule,
+} from "./navigation";
 export { SHELL_MODULES } from "./navigation";
 
 export type AppShellProps = ShellConfig & {
@@ -80,6 +84,8 @@ function AppShellChrome({
   const showBottomNav = showBottomNavConfig && !hideTabBar;
   const router = useRouter();
   const pathname = usePathname();
+  const isCurrent = (href: string) =>
+    pathname === href || pathname.startsWith(`${href}/`);
   const { session, setUnauthenticated } = useProductRuntime();
   const status = useSystemStatus();
   const notificationsDrawer = useNotificationsDrawer();
@@ -289,7 +295,12 @@ function AppShellChrome({
             </div>
           </div>
         </aside>
-        <main className={mainClass} id="main-content" ref={mainRef} tabIndex={-1}>
+        <main
+          className={mainClass}
+          id="main-content"
+          ref={mainRef}
+          tabIndex={-1}
+        >
           {deletionDueAt && (
             <PersistentStatusBanner
               text={accountDeletionBannerCopy(
@@ -334,26 +345,24 @@ function AppShellChrome({
         )}
         {showBottomNav && (
           <nav className={bottomNavClass} aria-label="Navegação principal">
-            {SIDEBAR_DESTINATIONS.filter((item) => isMobileTab(item.section)).map(
-              (item) => (
-                <Link
-                  className={clsx(
-                    "bottom-nav-item",
-                    isDestinationActive(item.section, active) && "is-active",
-                  )}
-                  href={item.href}
-                  key={item.section}
-                  aria-current={
-                    isDestinationActive(item.section, active)
-                      ? "page"
-                      : undefined
-                  }
-                >
-                  <Icon name={item.icon} />
-                  <span>{item.label}</span>
-                </Link>
-              ),
-            )}
+            {SIDEBAR_DESTINATIONS.filter((item) =>
+              isMobileTab(item.section),
+            ).map((item) => (
+              <Link
+                className={clsx(
+                  "bottom-nav-item",
+                  isDestinationActive(item.section, active) && "is-active",
+                )}
+                href={item.href}
+                key={item.section}
+                aria-current={
+                  isDestinationActive(item.section, active) ? "page" : undefined
+                }
+              >
+                <Icon name={item.icon} />
+                <span>{item.label}</span>
+              </Link>
+            ))}
             <button
               className={clsx(
                 "bottom-nav-item",
@@ -378,28 +387,102 @@ function AppShellChrome({
         eyebrow="Navegação"
         variant="sheet"
       >
-        <div className="list">
-          {MORE_DESTINATIONS.map((item) => (
-            <Link className="menu-item" href={item.href} key={item.section}>
-              <Icon name={item.icon} />
-              {item.label}
-              {item.section === "notificacoes" && notificationsBadge && (
-                <span className="badge-count">{notificationsBadge}</span>
-              )}
-            </Link>
-          ))}
-          <div className="menu-divider" />
-          <button
-            className="menu-item danger"
-            type="button"
-            onClick={() => void logout()}
+        {/* Folha "Mais" do celular (pedido de 2026-10-16): sem o cartão
+            interno. Atalhos em destaque no topo, configurações numa lista
+            com ícone e seta, e a conta com o "Sair" no fim — cada linha com
+            alvo de toque de 48 px e a página aberta marcada. */}
+        <div className="more-sheet">
+          <div className="more-tiles">
+            {MORE_DESTINATIONS.filter((item) =>
+              MORE_SHORTCUTS.has(item.section),
+            ).map((item) => (
+              <Link
+                aria-current={isCurrent(item.href) ? "page" : undefined}
+                className="more-tile"
+                href={item.href}
+                key={item.section}
+              >
+                <span aria-hidden="true" className="more-icon">
+                  <Icon name={item.icon} />
+                </span>
+                <span className="more-tile-label">{item.label}</span>
+                {item.section === "notificacoes" && notificationsBadge && (
+                  <span className="badge-count">{notificationsBadge}</span>
+                )}
+              </Link>
+            ))}
+          </div>
+          <MoreGroup
+            items={MORE_DESTINATIONS.filter(
+              (item) =>
+                !MORE_SHORTCUTS.has(item.section) && item.section !== "conta",
+            )}
+            isCurrent={isCurrent}
+            title="Configurações"
+          />
+          <MoreGroup
+            items={MORE_DESTINATIONS.filter((item) => item.section === "conta")}
+            isCurrent={isCurrent}
+            title="Sua conta"
           >
-            <Icon name="logout" />
-            Sair
-          </button>
+            <li>
+              <button
+                className="more-row is-danger"
+                type="button"
+                onClick={() => void logout()}
+              >
+                <span aria-hidden="true" className="more-icon">
+                  <Icon name="logout" />
+                </span>
+                <span className="more-row-label">Sair</span>
+              </button>
+            </li>
+          </MoreGroup>
         </div>
       </Dialog>
     </>
+  );
+}
+
+/** Os atalhos em destaque no topo da folha "Mais" do celular. */
+const MORE_SHORTCUTS = new Set(["notificacoes", "servicos"]);
+
+function MoreGroup({
+  children,
+  isCurrent,
+  items,
+  title,
+}: {
+  children?: ReactNode;
+  isCurrent: (href: string) => boolean;
+  items: typeof MORE_DESTINATIONS;
+  title: string;
+}) {
+  const headingId = useId();
+  return (
+    <section aria-labelledby={headingId} className="more-group">
+      <h3 className="more-group-title" id={headingId}>
+        {title}
+      </h3>
+      <ul className="more-list">
+        {items.map((item) => (
+          <li key={item.section}>
+            <Link
+              aria-current={isCurrent(item.href) ? "page" : undefined}
+              className="more-row"
+              href={item.href}
+            >
+              <span aria-hidden="true" className="more-icon">
+                <Icon name={item.icon} />
+              </span>
+              <span className="more-row-label">{item.label}</span>
+              <Icon name="chevron-right" />
+            </Link>
+          </li>
+        ))}
+        {children}
+      </ul>
+    </section>
   );
 }
 

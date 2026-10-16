@@ -79,7 +79,7 @@
   pointer-events: none;
 }
 .directory-list-surface {
-  padding: 16px 0 0;
+  padding: 0;
 }
 .service-list-readonly-note {
   margin: 0;
@@ -402,9 +402,9 @@
   }
 }
 .service-panel-header {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
@@ -419,7 +419,7 @@
 .service-panel-title {
   min-width: 0;
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 .service-panel-summary {
   color: var(--muted);
@@ -451,6 +451,24 @@
   }
   .service-panel .directory-state-surface {
     margin-inline: -28px;
+  }
+}
+/* "Selecione um serviço" no centro da coluna do detalhe, na altura da
+   lista ao lado (S1 Landscape/Desktop). */
+.list-detail:has(> .list-detail-list > .service-panel) .list-detail-empty {
+  min-height: 100dvh;
+  padding: 40px;
+  box-sizing: border-box;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.list-detail:has(> .list-detail-list > .service-panel) .list-detail-empty p {
+  max-width: 260px;
+  margin: 0;
+}
+@media (min-width: 1024px) and (max-width: 1099px) {
+  .list-detail:has(> .list-detail-list > .service-panel) .list-detail-empty {
+    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
   }
 }
 .service-row.is-open {

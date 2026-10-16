@@ -208,7 +208,7 @@ async function renderList(items: Service[], editable = true) {
   );
   await screen.findByRole("heading", { level: 1, name: "Serviços" });
   await waitFor(() =>
-    expect(screen.queryByLabelText("Carregando dados")).toBeNull(),
+    expect(document.querySelector("[aria-busy=\"true\"]")).toBeNull(),
   );
   return utils;
 }

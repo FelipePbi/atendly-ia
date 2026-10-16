@@ -72,10 +72,7 @@ export type AiCardView = {
  * do banner da casca. WhatsApp `unknown` ou `loading` não muda o cartão: só a
  * desconexão confirmada muda.
  */
-export function aiCardView(
-  ai: StatusView,
-  whatsapp: StatusView,
-): AiCardView {
+export function aiCardView(ai: StatusView, whatsapp: StatusView): AiCardView {
   if (whatsapp === "off") {
     return {
       action: { href: "/configuracoes/whatsapp", label: "Reconectar" },
@@ -86,9 +83,19 @@ export function aiCardView(
   }
   switch (ai) {
     case "loading":
-      return { action: null, support: null, title: "Verificando IA", tone: "neutral" };
+      return {
+        action: null,
+        support: null,
+        title: "Verificando IA",
+        tone: "neutral",
+      };
     case "unknown":
-      return { action: null, support: null, title: "IA não confirmado", tone: "neutral" };
+      return {
+        action: null,
+        support: null,
+        title: "IA não confirmado",
+        tone: "neutral",
+      };
     case "active":
       return {
         action: { href: "/configuracoes/ia", label: "Pausar" },
@@ -97,9 +104,19 @@ export function aiCardView(
         tone: "active",
       };
     case "pending":
-      return { action: null, support: null, title: "IA em ativação", tone: "warning" };
+      return {
+        action: null,
+        support: null,
+        title: "IA em ativação",
+        tone: "warning",
+      };
     default:
-      return { action: null, support: null, title: "IA desligada", tone: "danger" };
+      return {
+        action: null,
+        support: null,
+        title: "IA desligada",
+        tone: "danger",
+      };
   }
 }
 
@@ -232,10 +249,17 @@ export function SystemStatusProvider({ children }: { children: ReactNode }) {
 }
 
 /** Lê o status compartilhado pelo `SystemStatusProvider` mais próximo. */
+/** O mesmo estado, ou `null` fora do provider (telas montadas sozinhas). */
+export function useOptionalSystemStatus(): UseSystemStatusResult | null {
+  return useContext(SystemStatusContext);
+}
+
 export function useSystemStatus(): UseSystemStatusResult {
   const value = useContext(SystemStatusContext);
   if (!value) {
-    throw new Error("useSystemStatus must be used inside SystemStatusProvider.");
+    throw new Error(
+      "useSystemStatus must be used inside SystemStatusProvider.",
+    );
   }
   return value;
 }

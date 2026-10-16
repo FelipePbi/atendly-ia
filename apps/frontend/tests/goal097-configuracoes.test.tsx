@@ -194,7 +194,9 @@ function availabilityFixture(
   };
 }
 
-function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState {
+function settingsFixture(
+  overrides: Partial<SettingsState> = {},
+): SettingsState {
   return {
     ai: { enabled: true, tone: "PROFESSIONAL" },
     availability: availabilityFixture(),
@@ -226,7 +228,10 @@ function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState 
 
 function statusFixture(
   ai: "ACTIVE" | "OFF" | "PENDING",
-  whatsapp: { phoneNumber: string | null; status: "CONNECTED" | "DISCONNECTED" },
+  whatsapp: {
+    phoneNumber: string | null;
+    status: "CONNECTED" | "DISCONNECTED";
+  },
 ) {
   return {
     accountDeletion: { status: "NONE", dueAt: null },
@@ -241,7 +246,10 @@ function statusFixture(
   };
 }
 
-const CONNECTED = { phoneNumber: "5511999990000", status: "CONNECTED" } as const;
+const CONNECTED = {
+  phoneNumber: "5511999990000",
+  status: "CONNECTED",
+} as const;
 
 beforeEach(() => {
   shellCallers.clear();
@@ -412,7 +420,9 @@ describe("Goal097 prova 1: hub M1", () => {
     await waitFor(() => {
       expect(row(/^Serviços/)).toHaveTextContent("2 ativos");
       expect(row(/^IA/)).toHaveTextContent("Ativa · estilo Profissional");
-      expect(row(/^WhatsApp/)).toHaveTextContent("+55 11 99999-0000 · conectado");
+      expect(row(/^WhatsApp/)).toHaveTextContent(
+        "+55 11 99999-0000 · conectado",
+      );
       expect(row(/^Negócio/)).toHaveTextContent(
         "Endereço, pagamento, informações para a IA",
       );
@@ -469,14 +479,36 @@ describe("Goal097 prova 1: hub M1", () => {
   });
 
   test("a IA em ativação e desligada, e o WhatsApp desconectado, vêm do status lido", async () => {
+    // WhatsApp desconectado: a IA aparece pausada, seja qual for o estado
+    // dela (pedido de 2026-10-16).
     statusGet.mockResolvedValue(
-      statusFixture("PENDING", { phoneNumber: null, status: "DISCONNECTED" }),
+      statusFixture("ACTIVE", { phoneNumber: null, status: "DISCONNECTED" }),
     );
-    const first = renderHub();
+    const disconnected = renderHub();
     await waitFor(() => {
-      expect(row(/^IA/)).toHaveTextContent("Em ativação · estilo Profissional");
+      expect(row(/^IA/)).toHaveTextContent("Pausada · WhatsApp desconectado");
       expect(row(/^WhatsApp/)).toHaveTextContent("Desconectado");
     });
+    expect(row(/^IA/).querySelector(".is-breathing")).toBeNull();
+    disconnected.unmount();
+
+    // Nunca ligada (sem teste real): segue "Desligada", não "Pausada".
+    statusGet.mockResolvedValue(
+      statusFixture("OFF", { phoneNumber: null, status: "DISCONNECTED" }),
+    );
+    const neverOn = renderHub(
+      settingsFixture({ ai: { enabled: false, tone: "PROFESSIONAL" } }),
+    );
+    await waitFor(() =>
+      expect(row(/^IA/)).toHaveTextContent("Desligada · estilo Profissional"),
+    );
+    neverOn.unmount();
+
+    statusGet.mockResolvedValue(statusFixture("PENDING", CONNECTED));
+    const first = renderHub();
+    await waitFor(() =>
+      expect(row(/^IA/)).toHaveTextContent("Em ativação · estilo Profissional"),
+    );
     first.unmount();
 
     statusGet.mockResolvedValue(statusFixture("OFF", CONNECTED));
@@ -507,7 +539,9 @@ describe("Goal097 prova 1: hub M1", () => {
     }
     expect(container.textContent).not.toMatch(/ativos?\b/);
     expect(container.textContent).not.toMatch(/Guardar por/);
-    expect(container.textContent).not.toMatch(/Importar do|Concluída|Continuar/);
+    expect(container.textContent).not.toMatch(
+      /Importar do|Concluída|Continuar/,
+    );
   });
 
   test("o hub abre com todas as leituras secundárias falhando", async () => {
@@ -557,7 +591,11 @@ describe("Goal097 prova 2: AG1 — /configuracoes/agenda", () => {
         "/configuracoes/agenda/regras",
         "Mín. 2 h · máx. 60 dias · a cada 30 min",
       ],
-      ["Cancelamento e remarcação", "/configuracoes/agenda/regras", "Até 24 h antes"],
+      [
+        "Cancelamento e remarcação",
+        "/configuracoes/agenda/regras",
+        "Até 24 h antes",
+      ],
       [
         "Lembretes",
         "/configuracoes/agenda/lembretes",
@@ -582,7 +620,11 @@ describe("Goal097 prova 2: AG1 — /configuracoes/agenda", () => {
   });
 
   test("os grupos da tela vêm na ordem do protótipo", async () => {
-    const { container } = await renderRoute("calendar", NARROW, "Dias e horários");
+    const { container } = await renderRoute(
+      "calendar",
+      NARROW,
+      "Dias e horários",
+    );
 
     const titles = Array.from(
       container.querySelectorAll(".agenda-group-title"),
@@ -606,7 +648,9 @@ describe("Goal097 prova 2: AG1 — /configuracoes/agenda", () => {
     expect(
       screen.queryByRole("button", { name: /Salvar (política|regras)/ }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("Na prática", { exact: false })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Na prática", { exact: false }),
+    ).not.toBeInTheDocument();
   });
 
   test("Dias visíveis abre a folha e grava a preferência inteira pelo mesmo pedido", async () => {
@@ -621,7 +665,9 @@ describe("Goal097 prova 2: AG1 — /configuracoes/agenda", () => {
     const user = userEvent.setup();
     await renderRoute("calendar", NARROW, "Dias e horários");
 
-    await user.click(await screen.findByRole("button", { name: /^Dias visíveis/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /^Dias visíveis/ }),
+    );
     await user.click(screen.getByRole("button", { name: "Domingo" }));
     await user.click(screen.getByRole("button", { name: "Salvar" }));
 
@@ -676,8 +722,17 @@ describe("Goal097 prova 2: AG1 — /configuracoes/agenda", () => {
     const user = userEvent.setup();
     await renderRoute("calendar", NARROW, "Dias e horários");
 
-    await user.click(await screen.findByRole("button", { name: /^Dias visíveis/ }));
-    for (const day of ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]) {
+    await user.click(
+      await screen.findByRole("button", { name: /^Dias visíveis/ }),
+    );
+    for (const day of [
+      "Segunda",
+      "Terça",
+      "Quarta",
+      "Quinta",
+      "Sexta",
+      "Sábado",
+    ]) {
       await user.click(screen.getByRole("button", { name: day }));
     }
 
@@ -690,7 +745,9 @@ describe("Goal097 prova 2: AG1 — /configuracoes/agenda", () => {
     expect(last).toHaveAttribute("aria-pressed", "true");
 
     await user.click(screen.getByRole("button", { name: "Salvar" }));
-    await waitFor(() => expect(updateAgendaViewPreference).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(updateAgendaViewPreference).toHaveBeenCalledTimes(1),
+    );
     expect(updateAgendaViewPreference).toHaveBeenCalledWith({
       hiddenWeekdays: [1, 2, 3, 4, 5, 6],
       initialView: null,
@@ -699,7 +756,9 @@ describe("Goal097 prova 2: AG1 — /configuracoes/agenda", () => {
 });
 
 describe("Goal097 prova 2: resumos da Agenda (funções)", () => {
-  type Rule = Parameters<(typeof AgendaSummariesModule)["availabilityGridSummary"]>[0][number];
+  type Rule = Parameters<
+    (typeof AgendaSummariesModule)["availabilityGridSummary"]
+  >[0][number];
   const rule = (
     dayOfWeek: number,
     startTime: string,
@@ -751,7 +810,10 @@ describe("Goal097 prova 2: resumos da Agenda (funções)", () => {
     const { availabilityGridSummary } = await loadSummaries();
 
     expect(
-      availabilityGridSummary([rule(0, "10:00", "14:00"), rule(6, "10:00", "14:00")]),
+      availabilityGridSummary([
+        rule(0, "10:00", "14:00"),
+        rule(6, "10:00", "14:00"),
+      ]),
     ).toBe("Sáb–Dom 10:00–14:00");
   });
 
@@ -769,7 +831,9 @@ describe("Goal097 prova 2: resumos da Agenda (funções)", () => {
 
     expect(visibleDaysSummary([])).toBe("Todos os dias");
     expect(visibleDaysSummary([0])).toBe("Seg–Sáb · domingo oculto");
-    expect(visibleDaysSummary([0, 6])).toBe("Seg–Sex · sábado e domingo ocultos");
+    expect(visibleDaysSummary([0, 6])).toBe(
+      "Seg–Sex · sábado e domingo ocultos",
+    );
     expect(initialViewSummary(null)).toBe("Automática");
     expect(initialViewSummary("MONTH")).toBe("Mês");
   });
@@ -829,7 +893,9 @@ describe("Goal097 prova 3: AG3 — /configuracoes/agenda/regras", () => {
   test("política 0 aparece como Sem restrição, selecionada", async () => {
     settingsGet.mockResolvedValue(
       settingsFixture({
-        availability: availabilityFixture({ customerChangeMinNoticeMinutes: 0 }),
+        availability: availabilityFixture({
+          customerChangeMinNoticeMinutes: 0,
+        }),
       }),
     );
     await renderRoute("calendar-rules", NARROW, LEAD_GROUP);
@@ -850,7 +916,9 @@ describe("Goal097 prova 3: AG3 — /configuracoes/agenda/regras", () => {
     const user = userEvent.setup();
     await renderRoute("calendar-rules", NARROW, LEAD_GROUP);
 
-    await user.click(within(ruleGroup(LEAD_GROUP)).getByRole("radio", { name: "4 h" }));
+    await user.click(
+      within(ruleGroup(LEAD_GROUP)).getByRole("radio", { name: "4 h" }),
+    );
     await user.click(
       within(ruleGroup(FUTURE_GROUP)).getByRole("radio", { name: "90 dias" }),
     );
@@ -858,7 +926,9 @@ describe("Goal097 prova 3: AG3 — /configuracoes/agenda/regras", () => {
       within(ruleGroup(STEP_GROUP)).getByRole("radio", { name: "15 min" }),
     );
     await user.click(
-      within(ruleGroup(POLICY_GROUP)).getByRole("radio", { name: "Até 12 h antes" }),
+      within(ruleGroup(POLICY_GROUP)).getByRole("radio", {
+        name: "Até 12 h antes",
+      }),
     );
     expect(screen.getAllByRole("button", { name: "Salvar" })).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Salvar" }));
@@ -888,9 +958,13 @@ describe("Goal097 prova 3: AG3 — /configuracoes/agenda/regras", () => {
     const user = userEvent.setup();
     await renderRoute("calendar-rules", NARROW, LEAD_GROUP);
 
-    await user.click(within(ruleGroup(LEAD_GROUP)).getByRole("radio", { name: "1 dia" }));
     await user.click(
-      within(ruleGroup(POLICY_GROUP)).getByRole("radio", { name: "Até 48 h antes" }),
+      within(ruleGroup(LEAD_GROUP)).getByRole("radio", { name: "1 dia" }),
+    );
+    await user.click(
+      within(ruleGroup(POLICY_GROUP)).getByRole("radio", {
+        name: "Até 48 h antes",
+      }),
     );
     await user.click(screen.getByRole("button", { name: "Salvar" }));
 
@@ -1000,7 +1074,9 @@ describe("Goal097 prova 3: Na prática (na tela, antes de salvar)", () => {
         (time) => time.textContent,
       ),
     ).toEqual(["16:00", "16:30", "17:00"]);
-    expect(block).toHaveTextContent("Só a partir de 15:45, em passos de 30 min.");
+    expect(block).toHaveTextContent(
+      "Só a partir de 15:45, em passos de 30 min.",
+    );
   });
 
   test("trocar a antecedência e o intervalo na tela muda o bloco sem salvar", async () => {
@@ -1017,7 +1093,9 @@ describe("Goal097 prova 3: Na prática (na tela, antes de salvar)", () => {
       ),
     ).toEqual(["15:45", "16:00", "16:15"]);
 
-    await user.click(within(ruleGroup(LEAD_GROUP)).getByRole("radio", { name: "1 dia" }));
+    await user.click(
+      within(ruleGroup(LEAD_GROUP)).getByRole("radio", { name: "1 dia" }),
+    );
     expect(example()).toHaveTextContent("Só a partir de amanhã às 13:45");
     expect(
       Array.from(example().querySelectorAll(".rules-example-pill")).map(
@@ -1039,7 +1117,9 @@ describe("Goal097 prova 4: /configuracoes/agenda/lembretes", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "Lembretes" }),
     ).toBeVisible();
-    expect(screen.getByLabelText("Pedir confirmação de presença")).toBeChecked();
+    expect(
+      screen.getByLabelText("Pedir confirmação de presença"),
+    ).toBeChecked();
     const back = screen.getByRole("link", { name: "Voltar para Agenda" });
     expect(back).toHaveAttribute("href", "/configuracoes/agenda");
     expect(container.querySelector(".app-frame.is-pushed")).not.toBeNull();
@@ -1054,7 +1134,11 @@ const SHELL_ROUTES: Array<{
   scenario: Parameters<typeof SettingsScreen>[0]["scenario"];
 }> = [
   { name: "/configuracoes", ready: "Atendimento", scenario: "hub" },
-  { name: "/configuracoes/agenda", ready: "Dias e horários", scenario: "calendar" },
+  {
+    name: "/configuracoes/agenda",
+    ready: "Dias e horários",
+    scenario: "calendar",
+  },
   {
     name: "/configuracoes/agenda/regras",
     ready: LEAD_GROUP,
@@ -1071,21 +1155,32 @@ describe("Goal097 prova 5: casca", () => {
   test.each([
     ["≥1024", WIDE],
     ["<1024", NARROW],
-  ] as const)("uma chamada de useShellConfig por árvore nas quatro rotas, na faixa %s", async (_label, width) => {
-    for (const route of SHELL_ROUTES) {
-      shellCallers.clear();
-      const { unmount } = await renderRoute(route.scenario, width, route.ready);
-      await waitFor(() => {
-        expect(shellCallers.size, route.name).toBe(1);
-      });
-      unmount();
-    }
-  });
+  ] as const)(
+    "uma chamada de useShellConfig por árvore nas quatro rotas, na faixa %s",
+    async (_label, width) => {
+      for (const route of SHELL_ROUTES) {
+        shellCallers.clear();
+        const { unmount } = await renderRoute(
+          route.scenario,
+          width,
+          route.ready,
+        );
+        await waitFor(() => {
+          expect(shellCallers.size, route.name).toBe(1);
+        });
+        unmount();
+      }
+    },
+  );
 
   test.each(SHELL_ROUTES.slice(1))(
     "$name, de 1024 px em diante, mostra a lista com Agenda marcada",
     async (route) => {
-      const { container } = await renderRoute(route.scenario, WIDE, route.ready);
+      const { container } = await renderRoute(
+        route.scenario,
+        WIDE,
+        route.ready,
+      );
 
       const list = container.querySelector<HTMLElement>(".list-detail-list");
       expect(list).not.toBeNull();
@@ -1097,14 +1192,20 @@ describe("Goal097 prova 5: casca", () => {
         expect(current).toHaveLength(1);
         expect(current[0]?.textContent ?? "").toMatch(/^Agenda/);
       });
-      expect(within(container).getAllByRole("heading", { level: 1 })).toHaveLength(1);
+      expect(
+        within(container).getAllByRole("heading", { level: 1 }),
+      ).toHaveLength(1);
     },
   );
 
   test.each(SHELL_ROUTES.slice(1))(
     "$name, abaixo de 1024 px, é tela empurrada sem a lista",
     async (route) => {
-      const { container } = await renderRoute(route.scenario, NARROW, route.ready);
+      const { container } = await renderRoute(
+        route.scenario,
+        NARROW,
+        route.ready,
+      );
 
       expect(container.querySelector(".list-detail")).toBeNull();
       expect(container.querySelector(".app-frame.is-pushed")).not.toBeNull();
@@ -1112,7 +1213,11 @@ describe("Goal097 prova 5: casca", () => {
   );
 
   test("/configuracoes/disponibilidade, de 1024 px em diante, marca Agenda na lista", async () => {
-    const { container } = await renderRoute("availability", WIDE, "Disponibilidade");
+    const { container } = await renderRoute(
+      "availability",
+      WIDE,
+      "Disponibilidade",
+    );
 
     const list = container.querySelector<HTMLElement>(".list-detail-list");
     await waitFor(() => {

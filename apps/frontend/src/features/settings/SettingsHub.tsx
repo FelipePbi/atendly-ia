@@ -121,8 +121,14 @@ function useHubReadings(): HubReadings {
 
 function aiDetail(
   status: UseSystemStatusResult,
-  tone: SettingsState["ai"]["tone"],
+  ai: SettingsState["ai"],
 ): string | null {
+  const tone = ai.tone;
+  // Ligada, mas com o WhatsApp desconectado: a IA não atende, então ela
+  // aparece pausada; ao reconectar, volta sozinha (pedido de 2026-10-16,
+  // R11-302). Nunca ligada, segue "Desligada".
+  if (ai.enabled && status.whatsappView === "off")
+    return "Pausada · WhatsApp desconectado";
   const state =
     status.aiView === "active"
       ? "Ativa"
@@ -165,9 +171,9 @@ function hubGroups(
           title: "Serviços",
         },
         {
-          detail: aiDetail(status, settings.ai.tone),
+          detail: aiDetail(status, settings.ai),
           href: "/configuracoes/ia",
-          iaActive: status.aiView === "active",
+          iaActive: status.aiView === "active" && status.whatsappView !== "off",
           icon: "ia",
           title: "IA",
         },

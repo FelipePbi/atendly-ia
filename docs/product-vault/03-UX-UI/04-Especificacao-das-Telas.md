@@ -296,7 +296,7 @@ A partir de 1024 px, a lista de Configurações fica ao lado da seção aberta, 
 
 - estilo;
 - comportamento geral;
-- status;
+- status: com o WhatsApp desconectado, a IA aparece **pausada** ("IA pausada", sem "Pausar", com "Reconectar WhatsApp"), aqui e na lista de Configurações; ao reconectar, volta sozinha, sem mudar a escolha gravada;
 - FAQ/conhecimento acessado a partir dos módulos adequados.
 
 ### WhatsApp

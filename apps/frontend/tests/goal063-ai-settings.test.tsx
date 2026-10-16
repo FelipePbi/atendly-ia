@@ -25,7 +25,11 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import { type ActivationTestRun, BffHttpError, type SettingsState } from "@/data";
+import {
+  type ActivationTestRun,
+  BffHttpError,
+  type SettingsState,
+} from "@/data";
 
 import { expectNoA11yViolations } from "./support/a11y";
 
@@ -49,7 +53,15 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       restart: restartActivationTest,
       start: startActivationTest,
     },
-    notifications: { getPreferences: getNotificationPreferences },
+    notifications: {
+      getPreferences: getNotificationPreferences,
+      summary: () =>
+        Promise.resolve({
+          byLevel: { ATTENTION: 0, CRITICAL: 0, INFO: 0 },
+          openConditionsCount: 0,
+          unreadCount: 0,
+        }),
+    },
     settings: { get: getSettings, updateAi },
     status: { get: statusGet },
     whatsapp: { get: getWhatsapp },
@@ -65,6 +77,7 @@ vi.mock("@/features/knowledge/OtherInfoSection", () => ({
 }));
 
 import { AiSettings } from "@/features/settings/AiSettings";
+import { SystemStatusProvider } from "@/shared/runtime/systemStatus";
 
 const MILESTONES = [
   "MESSAGE_SENT",
@@ -75,7 +88,9 @@ const MILESTONES = [
   "APPOINTMENT_CONFIRMED",
 ] as const;
 
-function runFixture(overrides: Partial<ActivationTestRun> = {}): ActivationTestRun {
+function runFixture(
+  overrides: Partial<ActivationTestRun> = {},
+): ActivationTestRun {
   const state = overrides.state ?? "SUCCEEDED";
   return {
     id: "run-1",
@@ -149,7 +164,8 @@ function settingsFixture(
 const CONNECTED = { phoneNumber: "5511999990000", status: "CONNECTED" };
 const DISCONNECTED = { phoneNumber: null, status: "DISCONNECTED" };
 
-const FORBIDDEN = /\b(token|API|HTTP|run|projeção|reconciliação|desired|effective)\b/i;
+const FORBIDDEN =
+  /\b(token|API|HTTP|run|projeção|reconciliação|desired|effective)\b/i;
 
 function renderAi(settings: SettingsState) {
   const onSaved = vi.fn();
@@ -196,7 +212,9 @@ describe("Configurações › IA: sem interruptor, estado lido e a ação dele",
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(testSection()).toBeNull();
     expect(screen.queryByRole("button", { name: "Iniciar teste" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Retomar atendimento" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Retomar atendimento" }),
+    ).toBeNull();
     // Com a IA ativa não há teste a oferecer: a tela nem lê a execução.
     expect(getActivationTest).not.toHaveBeenCalled();
 
@@ -234,7 +252,10 @@ describe("Configurações › IA: sem interruptor, estado lido e a ação dele",
     await user.click(resume);
 
     await waitFor(() => {
-      expect(updateAi).toHaveBeenCalledWith({ enabled: true, tone: "BALANCED" });
+      expect(updateAi).toHaveBeenCalledWith({
+        enabled: true,
+        tone: "BALANCED",
+      });
     });
     expect(onSaved).toHaveBeenCalledWith(resumed);
   });
@@ -255,7 +276,9 @@ describe("Configurações › IA: sem interruptor, estado lido e a ação dele",
         "Um cliente simulado pergunta o preço de um serviço e pede um horário.",
       ),
     ).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Retomar atendimento" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Retomar atendimento" }),
+    ).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(container.textContent ?? "").not.toMatch(FORBIDDEN);
     await expectNoA11yViolations(container);
@@ -263,7 +286,9 @@ describe("Configurações › IA: sem interruptor, estado lido e a ação dele",
     getActivationTest.mockResolvedValue(
       runFixture({ state: "RUNNING", finishedAt: null }),
     );
-    await user.click(within(section).getByRole("button", { name: "Iniciar teste" }));
+    await user.click(
+      within(section).getByRole("button", { name: "Iniciar teste" }),
+    );
 
     await waitFor(() => {
       expect(startActivationTest).toHaveBeenCalledWith("5511999990000");
@@ -285,14 +310,18 @@ describe("Configurações › IA: sem interruptor, estado lido e a ação dele",
     expect(
       within(section).getByRole("button", { name: "Iniciar teste" }),
     ).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Retomar atendimento" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Retomar atendimento" }),
+    ).toBeNull();
   });
 
   test("sem teste válido e sem WhatsApp: leva a /configuracoes/whatsapp e não oferece o teste", async () => {
     getWhatsapp.mockResolvedValue(DISCONNECTED);
     const { container } = renderAi(settingsFixture());
 
-    const connect = await screen.findByRole("link", { name: "Conectar WhatsApp" });
+    const connect = await screen.findByRole("link", {
+      name: "Conectar WhatsApp",
+    });
     expect(connect).toHaveAttribute("href", "/configuracoes/whatsapp");
     expect(
       screen.getByText(/o teste precisa do seu WhatsApp conectado/),
@@ -334,7 +363,9 @@ describe("Configurações › IA: sem interruptor, estado lido e a ação dele",
       screen.getByText(/A IA só liga depois de um teste real que terminou bem/),
     ).toBeVisible();
     expect(screen.queryByText(/Não foi possível/)).toBeNull();
-    expect(screen.queryByRole("button", { name: "Retomar atendimento" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Retomar atendimento" }),
+    ).toBeNull();
     expect(container.textContent ?? "").not.toMatch(FORBIDDEN);
   });
 
@@ -357,4 +388,65 @@ describe("Configurações › IA: sem interruptor, estado lido e a ação dele",
       expect(updateAi).toHaveBeenCalledTimes(1);
     },
   );
+});
+
+describe("WhatsApp desconectado pausa a IA na tela (pedido de 2026-10-16)", () => {
+  function statusWith(whatsappStatus: "CONNECTED" | "DISCONNECTED") {
+    return {
+      accountDeletion: { dueAt: null, status: "NONE" },
+      ai: {
+        desiredEnabled: true,
+        effectiveEnabled: whatsappStatus === "CONNECTED",
+        reconciled: "NOOP",
+        state: whatsappStatus === "CONNECTED" ? "ACTIVE" : "INACTIVE",
+      },
+      degraded: false,
+      whatsapp: {
+        checkedAt: "2026-10-16T12:00:00.000Z",
+        phoneNumber: whatsappStatus === "CONNECTED" ? "5511999990000" : null,
+        status: whatsappStatus,
+      },
+    };
+  }
+
+  function renderWithStatus(settings: SettingsState) {
+    return render(
+      <SystemStatusProvider>
+        <AiSettings settings={settings} onSaved={vi.fn()} />
+      </SystemStatusProvider>,
+    );
+  }
+
+  test("IA ligada nas configurações, WhatsApp desconectado: 'IA pausada', sem 'Pausar', com 'Reconectar WhatsApp'", async () => {
+    statusGet.mockResolvedValue(statusWith("DISCONNECTED"));
+    getWhatsapp.mockResolvedValue(DISCONNECTED);
+    renderWithStatus(settingsFixture({ enabled: true, tone: "CASUAL" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "IA pausada" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Quando ele reconectar, ela volta a atender sozinha/),
+    ).toBeVisible();
+    expect(screen.queryByText("Atendendo pelo WhatsApp")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pausar" })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Reconectar WhatsApp" }),
+    ).toHaveAttribute("href", "/configuracoes/whatsapp");
+    // A escolha gravada não muda: nada é enviado para desligar a IA.
+    expect(updateAi).not.toHaveBeenCalled();
+    // Nem teste real a oferecer: a IA não está desligada, só sem WhatsApp.
+    expect(testSection()).toBeNull();
+  });
+
+  test("com o WhatsApp conectado, a mesma IA ligada aparece ativa", async () => {
+    statusGet.mockResolvedValue(statusWith("CONNECTED"));
+    renderWithStatus(settingsFixture({ enabled: true, tone: "CASUAL" }));
+
+    await waitFor(() => expect(statusGet).toHaveBeenCalled());
+    expect(
+      await screen.findByRole("heading", { name: "IA ativa" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Pausar" })).toBeVisible();
+  });
 });

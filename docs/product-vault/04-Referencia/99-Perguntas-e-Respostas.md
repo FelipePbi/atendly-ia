@@ -1184,7 +1184,7 @@ As perguntas abaixo também fizeram parte da entrevista. Elas são listadas indi
 - **R11-original-299.** Sugerir contatos provavelmente pessoais? — **Não consolidado como obrigação; seleção manual é suficiente no MVP.**
 - **R11-original-300.** IA pode inferir parentesco para sugerir contatos ignorados? — **Não consolidado como requisito de UX.**
 - **R11-original-301.** Qual status global mostrar? — **Refinado para IA ativa / pausada / instabilidade / configuração incompleta / WhatsApp desconectado.**
-- **R11-original-302.** WhatsApp desconecta: IA permanece logicamente habilitada? — **Sim; reconexão automática preserva estado quando possível.**
+- **R11-original-302.** WhatsApp desconecta: IA permanece logicamente habilitada? — **Sim; reconexão automática preserva estado quando possível.** Na tela, enquanto o WhatsApp está desconectado, a IA aparece pausada (2026-10-16).
 - **R11-original-303.** Depois de reconectar automaticamente, retomar IA? — **Sim se estava ativa.**
 - **R11-original-304.** Mensagens recebidas enquanto desconectado devem ser respondidas retroativamente? — **Não ficou como fluxo principal; prioridade é integridade e contexto atual.**
 - **R11-original-305.** Qual atraso ainda permite resposta automática? — **Não consolidado como regra fixa de produto.**

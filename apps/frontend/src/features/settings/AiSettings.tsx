@@ -24,6 +24,7 @@ import {
 } from "@/features/onboarding/segmentExamples";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { useOptionalSystemStatus } from "@/shared/runtime/systemStatus";
 import { Dialog } from "@/shared/ui/Dialog";
 import { Skeleton } from "@/shared/ui/States";
 
@@ -74,7 +75,15 @@ export function AiSettings({
   settings: SettingsState;
   onSaved: (state: SettingsState) => void;
 }) {
-  const enabled = settings.ai.enabled;
+  // Ligada nas configurações, mas com o WhatsApp desconectado a IA não
+  // atende: a tela a mostra pausada, sem "Pausar", com o caminho para
+  // reconectar. Ao reconectar ela volta sozinha — a escolha gravada não muda
+  // (pedido de 2026-10-16, R11-302).
+  const status = useOptionalSystemStatus();
+  const whatsappDown = status?.whatsappView === "off";
+  const enabledSetting = settings.ai.enabled;
+  const pausedByWhatsapp = enabledSetting && whatsappDown;
+  const enabled = enabledSetting && !whatsappDown;
   const savedTone: AiTone = settings.ai.tone ?? "BALANCED";
   const [tone, setTone] = useState<AiTone>(savedTone);
   const [busy, setBusy] = useState(false);
@@ -114,13 +123,13 @@ export function AiSettings({
   }, []);
 
   useEffect(() => {
-    if (enabled) return;
+    if (enabled || pausedByWhatsapp) return;
     const controller = new AbortController();
     void readActivation(controller.signal).then((next) => {
       if (!controller.signal.aborted) setRead(next);
     });
     return () => controller.abort();
-  }, [enabled]);
+  }, [enabled, pausedByWhatsapp]);
 
   /** Relê tudo do servidor: configurações, teste e WhatsApp. */
   async function reload() {
@@ -254,6 +263,7 @@ export function AiSettings({
   // pessoa seguir: é ela que relê o estado da IA.
   const showTest =
     !enabled &&
+    !pausedByWhatsapp &&
     loaded !== null &&
     loaded.whatsappConnected &&
     (!hasProof || testPanel === "succeeded");
@@ -271,7 +281,9 @@ export function AiSettings({
       <div className="ai-screen">
         <section
           aria-busy={
-            !enabled && (read.phase === "idle" || read.phase === "loading")
+            !enabled &&
+            !pausedByWhatsapp &&
+            (read.phase === "idle" || read.phase === "loading")
           }
           aria-labelledby="ai-activation-heading"
           className="ai-state"
@@ -285,9 +297,15 @@ export function AiSettings({
             </span>
             <div className="ai-state-copy">
               <h2 id="ai-activation-heading">
-                {activationTitle(enabled, read, hasProof)}
+                {pausedByWhatsapp
+                  ? "IA pausada"
+                  : activationTitle(enabled, read, hasProof)}
               </h2>
-              <p>{activationCopy(enabled, read, hasProof)}</p>
+              <p>
+                {pausedByWhatsapp
+                  ? "O WhatsApp está desconectado, então a IA não está atendendo. Quando ele reconectar, ela volta a atender sozinha."
+                  : activationCopy(enabled, read, hasProof)}
+              </p>
             </div>
             {enabled && (
               <button
@@ -301,7 +319,11 @@ export function AiSettings({
             )}
           </div>
           <div className="ai-state-actions">
-            {enabled ? null : read.phase === "error" ? (
+            {pausedByWhatsapp ? (
+              <Link className="btn btn-primary" href="/configuracoes/whatsapp">
+                Reconectar WhatsApp
+              </Link>
+            ) : enabled ? null : read.phase === "error" ? (
               <button
                 className="btn btn-secondary"
                 disabled={busy}

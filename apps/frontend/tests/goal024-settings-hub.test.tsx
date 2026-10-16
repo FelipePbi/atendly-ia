@@ -122,7 +122,9 @@ describe("hub com fonte de agenda Avenly", () => {
     );
 
     const aiRow = screen.getByRole("link", { name: /^IA/ });
-    expect(aiRow).toHaveTextContent("Ativa · estilo Profissional");
+    // O status deste arquivo tem a IA ativa e o WhatsApp desconectado: a IA
+    // aparece pausada enquanto o WhatsApp não volta (pedido de 2026-10-16).
+    expect(aiRow).toHaveTextContent("Pausada · WhatsApp desconectado");
     const businessRow = screen.getByRole("link", { name: /^Negócio/ });
     expect(businessRow).toHaveTextContent(
       "Endereço, pagamento, informações para a IA",

@@ -18,7 +18,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { notifyServicesChanged, type Service } from "@/data";
 import { ProductServicesScreen } from "@/features/services/ProductServicesScreen";
 import { ServicesWorkspace } from "@/features/services/ServicesWorkspace";
-import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
+import {
+  ShellConfigProvider,
+  useShellConfigValue,
+} from "@/shared/layout/ShellConfig";
 
 const serviceCatalogList = vi.fn();
 const serviceCatalogGetAiInstruction = vi.fn();
@@ -102,6 +105,7 @@ function route(pathname: string, search = "") {
   const id = new URLSearchParams(search).get("id") ?? undefined;
   return (
     <ShellConfigProvider>
+      <ShellActionProbe />
       <ServicesWorkspace>
         {pathname === "/servicos/editar" ? (
           <ProductServicesScreen key="edit" scenario="edit" serviceId={id} />
@@ -111,6 +115,24 @@ function route(pathname: string, search = "") {
       </ServicesWorkspace>
     </ShellConfigProvider>
   );
+}
+
+/** O botão flutuante que a tela pede à casca (`useShellConfig`). */
+function ShellActionProbe() {
+  const action = useShellConfigValue()?.action;
+  return <output data-testid="shell-action">{action?.label ?? ""}</output>;
+}
+
+/** Catálogo que só responde quando o teste manda. */
+function deferredCatalog() {
+  let resolve: (value: ReturnType<typeof catalog>) => void = () => undefined;
+  serviceCatalogList.mockImplementationOnce(
+    () =>
+      new Promise<ReturnType<typeof catalog>>((done) => {
+        resolve = done;
+      }),
+  );
+  return () => act(async () => resolve(catalog(SERVICES)));
 }
 
 function listAside() {
@@ -222,7 +244,7 @@ describe("Serviços — lista persistente entre lista e editor", () => {
     expect(
       await within(aside).findByRole("link", { name: "Editar Manicure" }),
     ).toBeVisible();
-    expect(screen.queryByLabelText("Carregando dados")).toBeNull();
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
     expect(listAside()).toBe(aside);
     // O que a pessoa digitava no serviço aberto não é apagado.
     expect(screen.getByDisplayValue("Corte feminino")).toBeVisible();
@@ -265,6 +287,86 @@ describe("Serviços — lista persistente entre lista e editor", () => {
       screen.getByRole("heading", { name: "Serviços" }),
     );
     expect(scroller).not.toContainElement(screen.getByText("3 ativos"));
+  });
+
+  test.each([390, 1440])(
+    "em %i px, carregando, não há esqueleto: o topo já está no lugar e os itens entram com fade",
+    async (width) => {
+      setViewport(width);
+      const arrive = deferredCatalog();
+      render(route("/servicos"));
+
+      // Antes de o catálogo chegar: título, busca e "+" no lugar, nenhum
+      // esqueleto e a área dos itens vazia, marcada como ocupada.
+      expect(screen.getByRole("heading", { name: "Serviços" })).toBeVisible();
+      expect(screen.getByRole("searchbox")).toBeVisible();
+      if (width >= 1024) {
+        expect(
+          within(listAside()).getByRole("link", { name: "Novo serviço" }),
+        ).toBeVisible();
+      } else {
+        expect(screen.getByTestId("shell-action")).toHaveTextContent(
+          "Novo serviço",
+        );
+      }
+      expect(document.querySelector(".skeleton")).toBeNull();
+      expect(screen.queryByLabelText("Carregando dados")).toBeNull();
+      const scroller = document.querySelector(".service-panel-scroll");
+      expect(scroller).toHaveAttribute("aria-busy", "true");
+      expect(scroller).toBeEmptyDOMElement();
+      const header = document.querySelector(".service-panel-header");
+
+      await arrive();
+      const row = screen.getByRole("link", { name: "Editar Escova" });
+      expect(scroller).toContainElement(row);
+      expect(scroller).not.toHaveAttribute("aria-busy");
+      expect(row.closest(".directory-list-surface")).toHaveClass(
+        "motion-enter-fade",
+      );
+      // O topo não é remontado quando os itens chegam.
+      expect(document.querySelector(".service-panel-header")).toBe(header);
+      expect(screen.getByText("3 ativos")).toBeVisible();
+    },
+  );
+
+  test("voltar a uma lista já carregada não repete o fade", async () => {
+    setViewport(390);
+    const view = render(route("/servicos"));
+    await screen.findByRole("link", { name: "Editar Escova" });
+
+    view.rerender(route("/servicos/editar", "?id=s2"));
+    expect(await screen.findByDisplayValue("Escova")).toBeVisible();
+    view.rerender(route("/servicos"));
+
+    expect(
+      screen
+        .getByRole("link", { name: "Editar Escova" })
+        .closest(".directory-list-surface"),
+    ).not.toHaveClass("motion-enter-fade");
+  });
+
+  test("com a lista ao lado, o '+' é só o do topo da lista, sem botão flutuante", async () => {
+    setViewport(1024);
+    render(route("/servicos"));
+    await screen.findByRole("link", { name: "Editar Escova" });
+
+    expect(
+      within(listAside()).getByRole("link", { name: "Novo serviço" }),
+    ).toBeVisible();
+    expect(screen.getByTestId("shell-action")).toBeEmptyDOMElement();
+  });
+
+  test("no celular, o '+' é o botão flutuante da casca", async () => {
+    setViewport(390);
+    render(route("/servicos"));
+    await screen.findByRole("link", { name: "Editar Escova" });
+
+    expect(screen.getByTestId("shell-action")).toHaveTextContent(
+      "Novo serviço",
+    );
+    expect(
+      screen.queryByRole("link", { name: "Novo serviço" }),
+    ).not.toBeInTheDocument();
   });
 });
 

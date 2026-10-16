@@ -247,6 +247,8 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 - indicador de pendência quando incompleto;
 - título, resumo, "+" e busca ficam fixos; só os itens rolam;
 - abrir ou trocar de serviço não recarrega a lista: ela mantém a busca e a rolagem, e só atualiza quando o catálogo muda;
+- na primeira carga não há esqueleto: título, "+" e busca já aparecem no lugar final, a área dos itens fica vazia e os itens entram com um fade curto (nenhum, com movimento reduzido);
+- com a lista ao lado (a partir de 1024 px), o "+" é só o do topo da lista, sem botão flutuante;
 - sem paginação: o catálogo de um profissional autônomo é curto e vem inteiro.
 
 ### Criar/editar

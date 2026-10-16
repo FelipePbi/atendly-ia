@@ -139,11 +139,13 @@ export function ServiceList() {
   const wide = useWideLayout();
   const state = useServiceListData();
   const { error, result } = state;
-  const emptyList = !error && result !== null && result.items.length === 0;
+  const emptyList = isEmptyList(state);
 
   useShellConfig({
+    // Com a lista ao lado (a partir de 1024 px), o "+" é o do topo da lista,
+    // como no quadro; o botão flutuante fica só para a lista em tela cheia.
     action:
-      result?.editable && !emptyList
+      canAdd(state) && !wide
         ? { href: "/servicos/novo", icon: "plus", label: "Novo serviço" }
         : undefined,
     active: "servicos",
@@ -190,9 +192,9 @@ export function ServiceListPanelView({
   showAdd?: boolean;
   state: ServiceListState;
 }) {
-  const { error, groups, result } = state;
+  const { groups, result } = state;
   const summary = result && result.items.length > 0 ? summaryLine(groups) : "";
-  const emptyList = !error && result !== null && result.items.length === 0;
+  const emptyList = isEmptyList(state);
   return (
     <div
       className={clsx(
@@ -204,9 +206,12 @@ export function ServiceListPanelView({
       <div className="service-panel-header">
         <div className="service-panel-title">
           <Heading>Serviços</Heading>
-          {summary && <span className="service-panel-summary">{summary}</span>}
+          {/* O resumo guarda a linha enquanto a lista carrega: nada pula. */}
+          {!emptyList && (
+            <span className="service-panel-summary">{summary || " "}</span>
+          )}
         </div>
-        {showAdd && result?.editable && !emptyList && (
+        {showAdd && canAdd(state) && (
           <Link
             aria-label="Novo serviço"
             className="service-panel-add"
@@ -230,6 +235,10 @@ function ServiceListContent({
 }) {
   const { error, filtered, groups, query, result, savedScroll, setQuery } =
     state;
+  // Na primeira carga não há esqueleto: o topo (título, "+" e busca) já está
+  // no lugar, a área dos itens fica vazia e eles entram com um fade curto.
+  // Quem volta a uma lista já carregada a encontra como estava, sem fade.
+  const [enter] = useState(() => result === null);
   // Só os itens rolam (título, resumo, "+" e busca ficam parados); a lista
   // volta ao ponto em que estava quando é montada de novo — ao voltar do
   // editor no celular.
@@ -239,13 +248,6 @@ function ServiceListContent({
     },
     [savedScroll],
   );
-  if (!result && !error) {
-    return (
-      <div className="service-panel-scroll">
-        <DirectoryLoading />
-      </div>
-    );
-  }
   if (error) {
     return (
       <DirectoryState
@@ -277,68 +279,54 @@ function ServiceListContent({
         </label>
       </section>
       <div
+        aria-busy={result ? undefined : true}
         className="service-panel-scroll"
         onScroll={(event) =>
           state.rememberScroll(event.currentTarget.scrollTop)
         }
         ref={restoreScroll}
       >
-        <section className="directory-list-surface">
-          {!editable && (
-            <p className="service-list-readonly-note">
-              Serviços não podem ser editados aqui.
-            </p>
-          )}
-          <ServiceGroup
-            editable={editable}
-            heading="Ativos"
-            hideHeading
-            openId={openId}
-            services={groups.active}
-          />
-          <ServiceGroup
-            editable={editable}
-            heading="Precisa de revisão"
-            hideHeading
-            openId={openId}
-            services={groups.review}
-          />
-          <ServiceGroup
-            editable={editable}
-            heading="Inativos"
-            openId={openId}
-            services={groups.inactive}
-          />
-          {filtered.length === 0 && (
-            <p className="directory-no-results">
-              Nenhum serviço corresponde à busca.
-            </p>
-          )}
-        </section>
+        {result && (
+          <section
+            className={clsx(
+              "directory-list-surface",
+              enter && "motion-enter-fade",
+            )}
+          >
+            {!editable && (
+              <p className="service-list-readonly-note">
+                Serviços não podem ser editados aqui.
+              </p>
+            )}
+            <ServiceGroup
+              editable={editable}
+              heading="Ativos"
+              hideHeading
+              openId={openId}
+              services={groups.active}
+            />
+            <ServiceGroup
+              editable={editable}
+              heading="Precisa de revisão"
+              hideHeading
+              openId={openId}
+              services={groups.review}
+            />
+            <ServiceGroup
+              editable={editable}
+              heading="Inativos"
+              openId={openId}
+              services={groups.inactive}
+            />
+            {filtered.length === 0 && (
+              <p className="directory-no-results">
+                Nenhum serviço corresponde à busca.
+              </p>
+            )}
+          </section>
+        )}
       </div>
     </>
-  );
-}
-
-function DirectoryLoading() {
-  return (
-    <div
-      className="directory-loading-shell"
-      aria-busy="true"
-      aria-label="Carregando dados"
-    >
-      {[0, 1, 2, 3, 4].map((item) => (
-        <div className="directory-loading-row" key={item}>
-          <span className="skeleton directory-loading-avatar" />
-          <span className="directory-loading-copy">
-            <span className="skeleton skeleton-title" />
-            <span className="skeleton skeleton-line" />
-          </span>
-          <span className="skeleton skeleton-line" />
-          <span className="skeleton skeleton-line" />
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -378,6 +366,20 @@ export function DirectoryState({
       </div>
     </div>
   );
+}
+
+function isEmptyList({ error, result }: ServiceListState): boolean {
+  return !error && result !== null && result.items.length === 0;
+}
+
+/**
+ * O "+" aparece desde o primeiro quadro: enquanto a lista carrega ele já está
+ * no lugar; some só no catálogo que não se edita aqui, no erro e na lista
+ * vazia (que tem a própria ação).
+ */
+function canAdd(state: ServiceListState): boolean {
+  if (state.error || isEmptyList(state)) return false;
+  return state.result ? state.result.editable : true;
 }
 
 export function requestError(error: unknown, fallback: string): string {

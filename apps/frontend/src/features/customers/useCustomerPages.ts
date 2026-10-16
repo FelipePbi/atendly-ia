@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BffHttpError, type CustomerListItem } from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { recall, remember } from "@/shared/runtime/sessionMemory";
 
 /** Tamanho de cada leva da lista de clientes (scroll infinito). */
 export const CUSTOMER_PAGE_SIZE = 15;
@@ -47,6 +48,27 @@ type PagesState = {
   moreError: CustomerPagesError | null;
 };
 
+/** A primeira leva sem busca, como veio por último nesta aba (D-168). */
+const FIRST_PAGE = "customers:first-page";
+
+type RememberedFirstPage = Pick<
+  PagesState,
+  "items" | "managedExternally" | "nextCursor" | "total"
+>;
+
+/**
+ * Voltar a Clientes abre com a primeira leva que a aba já leu, sem esqueleto,
+ * e a leitura nova a revalida no lugar (2026-10-16). Busca não é lembrada.
+ */
+function seededState(key: string, search: string): PagesState {
+  const remembered = search
+    ? undefined
+    : recall<RememberedFirstPage>(FIRST_PAGE);
+  return remembered
+    ? { ...initialState(key), ...remembered, loaded: true }
+    : initialState(key);
+}
+
 function initialState(key: string): PagesState {
   return {
     key,
@@ -74,8 +96,10 @@ export function useCustomerPages(
 ): CustomerPages {
   const [reload, setReload] = useState(0);
   const key = `${reload}:${search}`;
-  const [stored, setState] = useState<PagesState>(() => initialState(key));
-  const state = stored.key === key ? stored : initialState(key);
+  const [stored, setState] = useState<PagesState>(() =>
+    seededState(key, search),
+  );
+  const state = stored.key === key ? stored : seededState(key, search);
   const moreController = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -88,14 +112,14 @@ export function useCustomerPages(
         controller.signal,
       )
       .then((page) => {
-        setState({
-          ...initialState(key),
+        const first: RememberedFirstPage = {
           items: unique(page.items),
           total: page.total ?? page.items.length,
           managedExternally: page.managedExternally,
           nextCursor: page.nextCursor ?? null,
-          loaded: true,
-        });
+        };
+        if (!search) remember(FIRST_PAGE, first);
+        setState({ ...initialState(key), ...first, loaded: true });
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;

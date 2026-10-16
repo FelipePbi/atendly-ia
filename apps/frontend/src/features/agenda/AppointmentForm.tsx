@@ -36,6 +36,7 @@ import { appointmentHref } from "./agendaLinks";
 import {
   forgetAgendaChanges,
   recalledCalendar,
+  recalledCustomer,
   recalledCustomers,
   recalledServiceCatalog,
   rememberAppointment,
@@ -169,11 +170,21 @@ export function AppointmentForm({
   const [showManual, setShowManual] = useState(false);
   const [comments, setComments] = useState("");
   const [showComments, setShowComments] = useState(false);
-  const [loading, setLoading] = useState(
-    calendar === null || services === null || customers === null,
+  // A cliente que o perfil deixou lembrada (o "Agendar" de Clientes): com
+  // ela, a tela abre sem esperar a lista inteira de clientes, que segue
+  // chegando por trás para a busca (2026-10-16).
+  const [seedCustomer] = useState(() =>
+    customerId ? recalledCustomer(customerId) : null,
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Pronto quando há calendário e serviços; a lista de clientes só segura a
+  // tela quando a cliente pedida pela URL ainda não é conhecida.
+  const loading =
+    error === null &&
+    (calendar === null ||
+      services === null ||
+      (Boolean(customerId) && seedCustomer === null && customers === null));
   const [conflict, setConflict] = useState<ConflictState | null>(null);
   const timeFieldsetRef = useRef<HTMLFieldSetElement>(null);
   const timeLegendRef = useRef<HTMLLegendElement>(null);
@@ -202,27 +213,29 @@ export function AppointmentForm({
 
   useEffect(() => {
     const controller = new AbortController();
+    const fail = (caught: unknown) => {
+      if (!controller.signal.aborted)
+        setError(
+          requestError(caught, "Não foi possível preparar o agendamento."),
+        );
+    };
     Promise.all([
       getProductServices().calendar.getCalendar(controller.signal),
       getProductServices().serviceCatalog.list(controller.signal),
-      getProductServices().customers.list({}, controller.signal),
     ])
-      .then(([calendarResult, serviceResult, customerResult]) => {
+      .then(([calendarResult, serviceResult]) => {
         setCalendar(calendarResult);
         setServices(serviceResult);
-        setCustomers(customerResult);
         rememberServiceCatalog(serviceResult);
+      })
+      .catch(fail);
+    getProductServices()
+      .customers.list({}, controller.signal)
+      .then((customerResult) => {
+        setCustomers(customerResult);
         rememberCustomers(customerResult);
       })
-      .catch((caught: unknown) => {
-        if (!controller.signal.aborted)
-          setError(
-            requestError(caught, "Não foi possível preparar o agendamento."),
-          );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+      .catch(fail);
     return () => controller.abort();
   }, []);
 
@@ -334,7 +347,8 @@ export function AppointmentForm({
     : servicesMinutes;
   const total = agreementTotal(selectedServices);
   const selectedCustomer = chosenCustomerId
-    ? customers?.items.find((item) => item.id === chosenCustomerId)
+    ? (customers?.items.find((item) => item.id === chosenCustomerId) ??
+      (seedCustomer?.id === chosenCustomerId ? seedCustomer : undefined))
     : undefined;
   // Telefone não identifica ninguém aqui: uma pessoa já cadastrada é agendada
   // pelo próprio ID, mesmo sem telefone nenhum no perfil.

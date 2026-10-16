@@ -13,6 +13,12 @@ import {
 import { type FormEvent } from "react";
 
 import { BffHttpError, type CalendarState, type CustomerDetail } from "@/data";
+import {
+  recalledServiceCatalog,
+  rememberCalendar,
+  rememberCustomer,
+  rememberServiceCatalog,
+} from "@/features/agenda/agendaMemory";
 import { Icon } from "@/shared/icons/Icon";
 import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { PushedBar } from "@/shared/layout/PushedBar";
@@ -99,6 +105,7 @@ export function CustomerProfile({
       services.calendar.getCalendar(controller.signal),
     ])
       .then(([nextCustomer, nextCalendar]) => {
+        warmNewAppointment(nextCustomer, nextCalendar);
         const swapping =
           shownIdRef.current !== null && shownIdRef.current !== nextCustomer.id;
         shownIdRef.current = nextCustomer.id;
@@ -624,6 +631,31 @@ function initialTabFromLocation(): ProfileTab {
   return requested === "atendimentos" || requested === "notas"
     ? requested
     : "resumo";
+}
+
+/**
+ * O "Agendar" do perfil abre o novo agendamento pronto (2026-10-16): a
+ * cliente e o calendário que o perfil já leu ficam na memória da Agenda, e o
+ * catálogo de serviços é pré-lido uma vez. Sem isso a tela abria vazia e
+ * passava por esqueleto até ler tudo.
+ */
+function warmNewAppointment(
+  customer: CustomerDetail,
+  calendar: CalendarState,
+): void {
+  // Só pré-leitura: falhar aqui nunca pode derrubar o perfil.
+  try {
+    if (!calendar.capabilities.createAppointments) return;
+    rememberCalendar(calendar);
+    rememberCustomer(customer);
+    if (recalledServiceCatalog()) return;
+    void getProductServices()
+      .serviceCatalog.list()
+      .then(rememberServiceCatalog)
+      .catch(() => undefined);
+  } catch {
+    /* sem pré-leitura, o novo agendamento lê tudo ao abrir */
+  }
 }
 
 function sinceMonth(customer: CustomerDetail): string | null {

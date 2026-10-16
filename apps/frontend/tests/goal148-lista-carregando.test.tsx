@@ -4,7 +4,8 @@
  *
  * Título e busca ficam na tela enquanto a lista não chega, o esqueleto tem as
  * quatro linhas do quadro fora da árvore acessível e o texto digitado vale
- * quando a lista chega. Erro (CL10), vazio (CL2), busca (CL3) e lista (CL1)
+ * quando a lista chega. O esqueleto só aparece se a carga passar de ~150 ms
+ * (D-168, 2026-10-16): carga rápida não pisca. Erro (CL10), vazio (CL2), busca (CL3) e lista (CL1)
  * seguem como estavam.
  */
 
@@ -129,9 +130,13 @@ describe("CL9 — Clientes · carregando", () => {
     );
     expect(search).toBeEnabled();
     expect(screen.getByRole("status")).toHaveTextContent("Carregando clientes");
+    // No primeiro quadro, nada de esqueleto: carga rápida entra direto.
+    expect(container.querySelector(".customer-skeleton")).toBeNull();
 
-    expect(container.querySelectorAll(".customer-skeleton-row")).toHaveLength(
-      4,
+    await waitFor(() =>
+      expect(container.querySelectorAll(".customer-skeleton-row")).toHaveLength(
+        4,
+      ),
     );
     const skeleton = container.querySelector(".customer-skeleton");
     expect(skeleton).toHaveAttribute("aria-hidden", "true");
@@ -216,8 +221,11 @@ describe("CL9 — Clientes · carregando", () => {
       screen.getByRole("searchbox", { name: "Buscar cliente" }),
     ).toBeVisible();
     expect(screen.getByRole("status")).toHaveTextContent("Carregando clientes");
-    expect(container.querySelectorAll(".customer-skeleton-row")).toHaveLength(
-      4,
+    expect(container.querySelector(".customer-skeleton")).toBeNull();
+    await waitFor(() =>
+      expect(container.querySelectorAll(".customer-skeleton-row")).toHaveLength(
+        4,
+      ),
     );
 
     release([MARINA]);

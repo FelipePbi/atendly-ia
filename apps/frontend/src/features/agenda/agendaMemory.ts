@@ -4,6 +4,7 @@ import type {
   AppointmentNotification,
   AvailabilityException,
   CalendarState,
+  Customer,
   CustomerList,
   ServiceList,
   TimeBlock,
@@ -185,6 +186,20 @@ export function rememberCustomers(list: CustomerList): void {
 
 export function recalledCustomers(): CustomerList | null {
   return recall<CustomerList>(CUSTOMERS) ?? null;
+}
+
+const CUSTOMER = "agenda:customer:";
+
+/**
+ * A cliente de quem o "Agendar" do perfil parte (2026-10-16): o novo
+ * agendamento abre com ela escolhida, sem esperar a lista inteira de clientes.
+ */
+export function rememberCustomer(customer: Customer): void {
+  remember(`${CUSTOMER}${customer.id}`, customer);
+}
+
+export function recalledCustomer(id: string): Customer | null {
+  return recall<Customer>(`${CUSTOMER}${id}`) ?? null;
 }
 
 /** Depois de uma gravação: janelas, agendamentos e listas lidos antes deixam de valer. */

@@ -25,6 +25,7 @@ import {
   rememberAppointment,
   rememberAppointmentHistory,
   rememberCalendar,
+  rememberCustomer,
   rememberCustomers,
   rememberServiceCatalog,
 } from "@/features/agenda/agendaMemory";
@@ -279,6 +280,39 @@ describe("Novo agendamento abre pronto (pedido do usuário, 2026-10-12)", () => 
     expect(screen.queryByLabelText("Carregando agenda")).toBeNull();
     expect(container.querySelector(".skeleton")).toBeNull();
     expect(screen.getByText("Cliente")).toBeVisible();
+  });
+
+  test('"Agendar" do perfil (2026-10-16): com a cliente lembrada, abre com ela escolhida sem esperar a lista de clientes', () => {
+    rememberCalendar(calendarFixture());
+    rememberServiceCatalog({ items: [] } as never);
+    rememberCustomer({ id: "c-9", name: "Marina Costa", phone: null });
+    getCalendar.mockImplementation(never);
+    listCatalog.mockImplementation(never);
+    // A lista inteira de clientes nunca responde: a tela não espera por ela.
+    listCustomers.mockImplementation(never);
+    const { container } = render(
+      <ShellConfigProvider>
+        <AppointmentForm customerId="c-9" />
+      </ShellConfigProvider>,
+    );
+    expect(container.querySelector(".skeleton")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Remover Marina Costa" }),
+    ).toBeVisible();
+  });
+
+  test("sem a cliente lembrada, a cliente da URL ainda espera a lista (não abre com o campo vazio)", () => {
+    rememberCalendar(calendarFixture());
+    rememberServiceCatalog({ items: [] } as never);
+    getCalendar.mockImplementation(never);
+    listCatalog.mockImplementation(never);
+    listCustomers.mockImplementation(never);
+    render(
+      <ShellConfigProvider>
+        <AppointmentForm customerId="c-9" />
+      </ShellConfigProvider>,
+    );
+    expect(screen.queryByRole("form", { name: "Novo agendamento" })).toBeNull();
   });
 
   test('abrir a folha do "+ Novo" pré-lê serviços e clientes para a memória da aba', async () => {

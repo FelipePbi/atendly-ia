@@ -18,6 +18,7 @@ import { Icon } from "@/shared/icons/Icon";
 import { ListDetailEmpty, ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
+import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
@@ -208,6 +209,9 @@ export function CustomerListPanelView({
 }) {
   const { canCreate, customers, error, filtered, groups, loading, today } =
     data;
+  // Esqueleto só se a primeira leva passar de ~150 ms (D-168): carga rápida
+  // entra direto, sem piscar (2026-10-16).
+  const showSkeleton = useDeferredLoading(loading);
   const showingState = Boolean(error) || (!loading && customers.length === 0);
   const searchText = data.query.trim();
   const searching = !showingState && !loading && searchText !== "";
@@ -287,7 +291,13 @@ export function CustomerListPanelView({
           </div>
           {loading ? (
             <div className="customer-panel-scroll" key="loading">
-              <CustomerListSkeleton />
+              {showSkeleton ? (
+                <CustomerListSkeleton />
+              ) : (
+                <p className="sr-only" role="status">
+                  Carregando clientes
+                </p>
+              )}
             </div>
           ) : searching ? (
             <div className="customer-panel-scroll" key="search">

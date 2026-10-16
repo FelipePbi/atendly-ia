@@ -11,15 +11,19 @@ import { useState } from "react";
  */
 export function ContactPhoto({ src }: { src: string | null }) {
   const [failed, setFailed] = useState<string | null>(null);
+  // A foto aparece com fade sobre as iniciais quando termina de carregar, em
+  // vez de surgir de uma vez (2026-10-16).
+  const [loaded, setLoaded] = useState<string | null>(null);
   if (!src || failed === src) return null;
   return (
     // eslint-disable-next-line @next/next/no-img-element -- bytes do proxy do BFF, com cookie de sessão; sem otimização remota aplicável.
     <img
       alt=""
-      className="contact-photo"
+      className={loaded === src ? "contact-photo is-loaded" : "contact-photo"}
       decoding="async"
       loading="lazy"
       onError={() => setFailed(src)}
+      onLoad={() => setLoaded(src)}
       src={src}
     />
   );

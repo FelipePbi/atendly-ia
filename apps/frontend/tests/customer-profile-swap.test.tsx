@@ -3,10 +3,12 @@
  * Perfil da cliente no painel ao lado da lista (pedido de 2026-10-15).
  *
  * Sem esqueleto no painel: enquanto a cliente carrega, o painel fica vazio na
- * primeira carga e, na troca, mantém a anterior esmaecida (`aria-busy`). Cada
- * cliente que chega entra com a animação curta (`is-entering`), na primeira
- * carga e em cada troca; o conteúdo é remontado, a lista não. Trocar de aba
- * não repete a entrada, e o erro continua com estado próprio.
+ * primeira carga e, na troca, mantém a anterior (`aria-busy`). A primeira
+ * cliente entra com a animação curta (`is-entering`). A troca por outra é um
+ * crossfade da View Transition `customer-swap` (2026-10-16): a nova não pode
+ * entrar de opacidade zero por cima, senão o painel pisca. O conteúdo é
+ * remontado, a lista não. Trocar de aba não repete a entrada, e o erro
+ * continua com estado próprio.
  */
 
 import { act, render, screen } from "@testing-library/react";
@@ -132,7 +134,26 @@ beforeEach(() => {
 
 afterEach(() => {
   Reflect.deleteProperty(window, "matchMedia");
+  Reflect.deleteProperty(document, "startViewTransition");
 });
+
+/** View Transition fake: aplica a atualização na hora e anota a classe do tipo. */
+function stubViewTransition() {
+  const types: string[][] = [];
+  Object.defineProperty(document, "startViewTransition", {
+    configurable: true,
+    value: (update: () => void) => {
+      types.push(
+        [...document.documentElement.classList].filter((c) =>
+          c.startsWith("vt-"),
+        ),
+      );
+      update();
+      return { finished: Promise.resolve() };
+    },
+  });
+  return types;
+}
 
 describe("perfil da cliente no painel ao lado da lista", () => {
   test("carregando, o painel não mostra esqueleto; a cliente entra com a animação", async () => {
@@ -148,7 +169,8 @@ describe("perfil da cliente no painel ao lado da lista", () => {
     expect(profileSection()).toHaveClass("is-entering");
   });
 
-  test("trocar de cliente esmaece a anterior e roda a entrada de novo, sem remontar a lista", async () => {
+  test("trocar de cliente faz crossfade, sem piscar e sem remontar a lista", async () => {
+    const transitions = stubViewTransition();
     const { rerender } = render(screenFor("c1"));
     const firstHeading = await profileHeading("Ana Paula");
     const list = screen.getByRole("list", { name: /clientes/i });
@@ -156,7 +178,10 @@ describe("perfil da cliente no painel ao lado da lista", () => {
     const arrive = deferredDetail();
     rerender(screenFor("c2"));
 
-    // Enquanto a nova não chega: a anterior fica, esmaecida, sem esqueleto.
+    // A primeira carga não usa a transição: não há conteúdo anterior.
+    expect(transitions).toEqual([]);
+
+    // Enquanto a nova não chega: a anterior fica, sem esqueleto.
     expect(firstHeading).toBeInTheDocument();
     expect(profileSection()).toHaveClass("is-refreshing");
     // A entrada anterior sai: o fim dela seguraria a opacidade em 1.
@@ -169,7 +194,10 @@ describe("perfil da cliente no painel ao lado da lista", () => {
 
     expect(secondHeading).not.toBe(firstHeading);
     expect(firstHeading).not.toBeInTheDocument();
-    expect(profileSection()).toHaveClass("is-entering");
+    // A troca é o crossfade: uma transição `customer-swap`, e a nova não roda
+    // a entrada de opacidade zero (era ela que fazia o painel piscar).
+    expect(transitions).toEqual([["vt-customer-swap"]]);
+    expect(profileSection()).not.toHaveClass("is-entering");
     expect(profileSection()).not.toHaveClass("is-refreshing");
     expect(profileSection()).not.toHaveAttribute("aria-busy");
     expect(screen.getByRole("list", { name: /clientes/i })).toBe(list);

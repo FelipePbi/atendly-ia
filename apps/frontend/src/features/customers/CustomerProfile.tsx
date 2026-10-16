@@ -18,6 +18,7 @@ import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { PushedBar } from "@/shared/layout/PushedBar";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
+import { runViewTransition } from "@/shared/motion/viewTransition";
 import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { ContactPhoto, customerPhotoUrl } from "@/shared/ui/ContactPhoto";
@@ -79,11 +80,12 @@ export function CustomerProfile({
     id: string | null;
   } | null>(null);
   const [savedNotice, setSavedNotice] = useState(false);
-  // Cada cliente que chega entra com uma animação curta, na primeira carga e
-  // em cada troca com a lista ao lado (pedido de 2026-10-15). Na troca, o
-  // conteúdo anterior fica esmaecido até o novo chegar; trocar de aba depois
-  // não repete a entrada.
+  // A primeira cliente entra com uma animação curta (pedido de 2026-10-15).
+  // A troca de uma cliente por outra é um crossfade da View Transition
+  // `customer-swap` (pedido de 2026-10-16): a anterior sai enquanto a nova
+  // entra, sem passar pelo painel vazio. Trocar de aba não repete a entrada.
   const [enterId, setEnterId] = useState<string | null>(null);
+  const shownIdRef = useRef<string | null>(null);
   const notesPanelRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const tabsId = useId();
@@ -97,9 +99,17 @@ export function CustomerProfile({
       services.calendar.getCalendar(controller.signal),
     ])
       .then(([nextCustomer, nextCalendar]) => {
-        setEnterId(nextCustomer.id);
-        setCustomer(nextCustomer);
-        setCalendar(nextCalendar);
+        const swapping =
+          shownIdRef.current !== null && shownIdRef.current !== nextCustomer.id;
+        shownIdRef.current = nextCustomer.id;
+        const show = () => {
+          setEnterId(swapping ? null : nextCustomer.id);
+          setCustomer(nextCustomer);
+          setCalendar(nextCalendar);
+        };
+        if (swapping)
+          void runViewTransition(show, { types: ["customer-swap"] });
+        else show();
       })
       .catch((caught: unknown) => {
         if (!controller.signal.aborted)
@@ -247,8 +257,8 @@ export function CustomerProfile({
       className={clsx(
         "directory-page customer-profile",
         customer && tab !== "resumo" && "is-fill",
-        // A entrada segura a opacidade no fim; durante a troca ela sai para
-        // o conteúdo anterior poder esmaecer.
+        // Durante a troca a entrada sai, para o conteúdo anterior poder
+        // esmaecer se a cliente nova demorar.
         refreshing
           ? "is-refreshing"
           : customer && enterId === customer.id && "is-entering",

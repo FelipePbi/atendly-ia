@@ -153,16 +153,46 @@
 .motion-enter.is-fast {
   animation-duration: var(--at-duration-fast);
 }
-/* Perfil do cliente: cada cliente que chega entra curto; na troca com a lista
-   ao lado, o conteúdo anterior fica esmaecido até o novo chegar. */
+/* Perfil do cliente: a primeira cliente entra curto. A troca por outra é um
+   crossfade (`vt-customer-swap`): a anterior sai em 160 ms enquanto a nova
+   entra em 240 ms, sem o painel passar por vazio (2026-10-16). Se a cliente
+   nova demorar, a anterior esmaece devagar; carga rápida nunca chega a
+   esmaecer. */
 .customer-profile.is-entering > :not(.pushed-bar) {
-  animation: motion-rise-in var(--at-duration-fast) var(--at-ease-standard) both;
+  animation: motion-rise-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
 }
 .customer-profile > :not(.pushed-bar) {
-  transition: opacity var(--at-duration-fast) var(--at-ease-standard);
+  transition: opacity var(--at-duration-moderate) var(--at-ease-standard);
 }
 .customer-profile.is-refreshing > :not(.pushed-bar) {
-  opacity: 0.55;
+  opacity: 0.6;
+  transition-delay: 180ms;
+}
+/* Só com a lista ao lado: abaixo de 1024 px o perfil é tela empurrada e se
+   move junto com `page-content`. */
+@media (min-width: 1024px) {
+  .customer-profile {
+    view-transition-name: customer-panel;
+  }
+}
+::view-transition-group(customer-panel) {
+  animation: none;
+}
+::view-transition-image-pair(customer-panel) {
+  isolation: auto;
+}
+::view-transition-old(customer-panel),
+::view-transition-new(customer-panel) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html.vt-customer-swap::view-transition-old(customer-panel) {
+  animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both;
+}
+html.vt-customer-swap::view-transition-new(customer-panel) {
+  animation: motion-fade-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
 }
 /* Tela empurrada no celular, sem View Transitions: entra da direita. */
 .motion-enter-forward {

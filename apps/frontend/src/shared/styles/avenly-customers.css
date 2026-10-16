@@ -1246,7 +1246,10 @@
 .customer-profile .directory-detail-hero.is-compact .directory-detail-identity {
   align-items: center;
 }
-.customer-profile .directory-detail-hero.is-compact .directory-detail-identity > div {
+.customer-profile
+  .directory-detail-hero.is-compact
+  .directory-detail-identity
+  > div {
   gap: 0;
 }
 .customer-profile .directory-detail-hero.is-compact .avatar {
@@ -2093,4 +2096,9 @@
   height: 100%;
   object-fit: cover;
   border-radius: inherit;
+  opacity: 0;
+  transition: opacity var(--at-duration-moderate) var(--at-ease-standard);
+}
+.contact-photo.is-loaded {
+  opacity: 1;
 }

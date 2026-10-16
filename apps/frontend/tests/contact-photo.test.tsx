@@ -88,6 +88,18 @@ describe("foto de perfil da cliente", () => {
     expect(container).toHaveTextContent("AC");
   });
 
+  test("a foto só fica visível depois de carregar, para entrar com fade", () => {
+    const { container } = render(
+      <ContactPhoto src="http://bff.test/v1/customers/c1/avatar" />,
+    );
+    const img = container.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img).not.toHaveClass("is-loaded");
+
+    fireEvent.load(img as HTMLImageElement);
+    expect(img).toHaveClass("contact-photo", "is-loaded");
+  });
+
   test("sem id, ou sem o endereço do BFF, não há foto", () => {
     expect(customerPhotoUrl(null)).toBeNull();
     vi.stubEnv("NEXT_PUBLIC_BFF_URL", "");

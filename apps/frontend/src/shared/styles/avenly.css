@@ -2104,38 +2104,63 @@ p {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-/* Pedido de 2026-10-12: na sidebar (tablet e desktop), o cartão de WhatsApp
-   desconectado pulsa de leve, um anel na cor do perigo que se abre e some,
-   no mesmo ritmo do ponto da IA ativa. Movimento reduzido (D-173, pedido de
-   2026-10-16): o anel não se abre, só acende e apaga no lugar, para o aviso
-   continuar chamando a atenção sem nada se mover. */
+/* Pedido de 2026-10-12, refeito em 2026-10-16: na sidebar (tablet e
+   desktop), o cartão de WhatsApp desconectado chama a atenção com ondas na
+   cor do perigo que se abrem e se dispersam — duas ondas encavaladas por
+   cerca de 3 s, depois 20 s parado, e de novo. Nunca pisca o tempo
+   todo. Cada onda é um pseudo-elemento: ::before começa no 0 e ::after 1,2 s
+   depois, no mesmo ciclo de 23 s (1,8 s de onda = 7,826% do ciclo).
+   Movimento reduzido (D-173): no mesmo ritmo, a onda não se abre — só
+   acende e apaga no lugar. */
 .ia-card.is-disconnected {
+  position: relative;
   border-color: transparent;
   background: var(--danger-soft);
-  animation: at-alert-pulse 2.4s var(--at-ease-standard) infinite;
 }
-@keyframes at-alert-pulse {
+.ia-card.is-disconnected::before,
+.ia-card.is-disconnected::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: at-alert-wave 23s ease-out infinite both;
+}
+.ia-card.is-disconnected::after {
+  animation-delay: 1.2s;
+}
+@keyframes at-alert-wave {
   0% {
-    box-shadow: 0 0 0 0 color-mix(in oklch, var(--danger), transparent 65%);
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--danger), transparent 62%);
   }
-  70%,
+  /* Na metade da onda ela ainda se vê: se abre devagar e só então some. */
+  3.9% {
+    box-shadow: 0 0 2px 8px color-mix(in oklch, var(--danger), transparent 82%);
+  }
+  7.826%,
   100% {
-    box-shadow: 0 0 0 8px color-mix(in oklch, var(--danger), transparent 100%);
+    box-shadow: 0 0 4px 14px
+      color-mix(in oklch, var(--danger), transparent 100%);
   }
 }
 @keyframes at-alert-glow {
   0%,
+  7.826%,
   100% {
     box-shadow: 0 0 0 4px color-mix(in oklch, var(--danger), transparent 100%);
   }
-  50% {
-    box-shadow: 0 0 0 4px color-mix(in oklch, var(--danger), transparent 72%);
+  3.3% {
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--danger), transparent 75%);
   }
 }
 @media (prefers-reduced-motion: reduce) {
   /* `!important` e a especificidade vencem o bloqueio global de tokens.css. */
-  .ia-card.is-disconnected {
-    animation: at-alert-glow 2.4s ease-in-out infinite !important;
+  .ia-card.is-disconnected::before,
+  .ia-card.is-disconnected::after {
+    animation: at-alert-glow 23s ease-in-out infinite both !important;
+  }
+  .ia-card.is-disconnected::after {
+    animation-delay: 1.2s !important;
   }
 }
 .ia-card-ban {

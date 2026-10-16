@@ -262,16 +262,40 @@ describe("estilo do aviso e do cartão da sidebar", () => {
     expect(css).toMatch(/main#main-content:focus-visible \{\s*outline: none;/);
   });
 
-  test("cartão de WhatsApp desconectado pulsa; com movimento reduzido só acende e apaga no lugar (D-173)", () => {
+  test("cartão de WhatsApp desconectado: ondas por ~3 s, 20 s parado, e de novo (2026-10-16)", () => {
+    const block = (selector: string) => {
+      const at = css.indexOf(selector);
+      expect(at, selector).toBeGreaterThan(-1);
+      return css.slice(at, css.indexOf("}", at));
+    };
+    // Duas ondas encavaladas no mesmo ciclo de 23 s: a segunda 1,2 s depois.
+    expect(
+      block(
+        ".ia-card.is-disconnected::before,\n.ia-card.is-disconnected::after {",
+      ),
+    ).toMatch(/animation: at-alert-wave 23s [^;]*infinite/);
     expect(css).toMatch(
-      /\.ia-card\.is-disconnected \{[^}]*animation: at-alert-pulse 2\.4s/,
+      /\}\s*\.ia-card\.is-disconnected::after \{\s*animation-delay: 1\.2s;/,
     );
-    expect(css).toMatch(/@keyframes at-alert-pulse/);
-    expect(css).toMatch(
-      /@media \(prefers-reduced-motion: reduce\) \{[^@]*\.ia-card\.is-disconnected \{\s*animation: at-alert-glow 2\.4s ease-in-out infinite !important;/,
+    // A onda se abre e se dispersa em 1,8 s (7,826% de 23 s) e fica parada
+    // até o fim do ciclo: nada pisca o tempo todo.
+    const wave = css.slice(
+      css.indexOf("@keyframes at-alert-wave"),
+      css.indexOf("@keyframes at-alert-glow"),
     );
-    // O brilho do movimento reduzido não desloca nada: o anel tem o mesmo
-    // tamanho o tempo todo, só a cor acende e apaga.
+    expect(wave).toMatch(/7\.826%,\s*100% \{[^}]*14px[^}]*transparent 100%/);
+    expect((1.2 + 23 * 0.07826).toFixed(1)).toBe("3.0");
+
+    // Movimento reduzido (D-173): mesmo ritmo, sem a onda se abrir.
+    const reduced = css.slice(
+      css.indexOf(
+        "@media (prefers-reduced-motion: reduce)",
+        css.indexOf("@keyframes at-alert-glow"),
+      ),
+    );
+    expect(reduced).toMatch(
+      /\.ia-card\.is-disconnected::before,\s*\.ia-card\.is-disconnected::after \{\s*animation: at-alert-glow 23s ease-in-out infinite both !important;/,
+    );
     const glow = css.slice(
       css.indexOf("@keyframes at-alert-glow"),
       css.indexOf(
@@ -280,6 +304,8 @@ describe("estilo do aviso e do cartão da sidebar", () => {
       ),
     );
     expect(glow).not.toMatch(/transform/);
+    // O anel tem o mesmo tamanho o tempo todo: só a cor acende e apaga.
     expect(glow.match(/0 0 0 4px/g)).toHaveLength(2);
+    expect(glow).not.toMatch(/14px/);
   });
 });

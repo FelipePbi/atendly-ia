@@ -34,12 +34,22 @@ function reducedMotionBlocks(css: string): string {
     .join("\n");
 }
 
-/** A declaração que vale para o seletor, dentro do texto dado. */
+/** Todas as declarações que valem para o seletor, juntas. */
 function ruleFor(css: string, selector: string): string {
-  const at = css.indexOf(selector);
-  expect(at, `${selector} no bloco de movimento reduzido`).toBeGreaterThan(-1);
-  const open = css.indexOf("{", at);
-  return css.slice(open, css.indexOf("}", open));
+  const bodies: string[] = [];
+  for (
+    let at = css.indexOf(selector);
+    at !== -1;
+    at = css.indexOf(selector, at + 1)
+  ) {
+    const open = css.indexOf("{", at);
+    bodies.push(css.slice(open, css.indexOf("}", open)));
+  }
+  expect(
+    bodies.length,
+    `${selector} no bloco de movimento reduzido`,
+  ).toBeGreaterThan(0);
+  return bodies.join("\n");
 }
 
 describe("com movimento reduzido, trocar de item não pisca", () => {
@@ -101,5 +111,41 @@ describe("com movimento reduzido, trocar de item não pisca", () => {
       const body = motionCss.slice(at, motionCss.indexOf("@keyframes", at + 1));
       expect(body).not.toMatch(/transform/);
     }
+  });
+
+  test("as fotos paradas somem com movimento reduzido; as dos painéis com fade ficam (vídeo de 2026-10-16)", () => {
+    const reduced = reducedMotionBlocks(motionCss);
+    expect(ruleFor(reduced, "::view-transition-old(*)")).toMatch(
+      /display:\s*none !important/,
+    );
+    for (const selector of [
+      "html.vt-appointment-swap::view-transition-old(appointment-panel)",
+      "html.vt-customer-swap::view-transition-old(customer-panel)",
+      "html.vt-settings-swap::view-transition-old(settings-panel)",
+    ]) {
+      expect(ruleFor(reduced, selector)).toMatch(/display:\s*block !important/);
+    }
+  });
+
+  test("trocar de agendamento não mexe na coluna nem na grade, e o aviso fica por cima", () => {
+    expect(
+      ruleFor(
+        motionCss,
+        "html.vt-appointment-swap::view-transition-old(agenda-content)",
+      ),
+    ).toMatch(/display:\s*none/);
+    expect(
+      ruleFor(
+        motionCss,
+        "html.vt-appointment-swap::view-transition-new(agenda-content)",
+      ),
+    ).toMatch(/animation:\s*none/);
+    expect(ruleFor(motionCss, ".shell-status-layer {")).toMatch(
+      /view-transition-name:\s*shell-status/,
+    );
+    // Fora de navegação, a foto antiga da página não fica sob a nova.
+    expect(motionCss).toMatch(
+      /html:not\(\.vt-nav-fade\):not\(\.vt-nav-forward\):not\(\s*\.vt-nav-back\s*\)::view-transition-old\(page-content\) \{\s*display: none;/,
+    );
   });
 });

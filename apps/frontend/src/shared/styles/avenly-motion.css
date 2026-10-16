@@ -265,6 +265,14 @@ html.vt-customer-swap::view-transition-new(customer-panel) {
   animation: none;
   mix-blend-mode: normal;
 }
+/* Parada, a foto antiga some no primeiro quadro: as duas fotos iguais
+   empilhadas engrossam o texto e a tela parece recarregar (vídeo de
+   2026-10-16, troca de agendamento). */
+html:not(.vt-nav-fade):not(.vt-nav-forward):not(
+    .vt-nav-back
+  )::view-transition-old(page-content) {
+  display: none;
+}
 html.vt-nav-fade::view-transition-old(page-content),
 html.vt-nav-forward::view-transition-old(page-content),
 html.vt-nav-back::view-transition-old(page-content) {
@@ -417,6 +425,32 @@ html.vt-conversation-swap::view-transition-old(conversation-panel) {
 html.vt-conversation-swap::view-transition-new(conversation-panel) {
   animation: motion-fade-in var(--at-duration-moderate) var(--at-ease-standard)
     both;
+}
+
+/* Trocar de agendamento mexe só no painel (2026-10-16): a coluna do dia, os
+   dias e a grade ficam parados no lugar — sem fade e sem a foto antiga por
+   baixo —, como a lista em Clientes e Serviços. */
+html.vt-appointment-swap::view-transition-old(agenda-calendar-days),
+html.vt-appointment-swap::view-transition-old(agenda-content) {
+  display: none;
+}
+html.vt-appointment-swap::view-transition-new(agenda-calendar-days),
+html.vt-appointment-swap::view-transition-new(agenda-content) {
+  animation: none;
+}
+
+/* O aviso flutuante do topo (WhatsApp desconectado etc.) fica por cima da
+   transição, parado: sem nome próprio, ele ia na foto do root, e a área da
+   tela, que tem nome, era desenhada por cima dele. */
+.shell-status-layer {
+  view-transition-name: shell-status;
+}
+::view-transition-group(shell-status),
+::view-transition-new(shell-status) {
+  animation: none;
+}
+::view-transition-old(shell-status) {
+  display: none;
 }
 
 /* Tela do agendamento com a coluna da Agenda ao lado (2026-10-16): trocar
@@ -673,6 +707,20 @@ html.is-view-transition .motion-enter-back {
   ::view-transition-old(*),
   ::view-transition-new(*) {
     animation: none !important;
+  }
+  /* Sem animação, a foto antiga parada sob a nova engrossa o texto e a tela
+     parece recarregar: ela some, exceto nas trocas de painel com fade
+     (D-173), declaradas logo abaixo. */
+  ::view-transition-old(*) {
+    display: none !important;
+  }
+  html.vt-customer-swap::view-transition-old(customer-panel),
+  html.vt-conversation-swap::view-transition-old(conversation-panel),
+  html.vt-service-swap::view-transition-old(service-panel),
+  html.vt-appointment-swap::view-transition-old(appointment-panel),
+  html.vt-appointment-swap::view-transition-old(agenda-panel),
+  html.vt-settings-swap::view-transition-old(settings-panel) {
+    display: block !important;
   }
   /* Exceção pedida pelo usuário (D-173, 2026-10-16): o item que abre no
      painel ao lado da lista (cliente, conversa, serviço) troca com fade

@@ -141,7 +141,13 @@ function dashboardFixture(): Dashboard {
 
 type ShellRoute = Pick<ShellConfig, "active" | "module" | "title">;
 
-function renderShell(route: ShellRoute = { active: "inicio", module: "dashboard", title: "Início" }) {
+function renderShell(
+  route: ShellRoute = {
+    active: "inicio",
+    module: "dashboard",
+    title: "Início",
+  },
+) {
   return render(
     <AppShell {...route}>
       <p>Conteúdo</p>
@@ -160,7 +166,10 @@ beforeEach(() => {
   dashboardGet.mockReset();
   notificationsSummary.mockReset();
   logout.mockReset();
-  sessionUser.current = { email: "dona@studiomarina.com.br", name: "Marina Alves" };
+  sessionUser.current = {
+    email: "dona@studiomarina.com.br",
+    name: "Marina Alves",
+  };
   statusGet.mockResolvedValue(statusFixture());
   dashboardGet.mockResolvedValue(dashboardFixture());
   notificationsSummary.mockResolvedValue({
@@ -176,10 +185,12 @@ describe("Goal087 prova 1: a sidebar", () => {
     await screen.findByText("IA ativa");
 
     const sidebar = sidebarOf(container);
-    const destinations = Array.from(sidebar.querySelectorAll("nav a")).map((link) => ({
-      href: link.getAttribute("href"),
-      name: (link.textContent ?? "").trim(),
-    }));
+    const destinations = Array.from(sidebar.querySelectorAll("nav a")).map(
+      (link) => ({
+        href: link.getAttribute("href"),
+        name: (link.textContent ?? "").trim(),
+      }),
+    );
 
     expect(destinations).toEqual([
       { href: "/inicio", name: "Início" },
@@ -191,12 +202,23 @@ describe("Goal087 prova 1: a sidebar", () => {
       { href: "/notificacoes", name: "Notificações" },
     ]);
 
-    const nav = within(sidebar).getByRole("navigation", { name: "Navegação principal" });
+    const nav = within(sidebar).getByRole("navigation", {
+      name: "Navegação principal",
+    });
     expect(within(nav).getAllByRole("link")).toHaveLength(7);
-    expect(within(nav).getByRole("link", { name: "Início" })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: "Início" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
 
-    expect(within(sidebar).queryByText(/WhatsApp (conectado|desconectado)/)).toBeNull();
-    expect(within(sidebar).queryByText(/Verificando WhatsApp|WhatsApp não confirmado/)).toBeNull();
+    expect(
+      within(sidebar).queryByText(/WhatsApp (conectado|desconectado)/),
+    ).toBeNull();
+    expect(
+      within(sidebar).queryByText(
+        /Verificando WhatsApp|WhatsApp não confirmado/,
+      ),
+    ).toBeNull();
   });
 
   test("com o WhatsApp desconectado, a sidebar continua sem a linha de estado do WhatsApp", async () => {
@@ -208,7 +230,11 @@ describe("Goal087 prova 1: a sidebar", () => {
     // Goal085: o cartão da IA passa a dizer a desconexão; a linha de estado
     // própria do WhatsApp (.wa-status) continua ausente.
     expect(within(sidebar).queryByText("WhatsApp conectado")).toBeNull();
-    expect(within(sidebar).queryByText(/Verificando WhatsApp|WhatsApp não confirmado/)).toBeNull();
+    expect(
+      within(sidebar).queryByText(
+        /Verificando WhatsApp|WhatsApp não confirmado/,
+      ),
+    ).toBeNull();
     expect(sidebar.querySelector(".wa-status")).toBeNull();
   });
 });
@@ -220,10 +246,9 @@ describe("Goal087 prova 2: o cartão da IA", () => {
 
     expect(await within(sidebar).findByText("IA ativa")).toBeVisible();
     expect(within(sidebar).getByText("atendendo pelo WhatsApp")).toBeVisible();
-    expect(within(sidebar).getByRole("link", { name: "Pausar" })).toHaveAttribute(
-      "href",
-      "/configuracoes/ia",
-    );
+    expect(
+      within(sidebar).getByRole("link", { name: "Pausar" }),
+    ).toHaveAttribute("href", "/configuracoes/ia");
   });
 
   test.each<[AiState, string]>([
@@ -247,14 +272,18 @@ describe("Goal087 prova 3: a conta", () => {
     const { container } = renderShell();
     await screen.findByText("IA ativa");
 
-    const account = within(sidebarOf(container)).getByRole("button", { name: /Marina Alves/ });
+    const account = within(sidebarOf(container)).getByRole("button", {
+      name: /Marina Alves/,
+    });
     expect(within(account).getByText("Marina Alves")).toBeVisible();
     expect(account.querySelector(".avatar")?.textContent).toBe("MA");
     expect(within(account).queryByText("dona@studiomarina.com.br")).toBeNull();
     expect(within(account).queryByText("Conta proprietária")).toBeNull();
 
     expect(
-      container.querySelector(".sidebar .business-context .business-name strong")?.textContent,
+      container.querySelector(
+        ".sidebar .business-context .business-name strong",
+      )?.textContent,
     ).toBe("Studio Marina");
   });
 
@@ -269,7 +298,9 @@ describe("Goal087 prova 3: a conta", () => {
     expect(within(account).getByText("dona@studiomarina.com.br")).toBeVisible();
     expect(account.querySelector(".avatar")?.textContent).toBe("D");
     expect(
-      container.querySelector(".sidebar .business-context .business-name strong")?.textContent,
+      container.querySelector(
+        ".sidebar .business-context .business-name strong",
+      )?.textContent,
     ).toBe("Studio Marina");
   });
 
@@ -278,20 +309,46 @@ describe("Goal087 prova 3: a conta", () => {
     const { container } = renderShell();
     await screen.findByText("IA ativa");
 
-    const account = within(sidebarOf(container)).getByRole("button", { name: /Marina Alves/ });
+    const account = within(sidebarOf(container)).getByRole("button", {
+      name: /Marina Alves/,
+    });
     await user.click(account);
 
     const menu = container.querySelector<HTMLElement>("#account-menu");
     expect(menu).not.toBeNull();
-    expect(within(menu as HTMLElement).getByRole("link", { name: "Minha conta" })).toHaveAttribute(
-      "href",
-      "/configuracoes/conta",
-    );
-    expect(within(menu as HTMLElement).getByRole("button", { name: "Sair" })).toBeVisible();
+    expect(
+      within(menu as HTMLElement).getByRole("link", { name: "Minha conta" }),
+    ).toHaveAttribute("href", "/configuracoes/conta");
+    expect(
+      within(menu as HTMLElement).getByRole("button", { name: "Sair" }),
+    ).toBeVisible();
 
     await user.keyboard("{Escape}");
     expect(container.querySelector("#account-menu")).toBeNull();
     expect(account).toHaveFocus();
+  });
+
+  test("o menu fecha ao clicar fora e ao escolher Minha conta (2026-10-16)", async () => {
+    const user = userEvent.setup();
+    const { container } = renderShell();
+    await screen.findByText("IA ativa");
+    const account = within(sidebarOf(container)).getByRole("button", {
+      name: /Marina Alves/,
+    });
+
+    await user.click(account);
+    expect(container.querySelector("#account-menu")).not.toBeNull();
+    await user.click(document.body);
+    expect(container.querySelector("#account-menu")).toBeNull();
+
+    await user.click(account);
+    await user.click(
+      within(container.querySelector<HTMLElement>("#account-menu")!).getByRole(
+        "link",
+        { name: "Minha conta" },
+      ),
+    );
+    expect(container.querySelector("#account-menu")).toBeNull();
   });
 });
 
@@ -307,23 +364,38 @@ describe("Goal087 prova 4: sem cabeçalho de marca", () => {
     { active: "importacao", module: "migration", title: "Importação" },
   ];
 
-  test.each(ROUTES)("$title ($module) não renderiza header de marca", async (route) => {
-    const { container } = renderShell(route);
-    await screen.findByText("IA ativa");
+  test.each(ROUTES)(
+    "$title ($module) não renderiza header de marca",
+    async (route) => {
+      const { container } = renderShell(route);
+      await screen.findByText("IA ativa");
 
-    expect(container.querySelector('header[class$="-mobile-header"]')).toBeNull();
-    expect(container.querySelector("main header .brand, main > header")).toBeNull();
-  });
+      expect(
+        container.querySelector('header[class$="-mobile-header"]'),
+      ).toBeNull();
+      expect(
+        container.querySelector("main header .brand, main > header"),
+      ).toBeNull();
+    },
+  );
 
   test("nem com a casca em atenção ou carregando", async () => {
     const { container } = render(
-      <AppShell active="inicio" attention loading module="dashboard" title="Início">
+      <AppShell
+        active="inicio"
+        attention
+        loading
+        module="dashboard"
+        title="Início"
+      >
         <p>Conteúdo</p>
       </AppShell>,
     );
     await screen.findByText("IA ativa");
 
-    expect(container.querySelector('header[class$="-mobile-header"]')).toBeNull();
+    expect(
+      container.querySelector('header[class$="-mobile-header"]'),
+    ).toBeNull();
     expect(container.querySelector("main > header")).toBeNull();
   });
 });
@@ -338,7 +410,9 @@ describe("Goal087 prova 5: a faixa da Home", () => {
       </ShellConfigProvider>,
     );
     await screen.findByRole("heading", { level: 1 });
-    const band = utils.container.querySelector<HTMLElement>("#operational-status");
+    const band = utils.container.querySelector<HTMLElement>(
+      "#operational-status",
+    );
     if (!band) throw new Error("#operational-status não foi renderizada");
     return { ...utils, band };
   }
@@ -348,8 +422,12 @@ describe("Goal087 prova 5: a faixa da Home", () => {
 
     expect(within(band).getByText("IA ativa")).toBeVisible();
     expect(within(band).getByRole("button", { name: "Pausar" })).toBeVisible();
-    expect(band.querySelector(".operational-points, .status-line, .status-dot")).toBeNull();
-    expect(within(band).queryByText(/WhatsApp conectado|Agenda indisponível/)).toBeNull();
+    expect(
+      band.querySelector(".operational-points, .status-line, .status-dot"),
+    ).toBeNull();
+    expect(
+      within(band).queryByText(/WhatsApp conectado|Agenda indisponível/),
+    ).toBeNull();
     expect(within(band).queryByText(/^Agenda$/)).toBeNull();
   });
 
@@ -358,11 +436,12 @@ describe("Goal087 prova 5: a faixa da Home", () => {
     const { band } = await renderHome();
 
     expect(within(band).getByText("WhatsApp desconectado")).toBeVisible();
-    expect(within(band).getByRole("link", { name: "Reconectar WhatsApp" })).toHaveAttribute(
-      "href",
-      "/configuracoes/whatsapp",
-    );
+    expect(
+      within(band).getByRole("link", { name: "Reconectar WhatsApp" }),
+    ).toHaveAttribute("href", "/configuracoes/whatsapp");
     expect(screen.queryByRole("link", { name: "Pausar" })).toBeNull();
-    expect(band.querySelector(".operational-points, .status-line, .status-dot")).toBeNull();
+    expect(
+      band.querySelector(".operational-points, .status-line, .status-dot"),
+    ).toBeNull();
   });
 });

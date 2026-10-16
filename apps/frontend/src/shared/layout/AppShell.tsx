@@ -90,6 +90,18 @@ function AppShellChrome({
   const status = useSystemStatus();
   const notificationsDrawer = useNotificationsDrawer();
   const [accountOpen, setAccountOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+  // O menu da conta fecha ao clicar fora dele (pedido de 2026-10-16), como
+  // fecha pelo próprio botão e pelo Esc.
+  useEffect(() => {
+    if (!accountOpen) return;
+    function closeOutside(event: PointerEvent) {
+      if (!accountMenuRef.current?.contains(event.target as Node))
+        setAccountOpen(false);
+    }
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, [accountOpen]);
   const [moreOpen, setMoreOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const firstRender = useRef(true);
@@ -251,6 +263,7 @@ function AppShellChrome({
             <IaCard aiView={status.aiView} whatsappView={status.whatsappView} />
             <div
               className="dropdown sidebar-account-menu"
+              ref={accountMenuRef}
               onKeyDown={(event) => {
                 if (event.key !== "Escape" || !accountOpen) return;
                 event.preventDefault();
@@ -279,14 +292,21 @@ function AppShellChrome({
               </button>
               {accountOpen && (
                 <div className="menu" id="account-menu">
-                  <Link className="menu-item" href="/configuracoes/conta">
+                  <Link
+                    className="menu-item"
+                    href="/configuracoes/conta"
+                    onClick={() => setAccountOpen(false)}
+                  >
                     Minha conta
                   </Link>
                   <div className="menu-divider" />
                   <button
                     className="menu-item danger"
                     type="button"
-                    onClick={() => void logout()}
+                    onClick={() => {
+                      setAccountOpen(false);
+                      void logout();
+                    }}
                   >
                     Sair
                   </button>

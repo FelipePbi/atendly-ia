@@ -202,6 +202,32 @@ export function recalledCustomer(id: string): Customer | null {
   return recall<Customer>(`${CUSTOMER}${id}`) ?? null;
 }
 
+const CUSTOMER_SUMMARY = "agenda:customer-summary:";
+
+/**
+ * A linha da pessoa no detalhe (atendimentos concluídos e a conversa mais
+ * recente), como veio por último: trocar de atendimento mostra as duas na
+ * hora, e a leitura em segundo plano as confirma no lugar.
+ */
+export type CustomerSummary = {
+  completed?: number | null;
+  conversationId?: string | null;
+};
+
+export function rememberCustomerSummary(
+  customerId: string,
+  summary: CustomerSummary,
+): void {
+  const key = `${CUSTOMER_SUMMARY}${customerId}`;
+  remember(key, { ...recall<CustomerSummary>(key), ...summary });
+}
+
+export function recalledCustomerSummary(
+  customerId: string,
+): CustomerSummary | null {
+  return recall<CustomerSummary>(`${CUSTOMER_SUMMARY}${customerId}`) ?? null;
+}
+
 /** Depois de uma gravação: janelas, agendamentos e listas lidos antes deixam de valer. */
 export function forgetAgendaChanges(): void {
   forget(WINDOW);
@@ -209,4 +235,5 @@ export function forgetAgendaChanges(): void {
   forget(HISTORY);
   forget(NOTIFICATIONS);
   forget(CUSTOMERS);
+  forget(CUSTOMER_SUMMARY);
 }

@@ -23,8 +23,12 @@ import { appointmentBackHref, appointmentFlowHref } from "./agendaLinks";
 import {
   recalledAppointment,
   recalledCalendar,
+  recalledCustomerSummary,
+  recalledServiceColors,
   rememberAppointment,
   rememberCalendar,
+  rememberCustomerSummary,
+  rememberServiceColors,
 } from "./agendaMemory";
 import { AppointmentFlowShell, formatMoney } from "./AppointmentFlowShell";
 import { AppointmentHistory } from "./AppointmentHistory";
@@ -92,6 +96,11 @@ export function useAppointmentDetail(
     /** A rota: o calendário que a Agenda já leu nesta aba vale antes da leitura. */
     remembered?: boolean;
     /**
+     * As cores do catálogo que a tela já leu (o painel do Dia): trocar de
+     * atendimento não relê o catálogo. Sem elas, o detalhe lê uma vez.
+     */
+    serviceColors?: ServiceColorMap;
+    /**
      * O agendamento como a lista ao lado o conhece (nome, horário, serviço,
      * estado): aparece na hora, e a leitura completa o resto (decisão do
      * usuário, 2026-10-12, D-168 — substitui o esqueleto de troca de D-166).
@@ -143,10 +152,14 @@ export function useAppointmentDetail(
     () => knownCalendar ?? (useRemembered ? recalledCalendar() : null),
   );
   const [historyReload, setHistoryReload] = useState(0);
-  const [serviceColors, setServiceColors] = useState<ServiceColorMap>(
-    () => new Map(),
+  const knownServiceColors = options.serviceColors ?? null;
+  const [readServiceColors, setServiceColors] = useState<ServiceColorMap>(
+    () => recalledServiceColors() ?? new Map(),
   );
+  const serviceColors = knownServiceColors ?? readServiceColors;
   const hasKnownCalendar = knownCalendar !== null;
+  // O calendário é lido do servidor uma vez por tela, não a cada atendimento.
+  const calendarReadRef = useRef(false);
   const loadedRef = useRef(loaded);
   useEffect(() => {
     loadedRef.current = loaded;
@@ -156,12 +169,10 @@ export function useAppointmentDetail(
     if (!appointmentId) return;
     const controller = new AbortController();
     const calendarService = getProductServices().calendar;
-    // Conteúdo de outro atendimento na tela enquanto este carrega: a troca,
-    // quando ele chegar, é conteúdo → conteúdo, com fade (D-168).
-    const stale = loadedRef.current?.id !== appointmentId;
+    const readCalendar = !hasKnownCalendar && !calendarReadRef.current;
     Promise.all([
       calendarService.getAppointment(appointmentId, controller.signal),
-      hasKnownCalendar ? null : calendarService.getCalendar(controller.signal),
+      readCalendar ? calendarService.getCalendar(controller.signal) : null,
     ])
       .then(([appointmentResult, calendarResult]) => {
         if (controller.signal.aborted) return;
@@ -174,11 +185,17 @@ export function useAppointmentDetail(
           });
           rememberAppointment(appointmentResult);
           if (calendarResult) {
+            calendarReadRef.current = true;
             setCalendar(calendarResult);
             rememberCalendar(calendarResult);
           }
         };
-        // Crossfade do painel, também com movimento reduzido (D-173).
+        // Outro atendimento ainda na tela quando este chega: a troca é
+        // conteúdo → conteúdo, com o crossfade do painel, também com
+        // movimento reduzido (D-173). Decidido na chegada, não no pedido: se
+        // a semente já trocou o painel, a leitura só completa no lugar — uma
+        // segunda transição cortaria a primeira e o painel trocaria seco.
+        const stale = loadedRef.current?.id !== appointmentId;
         if (stale)
           void runViewTransition(apply, {
             fadeOnReducedMotion: true,
@@ -216,18 +233,24 @@ export function useAppointmentDetail(
     : "O agendamento não foi informado.";
 
   // Só a cor do ponto de cada serviço depende do catálogo: sem ele, o ponto
-  // fica neutro e o detalhe continua.
+  // fica neutro e o detalhe continua. Lido uma vez por tela, e nem isso
+  // quando quem mostra o detalhe já tem as cores.
+  const hasKnownServiceColors = knownServiceColors !== null;
   useEffect(() => {
-    if (!appointmentId) return;
+    if (hasKnownServiceColors) return;
     const controller = new AbortController();
     const catalog = getProductServices().serviceCatalog;
     if (!catalog || typeof catalog.list !== "function") return;
     Promise.resolve()
       .then(() => catalog.list(controller.signal))
-      .then((result) => setServiceColors(serviceColorMap(result.items)))
+      .then((result) => {
+        const colors = serviceColorMap(result.items);
+        setServiceColors(colors);
+        rememberServiceColors(colors);
+      })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [appointmentId]);
+  }, [hasKnownServiceColors]);
 
   const writable = Boolean(
     calendar?.capabilities.createAppointments && appointment
@@ -522,12 +545,21 @@ function AppointmentWhen({ appointment }: { appointment: Appointment }) {
 /**
  * A cliente com o telefone (D-099) e, quando há `customerId` e a leitura
  * responde, a contagem de atendimentos e o atalho para a conversa dela
- * (D-110 (d)). Leitura que falha some sem erro na tela.
+ * (D-110 (d)). Leitura que falha some sem erro na tela. Voltar a uma pessoa
+ * já vista nesta aba mostra as duas na hora, e a leitura as confirma no lugar
+ * (D-167): trocar de atendimento não faz a linha e o atalho aparecerem depois.
  */
 function AppointmentCustomer({ appointment }: { appointment: Appointment }) {
   const customerId = appointment.customerId;
-  const [completed, setCompleted] = useState<number | null>(null);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [remembered] = useState(() =>
+    customerId ? recalledCustomerSummary(customerId) : null,
+  );
+  const [completed, setCompleted] = useState<number | null>(
+    remembered?.completed ?? null,
+  );
+  const [conversationId, setConversationId] = useState<string | null>(
+    remembered?.conversationId ?? null,
+  );
 
   useEffect(() => {
     if (!customerId) return;
@@ -537,9 +569,11 @@ function AppointmentCustomer({ appointment }: { appointment: Appointment }) {
       .then(() =>
         getProductServices().customers.get(customerId, controller.signal),
       )
-      .then((customer) =>
-        setCompleted(customer.appointmentStats?.completed ?? null),
-      )
+      .then((customer) => {
+        const count = customer.appointmentStats?.completed ?? null;
+        setCompleted(count);
+        rememberCustomerSummary(customerId, { completed: count });
+      })
       .catch(() => undefined);
     return () => controller.abort();
   }, [customerId]);
@@ -555,7 +589,11 @@ function AppointmentCustomer({ appointment }: { appointment: Appointment }) {
           controller.signal,
         ),
       )
-      .then((result) => setConversationId(result[0]?.id ?? null))
+      .then((result) => {
+        const id = result[0]?.id ?? null;
+        setConversationId(id);
+        rememberCustomerSummary(customerId, { conversationId: id });
+      })
       .catch(() => undefined);
     return () => controller.abort();
   }, [customerId]);

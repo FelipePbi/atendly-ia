@@ -842,6 +842,7 @@ export function AgendaBoard({
                         appointmentId={selectedAppointment?.id ?? null}
                         calendar={calendar}
                         seed={selectedAppointment}
+                        serviceColors={serviceColors}
                         closedDay={
                           hasAvailability === false &&
                           entriesForDate(entries, isoDate(cursor)).length === 0
@@ -945,11 +946,14 @@ function DayDetailPanel({
   onUpdated,
   returnTo,
   seed,
+  serviceColors,
 }: {
   appointmentId: string | null;
   calendar: CalendarState;
   /** O atendimento como a lista o conhece: o painel começa por ele (D-168). */
   seed: Appointment | null;
+  /** As cores que a Agenda já leu: trocar de atendimento não relê o catálogo. */
+  serviceColors: ServiceColorMap;
   /** O dia da Agenda em que o painel está: Remarcar e Cancelar voltam a ele. */
   returnTo: string;
   /** Dia vazio em que o negócio não atende (quadro A2): não há o que selecionar. */
@@ -983,6 +987,7 @@ function DayDetailPanel({
         onUpdated={(lifecycle) => onUpdated(appointmentId, lifecycle)}
         seed={seed}
         returnTo={returnTo}
+        serviceColors={serviceColors}
       />
     </aside>
   );
@@ -994,18 +999,21 @@ function DayAppointmentDetail({
   onUpdated,
   returnTo,
   seed,
+  serviceColors,
 }: {
   appointmentId: string;
   calendar: CalendarState;
   onUpdated: (lifecycle: AppointmentLifecycle) => void;
   returnTo: string;
   seed: Appointment | null;
+  serviceColors: ServiceColorMap;
 }) {
   // Trocar de atendimento começa pelo que a lista já sabe dele (`seed`) e a
   // leitura completa o resto; sem esqueleto (decisão do usuário, 2026-10-12).
   const detail = useAppointmentDetail(appointmentId, {
     calendar,
     seed,
+    serviceColors,
     onLifecycle: onUpdated,
   });
   return (

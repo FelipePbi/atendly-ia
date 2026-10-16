@@ -160,7 +160,9 @@ function statusFixture(
   };
 }
 
-function settingsFixture(timezone: string | null = "America/Sao_Paulo"): SettingsState {
+function settingsFixture(
+  timezone: string | null = "America/Sao_Paulo",
+): SettingsState {
   return {
     ai: { enabled: true, tone: "BALANCED" },
     availability: {
@@ -169,7 +171,13 @@ function settingsFixture(timezone: string | null = "America/Sao_Paulo"): Setting
       maxLeadDays: 90,
       minLeadMinutes: 0,
       rules: [
-        { active: true, dayOfWeek: 1, endTime: "18:00", id: "r1", startTime: "09:00" },
+        {
+          active: true,
+          dayOfWeek: 1,
+          endTime: "18:00",
+          id: "r1",
+          startTime: "09:00",
+        },
       ],
       timezone: "America/Sao_Paulo",
     },
@@ -207,7 +215,13 @@ async function renderDeletion(width: number = NARROW) {
       <SettingsScreen scenario="account-deletion" />
     </PlatformLayout>,
   );
-  await screen.findAllByRole("heading", { level: 1 });
+  // A tela de exclusão já montou (com o formulário ou com o estado dela):
+  // Configurações carregando não tem mais um h1 próprio (2026-10-16).
+  await waitFor(() =>
+    expect(
+      utils.container.querySelector(".deletion-screen, form, h1"),
+    ).not.toBeNull(),
+  );
   return utils;
 }
 
@@ -246,7 +260,9 @@ beforeEach(() => {
     openConditionsCount: 0,
     unreadCount: 0,
   });
-  notificationsGetPreferences.mockResolvedValue({ aiAppointmentCreated: false });
+  notificationsGetPreferences.mockResolvedValue({
+    aiAppointmentCreated: false,
+  });
   serviceCatalogList.mockResolvedValue({
     editable: true,
     items: [{ active: true, needsReview: false }],
@@ -310,7 +326,10 @@ describe("Goal124 C2: a tela", () => {
 
   test("o dia do terceiro passo é hoje mais 7 dias no fuso do negócio, não no UTC", async () => {
     // 01:30 UTC de 7/out é 22:30 de 6/out em São Paulo: hoje, para o negócio, é dia 6.
-    vi.useFakeTimers({ now: new Date("2026-10-07T01:30:00.000Z"), toFake: ["Date"] });
+    vi.useFakeTimers({
+      now: new Date("2026-10-07T01:30:00.000Z"),
+      toFake: ["Date"],
+    });
     await renderForm();
 
     const steps = within(screen.getByRole("list")).getAllByRole("listitem");
@@ -320,7 +339,10 @@ describe("Goal124 C2: a tela", () => {
 
   test("a soma de sete dias vira o mês no fuso do negócio", async () => {
     // 01:00 UTC de 26/out é 22:00 de 25/out em São Paulo: 25 + 7 = 1º de novembro.
-    vi.useFakeTimers({ now: new Date("2026-10-26T01:00:00.000Z"), toFake: ["Date"] });
+    vi.useFakeTimers({
+      now: new Date("2026-10-26T01:00:00.000Z"),
+      toFake: ["Date"],
+    });
     await renderForm();
 
     const steps = within(screen.getByRole("list")).getAllByRole("listitem");
@@ -328,7 +350,10 @@ describe("Goal124 C2: a tela", () => {
   });
 
   test("usa o fuso gravado no negócio e, sem negócio lido, o de São Paulo", async () => {
-    vi.useFakeTimers({ now: new Date("2026-10-06T20:00:00.000Z"), toFake: ["Date"] });
+    vi.useFakeTimers({
+      now: new Date("2026-10-06T20:00:00.000Z"),
+      toFake: ["Date"],
+    });
     settingsGet.mockResolvedValue(settingsFixture("Pacific/Auckland"));
     const first = await renderForm();
     // 20:00 UTC de 6/out já é 7/out em Auckland (UTC+13): 7 + 7 = 14.
@@ -356,7 +381,10 @@ describe("Goal124 C2: o pedido", () => {
     await user.click(confirm);
     expect(requestDeletion).not.toHaveBeenCalled();
 
-    await user.type(screen.getByLabelText("Confirme com sua senha"), "senhaAtual123");
+    await user.type(
+      screen.getByLabelText("Confirme com sua senha"),
+      "senhaAtual123",
+    );
     expect(confirm).toBeEnabled();
     await user.clear(screen.getByLabelText("Confirme com sua senha"));
     expect(confirm).toBeDisabled();
@@ -368,8 +396,13 @@ describe("Goal124 C2: o pedido", () => {
     statusGet.mockClear();
     requestDeletion.mockResolvedValue(undefined);
 
-    await user.type(screen.getByLabelText("Confirme com sua senha"), "senhaAtual123");
-    await user.click(screen.getByRole("button", { name: "Excluir minha conta" }));
+    await user.type(
+      screen.getByLabelText("Confirme com sua senha"),
+      "senhaAtual123",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Excluir minha conta" }),
+    );
 
     await waitFor(() => expect(requestDeletion).toHaveBeenCalledTimes(1));
     expect(requestDeletion).toHaveBeenCalledWith("senhaAtual123");
@@ -383,10 +416,17 @@ describe("Goal124 C2: o pedido", () => {
     await renderForm();
     requestDeletion.mockReturnValue(new Promise(() => undefined));
 
-    await user.type(screen.getByLabelText("Confirme com sua senha"), "senhaAtual123");
-    await user.click(screen.getByRole("button", { name: "Excluir minha conta" }));
+    await user.type(
+      screen.getByLabelText("Confirme com sua senha"),
+      "senhaAtual123",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Excluir minha conta" }),
+    );
 
-    const busy = await screen.findByRole("button", { name: "Pedindo exclusão..." });
+    const busy = await screen.findByRole("button", {
+      name: "Pedindo exclusão...",
+    });
     expect(busy).toBeDisabled();
     expect(requestDeletion).toHaveBeenCalledTimes(1);
     expect(replace).not.toHaveBeenCalled();
@@ -404,12 +444,21 @@ describe("Goal124 C2: o pedido", () => {
       }),
     );
 
-    await user.type(screen.getByLabelText("Confirme com sua senha"), "errada-000");
-    await user.click(screen.getByRole("button", { name: "Excluir minha conta" }));
+    await user.type(
+      screen.getByLabelText("Confirme com sua senha"),
+      "errada-000",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Excluir minha conta" }),
+    );
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Senha atual incorreta.");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Senha atual incorreta.",
+    );
     expect(replace).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Excluir minha conta" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Excluir minha conta" }),
+    ).toBeEnabled();
   });
 
   test("outra falha mostra a mensagem de hoje e nunca vira sucesso", async () => {
@@ -417,8 +466,13 @@ describe("Goal124 C2: o pedido", () => {
     await renderForm();
     requestDeletion.mockRejectedValue(new Error("network error"));
 
-    await user.type(screen.getByLabelText("Confirme com sua senha"), "senhaAtual123");
-    await user.click(screen.getByRole("button", { name: "Excluir minha conta" }));
+    await user.type(
+      screen.getByLabelText("Confirme com sua senha"),
+      "senhaAtual123",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Excluir minha conta" }),
+    );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Não foi possível pedir a exclusão agora. Tente novamente.",
@@ -430,7 +484,10 @@ describe("Goal124 C2: o pedido", () => {
     const user = userEvent.setup();
     await renderForm();
 
-    await user.type(screen.getByLabelText("Confirme com sua senha"), "senhaAtual123");
+    await user.type(
+      screen.getByLabelText("Confirme com sua senha"),
+      "senhaAtual123",
+    );
     await user.click(screen.getByRole("button", { name: "Voltar" }));
 
     expect(push).toHaveBeenCalledWith(ACCOUNT);
@@ -445,7 +502,9 @@ describe("Goal124 C2: os estados da rota", () => {
     );
     await renderForm();
 
-    expect(screen.getByRole("button", { name: "Excluir minha conta" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Excluir minha conta" }),
+    ).toBeVisible();
     expect(replace).not.toHaveBeenCalled();
   });
 
@@ -458,7 +517,9 @@ describe("Goal124 C2: os estados da rota", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 1, name: H1 })).toBeNull();
     expect(screen.queryByLabelText("Confirme com sua senha")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Excluir minha conta" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Excluir minha conta" }),
+    ).toBeNull();
     expect(replace).not.toHaveBeenCalled();
   });
 
@@ -467,10 +528,14 @@ describe("Goal124 C2: os estados da rota", () => {
     await renderDeletion();
 
     expect(
-      await screen.findByText(/Não foi possível carregar o estado da exclusão agora/),
+      await screen.findByText(
+        /Não foi possível carregar o estado da exclusão agora/,
+      ),
     ).toBeVisible();
     expect(screen.queryByLabelText("Confirme com sua senha")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Excluir minha conta" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Excluir minha conta" }),
+    ).toBeNull();
     expect(replace).not.toHaveBeenCalled();
   });
 
@@ -487,7 +552,9 @@ describe("Goal124 C2: os estados da rota", () => {
 
       await waitFor(() => expect(replace).toHaveBeenCalledWith(ACCOUNT));
       expect(screen.queryByLabelText("Confirme com sua senha")).toBeNull();
-      expect(screen.queryByRole("button", { name: "Excluir minha conta" })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Excluir minha conta" }),
+      ).toBeNull();
     },
   );
 });
@@ -496,11 +563,14 @@ describe("Goal124 C2: a casca", () => {
   test.each([
     ["≥1024", WIDE],
     ["<1024", NARROW],
-  ] as const)("uma chamada de useShellConfig por árvore, na faixa %s", async (_label, width) => {
-    await renderForm(width);
+  ] as const)(
+    "uma chamada de useShellConfig por árvore, na faixa %s",
+    async (_label, width) => {
+      await renderForm(width);
 
-    await waitFor(() => expect(shellCallers.size).toBe(1));
-  });
+      await waitFor(() => expect(shellCallers.size).toBe(1));
+    },
+  );
 
   test("de 1024 px em diante a lista do hub marca 'Conta' e a tela tem um só h1", async () => {
     const { container } = await renderForm(WIDE);
@@ -509,11 +579,15 @@ describe("Goal124 C2: a casca", () => {
     expect(list).not.toBeNull();
     expect(list).toHaveAttribute("aria-label", "Configurações");
     await waitFor(() => {
-      const current = (list as HTMLElement).querySelectorAll('[aria-current="page"]');
+      const current = (list as HTMLElement).querySelectorAll(
+        '[aria-current="page"]',
+      );
       expect(current).toHaveLength(1);
       expect(current[0]?.textContent ?? "").toMatch(/^Conta/);
     });
-    expect(within(container).getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(
+      within(container).getAllByRole("heading", { level: 1 }),
+    ).toHaveLength(1);
   });
 
   test("abaixo de 1024 px é tela empurrada, sem a lista e sem barra de abas, com voltar para Conta", async () => {
@@ -522,10 +596,9 @@ describe("Goal124 C2: a casca", () => {
     expect(container.querySelector(".list-detail")).toBeNull();
     expect(container.querySelector(".app-frame.is-pushed")).not.toBeNull();
     expect(container.querySelector('nav[class$="bottom-nav"]')).toBeNull();
-    expect(screen.getByRole("link", { name: "Voltar para Conta" })).toHaveAttribute(
-      "href",
-      ACCOUNT,
-    );
+    expect(
+      screen.getByRole("link", { name: "Voltar para Conta" }),
+    ).toHaveAttribute("href", ACCOUNT);
     expect(screen.getByText("Excluir conta", { selector: "h2" })).toBeVisible();
   });
 });

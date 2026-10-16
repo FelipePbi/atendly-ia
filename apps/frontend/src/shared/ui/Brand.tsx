@@ -144,17 +144,28 @@ export function Brand({
  * respiração do símbolo não recomeçar no meio.
  */
 export function BrandLoader({
+  inline = false,
   label,
   leaving = false,
 }: {
+  /**
+   * Dentro da área do conteúdo, com a casca (sidebar, barras) à vista: o
+   * carregamento de uma tela depois do splash (2026-10-16). Sem `inline`, é a
+   * camada que cobre a página inteira no primeiro carregamento.
+   */
+  inline?: boolean;
   label: string;
   leaving?: boolean;
 }) {
   return (
     <div
-      className={
-        leaving ? "brand-loader-screen is-leaving" : "brand-loader-screen"
-      }
+      className={[
+        "brand-loader-screen",
+        inline && "is-inline",
+        leaving && "is-leaving",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       aria-busy={leaving ? undefined : "true"}
       aria-hidden={leaving ? "true" : undefined}
       data-splash={leaving ? "leaving" : "covering"}

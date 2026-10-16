@@ -7,7 +7,9 @@ import { ReminderSettingsSection } from "@/features/reminders/ReminderSettingsSe
 import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
+import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { BrandLoader } from "@/shared/ui/Brand";
 
 import { AccountDeletionScreen } from "./AccountDeletionScreen";
 import { AccountSettings } from "./AccountSettings";
@@ -59,13 +61,13 @@ export function ProductSettingsScreen({
     title: "Configurações",
   });
 
+  // Carregando: o "A" animado no centro do conteúdo, e só se a leitura
+  // passar de ~150 ms (D-168) — carga rápida entra direto (2026-10-16).
+  const showLoader = useDeferredLoading(!settings && !error);
   if (!settings && !error) {
-    return (
-      <SettingsMessage
-        title="Carregando configurações"
-        copy="Buscando o estado atual do seu negócio."
-      />
-    );
+    return showLoader ? (
+      <BrandLoader inline label="Carregando configurações" />
+    ) : null;
   }
   if (error || !settings) {
     return (

@@ -238,6 +238,16 @@ svg {
   place-items: center;
   background: var(--bg);
 }
+/* Dentro do conteúdo (2026-10-16): o mesmo símbolo, no centro da área da
+   tela, com a casca à vista — o carregamento padrão de uma tela que demora,
+   no lugar de cartões "Carregando…". */
+.brand-loader-screen.is-inline {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  min-height: min(70dvh, 560px);
+  background: transparent;
+}
 /* Saída: some em 160 ms (token) e deixa a tela de baixo se apresentar. */
 .brand-loader-screen.is-leaving {
   pointer-events: none;

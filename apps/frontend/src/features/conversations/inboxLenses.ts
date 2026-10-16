@@ -147,10 +147,11 @@ export function groupInbox(
 export function useCommercialAttention(
   own: Conversation[] | null,
   ownReady: boolean,
+  active = true,
 ): number | null {
   const [count, setCount] = useState<number | null>(null);
   const [remembered, setRemembered] = useState<number | null>(null);
-  const enabled = own === null;
+  const enabled = own === null && active;
   const ownCount =
     own !== null && ownReady
       ? own.filter((item) => needsAttention(conversationState(item))).length
@@ -183,7 +184,7 @@ export function useCommercialAttention(
     };
   }, [enabled]);
 
-  return (enabled ? count : ownCount) ?? remembered;
+  return (own === null ? count : ownCount) ?? remembered;
 }
 
 export type InboxQueryResult = {
@@ -204,11 +205,13 @@ export type InboxQueryResult = {
  * Carregando é, então, "ainda não há resultado para a chave corrente" — não um
  * `setLoading(true)` dentro do efeito, que dispararia render em cascata. A
  * atualização de fundo nunca devolve a tela ao estado de carregamento nem apaga
- * a lista que a profissional está lendo.
+ * a lista que a profissional está lendo. Desligada (`enabled: false`), não
+ * busca nem atualiza: é a lista guardada de quem está no chat do celular.
  */
 export function useInboxConversations(
   lens: InboxLens,
   search: string,
+  enabled = true,
 ): InboxQueryResult {
   const [result, setResult] = useState<{
     items: Conversation[];
@@ -223,6 +226,7 @@ export function useInboxConversations(
   const key = `${lens}|${debounced.trim()}|${attempt}`;
 
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
     const query = lensQuery(lens, debounced);
 
@@ -253,7 +257,7 @@ export function useInboxConversations(
       controller.abort();
       window.clearInterval(timer);
     };
-  }, [debounced, key, lens]);
+  }, [debounced, enabled, key, lens]);
 
   const error = failure?.key === key ? failure.message : null;
   const loading = !error && result?.key !== key;
@@ -280,7 +284,9 @@ export type NoWhatsappProbe = "empty" | "idle" | "loading" | "present";
  * `limit: 1`. Lista vazia é `empty`; conversa ou falha da consulta é `present`,
  * e a tela segue com as abas. A consulta é refeita quando `whatsappView` muda.
  */
-export function useNoWhatsappProbe(whatsappView: StatusView): NoWhatsappProbe {
+export function useNoWhatsappProbe(
+  whatsappView: StatusView | null,
+): NoWhatsappProbe {
   const [seen, setSeen] = useState(whatsappView);
   const [outcome, setOutcome] = useState<"empty" | "present" | null>(null);
   if (seen !== whatsappView) {

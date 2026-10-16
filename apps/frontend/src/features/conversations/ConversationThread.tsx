@@ -50,6 +50,10 @@ import {
 } from "./conversationState";
 import { ConversationSuggestions } from "./ConversationSuggestions";
 import {
+  type ThreadSnapshot,
+  useConversationsWorkspace,
+} from "./conversationsWorkspaceContext";
+import {
   conversationLabel,
   formatWaitingTime,
   initials,
@@ -58,6 +62,9 @@ import {
 import type { InboxLens } from "./inboxLenses";
 import { refreshIntervalMs } from "./inboxLenses";
 import { MessageTimeline } from "./MessageTimeline";
+
+/** Leitura da casca mais nova que isso não é refeita quando o chat abre. */
+const FRESH_SNAPSHOT_MS = 5_000;
 
 /**
  * O chat de uma conversa, como nos quadros K1 a K4 (Goal114). É o único ponto
@@ -70,18 +77,35 @@ import { MessageTimeline } from "./MessageTimeline";
  * faixas e o chat fica sempre na mesma posição da árvore, então cruzar 1024 px
  * não apaga o rascunho nem troca o campo. Abaixo disso o chat é tela
  * empurrada, sem barra de abas, e a lista nem é montada.
+ *
+ * Dentro da casca de `/conversas` (`ConversationsWorkspace`), a lista é da
+ * casca e o chat desenha só o painel (`hosted`). A casca já entrega o que leu
+ * da conversa (`initial`): o chat abre com ela, sem esqueleto, e só segue
+ * atualizando por trás.
  */
 export function ConversationThread({
   conversationId,
+  initial,
 }: {
   conversationId: string;
+  initial?: ThreadSnapshot;
 }) {
   const wide = useWideLayout();
+  const workspace = useConversationsWorkspace();
+  const hosted = Boolean(workspace?.hosted);
+  const remember = workspace?.remember;
   const { session } = useProductRuntime();
-  const [conversation, setConversation] = useState<Conversation | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [events, setEvents] = useState<ConversationEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [conversation, setConversation] = useState<Conversation | null>(
+    initial?.conversation ?? null,
+  );
+  const [messages, setMessages] = useState<Message[]>(initial?.messages ?? []);
+  const [events, setEvents] = useState<ConversationEvent[]>(
+    initial?.events ?? [],
+  );
+  const [loading, setLoading] = useState(!initial);
+  // Leitura que a casca acabou de fazer: a primeira busca do chat seria
+  // repetida. Mais velha que isso, o chat confere por trás ao abrir.
+  const snapshotAt = useRef(initial?.fetchedAt ?? null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -129,6 +153,11 @@ export function ConversationThread({
         setConversation(conversationResult);
         setMessages(messagesResult);
         if (!background) setError(null);
+        remember?.({
+          conversation: conversationResult,
+          events: (await eventsPromise) ?? [],
+          messages: messagesResult,
+        });
       } catch (caught: unknown) {
         if (!signal?.aborted && !background) {
           setError(
@@ -141,15 +170,23 @@ export function ConversationThread({
       const eventsResult = await eventsPromise;
       if (eventsResult && !signal?.aborted) setEvents(eventsResult);
     },
-    [conversationId],
+    [conversationId, remember],
   );
 
   useEffect(() => {
     const controller = new AbortController();
-    const initialTimer = window.setTimeout(
-      () => void load(controller.signal),
-      0,
-    );
+    const openedAt = snapshotAt.current;
+    const skipFirst =
+      attempt === 0 &&
+      openedAt !== null &&
+      Date.now() - openedAt < FRESH_SNAPSHOT_MS;
+    const initialTimer = skipFirst
+      ? undefined
+      : window.setTimeout(
+          () =>
+            void load(controller.signal, attempt === 0 && openedAt !== null),
+          0,
+        );
     const timer = window.setInterval(
       () => void load(controller.signal, true),
       refreshIntervalMs,
@@ -731,26 +768,43 @@ export function ConversationThread({
     );
   }
 
+  // Na casca, a lista e o painel são dela: os mesmos nós viram invólucros sem
+  // caixa, e cruzar 1024 px continua sem remontar o chat.
   return (
     <>
       <div
         className={
-          wide ? "list-detail conversation-list-detail" : "list-detail-flat"
+          hosted
+            ? "conversation-hosted"
+            : wide
+              ? "list-detail conversation-list-detail"
+              : "list-detail-flat"
         }
       >
         <div
-          aria-label={wide ? "Conversas" : undefined}
-          className="list-detail-list conversation-list-column"
-          role={wide ? "complementary" : undefined}
+          aria-label={!hosted && wide ? "Conversas" : undefined}
+          className={
+            hosted
+              ? "conversation-hosted-list"
+              : "list-detail-list conversation-list-column"
+          }
+          hidden={hosted || undefined}
+          role={!hosted && wide ? "complementary" : undefined}
         >
-          {wide && conversation && (
+          {!workspace && wide && conversation && (
             <ThreadListColumn
               initialLens={lensForConversation(conversation)}
               selectedId={conversationId}
             />
           )}
         </div>
-        <div className="list-detail-panel conversation-detail-panel">
+        <div
+          className={
+            hosted
+              ? "conversation-hosted-panel"
+              : "list-detail-panel conversation-detail-panel"
+          }
+        >
           {chat}
         </div>
       </div>
@@ -878,9 +932,10 @@ export function ConversationThread({
 }
 
 /**
- * A coluna da lista ao lado do chat: o mesmo estado e o mesmo componente de
- * `/conversas`, sem declarar casca. Só é montada de 1024 px em diante, então
- * abaixo disso o chat não lê a lista.
+ * A coluna da lista ao lado do chat fora da casca de `/conversas` (o chat
+ * montado sozinho): o mesmo estado e o mesmo componente de `/conversas`, sem
+ * declarar casca. Só é montada de 1024 px em diante, então abaixo disso o chat
+ * não lê a lista.
  */
 function ThreadListColumn({
   initialLens,

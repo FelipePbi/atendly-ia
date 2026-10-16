@@ -188,6 +188,12 @@ Cada linha:
 - estado IA/humano;
 - destaque de handoff.
 
+Com o chat ao lado (desktop):
+
+- título, busca, abas e nota da aba ficam fixos; só as conversas rolam;
+- abrir ou trocar de conversa não recarrega a lista: ela mantém a aba, a busca e a rolagem;
+- trocar de conversa não mostra esqueleto: a anterior fica até a nova chegar e a troca é um fade suave. Voltar a uma conversa já aberta é imediato.
+
 ### Chat
 
 - mensagens;

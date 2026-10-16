@@ -12,6 +12,7 @@ import {
   useConversationList,
 } from "./ConversationListColumn";
 import { ConversationLoading } from "./ConversationLoading";
+import { useConversationsWorkspace } from "./conversationsWorkspaceContext";
 import { useNoWhatsappProbe } from "./inboxLenses";
 
 /**
@@ -21,8 +22,12 @@ import { useNoWhatsappProbe } from "./inboxLenses";
  * C5 nem abas. Cada ramo declara `useShellConfig` uma vez, e só um monta.
  */
 export function ConversationInbox() {
-  const { whatsappView } = useSystemStatus();
-  const probe = useNoWhatsappProbe(whatsappView);
+  // Dentro da casca de `/conversas`, status e sondagem são os dela.
+  const workspace = useConversationsWorkspace();
+  const status = useSystemStatus();
+  const ownProbe = useNoWhatsappProbe(workspace ? null : status.whatsappView);
+  const whatsappView = workspace?.whatsappView ?? status.whatsappView;
+  const probe = workspace?.probe ?? ownProbe;
 
   if (whatsappView === "loading" || probe === "loading")
     return <InboxPending />;
@@ -122,7 +127,9 @@ function NoWhatsappState() {
  */
 function InboxWithTabs() {
   const wide = useWideLayout();
-  const list = useConversationList();
+  const workspace = useConversationsWorkspace();
+  const ownList = useConversationList("commercial", !workspace);
+  const list = workspace?.list ?? ownList;
 
   useShellConfig({
     active: "conversas",
@@ -133,6 +140,11 @@ function InboxWithTabs() {
   });
 
   const split = wide && !list.connectedEmpty;
+
+  // Na casca, a coluna é dela: aqui fica só o painel ao lado.
+  if (workspace?.hosted) {
+    return <ListDetailEmpty>Selecione uma conversa</ListDetailEmpty>;
+  }
 
   return (
     <div

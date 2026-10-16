@@ -37,7 +37,10 @@ export type ConversationListState = ReturnType<typeof useConversationList>;
  * com o que a lista sabe (atenção, carregando) sem que a coluna declare
  * `useShellConfig` — a mesma coluna também aparece ao lado do chat.
  */
-export function useConversationList(initialLens: InboxLens = "commercial") {
+export function useConversationList(
+  initialLens: InboxLens = "commercial",
+  enabled = true,
+) {
   const { whatsapp, whatsappView } = useSystemStatus();
   const [lens, setLens] = useState<InboxLens>(initialLens);
   const [search, setSearch] = useState("");
@@ -46,11 +49,12 @@ export function useConversationList(initialLens: InboxLens = "commercial") {
   const timezone =
     session?.businessProfile?.timezone ?? DEFAULT_BUSINESS_TIMEZONE;
   const { attention, conversations, error, loading, reload, searching } =
-    useInboxConversations(lens, search);
+    useInboxConversations(lens, search, enabled);
   const term = search.trim();
   const commercialAttention = useCommercialAttention(
     lens === "commercial" && !term ? conversations : null,
     !loading && !error,
+    enabled,
   );
   const emptyTab = !loading && !error && conversations.length === 0 && !term;
   const connectedEmpty =

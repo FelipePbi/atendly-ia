@@ -18,7 +18,10 @@ import type { Conversation } from "@/data";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 import { SystemStatusProvider } from "@/shared/runtime/systemStatus";
 
+let currentPath = "/conversas";
+
 vi.mock("next/navigation", () => ({
+  usePathname: () => currentPath,
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
@@ -50,6 +53,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 }));
 
 import ConversationDetailPage from "@/app/(platform)/conversas/[id]/page";
+import ConversasLayout from "@/app/(platform)/conversas/layout";
 import ConversationsPage from "@/app/(platform)/conversas/page";
 
 function conversationFixture(
@@ -113,11 +117,17 @@ function renderPage(page: React.ReactElement) {
   );
 }
 
+/**
+ * O chat de `/conversas/[id]` é desenhado pela casca do layout da rota (a
+ * página só existe para a rota): monta os dois, como o Next monta.
+ */
 async function renderConversation(id: string) {
-  const element = await ConversationDetailPage({
-    params: Promise.resolve({ id }),
-  });
-  return renderPage(element);
+  currentPath = `/conversas/${id}`;
+  return renderPage(
+    <ConversasLayout>
+      <ConversationDetailPage />
+    </ConversasLayout>,
+  );
 }
 
 describe("as duas telas do Goal017 montam pela própria rota", () => {
@@ -228,7 +238,10 @@ describe("ConversationContextPanel e ConversationSuggestions não ficam sem impo
     });
     expect(
       await within(context).findByRole("link", { name: "Ver perfil" }),
-    ).toHaveAttribute("href", "/clientes/detalhes?id=cust-1&voltar=%2Fconversas%2Fconv-1");
+    ).toHaveAttribute(
+      "href",
+      "/clientes/detalhes?id=cust-1&voltar=%2Fconversas%2Fconv-1",
+    );
   });
 
   test("a sugestão da IA só é alcançada pelo chat quando há atendimento humano vigente", async () => {

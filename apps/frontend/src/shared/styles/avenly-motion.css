@@ -373,6 +373,42 @@ html.vt-step-prev::view-transition-new(agenda-content) {
     var(--at-ease-standard) both;
 }
 
+/* Chat ao lado da lista de Conversas (2026-10-16), o mesmo ajuste do perfil
+   do cliente: a casca busca a conversa nova antes de trocar, e a troca é um
+   crossfade (`vt-conversation-swap`) — a anterior sai em 160 ms enquanto a
+   nova entra em 240 ms. Se a nova demorar, a anterior esmaece devagar; carga
+   rápida nunca chega a esmaecer. Só com a lista ao lado. */
+.conversation-detail-panel .conversation-chat {
+  transition: opacity var(--at-duration-moderate) var(--at-ease-standard);
+}
+.conversation-detail-panel.is-refreshing .conversation-chat {
+  opacity: 0.6;
+  transition-delay: 180ms;
+}
+@media (min-width: 1024px) {
+  .conversation-detail-panel {
+    view-transition-name: conversation-panel;
+  }
+}
+::view-transition-group(conversation-panel) {
+  animation: none;
+}
+::view-transition-image-pair(conversation-panel) {
+  isolation: auto;
+}
+::view-transition-old(conversation-panel),
+::view-transition-new(conversation-panel) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html.vt-conversation-swap::view-transition-old(conversation-panel) {
+  animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both;
+}
+html.vt-conversation-swap::view-transition-new(conversation-panel) {
+  animation: motion-fade-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+}
+
 /* Painel de detalhe do Dia (D-165), a partir de 1024 px: trocar o atendimento
    escolhido troca o painel com fade — sai em 160 ms, entra em 240 ms. */
 .agenda-day-detail {
@@ -560,7 +596,8 @@ html.is-view-transition .motion-enter-back {
   }
   .motion-press,
   .tab,
-  .customer-profile > :not(.pushed-bar) {
+  .customer-profile > :not(.pushed-bar),
+  .conversation-detail-panel .conversation-chat {
     transition: none;
   }
   /* A apresentação depois do splash não acontece: a tela aparece inteira no

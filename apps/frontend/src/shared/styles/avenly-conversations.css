@@ -522,8 +522,47 @@
   display: contents;
 }
 /* Coluna do quadro: width 380 + border-right 1 em content-box = 381 */
+/* Casca de /conversas (ConversationsWorkspace): sem a lista ao lado, e dentro
+   do painel quando a casca desenha a lista, os invólucros não geram caixa —
+   a tela de dentro fica no mesmo lugar do layout de antes. */
+.conversation-workspace,
+.conversation-workspace-panel,
+.conversation-hosted,
+.conversation-hosted-panel {
+  display: contents;
+}
 .list-detail.conversation-list-detail {
   grid-template-columns: 381px minmax(0, 1fr);
+}
+/* Topo fixo da coluna ao lado do chat (2026-10-16, o mesmo de Clientes):
+   título, busca, abas e nota da aba ficam parados; só a área das conversas
+   rola, e a barra de rolagem começa abaixo das abas. */
+.list-detail.conversation-list-detail
+  > .list-detail-list.conversation-list-column {
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden;
+}
+.conversation-list-detail
+  > .conversation-list-column
+  > .conversation-list-page {
+  flex: 1;
+  min-height: 0;
+}
+.conversation-list-detail
+  > .conversation-list-column
+  > .conversation-list-page
+  > :not(.conversation-list-surface) {
+  flex: none;
+}
+.conversation-list-detail
+  > .conversation-list-column
+  > .conversation-list-page
+  > .conversation-list-surface {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .conversation-detail-panel .list-detail-empty {
   min-height: 100dvh;

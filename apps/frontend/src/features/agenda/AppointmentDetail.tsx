@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
   type Appointment,
@@ -117,19 +117,28 @@ export function useAppointmentDetail(
       : null;
   });
   // Trocar de atendimento com o novo já conhecido (semente ou memória): ele
-  // entra na hora; sem nada conhecido, o anterior fica na tela, ocupado, até
-  // o novo chegar — nunca um esqueleto no lugar de conteúdo.
-  if (appointmentId && loaded?.id !== appointmentId) {
+  // entra antes da pintura, com o crossfade do painel (D-173, 2026-10-16);
+  // sem nada conhecido, o anterior fica na tela, ocupado, até o novo chegar —
+  // nunca um esqueleto no lugar de conteúdo.
+  const loadedId = loaded?.id ?? null;
+  useLayoutEffect(() => {
+    if (!appointmentId || loadedId === appointmentId) return;
     const known = seed ?? recalledAppointment(appointmentId);
-    if (known) {
-      setLoaded({
-        appointment: known,
-        error: null,
-        fresh: false,
-        id: appointmentId,
-      });
-    }
-  }
+    if (!known) return;
+    const next: LoadedAppointment = {
+      appointment: known,
+      error: null,
+      fresh: false,
+      id: appointmentId,
+    };
+    void runViewTransition(
+      () =>
+        setLoaded((current) =>
+          current?.id === appointmentId ? current : next,
+        ),
+      { fadeOnReducedMotion: true, types: ["appointment-swap"] },
+    );
+  }, [appointmentId, loadedId, seed]);
   const [calendar, setCalendar] = useState<CalendarState | null>(
     () => knownCalendar ?? (useRemembered ? recalledCalendar() : null),
   );
@@ -169,7 +178,12 @@ export function useAppointmentDetail(
             rememberCalendar(calendarResult);
           }
         };
-        if (stale) void runViewTransition(apply);
+        // Crossfade do painel, também com movimento reduzido (D-173).
+        if (stale)
+          void runViewTransition(apply, {
+            fadeOnReducedMotion: true,
+            types: ["appointment-swap"],
+          });
         else apply();
       })
       .catch((caught: unknown) => {

@@ -460,6 +460,58 @@ describe("trocar de atendimento mostra o esqueleto só no detalhe até o novo ch
       document.querySelector('[aria-busy="true"]')?.outerHTML ?? null,
     ).toBeNull();
   });
+
+  test("na rota /agenda/agendamento, trocar pela coluna roda o appointment-swap, também com movimento reduzido", async () => {
+    // matchMedia casa tudo: lista ao lado (1024 px) e movimento reduzido.
+    vi.stubGlobal(
+      "matchMedia",
+      (query: string) =>
+        ({
+          addEventListener: () => undefined,
+          matches: true,
+          media: query,
+          removeEventListener: () => undefined,
+        }) as unknown as MediaQueryList,
+    );
+    const types: string[][] = [];
+    Object.defineProperty(document, "startViewTransition", {
+      configurable: true,
+      value: (update: () => void) => {
+        types.push(
+          [...document.documentElement.classList].filter((c) =>
+            c.startsWith("vt-"),
+          ),
+        );
+        update();
+        return { finished: Promise.resolve() };
+      },
+    });
+    try {
+      const view = render(
+        <ShellConfigProvider>
+          <AppointmentDetail appointmentId="apt-1" />
+        </ShellConfigProvider>,
+      );
+      answer(0, ana());
+      expect(
+        await screen.findByRole("heading", { name: "Ana Paula" }),
+      ).toBeVisible();
+      types.length = 0;
+
+      view.rerender(
+        <ShellConfigProvider>
+          <AppointmentDetail appointmentId="apt-2" />
+        </ShellConfigProvider>,
+      );
+      answer(pending.length - 1, bruna());
+      expect(
+        await screen.findByRole("heading", { name: "Bruna Costa" }),
+      ).toBeVisible();
+      expect(types).toContainEqual(["vt-appointment-swap"]);
+    } finally {
+      Reflect.deleteProperty(document, "startViewTransition");
+    }
+  });
 });
 
 describe("a Agenda lembra a última visualização escolhida neste aparelho", () => {

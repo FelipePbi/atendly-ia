@@ -610,11 +610,15 @@ export function AgendaBoard({
 
   /** Na lista do Dia a partir de 1024 px, a escolha troca o painel ao lado com fade. */
   function toggleSelectedAppointment(appointment: Appointment) {
-    void runViewTransition(() => {
-      setSelectedAppointmentId((current) =>
-        current === appointment.id ? null : appointment.id,
-      );
-    });
+    // Também com movimento reduzido, só opacidade (D-173).
+    void runViewTransition(
+      () => {
+        setSelectedAppointmentId((current) =>
+          current === appointment.id ? null : appointment.id,
+        );
+      },
+      { fadeOnReducedMotion: true, types: ["appointment-swap"] },
+    );
   }
 
   /** Bloqueio e compromisso pessoal abrem as ações da ocorrência no Dia e na Semana. */

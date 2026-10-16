@@ -48,7 +48,12 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 function statusFixture(overrides: Partial<SystemStatus> = {}): SystemStatus {
   return {
     accountDeletion: { status: "NONE", dueAt: null },
-    ai: { desiredEnabled: true, effectiveEnabled: true, reconciled: "CONVERGED", state: "ACTIVE" },
+    ai: {
+      desiredEnabled: true,
+      effectiveEnabled: true,
+      reconciled: "CONVERGED",
+      state: "ACTIVE",
+    },
     degraded: false,
     whatsapp: {
       checkedAt: "2026-10-12T12:00:00.000Z",
@@ -87,7 +92,9 @@ describe("aviso de WhatsApp desconectado: ocultar por 1h", () => {
   test("o aviso tem 'Ocultar por 1h' ao lado de 'Reconectar WhatsApp'", async () => {
     const { container } = renderShell();
     const banner = await screen.findByRole("alert");
-    expect(within(banner).getByText("Atendimento automático parado")).toBeVisible();
+    expect(
+      within(banner).getByText("Atendimento automático parado"),
+    ).toBeVisible();
     expect(
       within(banner).getByRole("link", { name: "Reconectar WhatsApp" }),
     ).toHaveAttribute("href", "/configuracoes/whatsapp");
@@ -105,9 +112,13 @@ describe("aviso de WhatsApp desconectado: ocultar por 1h", () => {
       within(banner).getByRole("button", { name: "Ocultar por 1h" }),
     );
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(document.activeElement).toBe(document.getElementById("main-content"));
+    expect(document.activeElement).toBe(
+      document.getElementById("main-content"),
+    );
     const until = Number(
-      window.localStorage.getItem(statusBannerSnoozeKey("whatsapp-disconnected")),
+      window.localStorage.getItem(
+        statusBannerSnoozeKey("whatsapp-disconnected"),
+      ),
     );
     expect(until - before).toBeGreaterThanOrEqual(STATUS_BANNER_SNOOZE_MS);
     expect(until - Date.now()).toBeLessThanOrEqual(STATUS_BANNER_SNOOZE_MS);
@@ -141,7 +152,9 @@ describe("aviso de WhatsApp desconectado: ocultar por 1h", () => {
     renderShell();
     const banner = await screen.findByRole("alert");
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await user.click(within(banner).getByRole("button", { name: "Ocultar por 1h" }));
+    await user.click(
+      within(banner).getByRole("button", { name: "Ocultar por 1h" }),
+    );
     expect(screen.queryByRole("alert")).toBeNull();
     await act(async () => {
       vi.advanceTimersByTime(STATUS_BANNER_SNOOZE_MS + 1000);
@@ -154,7 +167,12 @@ describe("aviso de WhatsApp desconectado: ocultar por 1h", () => {
   test("ocultar um aviso não oculta o outro", async () => {
     statusGet.mockResolvedValue(
       statusFixture({
-        ai: { desiredEnabled: true, effectiveEnabled: false, reconciled: "UNKNOWN", state: "UNKNOWN" },
+        ai: {
+          desiredEnabled: true,
+          effectiveEnabled: false,
+          reconciled: "UNKNOWN",
+          state: "UNKNOWN",
+        },
       }),
     );
     renderShell();
@@ -172,7 +190,12 @@ describe("aviso de WhatsApp desconectado: ocultar por 1h", () => {
   test("os avisos que se ocultam ficam na camada flutuante; a exclusão não", async () => {
     statusGet.mockResolvedValue(
       statusFixture({
-        ai: { desiredEnabled: true, effectiveEnabled: false, reconciled: "UNKNOWN", state: "UNKNOWN" },
+        ai: {
+          desiredEnabled: true,
+          effectiveEnabled: false,
+          reconciled: "UNKNOWN",
+          state: "UNKNOWN",
+        },
       }),
     );
     renderShell();
@@ -186,13 +209,20 @@ describe("aviso de WhatsApp desconectado: ocultar por 1h", () => {
   test("o aviso de exclusão de conta não oferece ocultar", async () => {
     statusGet.mockResolvedValue(
       statusFixture({
-        accountDeletion: { status: "SCHEDULED", dueAt: "2026-11-11T12:00:00.000Z" },
+        accountDeletion: {
+          status: "SCHEDULED",
+          dueAt: "2026-11-11T12:00:00.000Z",
+        },
       }),
     );
     renderShell();
     const banner = await screen.findByRole("alert");
-    expect(within(banner).getByText("Exclusão de conta agendada")).toBeVisible();
-    expect(within(banner).queryByRole("button", { name: /ocultar/i })).toBeNull();
+    expect(
+      within(banner).getByText("Exclusão de conta agendada"),
+    ).toBeVisible();
+    expect(
+      within(banner).queryByRole("button", { name: /ocultar/i }),
+    ).toBeNull();
   });
 });
 
@@ -204,7 +234,9 @@ describe("estilo do aviso e do cartão da sidebar", () => {
     expect(mobile).toMatch(
       /@media \(max-width: 767px\) \{[^@]*?\n {2}\.shell-status-banner \{[^}]*padding: 10px 12px;/,
     );
-    expect(mobile).toMatch(/\.shell-status-banner \.alert-text \{\s*display: none;/);
+    expect(mobile).toMatch(
+      /\.shell-status-banner \.alert-text \{\s*display: none;/,
+    );
     expect(mobile).toMatch(
       /\.shell-status-banner \.shell-status-link \{[^}]*width: auto;[^}]*background: none;/,
     );
@@ -230,13 +262,24 @@ describe("estilo do aviso e do cartão da sidebar", () => {
     expect(css).toMatch(/main#main-content:focus-visible \{\s*outline: none;/);
   });
 
-  test("cartão de WhatsApp desconectado pulsa e para com movimento reduzido", () => {
+  test("cartão de WhatsApp desconectado pulsa; com movimento reduzido só acende e apaga no lugar (D-173)", () => {
     expect(css).toMatch(
       /\.ia-card\.is-disconnected \{[^}]*animation: at-alert-pulse 2\.4s/,
     );
     expect(css).toMatch(/@keyframes at-alert-pulse/);
     expect(css).toMatch(
-      /@media \(prefers-reduced-motion: reduce\) \{\s*\.ia-card\.is-disconnected \{\s*animation: none;/,
+      /@media \(prefers-reduced-motion: reduce\) \{[^@]*\.ia-card\.is-disconnected \{\s*animation: at-alert-glow 2\.4s ease-in-out infinite !important;/,
     );
+    // O brilho do movimento reduzido não desloca nada: o anel tem o mesmo
+    // tamanho o tempo todo, só a cor acende e apaga.
+    const glow = css.slice(
+      css.indexOf("@keyframes at-alert-glow"),
+      css.indexOf(
+        "@media (prefers-reduced-motion: reduce)",
+        css.indexOf("@keyframes at-alert-glow"),
+      ),
+    );
+    expect(glow).not.toMatch(/transform/);
+    expect(glow.match(/0 0 0 4px/g)).toHaveLength(2);
   });
 });

@@ -1719,25 +1719,25 @@ p {
  * 2026-10-12), e recebem a mesma rede.
  */
 :where(
-    :is(.app-frame, .chat-sheet)
-      :is(
-        input:not([type]),
-        input[type="text"],
-        input[type="email"],
-        input[type="tel"],
-        input[type="url"],
-        input[type="search"],
-        input[type="password"],
-        input[type="number"],
-        input[type="date"],
-        input[type="time"],
-        input[type="datetime-local"],
-        input[type="month"],
-        input[type="week"],
-        select,
-        textarea
-      ):not([class])
-  ) {
+  :is(.app-frame, .chat-sheet)
+    :is(
+      input:not([type]),
+      input[type="text"],
+      input[type="email"],
+      input[type="tel"],
+      input[type="url"],
+      input[type="search"],
+      input[type="password"],
+      input[type="number"],
+      input[type="date"],
+      input[type="time"],
+      input[type="datetime-local"],
+      input[type="month"],
+      input[type="week"],
+      select,
+      textarea
+    ):not([class])
+) {
   width: 100%;
   min-height: 48px;
   border: 1px solid var(--border-strong);
@@ -1977,7 +1977,9 @@ p {
 }
 /* Pedido de 2026-10-12: na sidebar (tablet e desktop), o cartão de WhatsApp
    desconectado pulsa de leve, um anel na cor do perigo que se abre e some,
-   no mesmo ritmo do ponto da IA ativa. Movimento reduzido: parado. */
+   no mesmo ritmo do ponto da IA ativa. Movimento reduzido (D-173, pedido de
+   2026-10-16): o anel não se abre, só acende e apaga no lugar, para o aviso
+   continuar chamando a atenção sem nada se mover. */
 .ia-card.is-disconnected {
   border-color: transparent;
   background: var(--danger-soft);
@@ -1985,18 +1987,26 @@ p {
 }
 @keyframes at-alert-pulse {
   0% {
-    box-shadow: 0 0 0 0
-      color-mix(in oklch, var(--danger), transparent 65%);
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--danger), transparent 65%);
   }
   70%,
   100% {
-    box-shadow: 0 0 0 8px
-      color-mix(in oklch, var(--danger), transparent 100%);
+    box-shadow: 0 0 0 8px color-mix(in oklch, var(--danger), transparent 100%);
+  }
+}
+@keyframes at-alert-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--danger), transparent 100%);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--danger), transparent 72%);
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  /* `!important` e a especificidade vencem o bloqueio global de tokens.css. */
   .ia-card.is-disconnected {
-    animation: none;
+    animation: at-alert-glow 2.4s ease-in-out infinite !important;
   }
 }
 .ia-card-ban {

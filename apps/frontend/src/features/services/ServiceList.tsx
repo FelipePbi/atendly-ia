@@ -290,7 +290,9 @@ function ServiceListContent({
           <section
             className={clsx(
               "directory-list-surface",
-              enter && "motion-enter-fade",
+              // Primeira carga: os serviços entram com fade suave, também
+              // com movimento reduzido (D-173, 2026-10-16).
+              enter && "service-list-arrive",
             )}
           >
             {!editable && (

@@ -321,7 +321,7 @@ describe("Serviços — lista persistente entre lista e editor", () => {
       expect(scroller).toContainElement(row);
       expect(scroller).not.toHaveAttribute("aria-busy");
       expect(row.closest(".directory-list-surface")).toHaveClass(
-        "motion-enter-fade",
+        "service-list-arrive",
       );
       // O topo não é remontado quando os itens chegam.
       expect(document.querySelector(".service-panel-header")).toBe(header);
@@ -342,7 +342,7 @@ describe("Serviços — lista persistente entre lista e editor", () => {
       screen
         .getByRole("link", { name: "Editar Escova" })
         .closest(".directory-list-surface"),
-    ).not.toHaveClass("motion-enter-fade");
+    ).not.toHaveClass("service-list-arrive");
   });
 
   test("com a lista ao lado, o '+' é só o do topo da lista, sem botão flutuante", async () => {

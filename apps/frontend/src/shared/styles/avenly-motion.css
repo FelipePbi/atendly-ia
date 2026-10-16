@@ -155,6 +155,14 @@
 .motion-enter.is-fast {
   animation-duration: var(--at-duration-fast);
 }
+/* Lista de Serviços na primeira carga (2026-10-16): o topo já está no lugar e
+   os serviços entram com fade de 240 ms, só opacidade — também com
+   movimento reduzido (D-173, no fim deste arquivo). */
+.service-list-arrive {
+  animation: motion-fade-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+}
+
 /* Perfil do cliente: a primeira cliente entra curto. A troca por outra é um
    crossfade (`vt-customer-swap`): a anterior sai em 160 ms enquanto a nova
    entra em 240 ms, sem o painel passar por vazio (2026-10-16). Se a cliente
@@ -411,6 +419,33 @@ html.vt-conversation-swap::view-transition-new(conversation-panel) {
     both;
 }
 
+/* Tela do agendamento com a coluna da Agenda ao lado (2026-10-16): trocar
+   de agendamento na coluna só muda `?id=`, e o painel troca com o mesmo
+   crossfade de Clientes e Serviços (`vt-appointment-swap`). */
+@media (min-width: 1024px) {
+  .agenda-appt {
+    view-transition-name: appointment-panel;
+  }
+}
+::view-transition-group(appointment-panel) {
+  animation: none;
+}
+::view-transition-image-pair(appointment-panel) {
+  isolation: auto;
+}
+::view-transition-old(appointment-panel),
+::view-transition-new(appointment-panel) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html.vt-appointment-swap::view-transition-old(appointment-panel) {
+  animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both;
+}
+html.vt-appointment-swap::view-transition-new(appointment-panel) {
+  animation: motion-fade-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+}
+
 /* Painel de detalhe do Dia (D-165), a partir de 1024 px: trocar o atendimento
    escolhido troca o painel com fade — sai em 160 ms, entra em 240 ms. */
 .agenda-day-detail {
@@ -646,17 +681,22 @@ html.is-view-transition .motion-enter-back {
      `tokens.css`. */
   html.vt-customer-swap::view-transition-old(customer-panel),
   html.vt-conversation-swap::view-transition-old(conversation-panel),
-  html.vt-service-swap::view-transition-old(service-panel) {
+  html.vt-service-swap::view-transition-old(service-panel),
+  html.vt-appointment-swap::view-transition-old(appointment-panel),
+  html.vt-appointment-swap::view-transition-old(agenda-panel) {
     animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both !important;
   }
   html.vt-customer-swap::view-transition-new(customer-panel),
   html.vt-conversation-swap::view-transition-new(conversation-panel),
-  html.vt-service-swap::view-transition-new(service-panel) {
+  html.vt-service-swap::view-transition-new(service-panel),
+  html.vt-appointment-swap::view-transition-new(appointment-panel),
+  html.vt-appointment-swap::view-transition-new(agenda-panel) {
     animation: motion-fade-in var(--at-duration-moderate)
       var(--at-ease-standard) both !important;
   }
   .customer-profile.is-entering > :not(.pushed-bar),
-  .service-form-screen.is-entering > :not(.pushed-bar) {
+  .service-form-screen.is-entering > :not(.pushed-bar),
+  .service-list-arrive {
     animation: motion-fade-in var(--at-duration-moderate)
       var(--at-ease-standard) both !important;
   }

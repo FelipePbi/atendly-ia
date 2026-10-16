@@ -69,6 +69,8 @@ describe("com movimento reduzido, trocar de item não pisca", () => {
     ["customer-swap", "customer-panel"],
     ["conversation-swap", "conversation-panel"],
     ["service-swap", "service-panel"],
+    ["appointment-swap", "appointment-panel"],
+    ["appointment-swap", "agenda-panel"],
   ])("a troca %s é um fade só de opacidade (D-173)", (type, name) => {
     const reduced = reducedMotionBlocks(motionCss);
     expect(
@@ -84,6 +86,7 @@ describe("com movimento reduzido, trocar de item não pisca", () => {
     for (const selector of [
       ".customer-profile.is-entering > :not(.pushed-bar)",
       ".service-form-screen.is-entering > :not(.pushed-bar)",
+      ".service-list-arrive",
     ]) {
       expect(ruleFor(reduced, selector)).toMatch(
         /animation:\s*motion-fade-in[^;]*!important/,

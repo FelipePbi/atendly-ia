@@ -7733,10 +7733,11 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 
 **Decisão:**
 
-1. A troca de item no painel ao lado da lista (`customer-swap`, `conversation-swap`, `service-swap`) roda a View Transition também com movimento reduzido (`runViewTransition(..., { fadeOnReducedMotion: true })`). O CSS a reduz a fade de opacidade: sai em 160 ms e entra em 240 ms.
-2. A primeira entrada do item no painel é fade de 240 ms, sem os 8 px de subida.
+1. A troca de item no painel ao lado da lista (`customer-swap`, `conversation-swap`, `service-swap` e `appointment-swap`, este no painel do Dia e na tela do agendamento com a coluna ao lado) roda a View Transition também com movimento reduzido (`runViewTransition(..., { fadeOnReducedMotion: true })`). O CSS a reduz a fade de opacidade: sai em 160 ms e entra em 240 ms.
+2. A primeira entrada do item no painel é fade de 240 ms, sem os 8 px de subida. O mesmo vale para os serviços chegando na primeira carga da lista de Serviços (pedido de 2026-10-16: sem esqueleto, com o topo já no lugar).
 3. Com movimento reduzido, o item anterior não esmaece enquanto o novo carrega.
-4. O resto continua desligado com movimento reduzido: navegação entre telas, folhas, abas, apresentação depois do splash, deslocamentos e escalas.
+4. O cartão "WhatsApp desconectado" da sidebar continua chamando a atenção com movimento reduzido: o anel não se abre, só acende e apaga no lugar (`at-alert-glow`, 2,4 s).
+5. O resto continua desligado com movimento reduzido: navegação entre telas, folhas, abas, apresentação depois do splash, deslocamentos e escalas.
 
 **Alternativas:** manter a troca seca, sem fade, como manda a D-168 (rejeitada pelo usuário); ligar todas as animações ignorando a preferência do sistema (deslocamento e escala são justamente o que a preferência pede para evitar).
 

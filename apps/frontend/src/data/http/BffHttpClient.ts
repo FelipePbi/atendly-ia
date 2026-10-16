@@ -77,6 +77,22 @@ export class BffHttpError extends Error {
   }
 }
 
+/** O que o adapter guarda de uma resposta, já com o corpo lido. */
+interface ReceivedResponse {
+  ok: boolean;
+  payload: unknown;
+  requestId: string;
+  status: number;
+  statusText: string;
+}
+
+interface InFlightRead {
+  abort: () => void;
+  callers: number;
+  pendingAbort?: ReturnType<typeof setTimeout>;
+  response: Promise<ReceivedResponse>;
+}
+
 /** Nome do cookie de CSRF antes da troca de marca. Fixo, não configurável. */
 const LEGACY_CSRF_COOKIE_NAME = "atendly_csrf";
 
@@ -103,6 +119,7 @@ export class BffHttpClient {
   private readonly fetchImplementation: typeof fetch;
   private readonly getCsrfToken: () => string | undefined;
   private csrfToken: string | undefined;
+  private readonly inFlightReads = new Map<string, InFlightRead>();
 
   constructor(options: BffHttpClientOptions) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
@@ -124,6 +141,102 @@ export class BffHttpClient {
    */
   resetCsrfToken(): void {
     this.csrfToken = undefined;
+  }
+
+  /**
+   * Leitura compartilhada: quem pede a mesma URL com os mesmos headers enquanto
+   * ela ainda está em voo recebe a mesma resposta, sem outra ida ao BFF.
+   *
+   * Cada chamador mantém o próprio `signal`: ao abortar, só ele é rejeitado. A
+   * requisição de rede só é cancelada quando nenhum chamador sobrou, e um tick
+   * depois — é o intervalo em que o React (StrictMode em dev) desmonta e
+   * remonta o efeito; a remontagem reaproveita a leitura em vez de abortar uma
+   * e disparar outra igual.
+   */
+  private sharedRead(
+    url: URL,
+    headers: Headers,
+    signal: AbortSignal | undefined,
+  ): Promise<ReceivedResponse> {
+    if (signal?.aborted) return Promise.reject(abortReason(signal));
+
+    const key = readKey(url, headers);
+    let read = this.inFlightReads.get(key);
+    if (!read) {
+      const controller = new AbortController();
+      const response = this.receive(url, {
+        credentials: "include",
+        headers,
+        method: "GET",
+        signal: controller.signal,
+      });
+      const created: InFlightRead = {
+        abort: () => {
+          if (this.inFlightReads.get(key) === created) {
+            this.inFlightReads.delete(key);
+          }
+          controller.abort();
+        },
+        callers: 0,
+        response,
+      };
+      const forget = () => {
+        if (this.inFlightReads.get(key) === created) {
+          this.inFlightReads.delete(key);
+        }
+      };
+      response.then(forget, forget);
+      this.inFlightReads.set(key, created);
+      read = created;
+    }
+
+    const shared = read;
+    if (shared.pendingAbort !== undefined) {
+      clearTimeout(shared.pendingAbort);
+      shared.pendingAbort = undefined;
+    }
+    shared.callers += 1;
+    if (!signal) return shared.response;
+
+    let leave = () => {};
+    const left = new Promise<never>((_, reject) => {
+      leave = () => {
+        reject(abortReason(signal));
+        shared.callers -= 1;
+        if (shared.callers === 0) {
+          shared.pendingAbort = setTimeout(shared.abort, 0);
+        }
+      };
+      signal.addEventListener("abort", leave, { once: true });
+    });
+    return Promise.race([shared.response, left]).finally(() =>
+      signal.removeEventListener("abort", leave),
+    );
+  }
+
+  private async receive(
+    url: URL,
+    init: RequestInit,
+  ): Promise<ReceivedResponse> {
+    const response = await this.fetchImplementation(url, init);
+
+    // Antes de qualquer decisão sobre o status: toda resposta autenticada por
+    // cookie carrega o token vigente, inclusive as de erro. É assim que o
+    // adapter se recupera de um reload — e de um 403 por token defasado.
+    const issuedCsrfToken = response.headers.get(this.csrfHeaderName);
+    if (issuedCsrfToken) this.csrfToken = issuedCsrfToken;
+
+    const requestId =
+      response.headers.get("x-request-id") ??
+      new Headers(init.headers).get("x-request-id") ??
+      "";
+    return {
+      ok: response.ok,
+      payload: await parseJson(response, requestId),
+      requestId,
+      status: response.status,
+      statusText: response.statusText,
+    };
   }
 
   async request<TSchema extends z.ZodType>(
@@ -157,11 +270,16 @@ export class BffHttpClient {
       if (csrfToken) headers.set(this.csrfHeaderName, csrfToken);
     }
 
-    let response: Response;
+    const url = buildUrl(this.baseUrl, options.path, options.query);
+    let response: ReceivedResponse;
     try {
-      response = await this.fetchImplementation(
-        buildUrl(this.baseUrl, options.path, options.query),
-        {
+      if (isSafeMethod(method)) {
+        response = await this.sharedRead(url, headers, options.signal);
+      } else {
+        // Uma leitura iniciada antes desta mutação pode trazer o estado
+        // anterior a ela: quem ler depois começa uma requisição nova.
+        this.inFlightReads.clear();
+        response = await this.receive(url, {
           body:
             options.body === undefined
               ? undefined
@@ -170,9 +288,10 @@ export class BffHttpClient {
           headers,
           method,
           signal: options.signal,
-        },
-      );
+        });
+      }
     } catch (error: unknown) {
+      if (error instanceof BffHttpError) throw error;
       if (isAbortError(error) || options.signal?.aborted) {
         throw new BffHttpError({
           code: "REQUEST_ABORTED",
@@ -191,14 +310,8 @@ export class BffHttpClient {
       });
     }
 
-    // Antes de qualquer decisão sobre o status: toda resposta autenticada por
-    // cookie carrega o token vigente, inclusive as de erro. É assim que o
-    // adapter se recupera de um reload — e de um 403 por token defasado.
-    const issuedCsrfToken = response.headers.get(this.csrfHeaderName);
-    if (issuedCsrfToken) this.csrfToken = issuedCsrfToken;
-
-    const responseRequestId = response.headers.get("x-request-id") ?? requestId;
-    const payload = await parseJson(response, responseRequestId);
+    const { payload } = response;
+    const responseRequestId = response.requestId || requestId;
 
     if (!response.ok) {
       const parsedError = errorEnvelopeSchema.safeParse(payload);
@@ -391,6 +504,18 @@ function createRequestId(): string {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
+}
+
+/** URL e headers enviados, menos o `x-request-id`, que é único por chamada. */
+function readKey(url: URL, headers: Headers): string {
+  const sent = [...headers].filter(([name]) => name !== "x-request-id");
+  return JSON.stringify([url.href, sent]);
+}
+
+function abortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new DOMException("Aborted", "AbortError");
 }
 
 function isSafeMethod(method: HttpMethod): boolean {

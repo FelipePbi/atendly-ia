@@ -15,7 +15,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { BffHttpError, type Customer } from "@/data";
+import { BffHttpError, type Customer, type CustomerListQuery } from "@/data";
 import {
   CustomerList,
   CustomerListPanel,
@@ -23,6 +23,7 @@ import {
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
 import { expectNoA11yViolations } from "./support/a11y";
+import { asServerSearch } from "./support/customer-list-server";
 
 const customersList = vi.fn();
 const calendarGetCalendar = vi.fn();
@@ -34,7 +35,10 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     calendar: { getCalendar: calendarGetCalendar },
-    customers: { list: customersList },
+    customers: {
+      list: (query?: CustomerListQuery, signal?: AbortSignal) =>
+        asServerSearch(customersList(query, signal), query),
+    },
   }),
 }));
 

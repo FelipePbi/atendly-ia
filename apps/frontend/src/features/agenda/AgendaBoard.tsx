@@ -1151,7 +1151,7 @@ function AgendaNewSheet({
     }
     if (!recalledCustomers() && typeof customers?.list === "function") {
       customers
-        .list(controller.signal)
+        .list({}, controller.signal)
         .then((list) => {
           if (!controller.signal.aborted) rememberCustomers(list);
         })

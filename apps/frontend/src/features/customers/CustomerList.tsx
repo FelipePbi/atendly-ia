@@ -2,92 +2,147 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
-
 import {
-  BffHttpError,
-  type CustomerAppointmentSummary,
-  type CustomerList as CustomerListResult,
-  type CustomerListItem,
-} from "@/data";
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import { type CustomerAppointmentSummary, type CustomerListItem } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { ListDetailEmpty, ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { Button } from "@/shared/ui/Button";
 import { ContactPhoto, customerPhotoUrl } from "@/shared/ui/ContactPhoto";
 import { Field } from "@/shared/ui/Field";
 
+import { CustomerListMore } from "./CustomerListMore";
 import { CustomerEmptyState, CustomerErrorState } from "./CustomerStates";
+import {
+  type CustomerPages,
+  type CustomerPagesError,
+  useCustomerPages,
+} from "./useCustomerPages";
 
-type CustomerListError = { reference: string | null };
-
-type CustomerListData = {
+export type CustomerListData = {
   canCreate: boolean;
+  /** Clientes já carregados da lista sem busca. */
   customers: CustomerListItem[];
-  error: CustomerListError | null;
+  error: CustomerPagesError | null;
+  /** Resultado já carregado da busca, feita no servidor. */
   filtered: CustomerListItem[];
   groups: CustomerGroup[];
+  /** Lista sem busca, paginada. */
+  list: CustomerPages;
   loading: boolean;
   query: string;
+  /** Busca de novo o que está na tela, sem esqueleto (cadastro mudou). */
+  refresh: () => void;
+  /** Guarda onde a lista sem busca estava rolada. */
+  rememberScroll: (top: number) => void;
+  /** Busca paginada; vale enquanto há texto no campo. */
+  results: CustomerPages;
   retry: () => void;
+  /** Onde a lista sem busca estava rolada, para voltar ao mesmo ponto. */
+  savedScroll: () => number;
+  /** A busca digitada ainda não tem resposta. */
+  searchPending: boolean;
   setQuery: (value: string) => void;
   today: Date;
+  /** Total real de clientes do negócio, não só o carregado. */
+  total: number;
 };
 
-/** `enabled=false` não busca nada: o painel que não cabe na janela nunca consome o BFF. */
+/** Espera entre a digitação e a busca no servidor. */
+const SEARCH_DEBOUNCE_MS = 250;
+
+const CustomerListContext = createContext<CustomerListData | null>(null);
+
+/**
+ * Dados da lista mantidos acima das telas: o layout de `/clientes` os guarda
+ * enquanto a pessoa vai da lista ao detalhe e volta, sem buscar de novo.
+ */
+export const CustomerListProvider = CustomerListContext.Provider;
+
+/**
+ * Dados da lista: os do layout de `/clientes`, quando a tela está dentro dele;
+ * senão, próprios. `enabled=false` não busca nada: o painel que não cabe na
+ * janela nunca consome o BFF.
+ */
 export function useCustomerListData(enabled = true): CustomerListData {
-  const [result, setResult] = useState<CustomerListResult | null>(null);
+  const shared = useContext(CustomerListContext);
+  const own = useCustomerListState(enabled && !shared);
+  return shared ?? own;
+}
+
+/** Estado da lista: levas carregadas, busca, fuso e rolagem. */
+export function useCustomerListState(enabled = true): CustomerListData {
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
-  const [error, setError] = useState<CustomerListError | null>(null);
   const [query, setQuery] = useState("");
-  const [reload, setReload] = useState(0);
+  const searchText = query.trim();
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    // Limpar o campo volta à lista na hora; digitar espera uma pausa.
+    const timer = setTimeout(
+      () => setSearch(searchText),
+      searchText ? SEARCH_DEBOUNCE_MS : 0,
+    );
+    return () => clearTimeout(timer);
+  }, [searchText]);
 
   useEffect(() => {
     if (!enabled) return;
     const controller = new AbortController();
-    const services = getProductServices();
-    Promise.all([
-      services.customers.list(controller.signal),
-      businessTimezone(services, controller.signal),
-    ])
-      .then(([list, zone]) => {
-        setTimezone(zone);
-        setResult(list);
-      })
-      .catch((caught: unknown) => {
-        if (!controller.signal.aborted) setError(requestError(caught));
-      });
-    return () => controller.abort();
-  }, [enabled, reload]);
-
-  const customers = result?.items ?? [];
-  const filtered = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase("pt-BR");
-    if (!normalized) return result?.items ?? [];
-    return (result?.items ?? []).filter((customer) =>
-      `${customer.name ?? ""} ${customer.phone ?? ""}`
-        .toLocaleLowerCase("pt-BR")
-        .includes(normalized),
+    void businessTimezone(getProductServices(), controller.signal).then(
+      (zone) => {
+        if (!controller.signal.aborted) setTimezone(zone);
+      },
     );
-  }, [result, query]);
-  const groups = useMemo(() => groupAlphabetically(filtered), [filtered]);
+    return () => controller.abort();
+  }, [enabled]);
+
+  const list = useCustomerPages("", enabled);
+  const results = useCustomerPages(search, enabled && search !== "");
+  const groups = useMemo(() => groupAlphabetically(list.items), [list.items]);
+  const scroll = useRef(0);
+  const rememberScroll = useCallback((top: number) => {
+    scroll.current = top;
+  }, []);
+  const savedScroll = useCallback(() => scroll.current, []);
+  const { refresh: refreshList } = list;
+  const { refresh: refreshResults } = results;
+  const refresh = useCallback(() => {
+    refreshList();
+    refreshResults();
+  }, [refreshList, refreshResults]);
 
   return {
-    canCreate: Boolean(result) && !result?.managedExternally,
-    customers,
-    error,
-    filtered,
+    canCreate: !list.loading && !list.error && !list.managedExternally,
+    customers: list.items,
+    error: list.error,
+    filtered: results.items,
     groups,
-    loading: enabled && !result && !error,
+    list,
+    loading: list.loading,
     query,
-    retry: () => {
-      setError(null);
-      setReload((value) => value + 1);
-    },
+    refresh,
+    rememberScroll,
+    results,
+    retry: list.retry,
+    savedScroll,
+    searchPending: searchText !== search || results.loading,
     setQuery,
     today: todayWallDate(timezone),
+    total: list.total,
   };
 }
 
@@ -140,7 +195,7 @@ export function CustomerListPanel({ openId }: { openId?: string }) {
   return <CustomerListPanelView data={data} heading="h2" openId={openId} />;
 }
 
-function CustomerListPanelView({
+export function CustomerListPanelView({
   data,
   heading: Heading = "h1",
   openId,
@@ -156,6 +211,16 @@ function CustomerListPanelView({
   const showingState = Boolean(error) || (!loading && customers.length === 0);
   const searchText = data.query.trim();
   const searching = !showingState && !loading && searchText !== "";
+  // Só os itens rolam (o cabeçalho e a busca ficam parados); a lista volta ao
+  // ponto em que estava quando a área de itens é montada de novo — ao sair da
+  // busca ou voltar do detalhe no celular.
+  const { savedScroll } = data;
+  const restoreScroll = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (element) element.scrollTop = savedScroll();
+    },
+    [savedScroll],
+  );
   return (
     <div
       className={clsx(
@@ -170,9 +235,9 @@ function CustomerListPanelView({
           <div className="customer-panel-tools">
             {!loading && !error && customers.length > 0 && (
               <span className="customer-panel-count">
-                {customers.length}
+                {data.total}
                 <span className="sr-only">
-                  {customers.length === 1 ? " cliente" : " clientes"}
+                  {data.total === 1 ? " cliente" : " clientes"}
                 </span>
               </span>
             )}
@@ -221,36 +286,55 @@ function CustomerListPanelView({
             )}
           </div>
           {loading ? (
-            <CustomerListSkeleton />
+            <div className="customer-panel-scroll" key="loading">
+              <CustomerListSkeleton />
+            </div>
           ) : searching ? (
-            <CustomerSearchResults
-              canCreate={canCreate}
-              customers={filtered}
-              open={openId}
-              query={searchText}
-              today={today}
-            />
+            <div className="customer-panel-scroll" key="search">
+              <CustomerSearchResults
+                canCreate={canCreate}
+                customers={filtered}
+                open={openId}
+                pages={data.results}
+                pending={data.searchPending}
+                query={searchText}
+                today={today}
+              />
+            </div>
           ) : (
             <div
-              aria-label="Clientes"
-              className="customer-panel-list"
-              role="list"
+              className="customer-panel-scroll"
+              key="list"
+              onScroll={(event) =>
+                data.rememberScroll(event.currentTarget.scrollTop)
+              }
+              ref={restoreScroll}
             >
-              {groups.map((group) => (
-                <div className="customer-panel-group" key={group.letter}>
-                  {group.letter !== NO_NAME_LABEL && (
-                    <p className="customer-panel-letter">{group.letter}</p>
-                  )}
-                  {group.customers.map((customer) => (
-                    <CustomerRow
-                      customer={customer}
-                      key={customer.id}
-                      open={customer.id === openId}
-                      today={today}
-                    />
-                  ))}
-                </div>
-              ))}
+              <div
+                aria-label="Clientes"
+                className="customer-panel-list"
+                role="list"
+              >
+                {groups.map((group, index) => (
+                  <div
+                    className="customer-panel-group"
+                    key={`${group.letter}-${index}`}
+                  >
+                    {group.letter !== NO_NAME_LABEL && (
+                      <p className="customer-panel-letter">{group.letter}</p>
+                    )}
+                    {group.customers.map((customer) => (
+                      <CustomerRow
+                        customer={customer}
+                        key={customer.id}
+                        open={customer.id === openId}
+                        today={today}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <CustomerListMore pages={data.list} />
             </div>
           )}
         </>
@@ -263,16 +347,33 @@ function CustomerSearchResults({
   canCreate,
   customers,
   open,
+  pages,
+  pending,
   query,
   today,
 }: {
   canCreate: boolean;
   customers: CustomerListItem[];
   open?: string;
+  pages: CustomerPages;
+  pending: boolean;
   query: string;
   today: Date;
 }) {
   const create = canCreate ? <CustomerCreateRow query={query} /> : null;
+  if (pages.error) {
+    return (
+      <div className="customer-search-results">
+        <div className="customer-list-more-error" role="alert">
+          <p>Não foi possível buscar agora.</p>
+          <Button onClick={pages.retry} type="button" variant="secondary">
+            Tentar de novo
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  if (pending) return <CustomerListSkeleton label="Buscando clientes" />;
   return (
     <div className="customer-search-results">
       {customers.length === 0 ? (
@@ -293,13 +394,14 @@ function CustomerSearchResults({
               today={today}
             />
           ))}
-          {create && (
+          {create && !pages.hasMore && (
             <div className="customer-panel-row" role="listitem">
               {create}
             </div>
           )}
         </div>
       )}
+      {customers.length > 0 && <CustomerListMore pages={pages} />}
     </div>
   );
 }
@@ -476,11 +578,15 @@ function RelationIcon() {
   );
 }
 
-function CustomerListSkeleton() {
+function CustomerListSkeleton({
+  label = "Carregando clientes",
+}: {
+  label?: string;
+}) {
   return (
     <>
       <p className="sr-only" role="status">
-        Carregando clientes
+        {label}
       </p>
       <div aria-hidden="true" className="customer-skeleton">
         {[0, 1, 2, 3].map((item) => (
@@ -516,12 +622,6 @@ async function businessTimezone(
   }
 }
 
-function requestError(error: unknown): CustomerListError {
-  return {
-    reference: error instanceof BffHttpError ? error.requestId : null,
-  };
-}
-
 function initials(name: string | null): string {
   if (!name?.trim()) return "?";
   return name
@@ -548,17 +648,15 @@ function groupLetter(name: string): string {
 }
 
 /**
- * Ordem alfabética pt-BR por `localeCompare`, sem acento distinguindo letra;
- * cadastro sem nome vai para um separador próprio no fim (Goal075 CL-01).
+ * Agrupa na ordem que o servidor entregou (alfabética, sem acento nem caixa
+ * distinguindo letra): a lista chega em levas, e reordenar aqui faria uma
+ * pessoa da leva nova saltar para o meio do que já está na tela. A letra só
+ * abre grupo novo quando muda, então a leva que continua a mesma letra não
+ * repete o cabeçalho. Cadastro sem nome vai para um separador próprio no fim
+ * (Goal075 CL-01).
  */
 function groupAlphabetically(customers: CustomerListItem[]): CustomerGroup[] {
-  const named = customers
-    .filter((customer) => customer.name?.trim())
-    .sort((a, b) =>
-      (a.name ?? "").localeCompare(b.name ?? "", "pt-BR", {
-        sensitivity: "base",
-      }),
-    );
+  const named = customers.filter((customer) => customer.name?.trim());
   const unnamed = customers.filter((customer) => !customer.name?.trim());
 
   const groups: CustomerGroup[] = [];

@@ -15,9 +15,14 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { Customer } from "@/data";
+import type { Customer, CustomerListQuery } from "@/data";
 import { CustomerList } from "@/features/customers/CustomerList";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
+
+import {
+  asServerSearch,
+  waitForSearch,
+} from "./support/customer-list-server";
 
 const push = vi.fn();
 const replace = vi.fn();
@@ -32,7 +37,10 @@ const calendarGetCalendar = vi.fn();
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     calendar: { getCalendar: calendarGetCalendar },
-    customers: { list: customersList },
+    customers: {
+      list: (query?: CustomerListQuery, signal?: AbortSignal) =>
+        asServerSearch(customersList(query, signal), query),
+    },
   }),
 }));
 
@@ -130,12 +138,14 @@ describe("§6.6 texto de próximo, último e sem atendimentos na linha", () => {
 });
 
 describe("§6.7 separadores por letra em ordem pt-BR", () => {
+  // A ordem é do servidor (a lista chega em levas; ver
+  // customer-list-pagination no Scheduling): a tela só agrupa, sem reordenar.
   test("agrupa por letra sem acento, com 'Sem nome' no fim", async () => {
     customersList.mockResolvedValue({
       items: [
-        customerFixture({ id: "c1", name: "Bruno Lima" }),
-        customerFixture({ id: "c2", name: "Ana Souza" }),
         customerFixture({ id: "c3", name: "Álvaro Pires" }),
+        customerFixture({ id: "c2", name: "Ana Souza" }),
+        customerFixture({ id: "c1", name: "Bruno Lima" }),
         customerFixture({ id: "c4", name: null, phone: null }),
       ],
       managedExternally: false,
@@ -177,6 +187,7 @@ describe("§6.7 separadores por letra em ordem pt-BR", () => {
     expect(within(list).getAllByText(/^(A|B)$/)).toHaveLength(2);
 
     await user.type(screen.getByLabelText("Buscar cliente"), "Bruno");
+    await waitForSearch();
 
     const results = screen.getByRole("list", { name: "Clientes" });
     expect(within(results).queryByText("A")).not.toBeInTheDocument();

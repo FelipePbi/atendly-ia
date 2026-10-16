@@ -205,7 +205,7 @@ export function AppointmentForm({
     Promise.all([
       getProductServices().calendar.getCalendar(controller.signal),
       getProductServices().serviceCatalog.list(controller.signal),
-      getProductServices().customers.list(controller.signal),
+      getProductServices().customers.list({}, controller.signal),
     ])
       .then(([calendarResult, serviceResult, customerResult]) => {
         setCalendar(calendarResult);

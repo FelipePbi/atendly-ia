@@ -15,4 +15,5 @@ export * from "./services/BffServiceCatalogService";
 export * from "./services/BffSettingsService";
 export * from "./services/BffStatusService";
 export * from "./services/BffWhatsAppService";
+export * from "./services/customerChanges";
 export * from "./services/registry";

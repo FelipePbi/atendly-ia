@@ -14,10 +14,18 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { CalendarState, Customer, CustomerDetail, Service } from "@/data";
+import type {
+  CalendarState,
+  Customer,
+  CustomerDetail,
+  CustomerListQuery,
+  Service,
+} from "@/data";
 import { ProductCustomersScreen } from "@/features/customers/ProductCustomersScreen";
 import { ProductServicesScreen } from "@/features/services/ProductServicesScreen";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
+
+import { asServerSearch } from "./support/customer-list-server";
 
 const push = vi.fn();
 const replace = vi.fn();
@@ -45,7 +53,8 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
     conversations: { list: () => Promise.resolve([]) },
     customers: {
       get: customersGet,
-      list: customersList,
+      list: (query?: CustomerListQuery, signal?: AbortSignal) =>
+        asServerSearch(customersList(query, signal), query),
       listMemory: customersListMemory,
     },
     serviceCatalog: {

@@ -148,6 +148,52 @@ describe.skipIf(!RUN_INTEGRATION)("public customer routes", () => {
     expect(upstream[0].tenantId).toBe(owner.tenantId);
   });
 
+  it("repassa página, cursor e busca ao Scheduling e devolve total e nextCursor", async () => {
+    const owner = created[0]!;
+    stubScheduling({
+      data: {
+        items: [customerPayload({ id: "customer-ana", name: "Ana" })],
+        source: "AVENLY",
+        managedExternally: false,
+        filteredByPhone: false,
+        total: 356,
+        nextCursor: "cursor-2",
+      },
+      requestId: "upstream-page",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/customers?limit=15&cursor=cursor-1&q=an",
+      headers: browserRead(owner),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({
+      total: 356,
+      nextCursor: "cursor-2",
+    });
+    const forwarded = new URL(upstream[0].url).searchParams;
+    expect(forwarded.get("limit")).toBe("15");
+    expect(forwarded.get("cursor")).toBe("cursor-1");
+    expect(forwarded.get("q")).toBe("an");
+    expect(upstream[0].tenantId).toBe(owner.tenantId);
+  });
+
+  it("recusa página acima de 100 antes de chamar o Scheduling", async () => {
+    const owner = created[0]!;
+    stubScheduling({ data: {}, requestId: "upstream-too-big" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/customers?limit=500",
+      headers: browserRead(owner),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(upstream).toHaveLength(0);
+  });
+
   it("recusa a mutação por cookie sem CSRF, antes de chamar o Scheduling", async () => {
     const owner = created[0]!;
     stubScheduling({ data: customerPayload(), requestId: "upstream-csrf" });

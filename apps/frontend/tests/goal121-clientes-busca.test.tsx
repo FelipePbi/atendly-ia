@@ -12,6 +12,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import type { CustomerListQuery } from "@/data";
 import { CustomerForm } from "@/features/customers/CustomerForm";
 import { CustomerList } from "@/features/customers/CustomerList";
 import {
@@ -20,6 +21,10 @@ import {
 } from "@/shared/layout/ShellConfig";
 
 import { expectNoA11yViolations } from "./support/a11y";
+import {
+  asServerSearch,
+  waitForSearch,
+} from "./support/customer-list-server";
 
 const customersList = vi.fn();
 const customersCreate = vi.fn();
@@ -36,7 +41,8 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
     calendar: { getCalendar: calendarGetCalendar },
     customers: {
       create: customersCreate,
-      list: customersList,
+      list: (query?: CustomerListQuery, signal?: AbortSignal) =>
+        asServerSearch(customersList(query, signal), query),
       listCandidatesByPhone: customersCandidates,
     },
   }),
@@ -86,6 +92,7 @@ async function search(text: string) {
   const view = renderList();
   const user = userEvent.setup();
   await user.type(await screen.findByRole("searchbox"), text);
+  await waitForSearch();
   return { ...view, user };
 }
 
@@ -225,6 +232,7 @@ describe("CL3 — Clientes · busca", () => {
     const user = userEvent.setup();
     await user.clear(screen.getByRole("searchbox"));
     await user.type(screen.getByRole("searchbox"), "zzz");
+    await waitForSearch();
     expect(screen.getByText("Nenhum cliente corresponde à busca.")).toBeVisible();
     expect(
       screen.queryByRole("link", { name: /Adicionar novo cliente/ }),

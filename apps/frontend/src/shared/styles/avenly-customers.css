@@ -284,9 +284,34 @@
   }
 }
 
-/* Painel da lista de clientes (Goal088, quadro CL5) */
+/* Painel da lista de clientes (Goal088, quadro CL5).
+   Cabeçalho fixo: título, contador, "+" e busca ficam parados; só a área dos
+   itens (`.customer-panel-scroll`) rola, e a barra de rolagem começa abaixo
+   da busca. O painel ocupa a altura de quem o contém: a coluna da lista no
+   desktop (que deixa de rolar) e `.customer-list-screen` no celular. */
 .customer-panel {
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+.customer-panel-header,
+.customer-panel-searchbar {
+  flex: none;
+}
+.customer-panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding-bottom: 24px;
+}
+.list-detail-list:has(> .customer-panel) {
+  overflow-y: hidden;
+}
+.customer-panel.has-state {
+  overflow-y: auto;
 }
 .customer-panel-header {
   padding: 24px 20px 0;
@@ -464,10 +489,37 @@
   margin: 16px 20px 0;
 }
 
-/* Lista de clientes como tela (CL1): a mesma linha do painel, sem a coluna do detalhe. */
+/* Lista de clientes como tela (CL1): a mesma linha do painel, sem a coluna do detalhe.
+   Altura da janela menos a barra inferior da casca (65 px; 81 px a partir de
+   768 px), para a área dos itens rolar sozinha; sem a barra (busca aberta),
+   a janela inteira. O respiro no fim deixa a última linha acima do "+". */
 .customer-list-screen {
   width: 100%;
+  height: calc(100dvh - 65px - env(safe-area-inset-bottom));
   margin: 0;
+}
+.customer-list-screen .customer-panel-scroll {
+  padding-bottom: 88px;
+}
+@media (min-width: 768px) {
+  .customer-list-screen {
+    height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+  }
+}
+@media (min-width: 1100px) {
+  .customer-list-screen {
+    height: 100dvh;
+  }
+}
+.directory-shell:not(:has(> nav)) .customer-list-screen {
+  height: 100dvh;
+}
+/* Busca aberta no celular: a barra inferior some e a casca não reserva os
+   65 px dela, senão a janela rolaria junto com a área dos itens. */
+@media (max-width: 767px) {
+  .directory-shell.app-frame:not(:has(> nav)):has(.customer-list-screen) {
+    padding-bottom: 0;
+  }
 }
 .customer-panel-list {
   padding-top: 6px;
@@ -547,6 +599,37 @@
 }
 .customer-search-results {
   padding-top: 8px;
+}
+/* Scroll infinito: sentinela, leva carregando, falha recuperável e fim da lista. */
+.customer-list-sentinel {
+  height: 1px;
+}
+.customer-skeleton.is-more {
+  padding-top: 14px;
+}
+.customer-list-more-error {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+}
+.customer-list-more-error p {
+  margin: 0;
+}
+.customer-list-more > .btn-tertiary {
+  display: flex;
+  margin: 16px auto 0;
+}
+.customer-list-end {
+  margin: 0;
+  padding: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
 }
 .customer-search-mark {
   border-radius: 3px;

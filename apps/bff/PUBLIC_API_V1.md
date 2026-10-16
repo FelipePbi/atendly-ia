@@ -204,6 +204,18 @@ O cliente é uma **pessoa**, identificada pelo ID dentro do negócio. O telefone
 
 Os dois campos existem só na lista. `GET /v1/customers/:id` segue trazendo `primaryGuardian` completo, e a criação e a edição não mudam. Campos opcionais: resposta anterior a este Goal continua válida sem eles.
 
+### Lista paginada e busca no servidor
+
+`GET /v1/customers` aceita `limit` (1 a 100), `cursor` e `q`, para a tela de clientes carregar sob demanda (scroll infinito):
+
+- com `limit` ou `cursor`, a resposta é uma página. `nextCursor` é a continuação opaca (passe-a de volta em `cursor`, com o mesmo `q`) ou `null` no fim. Sem `limit`, uma página tem 50 itens. Um `cursor` que não veio desta lista é recusado com `400`.
+- sem `limit` e sem `cursor`, a lista sai inteira, como antes. Quem depende dela inteira (seletores de cliente) continua válido.
+- a ordem é a mesma nos dois modos: nome, sem nome por último, depois data do cadastro e `id`. O cursor guarda a chave da última pessoa entregue, não um deslocamento: cadastro criado ou removido entre páginas não repete nem pula ninguém.
+- `q` busca no negócio inteiro, não só no que já foi carregado: trecho do nome, sem diferenciar maiúscula, ou, quando não tem letra, trecho dos dígitos do telefone. `%` e `_` são texto.
+- `total` conta tudo o que o filtro casa (`q` e `phone`), não só a página. Sem filtro, é o número de clientes do negócio.
+
+`total` e `nextCursor` são opcionais no contrato: resposta anterior a esta mudança continua válida sem eles.
+
 ### Responsável principal
 
 `PUT /v1/customers/:id/primary-guardian` grava a relação com proveniência (`proposedBy`) e estado (`status`). A relação nasce `PROPOSED` e só vira `CONFIRMED` com confirmação explícita — no corpo do `PUT` ou por `POST .../primary-guardian/confirm`. Uma relação apenas proposta não é afirmada para a IA. No MVP existe no máximo um responsável principal por cliente.

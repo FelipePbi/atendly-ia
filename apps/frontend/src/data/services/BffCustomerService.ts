@@ -14,6 +14,7 @@ import {
   type deletedIdempotentSchema,
   type deletedSchema,
 } from "../mappers/publicApiSchemas";
+import { notifyCustomersChanged } from "./customerChanges";
 
 type Deleted = z.infer<typeof deletedSchema>;
 type DeletedIdempotent = z.infer<typeof deletedIdempotentSchema>;
@@ -23,6 +24,13 @@ export interface CreateCustomerInput {
   name?: string | null;
   /** Opcional: cliente sem telefone existe e é criado manualmente. */
   phone?: string | null;
+}
+
+export interface CustomerListQuery {
+  limit?: number;
+  cursor?: string | null;
+  /** Trecho do nome ou do telefone. */
+  q?: string;
 }
 
 export interface UpdateCustomerInput {
@@ -56,12 +64,28 @@ export interface CreateCustomerMemoryInput {
   aiAllowed?: boolean;
 }
 
+/** Mutação que muda o que a lista de Clientes mostra avisa quem a mantém. */
+function changed<T>(value: T): T {
+  notifyCustomersChanged();
+  return value;
+}
+
 export class BffCustomerService {
   constructor(private readonly http: BffHttpClient) {}
 
-  list(signal?: AbortSignal) {
+  /**
+   * Sem `limit` nem `cursor`, a lista inteira (seletores de cliente). Com
+   * eles, uma página: `nextCursor` continua, `total` conta o filtro inteiro e
+   * `q` busca no negócio todo, não só no que já foi carregado.
+   */
+  list(query: CustomerListQuery = {}, signal?: AbortSignal) {
+    const params = new URLSearchParams();
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
+    if (query.cursor) params.set("cursor", query.cursor);
+    if (query.q?.trim()) params.set("q", query.q.trim());
+    const search = params.toString();
     return this.http.request({
-      path: "/v1/customers",
+      path: search ? `/v1/customers?${search}` : "/v1/customers",
       schema: routeSchema<CustomerList>("GET", "/v1/customers"),
       signal,
     });
@@ -90,23 +114,27 @@ export class BffCustomerService {
   }
 
   create(input: CreateCustomerInput, signal?: AbortSignal) {
-    return this.http.request({
-      body: input,
-      method: "POST",
-      path: "/v1/customers",
-      schema: routeSchema<Customer>("POST", "/v1/customers"),
-      signal,
-    });
+    return this.http
+      .request({
+        body: input,
+        method: "POST",
+        path: "/v1/customers",
+        schema: routeSchema<Customer>("POST", "/v1/customers"),
+        signal,
+      })
+      .then(changed);
   }
 
   update(id: string, input: UpdateCustomerInput, signal?: AbortSignal) {
-    return this.http.request({
-      body: input,
-      method: "PATCH",
-      path: `/v1/customers/${encodeURIComponent(id)}`,
-      schema: routeSchema<Customer>("PATCH", "/v1/customers/:id"),
-      signal,
-    });
+    return this.http
+      .request({
+        body: input,
+        method: "PATCH",
+        path: `/v1/customers/${encodeURIComponent(id)}`,
+        schema: routeSchema<Customer>("PATCH", "/v1/customers/:id"),
+        signal,
+      })
+      .then(changed);
   }
 
   setPrimaryGuardian(
@@ -114,16 +142,18 @@ export class BffCustomerService {
     input: SetPrimaryGuardianInput,
     signal?: AbortSignal,
   ) {
-    return this.http.request({
-      body: input,
-      method: "PUT",
-      path: `/v1/customers/${encodeURIComponent(id)}/primary-guardian`,
-      schema: routeSchema<CustomerPrimaryGuardian>(
-        "PUT",
-        "/v1/customers/:id/primary-guardian",
-      ),
-      signal,
-    });
+    return this.http
+      .request({
+        body: input,
+        method: "PUT",
+        path: `/v1/customers/${encodeURIComponent(id)}/primary-guardian`,
+        schema: routeSchema<CustomerPrimaryGuardian>(
+          "PUT",
+          "/v1/customers/:id/primary-guardian",
+        ),
+        signal,
+      })
+      .then(changed);
   }
 
   confirmPrimaryGuardian(
@@ -131,29 +161,33 @@ export class BffCustomerService {
     input: { confirmedBy?: "PROFESSIONAL" | "CUSTOMER" } = {},
     signal?: AbortSignal,
   ) {
-    return this.http.request({
-      body: input,
-      method: "POST",
-      path: `/v1/customers/${encodeURIComponent(id)}/primary-guardian/confirm`,
-      schema: routeSchema<CustomerPrimaryGuardian>(
-        "POST",
-        "/v1/customers/:id/primary-guardian/confirm",
-      ),
-      signal,
-    });
+    return this.http
+      .request({
+        body: input,
+        method: "POST",
+        path: `/v1/customers/${encodeURIComponent(id)}/primary-guardian/confirm`,
+        schema: routeSchema<CustomerPrimaryGuardian>(
+          "POST",
+          "/v1/customers/:id/primary-guardian/confirm",
+        ),
+        signal,
+      })
+      .then(changed);
   }
 
   clearPrimaryGuardian(id: string, signal?: AbortSignal) {
-    return this.http.request({
-      method: "DELETE",
-      path: `/v1/customers/${encodeURIComponent(id)}/primary-guardian`,
-      // A remoção é idempotente: `deleted: false` quando não havia relação.
-      schema: routeSchema<DeletedIdempotent | CustomerPrimaryGuardian>(
-        "DELETE",
-        "/v1/customers/:id/primary-guardian",
-      ),
-      signal,
-    });
+    return this.http
+      .request({
+        method: "DELETE",
+        path: `/v1/customers/${encodeURIComponent(id)}/primary-guardian`,
+        // A remoção é idempotente: `deleted: false` quando não havia relação.
+        schema: routeSchema<DeletedIdempotent | CustomerPrimaryGuardian>(
+          "DELETE",
+          "/v1/customers/:id/primary-guardian",
+        ),
+        signal,
+      })
+      .then(changed);
   }
 
   createNote(id: string, input: CreateCustomerNoteInput, signal?: AbortSignal) {

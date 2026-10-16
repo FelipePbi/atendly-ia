@@ -296,7 +296,14 @@ const customerPatchSchema = z
   });
 const customerQuerySchema = z.object({
   phone: z.string().trim().min(6).max(32).optional(),
+  // Busca livre por nome ou telefone; vazia é o mesmo que não buscar.
+  q: z.string().trim().max(100).optional(),
+  // `limit` ou `cursor` liga a paginação; sem os dois, a lista sai inteira,
+  // como sempre saiu, para quem ainda depende dela inteira.
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  cursor: z.string().trim().min(1).max(1_024).optional(),
 });
+const CUSTOMER_PAGE_DEFAULT_LIMIT = 50;
 const customerDependentsQuerySchema = z.object({
   phone: z.string().trim().min(6).max(32),
 });
@@ -645,12 +652,29 @@ export async function registerManagementRoutes(
     const context = currentInternalContext(request);
     const settings = await requireCalendar(prisma, context.tenantId);
     const query = parse(customerQuerySchema, request.query ?? {});
-    const customers = await new AvenlyCustomerService(
-      prisma,
-      context.tenantId,
-    ).list({ phone: query.phone }, { timezone: settings.timezone });
+    const customers = new AvenlyCustomerService(prisma, context.tenantId);
+    const filter = { phone: query.phone, search: query.q };
+    const options = { timezone: settings.timezone };
+    const page =
+      query.limit !== undefined || query.cursor !== undefined
+        ? await customers.listPage(
+            filter,
+            {
+              limit: query.limit ?? CUSTOMER_PAGE_DEFAULT_LIMIT,
+              cursor: query.cursor,
+            },
+            options,
+          )
+        : await customers.list(filter, options).then((items) => ({
+            items,
+            total: items.length,
+            nextCursor: null,
+          }));
     return data(request, {
-      items: customers.map(customerDto),
+      items: page.items.map(customerDto),
+      // Total do filtro inteiro, não da página; `nextCursor` nulo é o fim.
+      total: page.total,
+      nextCursor: page.nextCursor,
       source: settings.source,
       managedExternally: false,
       // Busca por telefone devolve **candidatos**: zero, um ou vários. A

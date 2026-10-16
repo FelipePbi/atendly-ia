@@ -41,7 +41,7 @@ export function PrimaryGuardianPanel({
     if (!picking) return;
     const controller = new AbortController();
     getProductServices()
-      .customers.list(controller.signal)
+      .customers.list({}, controller.signal)
       .then((result) => setCandidates(result.items))
       .catch((caught: unknown) => {
         if (!controller.signal.aborted)

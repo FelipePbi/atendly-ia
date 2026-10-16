@@ -441,15 +441,23 @@ html.vt-appointment-swap::view-transition-new(agenda-content) {
 
 /* O aviso flutuante do topo (WhatsApp desconectado etc.) fica por cima da
    transição, parado: sem nome próprio, ele ia na foto do root, e a área da
-   tela, que tem nome, era desenhada por cima dele. */
-.shell-status-layer {
-  view-transition-name: shell-status;
+   tela, que tem nome, era desenhada por cima dele. O nome vai em cada aviso,
+   não na camada: ela tem altura zero e a foto dela saía vazia (vídeo de
+   2026-10-16, o aviso sumia a cada troca de agendamento). */
+.shell-status-layer > .shell-status-banner:nth-child(1) {
+  view-transition-name: shell-status-1;
 }
-::view-transition-group(shell-status),
-::view-transition-new(shell-status) {
+.shell-status-layer > .shell-status-banner:nth-child(2) {
+  view-transition-name: shell-status-2;
+}
+::view-transition-group(shell-status-1),
+::view-transition-group(shell-status-2),
+::view-transition-new(shell-status-1),
+::view-transition-new(shell-status-2) {
   animation: none;
 }
-::view-transition-old(shell-status) {
+::view-transition-old(shell-status-1),
+::view-transition-old(shell-status-2) {
   display: none;
 }
 

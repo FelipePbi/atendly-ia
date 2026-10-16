@@ -140,9 +140,23 @@ describe("com movimento reduzido, trocar de item não pisca", () => {
         "html.vt-appointment-swap::view-transition-new(agenda-content)",
       ),
     ).toMatch(/animation:\s*none/);
-    expect(ruleFor(motionCss, ".shell-status-layer {")).toMatch(
-      /view-transition-name:\s*shell-status/,
+    // O nome fica em cada aviso, que tem tamanho: na camada de altura zero a
+    // foto saía vazia e o aviso sumia durante a troca.
+    expect(motionCss).not.toMatch(
+      /\.shell-status-layer \{[^}]*view-transition-name/,
     );
+    expect(
+      ruleFor(
+        motionCss,
+        ".shell-status-layer > .shell-status-banner:nth-child(1) {",
+      ),
+    ).toMatch(/view-transition-name:\s*shell-status-1/);
+    expect(
+      ruleFor(
+        motionCss,
+        ".shell-status-layer > .shell-status-banner:nth-child(2) {",
+      ),
+    ).toMatch(/view-transition-name:\s*shell-status-2/);
     // Fora de navegação, a foto antiga da página não fica sob a nova.
     expect(motionCss).toMatch(
       /html:not\(\.vt-nav-fade\):not\(\.vt-nav-forward\):not\(\s*\.vt-nav-back\s*\)::view-transition-old\(page-content\) \{\s*display: none;/,

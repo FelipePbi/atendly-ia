@@ -61,6 +61,39 @@
 html {
   color-scheme: light;
 }
+
+/*
+ * Barra de rolagem do sistema: fina, sem setas, trilho transparente e polegar
+ * no verde da plataforma. Chromium/WebKit usam o pseudo-elemento; o Firefox, as
+ * propriedades padrão (no Chromium elas anulariam o pseudo-elemento).
+ */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-button {
+  display: none;
+}
+::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklch, var(--accent), transparent 35%);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--accent);
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--accent), transparent 35%)
+      transparent;
+  }
+}
 body {
   margin: 0;
   background: var(--bg);

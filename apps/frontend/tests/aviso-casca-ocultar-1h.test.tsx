@@ -248,7 +248,12 @@ describe("aviso de WhatsApp desconectado: ocultar por 1h", () => {
 });
 
 describe("estilo do aviso e do cartão da sidebar", () => {
-  const css = readFileSync("src/shared/styles/avenly.css", "utf8");
+  // Sem depender da quebra de linha: com `core.autocrlf` o Git grava o CSS
+  // com CRLF no Windows, e os seletores de duas linhas abaixo usam `\n`.
+  const css = readFileSync("src/shared/styles/avenly.css", "utf8").replace(
+    /\r\n/g,
+    "\n",
+  );
 
   test("no celular o aviso é compacto: sem a frase longa e com as ações em texto", () => {
     const mobile = css.slice(css.indexOf(".shell-status-hide {"));
@@ -303,7 +308,10 @@ describe("estilo do aviso e do cartão da sidebar", () => {
     ];
     const missing: string[] = [];
     for (const file of files) {
-      const source = readFileSync(`src/shared/styles/${file}`, "utf8");
+      const source = readFileSync(`src/shared/styles/${file}`, "utf8").replace(
+        /\r\n/g,
+        "\n",
+      );
       for (const rule of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
         const selector = rule[1].replace(/\/\*[\s\S]*?\*\//g, "").trim();
         for (const decl of rule[2].matchAll(

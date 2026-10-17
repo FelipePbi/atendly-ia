@@ -8,6 +8,8 @@ import {
   minutesFromTime,
 } from "../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../shared/errors/app-error.js";
+import { actorFromSource } from "../activity/activity-log.js";
+import { customerActivity } from "../activity/entity-activity.js";
 import { AvenlyAvailability } from "../availability/avenly-availability.js";
 import type {
   CalendarAppointment,
@@ -549,6 +551,10 @@ export class AvenlyAppointmentSeriesService {
       name: input.customerName,
       phone: input.customerPhone,
     });
+    const actor = actorFromSource(input.source, input.createdBy);
+    if (actor) {
+      await customerActivity.created(transaction, this.tenantId, actor, created);
+    }
     return created.id;
   }
 }

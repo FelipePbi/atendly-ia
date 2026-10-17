@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
 import { env } from "../../config/env.js";
-import type { PrismaClient } from "../../generated/prisma/client.js";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import type {
   ExternalEntityType,
   ImportCategory,
@@ -11,6 +11,7 @@ import type {
 import { getPrisma } from "../../infrastructure/database/prisma.js";
 import {
   currentInternalContext,
+  type InternalRequestContext,
   requireDeliveryCaller,
   requireHumanCaller,
   requireInternalAuth,
@@ -18,11 +19,26 @@ import {
 import {
   addDays,
   databaseTimeToMinutes,
+  instantToLocalDateTime,
   localDateTimeToInstant,
   timeFromMinutes,
   weekdayIndex,
 } from "../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../shared/errors/app-error.js";
+import {
+  ACTIVITY_AREAS,
+  type ActivityChange,
+  actorFromContext,
+  diffFields,
+  listActivity,
+  parseActivitySequence,
+  recordActivity,
+} from "../activity/activity-log.js";
+import {
+  customerActivity,
+  recordCustomerFact,
+  serviceActivity,
+} from "../activity/entity-activity.js";
 import {
   AI_CREATED_APPOINTMENT_EVENTS_MAX_LIMIT,
   listAiCreatedAppointmentEvents,
@@ -334,6 +350,41 @@ const authorizationPatchSchema = z.object({
   aiAuthorized: z.boolean(),
   actor: z.string().trim().max(200).nullable().optional(),
 });
+/** Nome do responsável para o antes/depois, ou o telefone sem nome. */
+function guardianLabel(
+  customer: { name: string | null; phone: string | null } | null | undefined,
+): string | null {
+  return customer ? (customer.name ?? customer.phone ?? null) : null;
+}
+
+/** Lista separada por vírgula (`area=AGENDA,CUSTOMERS`). */
+const commaList = <T extends z.ZodType<string, string>>(item: T) =>
+  z
+    .string()
+    .trim()
+    .max(4_000)
+    .transform((value) =>
+      value
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean),
+    )
+    .pipe(z.array(item).max(80))
+    .optional();
+
+const activityQuerySchema = z.object({
+  from: z.iso.datetime({ offset: true }).optional(),
+  to: z.iso.datetime({ offset: true }).optional(),
+  actor: z.enum(["AI", "USER"]).optional(),
+  area: commaList(z.enum(ACTIVITY_AREAS)),
+  action: commaList(z.string().regex(/^[a-z_]+\.[a-z_]+$/)),
+  q: z.string().trim().max(100).optional(),
+  beforeAt: z.iso.datetime({ offset: true }).optional(),
+  beforeSequence: z.string().regex(/^\d{1,19}$/).optional(),
+  inclusive: z.enum(["true", "false"]).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
 const customerChildParamsSchema = z.object({
   id: z.string().trim().min(1).max(128),
   childId: z.string().trim().min(1).max(128),
@@ -594,10 +645,21 @@ export async function registerManagementRoutes(
         409,
       );
     }
-    await prisma.calendarSettings.upsert({
-      where: { tenantId: context.tenantId },
-      create: { tenantId: context.tenantId, ...body },
-      update: { timezone: body.timezone },
+    await prisma.$transaction(async (transaction) => {
+      await transaction.calendarSettings.upsert({
+        where: { tenantId: context.tenantId },
+        create: { tenantId: context.tenantId, ...body },
+        update: { timezone: body.timezone },
+      });
+      if (existing) {
+        await recordSettingsChange(
+          transaction,
+          context,
+          "settings.timezone_updated",
+          { timezone: existing.timezone },
+          { timezone: body.timezone },
+        );
+      }
     });
     return data(request, await calendarOverview(prisma, context));
   });
@@ -627,10 +689,20 @@ export async function registerManagementRoutes(
     async (request, reply) => {
       const context = currentInternalContext(request);
       await requireCalendar(prisma, context.tenantId);
-      const service = await new AvenlyServiceService(
-        prisma,
-        context.tenantId,
-      ).create(parse(serviceBodySchema, request.body));
+      const body = parse(serviceBodySchema, request.body);
+      const service = await prisma.$transaction(async (transaction) => {
+        const created = await new AvenlyServiceService(
+          transaction,
+          context.tenantId,
+        ).create(body);
+        await serviceActivity.created(
+          transaction,
+          context.tenantId,
+          actorFromContext(context),
+          created,
+        );
+        return created;
+      });
       return reply.code(201).send(data(request, serviceDto(service)));
     },
   );
@@ -640,11 +712,25 @@ export async function registerManagementRoutes(
     await requireCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
     const body = parse(servicePatchSchema, request.body);
-    const serviceManager = new AvenlyServiceService(prisma, context.tenantId);
-    let service = await serviceManager.update(id, body);
-    if (body.active !== undefined && body.active !== service.active) {
-      service = await serviceManager.setActive(id, body.active);
-    }
+    const service = await prisma.$transaction(async (transaction) => {
+      const serviceManager = new AvenlyServiceService(
+        transaction,
+        context.tenantId,
+      );
+      const before = await serviceManager.requireService(id);
+      let after = await serviceManager.update(id, body);
+      if (body.active !== undefined && body.active !== after.active) {
+        after = await serviceManager.setActive(id, body.active);
+      }
+      await serviceActivity.updated(
+        transaction,
+        context.tenantId,
+        actorFromContext(context),
+        before,
+        after,
+      );
+      return after;
+    });
     return data(request, serviceDto(service));
   });
 
@@ -751,10 +837,20 @@ export async function registerManagementRoutes(
   app.post("/internal/customers", internalOnly, async (request, reply) => {
     const context = currentInternalContext(request);
     await requireCalendar(prisma, context.tenantId);
-    const customer = await new AvenlyCustomerService(
-      prisma,
-      context.tenantId,
-    ).create(parse(customerBodySchema, request.body));
+    const body = parse(customerBodySchema, request.body);
+    const customer = await prisma.$transaction(async (transaction) => {
+      const created = await new AvenlyCustomerService(
+        transaction,
+        context.tenantId,
+      ).create(body);
+      await customerActivity.created(
+        transaction,
+        context.tenantId,
+        actorFromContext(context),
+        created,
+      );
+      return created;
+    });
     return reply.code(201).send(data(request, customerDto(customer)));
   });
 
@@ -764,10 +860,19 @@ export async function registerManagementRoutes(
     await requireCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
     const body = parse(customerPatchSchema, request.body);
-    const customer = await new AvenlyCustomerService(
-      prisma,
-      context.tenantId,
-    ).update(id, body);
+    const customer = await prisma.$transaction(async (transaction) => {
+      const customers = new AvenlyCustomerService(transaction, context.tenantId);
+      const before = await customers.get(id);
+      const after = await customers.update(id, body);
+      await customerActivity.updated(
+        transaction,
+        context.tenantId,
+        actorFromContext(context),
+        before,
+        after,
+      );
+      return after;
+    });
     return data(request, customerDto(customer));
   });
 
@@ -779,10 +884,30 @@ export async function registerManagementRoutes(
       await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const body = parse(primaryGuardianBodySchema, request.body);
-      const relation = await new AvenlyCustomerService(
-        prisma,
-        context.tenantId,
-      ).setPrimaryGuardian(id, body);
+      const relation = await prisma.$transaction(async (transaction) => {
+        const customers = new AvenlyCustomerService(
+          transaction,
+          context.tenantId,
+        );
+        const previous = await customers.primaryGuardian(id);
+        const next = await customers.setPrimaryGuardian(id, body);
+        await recordCustomerFact(
+          transaction,
+          context.tenantId,
+          actorFromContext(context),
+          id,
+          "customer.guardian_set",
+          [
+            {
+              field: "primaryGuardian",
+              before: guardianLabel(previous?.relatedCustomer),
+              after: guardianLabel(next.relatedCustomer),
+            },
+          ],
+          { status: next.status },
+        );
+        return next;
+      });
       return data(request, primaryGuardianDto(relation));
     },
   );
@@ -795,12 +920,24 @@ export async function registerManagementRoutes(
       await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const body = parse(primaryGuardianConfirmSchema, request.body);
-      const relation = await new AvenlyCustomerService(
-        prisma,
-        context.tenantId,
-      ).confirmPrimaryGuardian(id, {
-        confirmedBy: body.confirmedBy,
-        actor: body.actor,
+      const relation = await prisma.$transaction(async (transaction) => {
+        const confirmed = await new AvenlyCustomerService(
+          transaction,
+          context.tenantId,
+        ).confirmPrimaryGuardian(id, {
+          confirmedBy: body.confirmedBy,
+          actor: body.actor,
+        });
+        await recordCustomerFact(
+          transaction,
+          context.tenantId,
+          actorFromContext(context),
+          id,
+          "customer.guardian_confirmed",
+          [],
+          { guardianName: guardianLabel(confirmed.relatedCustomer) },
+        );
+        return confirmed;
       });
       return data(request, primaryGuardianDto(relation));
     },
@@ -813,13 +950,32 @@ export async function registerManagementRoutes(
       const context = currentInternalContext(request);
       await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
-      return data(
-        request,
-        await new AvenlyCustomerService(
-          prisma,
+      const result = await prisma.$transaction(async (transaction) => {
+        const customers = new AvenlyCustomerService(
+          transaction,
           context.tenantId,
-        ).clearPrimaryGuardian(id),
-      );
+        );
+        const previous = await customers.primaryGuardian(id);
+        const cleared = await customers.clearPrimaryGuardian(id);
+        if (cleared.deleted) {
+          await recordCustomerFact(
+            transaction,
+            context.tenantId,
+            actorFromContext(context),
+            id,
+            "customer.guardian_cleared",
+            [
+              {
+                field: "primaryGuardian",
+                before: guardianLabel(previous?.relatedCustomer),
+                after: null,
+              },
+            ],
+          );
+        }
+        return cleared;
+      });
+      return data(request, result);
     },
   );
 
@@ -842,10 +998,21 @@ export async function registerManagementRoutes(
       await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const body = parse(customerNoteBodySchema, request.body);
-      const note = await new AvenlyCustomerService(
-        prisma,
-        context.tenantId,
-      ).addNote(id, body);
+      const note = await prisma.$transaction(async (transaction) => {
+        const created = await new AvenlyCustomerService(
+          transaction,
+          context.tenantId,
+        ).addNote(id, body);
+        await recordCustomerFact(
+          transaction,
+          context.tenantId,
+          actorFromContext(context),
+          id,
+          "customer.note_added",
+          [{ field: "note", before: null, after: created.body }],
+        );
+        return created;
+      });
       return reply.code(201).send(data(request, customerNoteDto(note)));
     },
   );
@@ -858,10 +1025,37 @@ export async function registerManagementRoutes(
       await requireCalendar(prisma, context.tenantId);
       const params = parse(customerChildParamsSchema, request.params);
       const body = parse(authorizationPatchSchema, request.body);
-      const note = await new AvenlyCustomerService(
-        prisma,
-        context.tenantId,
-      ).setNoteAuthorization(params.id, params.childId, body);
+      const note = await prisma.$transaction(async (transaction) => {
+        const before = await transaction.customerNote.findFirst({
+          where: {
+            tenantId: context.tenantId,
+            customerId: params.id,
+            id: params.childId,
+          },
+        });
+        const after = await new AvenlyCustomerService(
+          transaction,
+          context.tenantId,
+        ).setNoteAuthorization(params.id, params.childId, body);
+        if (before?.aiAuthorized !== after.aiAuthorized) {
+          await recordCustomerFact(
+            transaction,
+            context.tenantId,
+            actorFromContext(context),
+            params.id,
+            "customer.note_ai_access",
+            [
+              {
+                field: "aiAuthorized",
+                before: before?.aiAuthorized ?? null,
+                after: after.aiAuthorized,
+              },
+            ],
+            { note: after.body },
+          );
+        }
+        return after;
+      });
       return data(request, customerNoteDto(note));
     },
   );
@@ -873,13 +1067,31 @@ export async function registerManagementRoutes(
       const context = currentInternalContext(request);
       await requireCalendar(prisma, context.tenantId);
       const params = parse(customerChildParamsSchema, request.params);
-      return data(
-        request,
-        await new AvenlyCustomerService(prisma, context.tenantId).deleteNote(
-          params.id,
-          params.childId,
-        ),
-      );
+      const result = await prisma.$transaction(async (transaction) => {
+        const before = await transaction.customerNote.findFirst({
+          where: {
+            tenantId: context.tenantId,
+            customerId: params.id,
+            id: params.childId,
+          },
+        });
+        const removed = await new AvenlyCustomerService(
+          transaction,
+          context.tenantId,
+        ).deleteNote(params.id, params.childId);
+        if (before) {
+          await recordCustomerFact(
+            transaction,
+            context.tenantId,
+            actorFromContext(context),
+            params.id,
+            "customer.note_deleted",
+            [{ field: "note", before: before.body, after: null }],
+          );
+        }
+        return removed;
+      });
+      return data(request, result);
     },
   );
 
@@ -902,10 +1114,21 @@ export async function registerManagementRoutes(
       await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const body = parse(customerTagBodySchema, request.body);
-      const tag = await new AvenlyCustomerService(
-        prisma,
-        context.tenantId,
-      ).addTag(id, body);
+      const tag = await prisma.$transaction(async (transaction) => {
+        const created = await new AvenlyCustomerService(
+          transaction,
+          context.tenantId,
+        ).addTag(id, body);
+        await recordCustomerFact(
+          transaction,
+          context.tenantId,
+          actorFromContext(context),
+          id,
+          "customer.tag_added",
+          [{ field: "tag", before: null, after: created.label }],
+        );
+        return created;
+      });
       return reply.code(201).send(data(request, customerTagDto(tag)));
     },
   );
@@ -918,10 +1141,37 @@ export async function registerManagementRoutes(
       await requireCalendar(prisma, context.tenantId);
       const params = parse(customerChildParamsSchema, request.params);
       const body = parse(authorizationPatchSchema, request.body);
-      const tag = await new AvenlyCustomerService(
-        prisma,
-        context.tenantId,
-      ).setTagAuthorization(params.id, params.childId, body);
+      const tag = await prisma.$transaction(async (transaction) => {
+        const before = await transaction.customerTag.findFirst({
+          where: {
+            tenantId: context.tenantId,
+            customerId: params.id,
+            id: params.childId,
+          },
+        });
+        const after = await new AvenlyCustomerService(
+          transaction,
+          context.tenantId,
+        ).setTagAuthorization(params.id, params.childId, body);
+        if (before?.aiAuthorized !== after.aiAuthorized) {
+          await recordCustomerFact(
+            transaction,
+            context.tenantId,
+            actorFromContext(context),
+            params.id,
+            "customer.tag_ai_access",
+            [
+              {
+                field: "aiAuthorized",
+                before: before?.aiAuthorized ?? null,
+                after: after.aiAuthorized,
+              },
+            ],
+            { tag: after.label },
+          );
+        }
+        return after;
+      });
       return data(request, customerTagDto(tag));
     },
   );
@@ -933,13 +1183,31 @@ export async function registerManagementRoutes(
       const context = currentInternalContext(request);
       await requireCalendar(prisma, context.tenantId);
       const params = parse(customerChildParamsSchema, request.params);
-      return data(
-        request,
-        await new AvenlyCustomerService(prisma, context.tenantId).deleteTag(
-          params.id,
-          params.childId,
-        ),
-      );
+      const result = await prisma.$transaction(async (transaction) => {
+        const before = await transaction.customerTag.findFirst({
+          where: {
+            tenantId: context.tenantId,
+            customerId: params.id,
+            id: params.childId,
+          },
+        });
+        const removed = await new AvenlyCustomerService(
+          transaction,
+          context.tenantId,
+        ).deleteTag(params.id, params.childId);
+        if (before) {
+          await recordCustomerFact(
+            transaction,
+            context.tenantId,
+            actorFromContext(context),
+            params.id,
+            "customer.tag_deleted",
+            [{ field: "tag", before: before.label, after: null }],
+          );
+        }
+        return removed;
+      });
+      return data(request, result);
     },
   );
 
@@ -980,7 +1248,28 @@ export async function registerManagementRoutes(
         body.customerChangeMinNoticeMinutes ??
         calendar.customerChangeMinNoticeMinutes;
       assertOfferRules({ minLeadMinutes, maxLeadDays, granularityMinutes });
+      const previousRules = await prisma.availabilityRule.findMany({
+        where: { tenantId: context.tenantId },
+      });
       await prisma.$transaction(async (transaction) => {
+        await recordSettingsChange(
+          transaction,
+          context,
+          "settings.availability_updated",
+          {
+            ...availabilityActivityFields(previousRules.map(availabilityRuleDto)),
+            ...offerRulesDto(calendar),
+            timezone: calendar.timezone,
+          },
+          {
+            ...availabilityActivityFields(body.rules),
+            minLeadMinutes,
+            maxLeadDays,
+            granularityMinutes,
+            customerChangeMinNoticeMinutes,
+            timezone: body.timezone,
+          },
+        );
         await transaction.calendarSettings.update({
           where: { tenantId: context.tenantId },
           data: {
@@ -1039,7 +1328,16 @@ export async function registerManagementRoutes(
     await requireCalendar(prisma, context.tenantId);
     const body = parse(reminderSettingsBodySchema, request.body);
     const reminders = new ReminderService(prisma, context.tenantId);
-    const config = await reminders.set(body);
+    const previous = await reminders.get();
+    const config = await reminders.set(body, (transaction, next) =>
+      recordSettingsChange(
+        transaction,
+        context,
+        "settings.reminders_updated",
+        reminderActivityFields(previous),
+        reminderActivityFields(next),
+      ),
+    );
     return data(request, reminderConfigDto(config));
   });
 
@@ -1177,6 +1475,13 @@ export async function registerManagementRoutes(
         timeZone: calendar.timezone,
         ...body,
       });
+      await recordAgendaFact(
+        prisma,
+        context,
+        "agenda.extra_availability_added",
+        exception.id,
+        exceptionActivityDetails(exception),
+      );
       return reply.code(201).send(data(request, exceptionDto(exception)));
     },
   );
@@ -1201,6 +1506,13 @@ export async function registerManagementRoutes(
             ? { decidedBy: body.decidedBy, decidedReason: body.decidedReason }
             : undefined,
       });
+      await recordAgendaFact(
+        prisma,
+        context,
+        "agenda.unavailability_added",
+        exception.id,
+        exceptionActivityDetails(exception),
+      );
       return reply.code(201).send(data(request, exceptionDto(exception)));
     },
   );
@@ -1213,11 +1525,25 @@ export async function registerManagementRoutes(
       requireHumanCaller(context);
       const calendar = await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
+      const existing = await prisma.availabilityException.findFirst({
+        where: { tenantId: context.tenantId, id },
+      });
       await removeAvailabilityException(prisma, {
         tenantId: context.tenantId,
         timeZone: calendar.timezone,
         id,
       });
+      if (existing) {
+        await recordAgendaFact(
+          prisma,
+          context,
+          existing.available
+            ? "agenda.extra_availability_removed"
+            : "agenda.unavailability_removed",
+          id,
+          exceptionActivityDetails(existing),
+        );
+      }
       return data(request, { deleted: true as const });
     },
   );
@@ -1241,6 +1567,13 @@ export async function registerManagementRoutes(
         skipConflicts: body.skipConflicts,
         forceOverlapReason: body.forceOverlapReason,
       });
+      await recordAgendaFact(
+        prisma,
+        context,
+        "agenda.block_series_created",
+        series.id,
+        blockSeriesDto(series),
+      );
       return reply.code(201).send(data(request, blockSeriesDto(series)));
     },
   );
@@ -1264,6 +1597,13 @@ export async function registerManagementRoutes(
         skipConflicts: body.skipConflicts,
         forceOverlapReason: body.forceOverlapReason,
       });
+      await recordAgendaFact(
+        prisma,
+        context,
+        "agenda.block_series_updated",
+        series.id,
+        { ...blockSeriesDto(series), fromDate: body.fromDate },
+      );
       return data(request, blockSeriesDto(series));
     },
   );
@@ -1276,11 +1616,23 @@ export async function registerManagementRoutes(
       requireHumanCaller(context);
       const calendar = await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
+      const existing = await prisma.blockSeries.findFirst({
+        where: { tenantId: context.tenantId, id },
+      });
       await removeBlockSeriesFuture(prisma, {
         tenantId: context.tenantId,
         timeZone: calendar.timezone,
         seriesId: id,
       });
+      if (existing) {
+        await recordAgendaFact(
+          prisma,
+          context,
+          "agenda.block_series_removed",
+          id,
+          blockSeriesDto(existing),
+        );
+      }
       return data(request, { deleted: true as const });
     },
   );
@@ -1293,11 +1645,23 @@ export async function registerManagementRoutes(
       requireHumanCaller(context);
       const calendar = await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
+      const existing = await prisma.timeBlock.findFirst({
+        where: { tenantId: context.tenantId, id },
+      });
       await removeBlockOccurrence(prisma, {
         tenantId: context.tenantId,
         timeZone: calendar.timezone,
         id,
       });
+      if (existing) {
+        await recordAgendaFact(
+          prisma,
+          context,
+          "agenda.block_removed",
+          id,
+          timeBlockActivityDetails(existing, calendar.timezone),
+        );
+      }
       return data(request, { deleted: true as const });
     },
   );
@@ -1311,6 +1675,9 @@ export async function registerManagementRoutes(
       const calendar = await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const body = parse(moveOccurrenceBodySchema, request.body);
+      const existing = await prisma.timeBlock.findFirst({
+        where: { tenantId: context.tenantId, id },
+      });
       const block = await moveBlockOccurrence(prisma, {
         tenantId: context.tenantId,
         timeZone: calendar.timezone,
@@ -1318,6 +1685,24 @@ export async function registerManagementRoutes(
         startAt: new Date(body.startAt),
         endAt: new Date(body.endAt),
       });
+      const moved = timeBlockActivityDetails(block, calendar.timezone);
+      await recordAgendaFact(
+        prisma,
+        context,
+        "agenda.block_moved",
+        id,
+        moved,
+        existing
+          ? [
+              {
+                field: "startsAt",
+                before: timeBlockActivityDetails(existing, calendar.timezone)
+                  .startsAt,
+                after: moved.startsAt,
+              },
+            ]
+          : [],
+      );
       return data(request, timeBlockDto(block));
     },
   );
@@ -1354,6 +1739,13 @@ export async function registerManagementRoutes(
       kind: body.kind,
       title: body.title ?? null,
     });
+    await recordAgendaFact(
+      prisma,
+      context,
+      "agenda.block_created",
+      block.id,
+      timeBlockActivityDetails(block, calendar.timezone),
+    );
     return reply.code(201).send(data(request, timeBlockDto(block)));
   });
 
@@ -1362,11 +1754,23 @@ export async function registerManagementRoutes(
     requireHumanCaller(context);
     const calendar = await requireCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
+    const existing = await prisma.timeBlock.findFirst({
+      where: { tenantId: context.tenantId, id },
+    });
     await removeTimeBlock(prisma, {
       tenantId: context.tenantId,
       timeZone: calendar.timezone,
       id,
     });
+    if (existing) {
+      await recordAgendaFact(
+        prisma,
+        context,
+        "agenda.block_removed",
+        id,
+        timeBlockActivityDetails(existing, calendar.timezone),
+      );
+    }
     return data(request, { deleted: true as const });
   });
 
@@ -1466,6 +1870,8 @@ export async function registerManagementRoutes(
           lastErrorCode: null,
         },
       });
+      // Nem e-mail nem senha da origem entram no registro.
+      await recordImportFact(prisma, context, "import.source_connected", null);
       return data(request, await calendarOverview(prisma, context));
     },
   );
@@ -1515,9 +1921,17 @@ export async function registerManagementRoutes(
       // e por isso desconectar deixou de exigir migracao previa. O que sai e
       // a credencial da origem; a agenda do negocio segue igual.
       await requireCalendar(prisma, context.tenantId);
-      await prisma.integrationConnection.deleteMany({
+      const removed = await prisma.integrationConnection.deleteMany({
         where: { tenantId: context.tenantId, provider: "MINHA_AGENDA" },
       });
+      if (removed.count > 0) {
+        await recordImportFact(
+          prisma,
+          context,
+          "import.source_disconnected",
+          null,
+        );
+      }
       return data(request, await calendarOverview(prisma, context));
     },
   );
@@ -1824,6 +2238,9 @@ export async function registerManagementRoutes(
             { tenantId: context.tenantId, sessionId, userId: context.userId },
             { previewVersion: body.previewVersion },
           );
+          // Dentro do bloco idempotente: a retentativa faz replay e não
+          // registra o início de novo.
+          await recordImportFact(prisma, context, "import.started", sessionId);
           importWork.dispatch(() =>
             execution.runExecution(
               start,
@@ -1897,9 +2314,58 @@ export async function registerManagementRoutes(
         { tenantId: context.tenantId, sessionId, userId: context.userId },
         { acceptPending: body.acceptPending, idempotencyKey: key },
       );
+      // Concluir de novo devolve a mesma conclusão: a atividade é uma só.
+      const alreadyRecorded = await prisma.activityLog.findFirst({
+        where: {
+          tenantId: context.tenantId,
+          action: "import.completed",
+          entityId: sessionId,
+        },
+        select: { id: true },
+      });
+      if (!alreadyRecorded) {
+        await recordImportFact(prisma, context, "import.completed", sessionId, {
+          source: result.sourceAccountLabel,
+          counts: result.counts,
+          categories: result.categories.map((category) => ({
+            category: category.category,
+            imported: category.imported,
+            skipped: category.skipped,
+            failed: category.failed,
+          })),
+        });
+      }
       return data(request, importCompletionDto(result));
     },
   );
+
+  // --- Registro de atividade (D-176) ---------------------------------------
+  // Só leitura, só do negócio do cabeçalho. O BFF intercala esta fonte com a
+  // dele e a da IA; o corte (`before*`) é decidido por ele.
+  app.get("/internal/activity", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    const query = parse(activityQuerySchema, request.query ?? {});
+    const page = await listActivity(prisma, context.tenantId, {
+      from: query.from ? new Date(query.from) : undefined,
+      to: query.to ? new Date(query.to) : undefined,
+      actor: query.actor,
+      areas: query.area,
+      actions: query.action,
+      q: query.q,
+      before: query.beforeAt
+        ? {
+            occurredAt: new Date(query.beforeAt),
+            sequence:
+              query.beforeSequence !== undefined
+                ? parseActivitySequence(query.beforeSequence)
+                : undefined,
+            inclusive: query.inclusive === "true",
+          }
+        : undefined,
+      limit: query.limit,
+    });
+    return data(request, page);
+  });
 
   app.get("/internal/dashboard", internalOnly, async (request) => {
     const context = currentInternalContext(request);
@@ -2212,6 +2678,168 @@ function customerTagDto(tag: {
     createdAt: tag.createdAt.toISOString(),
     updatedAt: tag.updatedAt.toISOString(),
   };
+}
+
+const WEEKDAY_FIELDS = [
+  "weekday.0",
+  "weekday.1",
+  "weekday.2",
+  "weekday.3",
+  "weekday.4",
+  "weekday.5",
+  "weekday.6",
+] as const;
+
+/**
+ * Grade semanal como texto por dia (`09:00–12:00, 13:00–18:00`), nulo no
+ * dia fechado: o antes/depois da atividade compara dia a dia.
+ */
+function availabilityActivityFields(
+  rules: Array<{
+    dayOfWeek: number;
+    startTime: string;
+    endTime: string;
+    active: boolean;
+  }>,
+): Record<string, string | null> {
+  const fields: Record<string, string | null> = {};
+  WEEKDAY_FIELDS.forEach((field, dayOfWeek) => {
+    const ranges = rules
+      .filter((rule) => rule.dayOfWeek === dayOfWeek && rule.active)
+      .sort((left, right) => left.startTime.localeCompare(right.startTime))
+      .map((rule) => `${rule.startTime}–${rule.endTime}`);
+    fields[field] = ranges.length > 0 ? ranges.join(", ") : null;
+  });
+  return fields;
+}
+
+function reminderActivityFields(config: {
+  confirmationEnabled: boolean;
+  pricePolicy: string;
+  rules: Array<{ slot: string; leadMinutes: number }>;
+}): Record<string, string | number | boolean | null> {
+  const lead = (slot: string) =>
+    config.rules.find((rule) => rule.slot === slot)?.leadMinutes ?? null;
+  return {
+    "reminder.FIRST": lead("FIRST"),
+    "reminder.SECOND": lead("SECOND"),
+    confirmationEnabled: config.confirmationEnabled,
+    pricePolicy: config.pricePolicy,
+  };
+}
+
+/**
+ * Bloqueio, compromisso e exceção da agenda (só a profissional). O serviço de
+ * cada um abre a própria transação, então a atividade é gravada logo depois
+ * do commit — a exceção à regra da mesma transação registrada no D-176.
+ */
+async function recordAgendaFact(
+  prisma: PrismaClient,
+  context: InternalRequestContext,
+  action: string,
+  entityId: string,
+  details: Record<string, unknown>,
+  changes: ActivityChange[] = [],
+): Promise<void> {
+  const label =
+    typeof details.title === "string" && details.title
+      ? details.title
+      : typeof details.reason === "string" && details.reason
+        ? details.reason
+        : null;
+  await recordActivity(prisma, context.tenantId, {
+    actor: actorFromContext(context),
+    area: "AGENDA",
+    action,
+    entityType: action.includes("series")
+      ? "block_series"
+      : action.includes("block")
+        ? "time_block"
+        : "availability_exception",
+    entityId,
+    entityLabel: label,
+    changes,
+    details,
+  });
+}
+
+function timeBlockActivityDetails(
+  block: {
+    startAt: Date;
+    endAt: Date;
+    kind: string;
+    title: string | null;
+    reason: string | null;
+  },
+  timeZone: string,
+): {
+  startsAt: string;
+  endsAt: string;
+  kind: string;
+  title: string | null;
+  reason: string | null;
+} {
+  const stamp = (instant: Date) => {
+    const local = instantToLocalDateTime(instant, timeZone);
+    return `${local.date}T${local.time}`;
+  };
+  return {
+    startsAt: stamp(block.startAt),
+    endsAt: stamp(block.endAt),
+    kind: block.kind,
+    title: block.title,
+    reason: block.reason,
+  };
+}
+
+function exceptionActivityDetails(
+  exception: Parameters<typeof exceptionDto>[0],
+): Record<string, unknown> {
+  const dto = exceptionDto(exception);
+  return {
+    date: dto.date,
+    startTime: dto.startTime,
+    endTime: dto.endTime,
+    reason: dto.reason,
+  };
+}
+
+/** Importação da Minha Agenda: um registro por passo, nunca por item importado. */
+async function recordImportFact(
+  prisma: PrismaClient,
+  context: InternalRequestContext,
+  action: string,
+  sessionId: string | null,
+  details?: Record<string, unknown>,
+): Promise<void> {
+  await recordActivity(prisma, context.tenantId, {
+    actor: actorFromContext(context),
+    area: "IMPORT",
+    action,
+    entityType: sessionId ? "import_session" : "integration",
+    entityId: sessionId,
+    entityLabel: "Minha Agenda",
+    details: details ?? null,
+  });
+}
+
+/** Mudança de configuração da agenda: só registra o que mudou de fato. */
+async function recordSettingsChange(
+  transaction: Prisma.TransactionClient,
+  context: InternalRequestContext,
+  action: string,
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+): Promise<void> {
+  const changes = diffFields(before, after, Object.keys(after));
+  if (changes.length === 0) return;
+  await recordActivity(transaction, context.tenantId, {
+    actor: actorFromContext(context),
+    area: "SETTINGS",
+    action,
+    entityType: "settings",
+    changes,
+  });
 }
 
 function availabilityRuleDto(rule: {

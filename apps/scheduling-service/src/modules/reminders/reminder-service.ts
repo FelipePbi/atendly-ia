@@ -105,10 +105,23 @@ export class ReminderService {
    * (delete + createMany). `rules` vazio e a escolha explicita de desligar,
    * nao ausencia: apos este metodo, `configured` e sempre `true`.
    */
-  async set(input: ReminderConfigInput): Promise<ReminderConfig> {
+  async set(
+    input: ReminderConfigInput,
+    /** Roda na mesma transação, com o estado novo — o registro de atividade (D-176). */
+    within?: (
+      transaction: Prisma.TransactionClient,
+      next: ReminderConfig,
+    ) => Promise<void>,
+  ): Promise<ReminderConfig> {
     const rules = normalizeRules(input.rules);
     const pricePolicy = normalizePricePolicy(input.pricePolicy);
     const confirmationEnabled = input.confirmationEnabled ?? false;
+    const next: ReminderConfig = {
+      configured: true,
+      confirmationEnabled,
+      pricePolicy,
+      rules,
+    };
 
     await this.database.$transaction(async (transaction) => {
       await transaction.reminderSettings.upsert({
@@ -130,9 +143,10 @@ export class ReminderService {
           },
         });
       }
+      await within?.(transaction, next);
     });
 
-    return { configured: true, confirmationEnabled, pricePolicy, rules };
+    return next;
   }
 }
 

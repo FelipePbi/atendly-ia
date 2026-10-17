@@ -1,5 +1,8 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import { AppError } from "../../shared/errors/app-error.js";
+import type { ActivityActor } from "../activity/activity-log.js";
+import { recordAppointmentDeletion } from "../activity/appointment-activity.js";
+import { customerActivity } from "../activity/entity-activity.js";
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -51,7 +54,10 @@ export class CalendarRemovalService {
    * `false` quando ja nao existe: e o que torna a segunda passada da limpeza
    * observavelmente inofensiva.
    */
-  async deleteAppointment(appointmentId: string): Promise<boolean> {
+  async deleteAppointment(
+    appointmentId: string,
+    actor?: ActivityActor,
+  ): Promise<boolean> {
     const existing = await this.database.appointment.findUnique({
       where: { tenantId_id: { tenantId: this.tenantId, id: appointmentId } },
       select: { id: true },
@@ -60,6 +66,16 @@ export class CalendarRemovalService {
 
     await this.inTransaction(async (database) => {
       const where = { tenantId: this.tenantId, appointmentId };
+      // O registro de atividade (D-176) não tem chave para o atendimento:
+      // a remoção fica nele, com o contexto lido antes de apagar.
+      if (actor) {
+        await recordAppointmentDeletion(
+          database,
+          this.tenantId,
+          appointmentId,
+          actor,
+        );
+      }
       await database.appointmentItem.deleteMany({ where });
       await database.appointmentEvent.deleteMany({ where });
       await database.appointment.delete({
@@ -97,10 +113,13 @@ export class CalendarRemovalService {
    * pessoa com historico de agenda seria remover dado que nao e desta
    * operacao, entao a recusa e explicita e nomeada.
    */
-  async deleteCustomer(customerId: string): Promise<boolean> {
+  async deleteCustomer(
+    customerId: string,
+    actor?: ActivityActor,
+  ): Promise<boolean> {
     const existing = await this.database.customer.findUnique({
       where: { tenantId_id: { tenantId: this.tenantId, id: customerId } },
-      select: { id: true },
+      select: { id: true, name: true, phone: true },
     });
     if (!existing) return false;
 
@@ -116,8 +135,18 @@ export class CalendarRemovalService {
       );
     }
 
-    await this.database.customer.delete({
-      where: { tenantId_id: { tenantId: this.tenantId, id: customerId } },
+    await this.inTransaction(async (database) => {
+      await database.customer.delete({
+        where: { tenantId_id: { tenantId: this.tenantId, id: customerId } },
+      });
+      if (actor) {
+        await customerActivity.deleted(
+          database,
+          this.tenantId,
+          actor,
+          existing,
+        );
+      }
     });
     return true;
   }

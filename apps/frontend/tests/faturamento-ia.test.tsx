@@ -246,6 +246,62 @@ describe("gráfico", () => {
     );
     expect(screen.getByText("Marcado pela IA")).toBeInTheDocument();
   });
+
+  test("toda coluna com valor tem o valor escrito, não só a maior", () => {
+    const yearly = report({
+      period: "year",
+      start: "2026-01-01",
+      end: "2026-12-31",
+      series: [
+        {
+          start: "2026-01-01",
+          amount: 9740,
+          count: 6,
+          expectedAmount: 0,
+          aiAmount: 0,
+        },
+        {
+          start: "2026-02-01",
+          amount: 770,
+          count: 3,
+          expectedAmount: 0,
+          aiAmount: 0,
+        },
+        {
+          start: "2026-03-01",
+          amount: 0,
+          count: 0,
+          expectedAmount: 180,
+          aiAmount: 0,
+        },
+        {
+          start: "2026-04-01",
+          amount: 0,
+          count: 0,
+          expectedAmount: 0,
+          aiAmount: 0,
+        },
+      ],
+    });
+    const { container } = render(
+      <RevenueChart
+        bars={chartBars(yearly)}
+        caption="Mês a mês"
+        onOpen={() => undefined}
+        period="year"
+      />,
+    );
+    const values = [...container.querySelectorAll(".revenue-bar")].map(
+      (bar) => bar.querySelector(".revenue-bar-value")?.textContent ?? null,
+    );
+    expect(values).toEqual(["R$ 9,7 mil", "R$ 770", "R$ 180", null]);
+    // Todo mês tem o rótulo embaixo.
+    expect(
+      [...container.querySelectorAll(".revenue-bar-label")].map(
+        (label) => label.textContent,
+      ),
+    ).toEqual(["jan", "fev", "mar", "abr"]);
+  });
 });
 
 describe("cartão do Início", () => {

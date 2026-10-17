@@ -12,6 +12,7 @@ import {
   bestBar,
   chartBars,
   comparison,
+  formatCompactMoney,
   formatMoney,
   periodTitle,
   shareLabels,
@@ -128,5 +129,21 @@ describe("formato do faturamento", () => {
       day.weekday === 6 ? { ...day, amount: 300 } : day.weekday === 2 ? { ...day, amount: 100 } : day,
     );
     expect(strongestWeekday(weekdays)).toEqual({ weekday: 6, amount: 300, share: 0.75 });
+  });
+});
+
+/**
+ * Valor em toda coluna do gráfico (pedido de 2026-10-17): antes, só o maior
+ * dia ou mês tinha o valor escrito.
+ */
+describe("valor curto em cima de cada coluna", () => {
+  test("reais inteiros abaixo de mil e milhares com uma casa", () => {
+    expect(formatCompactMoney(0)).toBe("R$ 0");
+    expect(formatCompactMoney(770)).toBe("R$ 770");
+    expect(formatCompactMoney(999.6)).toBe("R$ 1000");
+    expect(formatCompactMoney(1240)).toBe("R$ 1,2 mil");
+    expect(formatCompactMoney(9740)).toBe("R$ 9,7 mil");
+    expect(formatCompactMoney(13000)).toBe("R$ 13 mil");
+    expect(formatCompactMoney(125400)).toBe("R$ 125 mil");
   });
 });

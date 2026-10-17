@@ -298,7 +298,8 @@ Resumo:
 Gráficos:
 
 - no Ano, **Mês a mês**; no Mês e na Semana, **Dia a dia**; o Dia não tem gráfico;
-- o melhor mês (ou dia) ganha a cor cheia e o valor por cima, e o título diz qual ("Melhor mês: março, R$ 3.200,00"); o previsto entra claro e listrado em cima do faturado, com legenda;
+- toda coluna tem o valor escrito em cima, em formato curto ("R$ 770", "R$ 9,7 mil"; o valor exato fica no rótulo da coluna), e todo dia (ou mês) tem o rótulo embaixo; no mês, com 31 colunas, e no celular o valor fica na vertical, e no celular o mês rola de lado dentro do cartão; o gráfico respira abaixo do subtítulo (pedido de 2026-10-17);
+- o melhor mês (ou dia) ganha a cor cheia, e o título diz qual ("Melhor mês: março, R$ 3.200,00"); o previsto entra claro e listrado em cima do faturado, com legenda;
 - cada barra é um botão que abre o período dela (mês no ano, dia no mês e na semana) e diz ao leitor de tela o período, o faturado, os atendimentos e o previsto;
 - **Por serviço**: barra de composição nas cores dos serviços e uma linha por serviço com valor, quantidade de atendimentos e participação ("65% do faturamento"), que fecha em 100%.
 

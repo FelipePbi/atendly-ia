@@ -16,6 +16,19 @@ export function formatMoney(amount: number): string {
   return currency.format(amount).replace(/ /g, " ");
 }
 
+/**
+ * Valor curto para escrever em cima de cada coluna do gráfico: "R$ 770",
+ * "R$ 1,2 mil", "R$ 9,7 mil". O valor exato fica no rótulo da coluna.
+ */
+export function formatCompactMoney(amount: number): string {
+  if (amount < 1000) return `R$ ${Math.round(amount)}`;
+  const thousands = amount / 1000;
+  const digits = thousands >= 100 ? 0 : 1;
+  return `R$ ${thousands.toLocaleString("pt-BR", {
+    maximumFractionDigits: digits,
+  })} mil`;
+}
+
 export const PERIOD_OPTIONS: Array<{ value: RevenuePeriod; label: string }> = [
   { value: "day", label: "Dia" },
   { value: "week", label: "Semana" },

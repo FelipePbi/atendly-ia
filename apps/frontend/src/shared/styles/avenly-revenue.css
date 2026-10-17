@@ -227,9 +227,20 @@
   color: var(--accent);
 }
 
-/* Gráfico */
+/* Gráfico. Toda coluna tem o valor em cima (pedido de 2026-10-17); o topo
+   reserva o lugar dele, e o gráfico respira abaixo do subtítulo. No mês (31
+   colunas) e no celular o valor fica na vertical; no celular, o mês rola de
+   lado dentro do cartão, sem a página rolar. */
+.revenue-chart {
+  margin-top: 8px;
+}
+.revenue-chart-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
 .revenue-bars {
-  height: 180px;
+  height: 240px;
+  padding-top: 64px;
   display: flex;
   align-items: stretch;
   gap: 6px;
@@ -280,21 +291,27 @@
 .revenue-bar-value {
   position: absolute;
   left: 50%;
-  bottom: calc(var(--fill, 0%) + 4px);
+  bottom: calc(var(--fill, 0%) + 6px);
   transform: translateX(-50%);
   white-space: nowrap;
   font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-soft);
+  font-variant-numeric: tabular-nums;
+}
+.revenue-bar.is-best .revenue-bar-value {
   font-weight: 700;
   color: var(--at-color-primary-ink);
 }
-.revenue-bar.is-start .revenue-bar-value {
-  left: 0;
-  transform: none;
+.revenue-bar-value.is-expected {
+  color: var(--muted);
+  font-weight: 500;
 }
-.revenue-bar.is-end .revenue-bar-value {
-  left: auto;
-  right: 0;
-  transform: none;
+/* Coluna estreita: o valor sobe na vertical, lido de baixo para cima. */
+.revenue-bars.is-dense .revenue-bar-value {
+  writing-mode: vertical-rl;
+  transform: translateX(-50%) rotate(180deg);
+  font-size: 10px;
 }
 .revenue-bar-label {
   height: 16px;
@@ -305,8 +322,8 @@
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.revenue-bar-label.is-hidden {
-  visibility: hidden;
+.revenue-bars.is-dense .revenue-bar-label {
+  font-size: 10px;
 }
 .revenue-bar.is-best .revenue-bar-label {
   color: var(--fg);
@@ -581,10 +598,12 @@
     grid-column: auto;
   }
   .revenue-bars {
-    height: 220px;
+    height: 280px;
+    padding-top: 48px;
   }
   .revenue-bars.is-dense {
     gap: 4px;
+    padding-top: 64px;
   }
 }
 
@@ -825,4 +844,15 @@
 }
 .home-ai-value-chevron {
   color: var(--fg-soft);
+}
+
+@media (max-width: 767px) {
+  .revenue-bars .revenue-bar-value {
+    writing-mode: vertical-rl;
+    transform: translateX(-50%) rotate(180deg);
+    font-size: 10px;
+  }
+  .revenue-bars.is-dense {
+    min-width: 680px;
+  }
 }

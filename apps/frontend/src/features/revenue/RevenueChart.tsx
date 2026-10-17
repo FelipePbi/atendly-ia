@@ -9,14 +9,18 @@ import {
   bestBar,
   type ChartBar,
   countLabel,
+  formatCompactMoney,
   formatMoney,
 } from "./revenueFormat";
 
 /**
  * Barras do Faturamento (D-177), em HTML e CSS, sem biblioteca de gráfico:
  * cada barra é um botão que abre o período dela (mês no ano, dia no mês e na
- * semana). O melhor período ganha a cor cheia e o valor por cima; o previsto
- * entra claro, em cima do faturado. A parte do faturado que a IA marcou fica
+ * semana). Toda coluna tem o valor escrito em cima, em formato curto, e todo
+ * dia tem o rótulo embaixo (pedido de 2026-10-17: antes só o maior tinha
+ * valor). No mês, com 31 colunas, o valor fica na vertical e, no celular, o
+ * gráfico rola de lado dentro do cartão. O melhor período ganha a cor cheia;
+ * o previsto entra claro, em cima do faturado. A parte do faturado que a IA marcou fica
  * na base da barra, em tom mais escuro (D-178). Para leitor de tela, cada
  * barra diz o período, o faturado, a parte da IA, os atendimentos e o
  * previsto.
@@ -43,71 +47,68 @@ export function RevenueChart({
 
   return (
     <div className="revenue-chart">
-      <div
-        aria-label={caption}
-        className={clsx("revenue-bars", dense && "is-dense")}
-        data-count={bars.length}
-        role="group"
-      >
-        {bars.map((bar, index) => {
-          const total = bar.amount + bar.expectedAmount;
-          const height = max > 0 ? (total / max) * 100 : 0;
-          const billedPart = total > 0 ? (bar.amount / total) * 100 : 0;
-          const fill = Math.max(height, total > 0 ? 2 : 0);
-          const isBest = best?.key === bar.key;
-          const showLabel = !dense || index === 0 || (index + 1) % 5 === 0;
-          return (
-            <button
-              aria-label={barLabel(bar, isBest, period)}
-              className={clsx(
-                "revenue-bar",
-                isBest && "is-best",
-                // O valor do melhor fica dentro do cartão nas pontas.
-                index < 2 && "is-start",
-                index > bars.length - 3 && "is-end",
-              )}
-              key={bar.key}
-              onClick={() => onOpen(bar.drill)}
-              title={`${bar.long}: ${formatMoney(bar.amount)}`}
-              type="button"
-            >
-              <span
-                aria-hidden="true"
-                className="revenue-bar-track"
-                style={{ "--fill": `${fill}%` } as CSSProperties}
+      <div className="revenue-chart-scroll">
+        <div
+          aria-label={caption}
+          className={clsx("revenue-bars", dense && "is-dense")}
+          data-count={bars.length}
+          role="group"
+        >
+          {bars.map((bar) => {
+            const total = bar.amount + bar.expectedAmount;
+            const height = max > 0 ? (total / max) * 100 : 0;
+            const billedPart = total > 0 ? (bar.amount / total) * 100 : 0;
+            const fill = Math.max(height, total > 0 ? 2 : 0);
+            const isBest = best?.key === bar.key;
+            return (
+              <button
+                aria-label={barLabel(bar, isBest, period)}
+                className={clsx("revenue-bar", isBest && "is-best")}
+                key={bar.key}
+                onClick={() => onOpen(bar.drill)}
+                title={`${bar.long}: ${formatMoney(bar.amount)}${bar.expectedAmount > 0 ? ` + ${formatMoney(bar.expectedAmount)} previsto` : ""}`}
+                type="button"
               >
-                {isBest && (
-                  <span className="revenue-bar-value">
-                    {formatMoney(bar.amount)}
-                  </span>
-                )}
                 <span
-                  className="revenue-bar-fill"
-                  style={{ height: `${fill}%` }}
+                  aria-hidden="true"
+                  className="revenue-bar-track"
+                  style={{ "--fill": `${fill}%` } as CSSProperties}
                 >
-                  {bar.expectedAmount > 0 && (
+                  {total > 0 && (
                     <span
-                      className="revenue-bar-expected"
-                      style={{ height: `${100 - billedPart}%` }}
-                    />
+                      className={clsx(
+                        "revenue-bar-value",
+                        bar.amount <= 0 && "is-expected",
+                      )}
+                    >
+                      {formatCompactMoney(bar.amount > 0 ? bar.amount : total)}
+                    </span>
                   )}
-                  {bar.aiAmount > 0 && (
-                    <span
-                      className="revenue-bar-ai"
-                      style={{ height: `${(bar.aiAmount / total) * 100}%` }}
-                    />
-                  )}
+                  <span
+                    className="revenue-bar-fill"
+                    style={{ height: `${fill}%` }}
+                  >
+                    {bar.expectedAmount > 0 && (
+                      <span
+                        className="revenue-bar-expected"
+                        style={{ height: `${100 - billedPart}%` }}
+                      />
+                    )}
+                    {bar.aiAmount > 0 && (
+                      <span
+                        className="revenue-bar-ai"
+                        style={{ height: `${(bar.aiAmount / total) * 100}%` }}
+                      />
+                    )}
+                  </span>
                 </span>
-              </span>
-              <span
-                aria-hidden="true"
-                className={clsx("revenue-bar-label", !showLabel && "is-hidden")}
-              >
-                {bar.short}
-              </span>
-            </button>
-          );
-        })}
+                <span aria-hidden="true" className="revenue-bar-label">
+                  {bar.short}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
       {(hasExpected || hasAi) && (
         <p aria-hidden="true" className="revenue-legend">

@@ -4,7 +4,12 @@ import clsx from "clsx";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { BffHttpError, type RevenuePeriod, type RevenueReport } from "@/data";
+import {
+  BffHttpError,
+  type RevenueAppointmentKind,
+  type RevenuePeriod,
+  type RevenueReport,
+} from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
@@ -15,6 +20,7 @@ import { BrandLoader } from "@/shared/ui/Brand";
 import { StatePanel } from "@/shared/ui/States";
 
 import { AiValueCard } from "./AiValueCard";
+import { RevenueAppointmentsDialog } from "./RevenueAppointmentsDialog";
 import { RevenueChart } from "./RevenueChart";
 import {
   adjacentPeriodDate,
@@ -259,6 +265,8 @@ function RevenueBody({
   onOpen: (target: View) => void;
   report: RevenueReport;
 }) {
+  // Qual lista está aberta (D-179): cancelados, faltas ou sem valor.
+  const [list, setList] = useState<RevenueAppointmentKind | null>(null);
   const nothing =
     report.billed.count === 0 &&
     report.expected.count === 0 &&
@@ -281,7 +289,7 @@ function RevenueBody({
   return (
     <div className="revenue-body">
       <div className="revenue-main">
-        <SummaryCard report={report} />
+        <SummaryCard onOpenList={setList} report={report} />
         {bars.length > 0 && (
           <ChartCard bars={bars} onOpen={onOpen} report={report} />
         )}
@@ -290,13 +298,24 @@ function RevenueBody({
       <div className="revenue-side">
         <CustomersCard report={report} />
         <WeekdayCard report={report} />
-        <LostCard report={report} />
+        <LostCard onOpenList={setList} report={report} />
       </div>
+      <RevenueAppointmentsDialog
+        kind={list}
+        onClose={() => setList(null)}
+        report={report}
+      />
     </div>
   );
 }
 
-function SummaryCard({ report }: { report: RevenueReport }) {
+function SummaryCard({
+  onOpenList,
+  report,
+}: {
+  onOpenList: (kind: RevenueAppointmentKind) => void;
+  report: RevenueReport;
+}) {
   const change = comparison(report);
   const { billed, expected } = report;
   return (
@@ -353,7 +372,11 @@ function SummaryCard({ report }: { report: RevenueReport }) {
         )}
       </dl>
       {billed.unvaluedCount > 0 && (
-        <p className="revenue-unvalued">
+        <button
+          className="revenue-unvalued"
+          onClick={() => onOpenList("unvalued")}
+          type="button"
+        >
           <Icon name="info" />
           <span>
             {countLabel(
@@ -363,8 +386,12 @@ function SummaryCard({ report }: { report: RevenueReport }) {
             )}{" "}
             (sob consulta, “a partir de” ou sem preço). Registre o valor final
             no atendimento para ele entrar aqui.
+            <span className="revenue-unvalued-action">
+              {billed.unvaluedCount === 1 ? "Ver qual" : "Ver quais"}
+              <Icon name="chevron-right" />
+            </span>
           </span>
-        </p>
+        </button>
       )}
     </section>
   );
@@ -550,7 +577,13 @@ function WeekdayCard({ report }: { report: RevenueReport }) {
   );
 }
 
-function LostCard({ report }: { report: RevenueReport }) {
+function LostCard({
+  onOpenList,
+  report,
+}: {
+  onOpenList: (kind: RevenueAppointmentKind) => void;
+  report: RevenueReport;
+}) {
   const { lost } = report;
   if (lost.cancelledCount === 0 && lost.noShowCount === 0) return null;
   const amount = lost.cancelledAmount + lost.noShowAmount;
@@ -564,28 +597,61 @@ function LostCard({ report }: { report: RevenueReport }) {
             : "Sem valor definido nos atendimentos que não aconteceram."}
         </p>
       </header>
-      <dl className="revenue-lost">
-        <div>
-          <dt>{lost.noShowCount === 1 ? "Falta" : "Faltas"}</dt>
-          <dd>
-            {lost.noShowCount}
-            {lost.noShowAmount > 0 && (
-              <span> · {formatMoney(lost.noShowAmount)}</span>
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>
-            {lost.cancelledCount === 1 ? "Cancelamento" : "Cancelamentos"}
-          </dt>
-          <dd>
-            {lost.cancelledCount}
-            {lost.cancelledAmount > 0 && (
-              <span> · {formatMoney(lost.cancelledAmount)}</span>
-            )}
-          </dd>
-        </div>
-      </dl>
+      <div className="revenue-lost">
+        <LostStat
+          amount={lost.noShowAmount}
+          count={lost.noShowCount}
+          label={lost.noShowCount === 1 ? "Falta" : "Faltas"}
+          onOpen={() => onOpenList("no_show")}
+        />
+        <LostStat
+          amount={lost.cancelledAmount}
+          count={lost.cancelledCount}
+          label={lost.cancelledCount === 1 ? "Cancelamento" : "Cancelamentos"}
+          onOpen={() => onOpenList("cancelled")}
+        />
+      </div>
     </section>
+  );
+}
+
+/**
+ * Um número de "Faltas e cancelamentos". Com algum atendimento, vira botão
+ * que abre a lista deles, com quem cancelou ou registrou a falta (D-179).
+ */
+function LostStat({
+  amount,
+  count,
+  label,
+  onOpen,
+}: {
+  amount: number;
+  count: number;
+  label: string;
+  onOpen: () => void;
+}) {
+  const content = (
+    <>
+      <span className="revenue-lost-label">{label}</span>
+      <span className="revenue-lost-value">
+        {count}
+        {amount > 0 && <span> · {formatMoney(amount)}</span>}
+      </span>
+    </>
+  );
+  if (count === 0) return <div className="revenue-lost-stat">{content}</div>;
+  return (
+    <button
+      aria-label={`${label}: ${count}${amount > 0 ? `, ${formatMoney(amount)}` : ""}. Ver quais foram`}
+      className="revenue-lost-stat is-action"
+      onClick={onOpen}
+      type="button"
+    >
+      {content}
+      <span className="revenue-lost-more">
+        Ver quais
+        <Icon name="chevron-right" />
+      </span>
+    </button>
   );
 }

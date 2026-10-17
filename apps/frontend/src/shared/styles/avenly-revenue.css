@@ -210,15 +210,31 @@
   font-size: 12px;
 }
 .revenue-unvalued {
+  width: 100%;
   margin: 14px 0 0;
   padding: 10px 12px;
+  border: 0;
   border-radius: var(--at-radius-sm);
   background: var(--surface-interactive);
   display: flex;
   gap: 8px;
   color: var(--fg-soft);
+  font: inherit;
   font-size: 13px;
   line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+.revenue-unvalued:hover {
+  background: color-mix(
+    in oklch,
+    var(--surface-interactive) 80%,
+    var(--accent-soft)
+  );
+}
+.revenue-unvalued-action {
+  margin-left: 6px;
+  white-space: nowrap;
 }
 .revenue-unvalued .icon {
   flex: none;
@@ -549,23 +565,60 @@
   margin: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 12px 32px;
 }
-.revenue-lost dt {
+.revenue-lost-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  margin: 0 -10px;
+  border: 0;
+  border-radius: var(--at-radius-sm);
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+}
+.revenue-lost-stat.is-action {
+  cursor: pointer;
+}
+.revenue-lost-stat.is-action:hover {
+  background: var(--surface-interactive);
+}
+.revenue-lost-stat.is-action:focus-visible,
+.revenue-unvalued:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.revenue-lost-label {
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
 }
-.revenue-lost dd {
-  margin: 2px 0 0;
+.revenue-lost-value {
   font-size: 18px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.revenue-lost dd span {
+.revenue-lost-value span {
   color: var(--muted);
   font-size: 13px;
   font-weight: 500;
+}
+.revenue-lost-more,
+.revenue-unvalued-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--at-color-primary-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.revenue-lost-more .icon,
+.revenue-unvalued-action .icon {
+  width: 16px;
+  height: 16px;
 }
 
 @media (min-width: 768px) {
@@ -855,4 +908,118 @@
   .revenue-bars.is-dense {
     min-width: 680px;
   }
+}
+
+/* --- Os atendimentos por trás dos números (D-179) -------------------------- */
+.revenue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.revenue-list-status,
+.revenue-list-hint {
+  margin: 0;
+  color: var(--fg-soft);
+  font-size: 14px;
+}
+.revenue-list-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--at-color-danger-ink);
+}
+.revenue-list-error p {
+  margin: 0;
+}
+.revenue-list-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.revenue-list-items li + li {
+  border-top: 1px solid var(--at-color-border);
+}
+.revenue-list-item {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 4px;
+  color: var(--fg);
+  text-decoration: none;
+}
+.revenue-list-item:hover {
+  background: var(--surface-interactive);
+}
+.revenue-list-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.revenue-list-when {
+  display: flex;
+  flex-direction: column;
+  font-variant-numeric: tabular-nums;
+}
+.revenue-list-day {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.revenue-list-time {
+  color: var(--muted);
+  font-size: 12px;
+}
+.revenue-list-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.revenue-list-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+.revenue-list-services {
+  color: var(--fg-soft);
+  font-size: 13px;
+}
+.revenue-list-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+.revenue-list-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--at-color-surface-active);
+  color: var(--at-color-ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+.revenue-list-tag.is-ai {
+  background: var(--at-color-primary-tint-strong);
+  color: var(--at-color-primary-ink);
+}
+.revenue-list-note {
+  color: var(--fg-soft);
+  font-size: 13px;
+  font-style: italic;
+}
+.revenue-list-amount {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.revenue-list-amount .icon {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
 }

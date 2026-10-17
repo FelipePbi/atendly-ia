@@ -302,6 +302,16 @@ Gráficos:
 - cada barra é um botão que abre o período dela (mês no ano, dia no mês e na semana) e diz ao leitor de tela o período, o faturado, os atendimentos e o previsto;
 - **Por serviço**: barra de composição nas cores dos serviços e uma linha por serviço com valor, quantidade de atendimentos e participação ("65% do faturamento"), que fecha em 100%.
 
+**O que a IA fez por você** ([[../../migration/DECISIONS#D-178|D-178]]), uma faixa larga logo abaixo do período, antes dos cartões — é o número que justifica assinar a IA. Só o que a agenda prova, nada estimado:
+
+- título com a parte da IA no faturado: "A IA marcou R$ 400,00 dos seus R$ 1.000,00 neste mês", com a porcentagem ao lado e uma barra; abaixo, o previsto dela ("+ R$ 250,00 em 2 atendimentos que ela já marcou pela frente");
+- destaques, cada um só quando aconteceu: **clientes novos que chegaram pela IA** (o primeiro agendamento foi dela; importados não contam), com quanto já gastaram e os nomes; **atendimentos marcados fora do seu horário** (a hora em que a IA marcou caiu fora do horário de atendimento ou em dia fechado), com o valor; **atendimentos remarcados pela IA**, com o valor que continuou na agenda;
+- "Desde que você começou, a IA trouxe 12 clientes novos, que já faturaram R$ 3.200,00." — o histórico inteiro desses clientes, mesmo as visitas que você marcou;
+- no gráfico, a parte do faturado que a IA marcou fica na base de cada barra, em tom escuro, com a legenda "Marcado pela IA", e o leitor de tela diz o valor;
+- com a IA desligada (status confirmado) e nada dela no período, a faixa vira convite: "Neste mês, 18 mensagens de clientes chegaram fora do seu horário de atendimento." e "Ligar a IA"; uma hora só conta como fora do horário quando nenhum minuto dela está dentro do horário daquele dia. Com o status incerto ou sem mensagem fora do horário, a faixa não aparece.
+
+No **Início**, logo abaixo da faixa de estado, um cartão curto leva ao Faturamento: "Neste mês a IA trouxe R$ 400,00 · 5 clientes novos". Só aparece quando a IA trouxe algo no mês; se a leitura falhar, não aparece.
+
 Também, quando houver dado:
 
 - **Clientes que mais faturaram** (cinco), cada nome abre o perfil;

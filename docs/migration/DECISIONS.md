@@ -7832,3 +7832,26 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Consequências:** o faturado de um atendimento sem valor final é o preço combinado, não um valor confirmado como cobrado; a tela diz isso em uma linha, e o perfil do cliente mantém a regra antiga (só valor final). O ano faz uma leitura de até dois anos de atendimentos do negócio por requisição, sem índice novo (`Appointment(tenantId, startAt, endAt)` já cobre).
 
 **Revisar se:** o produto ganhar pagamento ou sinal (o faturado passaria a poder vir do recebido), mais de um profissional por negócio, ou o volume de um negócio tornar a leitura do ano lenta.
+
+## D-178 — Faturamento mostra o que a IA fez: receita marcada por ela, clientes novos, agendamentos fora do horário e remarcações; para quem está sem a IA, as mensagens que chegaram fora do horário
+
+**Status:** ACCEPTED em 2026-10-16, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Amplia a D-177. Tela em `docs/product-vault/03-UX-UI/04-Especificacao-das-Telas.md` (Faturamento e Início).
+
+**Contexto:** a IA vai ser paga, e a profissional precisa ver no próprio faturamento que ela vale a assinatura. O usuário pediu destaques como "de R$ 1.000, R$ 400 vieram de agendamentos da IA" e "5 clientes novos que gastaram R$ 800". A agenda já guarda quem marcou cada atendimento (`Appointment.source`: `AI`, `USER`, `INTEGRATION`), quando foi marcado (`createdAt`), quem remarcou (`AppointmentEvent` `RESCHEDULED` com `source`), o horário de atendimento (`AvailabilityRule`, `AvailabilityException`) e o que veio de importação (`ExternalEntityMap` `CUSTOMER`). A IA guarda cada mensagem recebida.
+
+**Decisão:**
+
+1. **Só o que dá para provar.** Nada estimado ("horas economizadas", "a IA se pagou 4×" enquanto o preço do plano não existir no sistema). Número inflado tira a credibilidade dos números reais.
+2. **Receita da IA:** concluídos do período com `source = AI`, pelo mesmo valor da D-177, e a parte deles no faturado (nula sem faturado). Previsto da IA: confirmados pela frente com `source = AI`. No gráfico, cada barra separa a parte da IA (`series[].aiAmount`).
+3. **Cliente trazido pela IA:** o primeiro agendamento já criado para a pessoa (qualquer status) foi da IA, e ela não veio de importação. "Clientes novos" do período são os trazidos pela IA cujo primeiro agendamento foi criado no período; o valor é o que eles faturaram no período, inclusive visitas marcadas por você. "Desde que você começou" soma todos os trazidos pela IA e o faturado de todo o histórico deles.
+4. **Fora do horário:** concluídos do período que a IA marcou com `createdAt` fora do horário de atendimento daquele dia da semana, ou em dia inteiro fechado por exceção. Sem horário cadastrado, nada conta.
+5. **Remarcados pela IA:** concluídos do período com ao menos um `RESCHEDULED` de `source = AI`. A frase é "continuaram na sua agenda", sem afirmar que seriam cancelados.
+6. **Convite para quem está sem a IA:** com o status confirmando a IA desligada e nada dela no período, a faixa diz quantas mensagens de clientes chegaram fora do horário e oferece "Ligar a IA". A IA conta as mensagens recebidas por hora da semana (`GET /internal/inbound-hours`, só contagem, sem conversa pessoal); o BFF cruza com o horário e só conta a hora em que nenhum minuto está dentro do horário daquele dia — a conta erra para menos. Se a IA não responder, o faturamento sai igual, com `messages: null`.
+7. **Início:** um cartão curto ("Neste mês a IA trouxe R$ 400,00 · 5 clientes novos") leva ao Faturamento, só quando a IA trouxe algo no mês.
+8. Tudo somado no Scheduling (`GET /internal/revenue`, campo `ai` e `window`), repassado pelo BFF em `GET /v1/revenue` (campo `messages`), sem lista de atendimentos ou mensagens no navegador.
+
+**Alternativas:** creditar à IA todo atendimento de cliente que conversou no WhatsApp (não prova que foi a IA); estimar tempo economizado por conversa (número inventado); "enquanto você atendia outra cliente" (exigiria cruzar com atendimentos fora do período lido; fica para depois); contar mensagens fora do horário em minutos exatos (exigiria mandar os horários das mensagens ao BFF).
+
+**Consequências:** a leitura do faturamento passa a buscar, além do período, o primeiro agendamento de cada cliente do negócio, os clientes importados, o horário de atendimento e o histórico concluído dos clientes trazidos pela IA; cresce com o número de clientes, não de atendimentos. Cliente cujo primeiro agendamento foi da IA, mas que já era cliente antes da plataforma sem ter sido importado, conta como trazido pela IA.
+
+**Revisar se:** o produto ganhar preço de plano no sistema (o retorno da assinatura passa a ser calculável), ou a IA passar a marcar em nome de mais de um profissional.

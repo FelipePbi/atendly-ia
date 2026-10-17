@@ -596,3 +596,233 @@
     gap: 20px;
   }
 }
+
+/* --- O que a IA fez por você (D-178) ---------------------------------------
+   Faixa larga no topo, antes dos cartões: o número que justifica a IA vem
+   primeiro. Barras do gráfico ganham a parte da IA na base, em tom escuro. */
+.revenue-bar-ai {
+  flex: none;
+  margin-top: auto;
+  background: var(--at-color-primary-ink);
+}
+.revenue-legend-swatch.is-ai {
+  background: var(--at-color-primary-ink);
+}
+
+.revenue-ai {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--at-color-primary-tint-strong);
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--at-color-primary-tint) 70%, var(--surface)),
+    var(--surface) 70%
+  );
+}
+.revenue-ai-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px 14px;
+  align-items: start;
+}
+.revenue-ai-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--at-color-primary);
+  color: var(--at-color-on-primary);
+}
+.revenue-ai-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.revenue-ai-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.revenue-ai-copy .revenue-eyebrow {
+  margin: 0;
+  color: var(--at-color-primary-ink);
+}
+.revenue-ai-headline {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--fg);
+}
+.revenue-ai-detail {
+  margin: 0;
+  color: var(--fg-soft);
+  font-size: 14px;
+}
+.revenue-ai-share {
+  grid-column: 1 / -1;
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.revenue-ai-share-value {
+  font-family: var(--font-display);
+  font-size: 32px;
+  line-height: 1;
+  color: var(--at-color-primary-ink);
+  font-variant-numeric: tabular-nums;
+}
+.revenue-ai-share-label {
+  color: var(--fg-soft);
+  font-size: 13px;
+}
+.revenue-ai-meter {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--at-color-surface-active);
+  overflow: hidden;
+}
+.revenue-ai-meter-fill {
+  display: block;
+  width: var(--share);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--at-color-primary-ink);
+}
+.revenue-ai-highlights {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+.revenue-ai-highlight {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 12px;
+  align-items: baseline;
+  padding: 12px 14px;
+  border-radius: var(--at-radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--at-color-border);
+}
+.revenue-ai-highlight-value {
+  grid-row: span 2;
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1;
+  color: var(--at-color-primary-ink);
+  font-variant-numeric: tabular-nums;
+}
+.revenue-ai-highlight-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.revenue-ai-highlight-detail {
+  font-size: 13px;
+  color: var(--fg-soft);
+}
+.revenue-ai-since {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--at-color-border);
+  color: var(--fg-soft);
+  font-size: 14px;
+}
+.revenue-ai.is-invite {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+.revenue-ai.is-invite .revenue-ai-copy {
+  flex: 1 1 260px;
+}
+.revenue-ai-action {
+  flex: none;
+}
+
+@media (min-width: 768px) {
+  .revenue-ai {
+    padding: 24px;
+  }
+  .revenue-ai-head {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .revenue-ai-share {
+    grid-column: auto;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+  .revenue-ai-headline {
+    font-size: 22px;
+  }
+  .revenue-ai-highlights {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+}
+
+/* Cartão curto do Início (D-178): uma linha com o que a IA trouxe no mês. */
+.home-ai-value {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--at-color-primary-tint-strong);
+  background: color-mix(
+    in oklch,
+    var(--at-color-primary-tint) 60%,
+    var(--surface)
+  );
+  color: var(--fg);
+  text-decoration: none;
+  /* Mesmo respiro que a faixa de estado deixa antes do corpo do Início. */
+  margin-bottom: 26px;
+}
+.home-ai-value:hover {
+  border-color: var(--at-color-primary);
+}
+.home-ai-value:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.home-ai-value-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--at-color-primary);
+  color: var(--at-color-on-primary);
+}
+.home-ai-value-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.home-ai-value-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.home-ai-value-eyebrow {
+  color: var(--at-color-primary-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.home-ai-value-line {
+  font-size: 15px;
+  font-weight: 600;
+}
+.home-ai-value-chevron {
+  color: var(--fg-soft);
+}

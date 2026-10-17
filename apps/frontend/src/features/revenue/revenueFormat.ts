@@ -112,16 +112,20 @@ export function periodTitle(
   const sameYear = parts(start).year === parts(today).year;
   const year = sameYear ? "" : ` de ${parts(start).year}`;
   if (period === "day") {
-    return capitalize(`${weekdayName(weekdayOf(start))}, ${dayMonth(start)}${year}`);
+    return capitalize(
+      `${weekdayName(weekdayOf(start))}, ${dayMonth(start)}${year}`,
+    );
   }
   if (period === "week") {
-    const endYear = parts(end).year === parts(today).year ? "" : ` de ${parts(end).year}`;
+    const endYear =
+      parts(end).year === parts(today).year ? "" : ` de ${parts(end).year}`;
     if (parts(start).month === parts(end).month) {
       return `${parts(start).day} a ${dayMonth(end)}${endYear}`;
     }
     return `${dayMonth(start)} a ${dayMonth(end)}${endYear}`;
   }
-  if (period === "month") return capitalize(`${monthName(start)} de ${parts(start).year}`);
+  if (period === "month")
+    return capitalize(`${monthName(start)} de ${parts(start).year}`);
   return String(parts(start).year);
 }
 
@@ -149,7 +153,10 @@ export function previousName(
 /** Período como intervalo legível: "1 a 16 de setembro". */
 export function rangeLabel(start: string, end: string): string {
   if (start === end) return dayMonth(start);
-  if (parts(start).month === parts(end).month && parts(start).year === parts(end).year) {
+  if (
+    parts(start).month === parts(end).month &&
+    parts(start).year === parts(end).year
+  ) {
     return `${parts(start).day} a ${dayMonth(end)}`;
   }
   return `${dayMonth(start)} a ${dayMonth(end)}`;
@@ -167,10 +174,14 @@ export function comparison(report: RevenueReport): Comparison {
   const name = previousName(report);
   if (before <= 0) {
     if (current <= 0) return { kind: "none" };
-    return { kind: "new", text: `${capitalize(name)} não teve faturamento para comparar` };
+    return {
+      kind: "new",
+      text: `${capitalize(name)} não teve faturamento para comparar`,
+    };
   }
   const change = Math.round(((current - before) / before) * 100);
-  if (change === 0) return { kind: "change", direction: "same", text: `Igual a ${name}` };
+  if (change === 0)
+    return { kind: "change", direction: "same", text: `Igual a ${name}` };
   const sign = change > 0 ? "+" : "−";
   return {
     kind: "change",
@@ -214,6 +225,8 @@ export interface ChartBar {
   long: string;
   amount: number;
   expectedAmount: number;
+  /** Parte do faturado que veio de atendimentos marcados pela IA (D-178). */
+  aiAmount: number;
   count: number;
   /** Período que a barra abre ao ser tocada. */
   drill: { period: RevenuePeriod; date: string };
@@ -228,6 +241,7 @@ export function chartBars(report: RevenueReport): ChartBar[] {
         long: monthName(bucket.start),
         amount: bucket.amount,
         expectedAmount: bucket.expectedAmount,
+        aiAmount: bucket.aiAmount,
         count: bucket.count,
         drill: { period: "month", date: bucket.start },
       };
@@ -242,6 +256,7 @@ export function chartBars(report: RevenueReport): ChartBar[] {
       long: `${weekdayName(weekday)}, ${dayMonth(bucket.start)}`,
       amount: bucket.amount,
       expectedAmount: bucket.expectedAmount,
+      aiAmount: bucket.aiAmount,
       count: bucket.count,
       drill: { period: "day", date: bucket.start },
     };
@@ -263,8 +278,14 @@ export function strongestWeekday(
 ): { weekday: number; amount: number; share: number } | null {
   const total = weekdays.reduce((sum, day) => sum + day.amount, 0);
   if (total <= 0) return null;
-  const best = weekdays.reduce((top, day) => (day.amount > top.amount ? day : top));
-  return { weekday: best.weekday, amount: best.amount, share: best.amount / total };
+  const best = weekdays.reduce((top, day) =>
+    day.amount > top.amount ? day : top,
+  );
+  return {
+    weekday: best.weekday,
+    amount: best.amount,
+    share: best.amount / total,
+  };
 }
 
 /** Segunda a domingo, para a lista de dias da semana. */

@@ -18,6 +18,16 @@ import {
   strongestWeekday,
 } from "@/features/revenue/revenueFormat";
 
+const EMPTY_AI: RevenueReport["ai"] = {
+  billed: { amount: 0, count: 0 },
+  expected: { amount: 0, count: 0 },
+  share: null,
+  newCustomers: { count: 0, amount: 0, names: [] },
+  afterHours: { count: 0, amount: 0 },
+  rescheduled: { count: 0, amount: 0 },
+  acquired: { customers: 0, amount: 0 },
+};
+
 function report(overrides: Partial<RevenueReport> = {}): RevenueReport {
   return {
     period: "month",
@@ -25,6 +35,7 @@ function report(overrides: Partial<RevenueReport> = {}): RevenueReport {
     end: "2026-10-31",
     today: "2026-10-16",
     timezone: "America/Sao_Paulo",
+    window: { from: "2026-10-01T03:00:00.000Z", to: "2026-10-16T18:00:00.000Z" },
     billed: { amount: 1120, count: 8, unvaluedCount: 0, averageTicket: 140 },
     expected: { amount: 0, count: 0, unvaluedCount: 0 },
     previous: { start: "2026-09-01", end: "2026-09-16", amount: 1000, count: 7, partial: true },
@@ -33,6 +44,8 @@ function report(overrides: Partial<RevenueReport> = {}): RevenueReport {
     customers: [],
     weekdays: Array.from({ length: 7 }, (_, weekday) => ({ weekday, amount: 0, count: 0 })),
     series: [],
+    ai: EMPTY_AI,
+    messages: null,
     ...overrides,
   };
 }
@@ -100,9 +113,9 @@ describe("formato do faturamento", () => {
       start: "2026-01-01",
       end: "2026-12-31",
       series: [
-        { start: "2026-01-01", amount: 300, count: 2, expectedAmount: 0 },
-        { start: "2026-02-01", amount: 900, count: 6, expectedAmount: 0 },
-        { start: "2026-03-01", amount: 0, count: 0, expectedAmount: 450 },
+        { start: "2026-01-01", amount: 300, count: 2, expectedAmount: 0, aiAmount: 0 },
+        { start: "2026-02-01", amount: 900, count: 6, expectedAmount: 0, aiAmount: 0 },
+        { start: "2026-03-01", amount: 0, count: 0, expectedAmount: 450, aiAmount: 0 },
       ],
     });
     const bars = chartBars(yearly);

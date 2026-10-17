@@ -31,6 +31,16 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({ revenue: { get: revenueGet } }),
 }));
 
+const EMPTY_AI: RevenueReport["ai"] = {
+  billed: { amount: 0, count: 0 },
+  expected: { amount: 0, count: 0 },
+  share: null,
+  newCustomers: { count: 0, amount: 0, names: [] },
+  afterHours: { count: 0, amount: 0 },
+  rescheduled: { count: 0, amount: 0 },
+  acquired: { customers: 0, amount: 0 },
+};
+
 function report(overrides: Partial<RevenueReport> = {}): RevenueReport {
   return {
     period: "month",
@@ -38,6 +48,7 @@ function report(overrides: Partial<RevenueReport> = {}): RevenueReport {
     end: "2026-10-31",
     today: "2026-10-16",
     timezone: "America/Sao_Paulo",
+    window: { from: "2026-10-01T03:00:00.000Z", to: "2026-10-16T18:00:00.000Z" },
     billed: { amount: 2000, count: 12, unvaluedCount: 2, averageTicket: 200 },
     expected: { amount: 450, count: 3, unvaluedCount: 0 },
     previous: { start: "2026-09-01", end: "2026-09-16", amount: 1600, count: 10, partial: true },
@@ -56,8 +67,10 @@ function report(overrides: Partial<RevenueReport> = {}): RevenueReport {
       start: `2026-10-${String(index + 1).padStart(2, "0")}`,
       amount: index === 9 ? 500 : index < 16 ? 100 : 0,
       count: index < 16 ? 1 : 0,
-      expectedAmount: index > 16 ? 50 : 0,
+      expectedAmount: index > 16 ? 50 : 0, aiAmount: 0
     })),
+    ai: EMPTY_AI,
+    messages: null,
     ...overrides,
   };
 }
@@ -71,7 +84,7 @@ const YEAR = report({
     start: `2026-${String(index + 1).padStart(2, "0")}-01`,
     amount: index === 2 ? 3200 : index < 10 ? 1000 : 0,
     count: index < 10 ? 8 : 0,
-    expectedAmount: index >= 10 ? 400 : 0,
+    expectedAmount: index >= 10 ? 400 : 0, aiAmount: 0
   })),
 });
 

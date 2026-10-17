@@ -4,19 +4,17 @@ import clsx from "clsx";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import {
-  BffHttpError,
-  type RevenuePeriod,
-  type RevenueReport,
-} from "@/data";
+import { BffHttpError, type RevenuePeriod, type RevenueReport } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { recall, remember } from "@/shared/runtime/sessionMemory";
+import { useOptionalSystemStatus } from "@/shared/runtime/systemStatus";
 import { BrandLoader } from "@/shared/ui/Brand";
 import { StatePanel } from "@/shared/ui/States";
 
+import { AiValueCard } from "./AiValueCard";
 import { RevenueChart } from "./RevenueChart";
 import {
   adjacentPeriodDate,
@@ -62,6 +60,7 @@ export function RevenueScreen() {
   const [pending, setPending] = useState(!report);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  const aiOff = useOptionalSystemStatus()?.aiView === "off";
 
   // Trocar de período mostra na hora o que a aba já leu dele; o resto fica na
   // tela até a leitura nova chegar.
@@ -155,15 +154,12 @@ export function RevenueScreen() {
       {error && (
         <div className="revenue-inline-error" role="alert">
           <span>Não foi possível atualizar. {error}</span>
-          <button
-            className="btn btn-secondary"
-            onClick={retry}
-            type="button"
-          >
+          <button className="btn btn-secondary" onClick={retry} type="button">
             Tentar novamente
           </button>
         </div>
       )}
+      <AiValueCard aiOff={aiOff} report={report} />
       <RevenueBody onOpen={go} report={report} />
     </div>
   );
@@ -229,11 +225,7 @@ function PeriodControls({
           <Icon name="chevron-right" />
         </button>
         {!current && (
-          <button
-            className="revenue-today"
-            onClick={onToday}
-            type="button"
-          >
+          <button className="revenue-today" onClick={onToday} type="button">
             {todayLabel(report.period)}
           </button>
         )}
@@ -583,7 +575,9 @@ function LostCard({ report }: { report: RevenueReport }) {
           </dd>
         </div>
         <div>
-          <dt>{lost.cancelledCount === 1 ? "Cancelamento" : "Cancelamentos"}</dt>
+          <dt>
+            {lost.cancelledCount === 1 ? "Cancelamento" : "Cancelamentos"}
+          </dt>
           <dd>
             {lost.cancelledCount}
             {lost.cancelledAmount > 0 && (

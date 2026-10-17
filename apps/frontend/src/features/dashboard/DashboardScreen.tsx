@@ -36,6 +36,7 @@ import {
   useNotificationsDrawer,
   useNotificationsDrawerViewport,
 } from "@/features/notifications/NotificationsDrawer";
+import { HomeAiValue } from "@/features/revenue/HomeAiValue";
 import { Icon, type IconName } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
@@ -1076,6 +1077,8 @@ function RealDashboard({
         pauseRef={pauseRef}
         state={operationalState}
       />
+
+      <HomeAiValue />
 
       <div className="dashboard-body">
         {hasPendencies && (

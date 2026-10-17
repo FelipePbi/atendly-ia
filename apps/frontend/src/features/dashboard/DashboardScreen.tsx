@@ -37,6 +37,7 @@ import {
   useNotificationsDrawerViewport,
 } from "@/features/notifications/NotificationsDrawer";
 import { HomeAiValue } from "@/features/revenue/HomeAiValue";
+import { HomeRevenueCard } from "@/features/revenue/HomeRevenueCard";
 import { Icon, type IconName } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
@@ -1168,6 +1169,8 @@ function RealDashboard({
             />
           )}
         </article>
+
+        <HomeRevenueCard />
 
         {/* Os quadros H2 e H4 não têm "Esta semana": com pendências ou com o
             checklist, a coluna termina neles. H1, H3 e H5 mantêm o bloco. */}

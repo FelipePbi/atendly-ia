@@ -1023,3 +1023,244 @@
   height: 16px;
   color: var(--muted);
 }
+
+/* --- Faturamento no Início (D-180) -----------------------------------------
+   Seção do corpo do Início, no padrão dele (sem caixa): no celular logo depois
+   da agenda de hoje; a partir de 768 px, na coluna da direita. */
+.dashboard-body > .home-revenue {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.home-revenue.is-arriving {
+  animation: motion-fade-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+}
+.home-revenue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.home-revenue-head h2 {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.home-revenue-tabs {
+  display: inline-grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface-interactive);
+}
+.home-revenue-tab {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+.home-revenue-tab.is-active {
+  background: var(--surface);
+  color: var(--fg);
+  box-shadow: 0 1px 2px rgba(34, 30, 26, 0.12);
+}
+.home-revenue-tab:focus-visible,
+.home-revenue-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.home-revenue-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.home-revenue-total {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.home-revenue-amount {
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.home-revenue-caption {
+  color: var(--muted);
+  font-size: 13px;
+}
+.home-revenue-meter {
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-interactive);
+}
+.home-revenue-meter-billed {
+  background: var(--accent);
+}
+.home-revenue-meter-expected,
+.home-revenue-day-expected {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--accent-soft) 0 4px,
+    var(--at-color-primary-tint-strong) 4px 8px
+  );
+}
+.home-revenue-split {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.home-revenue-split dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.home-revenue-split dd {
+  margin: 2px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.home-revenue-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+.home-revenue-dot.is-expected {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--accent-soft) 0 3px,
+    var(--at-color-primary-tint-strong) 3px 6px
+  );
+  border: 1px solid var(--at-color-primary-tint-strong);
+}
+.home-revenue-facts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.home-revenue-facts li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-interactive);
+  color: var(--fg-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+.home-revenue-change.is-up {
+  color: var(--at-color-success-ink);
+}
+.home-revenue-change.is-down {
+  color: var(--at-color-danger-ink);
+}
+.home-revenue-facts li.home-revenue-ai {
+  background: var(--at-color-primary-tint-strong);
+  color: var(--at-color-primary-ink);
+}
+.home-revenue-ai .icon {
+  width: 14px;
+  height: 14px;
+}
+.home-revenue-week {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+.home-revenue-day {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+}
+.home-revenue-day-value {
+  color: var(--fg-soft);
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.home-revenue-day-track {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 64px;
+}
+.home-revenue-day-fill {
+  display: flex;
+  flex-direction: column;
+  border-radius: 4px 4px 2px 2px;
+  background: color-mix(in oklch, var(--accent) 45%, var(--surface));
+  overflow: hidden;
+}
+.home-revenue-day.is-today .home-revenue-day-fill {
+  background: var(--accent);
+}
+.home-revenue-day-expected {
+  flex: none;
+}
+.home-revenue-day-label {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+.home-revenue-day.is-today .home-revenue-day-label {
+  color: var(--fg);
+  font-weight: 700;
+}
+.home-revenue-more {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 2px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.home-revenue-more .icon {
+  width: 16px;
+  height: 16px;
+}
+
+@media (min-width: 768px) {
+  .dashboard-body > .home-revenue {
+    grid-column: 2;
+    margin-bottom: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-revenue.is-arriving {
+    animation: motion-fade-in var(--at-duration-moderate)
+      var(--at-ease-standard) both !important;
+  }
+}

@@ -9,6 +9,7 @@ export type PlatformSection =
   | "conta"
   | "conversas"
   | "disponibilidade"
+  | "faturamento"
   | "ia"
   | "importacao"
   | "inicio"
@@ -44,7 +45,10 @@ export type NavDestination = {
   section: PlatformSection;
 };
 
-/** Ordem e conteúdo da sidebar (tablet/notebook/desktop): cinco destinos + Configurações. */
+/**
+ * Ordem e conteúdo da sidebar (tablet/notebook/desktop): seis destinos +
+ * Configurações. Faturamento (D-177) vem depois de Serviços.
+ */
 export const SIDEBAR_DESTINATIONS: NavDestination[] = [
   { href: "/inicio", icon: "nav-home", label: "Início", section: "inicio" },
   {
@@ -70,6 +74,12 @@ export const SIDEBAR_DESTINATIONS: NavDestination[] = [
     icon: "nav-list",
     label: "Serviços",
     section: "servicos",
+  },
+  {
+    href: "/faturamento",
+    icon: "nav-chart",
+    label: "Faturamento",
+    section: "faturamento",
   },
 ];
 
@@ -106,11 +116,18 @@ export const NOTIFICATIONS_DESTINATION: NavDestination = {
 
 /**
  * Destinos que só aparecem dentro do "Mais" no mobile: Notificações,
- * Serviços e o que a Especificação das Telas lista sob "Mais / Configurações".
+ * Serviços, Faturamento (D-177) e o que a Especificação das Telas lista sob
+ * "Mais / Configurações".
  */
 export const MORE_DESTINATIONS: NavDestination[] = [
   NOTIFICATIONS_DESTINATION,
   { href: "/servicos", icon: "briefcase", label: "Serviços", section: "servicos" },
+  {
+    href: "/faturamento",
+    icon: "nav-chart",
+    label: "Faturamento",
+    section: "faturamento",
+  },
   { href: "/configuracoes/negocio", icon: "info", label: "Negócio", section: "negocio" },
   {
     href: "/configuracoes/agenda",

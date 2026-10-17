@@ -1247,6 +1247,10 @@ p {
   font-size: 15px;
   font-weight: 600;
 }
+/* Atalho que sobra sozinho na última linha ocupa a linha inteira (D-177). */
+.more-tile:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
 .more-tile .badge-count {
   position: absolute;
   top: 12px;

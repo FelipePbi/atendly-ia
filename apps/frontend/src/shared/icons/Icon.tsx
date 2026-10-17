@@ -39,6 +39,7 @@ export type IconName =
   | "x"
   | "chat"
   | "nav-calendar"
+  | "nav-chart"
   | "nav-chat"
   | "nav-home"
   | "nav-list"

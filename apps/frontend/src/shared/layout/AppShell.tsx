@@ -538,7 +538,7 @@ function useSectionTransitions(
 }
 
 /** Os atalhos em destaque no topo da folha "Mais" do celular. */
-const MORE_SHORTCUTS = new Set(["notificacoes", "servicos"]);
+const MORE_SHORTCUTS = new Set(["notificacoes", "servicos", "faturamento"]);
 
 function MoreGroup({
   children,

@@ -15,6 +15,7 @@ import { BffMigrationService } from "./BffMigrationService";
 import { BffNotificationService } from "./BffNotificationService";
 import { BffOnboardingService } from "./BffOnboardingService";
 import { BffRetentionService } from "./BffRetentionService";
+import { BffRevenueService } from "./BffRevenueService";
 import { BffServiceCatalogService } from "./BffServiceCatalogService";
 import { BffSettingsService } from "./BffSettingsService";
 import { BffStatusService } from "./BffStatusService";
@@ -34,6 +35,7 @@ export interface BffServiceRegistry {
   notifications: BffNotificationService;
   onboarding: BffOnboardingService;
   retention: BffRetentionService;
+  revenue: BffRevenueService;
   serviceCatalog: BffServiceCatalogService;
   settings: BffSettingsService;
   status: BffStatusService;
@@ -69,6 +71,7 @@ export function createBffServiceRegistry(
     notifications: new BffNotificationService(http),
     onboarding: new BffOnboardingService(http),
     retention: new BffRetentionService(http),
+    revenue: new BffRevenueService(http),
     serviceCatalog: new BffServiceCatalogService(http),
     settings: new BffSettingsService(http),
     status: new BffStatusService(http),

@@ -2,6 +2,8 @@ import type { PrismaClient } from "../../generated/prisma/client.js";
 import type { PriceType } from "../../generated/prisma/enums.js";
 import {
   addDays,
+  databaseDate,
+  databaseTimeToMinutes,
   instantToLocalDateTime,
   localDateTimeToInstant,
   weekdayIndex,
@@ -23,6 +25,11 @@ import {
  *
  * Faturado é só o que foi concluído. Previsto é o que está confirmado e
  * ainda vai acontecer. Os dois nunca se somam.
+ *
+ * O que a IA fez (D-178) sai dos mesmos atendimentos, contando só o que dá
+ * para provar: quem marcou (`source = AI`), o primeiro agendamento de cada
+ * cliente, a hora em que a IA marcou contra o horário de atendimento e as
+ * remarcações feitas pela IA. Nada é estimado.
  */
 
 export const REVENUE_PERIODS = ["day", "week", "month", "year"] as const;
@@ -36,6 +43,12 @@ export const UNLISTED_SERVICE_NAME = "Outros atendimentos";
 export interface RevenueAppointmentRow {
   status: string;
   startAt: Date;
+  /** Quem marcou: `AI`, `USER` ou `INTEGRATION` (importação). */
+  source?: string;
+  /** Quando o atendimento foi marcado. */
+  createdAt?: Date;
+  /** A IA remarcou este atendimento ao menos uma vez. */
+  rescheduledByAi?: boolean;
   customerId: string;
   customerName: string | null;
   finalValue: unknown;
@@ -56,6 +69,31 @@ export interface RevenueReportInput {
   now: Date;
 }
 
+/** Uma faixa do horário de atendimento semanal, em minutos do dia. */
+export interface OpeningWindow {
+  /** 0 = domingo. */
+  weekday: number;
+  startMinute: number;
+  endMinute: number;
+}
+
+/**
+ * O que o relatório precisa, além dos atendimentos do período, para dizer o
+ * que a IA fez (D-178).
+ */
+export interface RevenueAiContext {
+  /** Primeiro agendamento já criado para cada cliente, de qualquer status. */
+  firstAppointments: ReadonlyMap<string, { createdAt: Date; source: string }>;
+  /** Clientes que vieram de importação: nunca contam como trazidos pela IA. */
+  importedCustomerIds: ReadonlySet<string>;
+  /** Horário de atendimento semanal ativo. Vazio: nada conta como fora dele. */
+  openingWindows: readonly OpeningWindow[];
+  /** Dias inteiros fechados por exceção (`YYYY-MM-DD`). */
+  closedDates?: ReadonlySet<string>;
+  /** Atendimentos concluídos, de todo o histórico, dos clientes trazidos pela IA. */
+  acquiredRows: readonly RevenueAppointmentRow[];
+}
+
 export interface RevenueRange {
   /** Primeiro dia, inclusivo. */
   start: string;
@@ -70,6 +108,11 @@ export interface RevenueReport {
   end: string;
   today: string;
   timezone: string;
+  /**
+   * O período em instantes, cortado em agora: é o intervalo em que o BFF
+   * conta as mensagens que chegaram (D-178).
+   */
+  window: { from: string; to: string };
   billed: {
     amount: number;
     count: number;
@@ -111,7 +154,27 @@ export interface RevenueReport {
     amount: number;
     count: number;
     expectedAmount: number;
+    /** Parte do faturado que veio de atendimentos marcados pela IA. */
+    aiAmount: number;
   }>;
+  ai: RevenueAiReport;
+}
+
+export interface RevenueAiReport {
+  /** Concluídos no período que a IA marcou. */
+  billed: { amount: number; count: number };
+  /** Confirmados pela frente que a IA marcou. */
+  expected: { amount: number; count: number };
+  /** Parte do faturado do período que veio da IA; nula sem faturado. */
+  share: number | null;
+  /** Clientes cujo primeiro agendamento a IA marcou neste período. */
+  newCustomers: { count: number; amount: number; names: string[] };
+  /** Concluídos que a IA marcou fora do horário de atendimento. */
+  afterHours: { count: number; amount: number };
+  /** Concluídos que a IA remarcou, em vez de o horário se perder. */
+  rescheduled: { count: number; amount: number };
+  /** Desde sempre: clientes trazidos pela IA e o que já faturaram. */
+  acquired: { customers: number; amount: number };
 }
 
 // --- Períodos ---------------------------------------------------------------
@@ -259,12 +322,67 @@ export function splitAcrossItems(
   return shares;
 }
 
+// --- IA ---------------------------------------------------------------------
+
+/** Clientes trazidos pela IA: o primeiro agendamento foi dela e não vieram de importação. */
+export function aiAcquiredCustomerIds(context: RevenueAiContext): Set<string> {
+  const acquired = new Set<string>();
+  for (const [customerId, first] of context.firstAppointments) {
+    if (first.source !== "AI") continue;
+    if (context.importedCustomerIds.has(customerId)) continue;
+    acquired.add(customerId);
+  }
+  return acquired;
+}
+
+/**
+ * Se o instante cai fora do horário de atendimento, no fuso do negócio. Sem
+ * horário cadastrado não dá para afirmar nada: responde `false`.
+ */
+export function isOutsideOpeningHours(
+  instant: Date,
+  timeZone: string,
+  windows: readonly OpeningWindow[],
+  closedDates: ReadonlySet<string> = new Set(),
+): boolean {
+  if (windows.length === 0) return false;
+  const local = instantToLocalDateTime(instant, timeZone);
+  if (closedDates.has(local.date)) return true;
+  const weekday = weekdayIndex(local.date);
+  const [hour, minute] = local.time.split(":").map(Number) as [number, number];
+  const minutes = hour * 60 + minute;
+  return !windows.some(
+    (window) =>
+      window.weekday === weekday &&
+      minutes >= window.startMinute &&
+      minutes < window.endMinute,
+  );
+}
+
+function periodWindow(
+  range: RevenueRange,
+  timeZone: string,
+  now: Date,
+): { from: string; to: string } {
+  const from = localDateTimeToInstant(range.start, "00:00", timeZone);
+  const end = localDateTimeToInstant(range.end, "00:00", timeZone);
+  const to = end < now ? end : now;
+  return {
+    from: from.toISOString(),
+    to: (to < from ? from : to).toISOString(),
+  };
+}
+
+const EMPTY_AI_CONTEXT: RevenueAiContext = {
+  firstAppointments: new Map(),
+  importedCustomerIds: new Set(),
+  openingWindows: [],
+  acquiredRows: [],
+};
+
 // --- Relatório --------------------------------------------------------------
 
-function seriesBuckets(
-  period: RevenuePeriod,
-  range: RevenueRange,
-): string[] {
+function seriesBuckets(period: RevenuePeriod, range: RevenueRange): string[] {
   if (period === "day") return [];
   const buckets: string[] = [];
   if (period === "year") {
@@ -286,10 +404,32 @@ function bucketOf(period: RevenuePeriod, date: string): string {
 export function buildRevenueReport(
   rows: readonly RevenueAppointmentRow[],
   input: RevenueReportInput,
+  aiContext: RevenueAiContext = EMPTY_AI_CONTEXT,
 ): RevenueReport {
   const { period, timeZone, now } = input;
   const today = instantToLocalDateTime(now, timeZone).date;
   const range = revenuePeriodRange(period, input.date);
+  const acquired = aiAcquiredCustomerIds(aiContext);
+  // Clientes cujo primeiro agendamento a IA marcou dentro do período.
+  const newByAi = new Map<string, { name: string | null; amount: number }>();
+  for (const customerId of acquired) {
+    const first = aiContext.firstAppointments.get(customerId);
+    if (!first) continue;
+    const createdOn = instantToLocalDateTime(first.createdAt, timeZone).date;
+    if (createdOn >= range.start && createdOn < range.end) {
+      newByAi.set(customerId, { name: null, amount: 0 });
+    }
+  }
+  const ai = {
+    billedAmount: 0,
+    billedCount: 0,
+    expectedAmount: 0,
+    expectedCount: 0,
+    afterHoursCount: 0,
+    afterHoursAmount: 0,
+    rescheduledCount: 0,
+    rescheduledAmount: 0,
+  };
   const previous = previousRevenueRange(period, range, today);
 
   const billed = { amount: 0, count: 0, unvaluedCount: 0, valuedCount: 0 };
@@ -324,7 +464,7 @@ export function buildRevenueReport(
   const series = new Map(
     bucketKeys.map((start) => [
       start,
-      { start, amount: 0, count: 0, expectedAmount: 0 },
+      { start, amount: 0, count: 0, expectedAmount: 0, aiAmount: 0 },
     ]),
   );
 
@@ -371,11 +511,45 @@ export function buildRevenueReport(
         bucket.count += 1;
       }
 
+      if (row.source === "AI") {
+        ai.billedCount += 1;
+        ai.billedAmount += amount;
+        if (bucket) bucket.aiAmount += amount;
+        if (
+          row.createdAt &&
+          isOutsideOpeningHours(
+            row.createdAt,
+            timeZone,
+            aiContext.openingWindows,
+            aiContext.closedDates,
+          )
+        ) {
+          ai.afterHoursCount += 1;
+          ai.afterHoursAmount += amount;
+        }
+      }
+      if (row.rescheduledByAi) {
+        ai.rescheduledCount += 1;
+        ai.rescheduledAmount += amount;
+      }
+      const newcomer = newByAi.get(row.customerId);
+      if (newcomer) {
+        newcomer.name = newcomer.name ?? row.customerName;
+        newcomer.amount += amount;
+      }
+
       const parts =
         row.items.length === 0 ? [amount] : splitAcrossItems(row, amount);
       const entries =
         row.items.length === 0
-          ? [{ key: "", serviceId: null, name: UNLISTED_SERVICE_NAME, colorToken: null }]
+          ? [
+              {
+                key: "",
+                serviceId: null,
+                name: UNLISTED_SERVICE_NAME,
+                colorToken: null,
+              },
+            ]
           : row.items.map((item) => ({
               key: item.serviceId,
               serviceId: item.serviceId,
@@ -409,6 +583,10 @@ export function buildRevenueReport(
       else expected.amount += value;
       const bucket = series.get(bucketOf(period, date));
       if (bucket) bucket.expectedAmount += value ?? 0;
+      if (row.source === "AI") {
+        ai.expectedCount += 1;
+        ai.expectedAmount += value ?? 0;
+      }
       continue;
     }
 
@@ -424,10 +602,16 @@ export function buildRevenueReport(
     }
   }
 
-  const byAmount = <T extends { amount: number; count: number }>(
-    a: T,
-    b: T,
-  ) => b.amount - a.amount || b.count - a.count;
+  let acquiredAmount = 0;
+  for (const acquiredRow of aiContext.acquiredRows) {
+    if (acquiredRow.status !== "COMPLETED") continue;
+    if (!acquired.has(acquiredRow.customerId)) continue;
+    acquiredAmount += appointmentValueCents(acquiredRow) ?? 0;
+  }
+  const newcomers = [...newByAi.values()].sort((a, b) => b.amount - a.amount);
+
+  const byAmount = <T extends { amount: number; count: number }>(a: T, b: T) =>
+    b.amount - a.amount || b.count - a.count;
 
   return {
     period,
@@ -435,6 +619,7 @@ export function buildRevenueReport(
     end: addDays(range.end, -1),
     today,
     timezone: timeZone,
+    window: periodWindow(range, timeZone, now),
     billed: {
       amount: fromCents(billed.amount),
       count: billed.count,
@@ -483,7 +668,38 @@ export function buildRevenueReport(
       ...bucket,
       amount: fromCents(bucket.amount),
       expectedAmount: fromCents(bucket.expectedAmount),
+      aiAmount: fromCents(bucket.aiAmount),
     })),
+    ai: {
+      billed: { amount: fromCents(ai.billedAmount), count: ai.billedCount },
+      expected: {
+        amount: fromCents(ai.expectedAmount),
+        count: ai.expectedCount,
+      },
+      share: billed.amount > 0 ? ai.billedAmount / billed.amount : null,
+      newCustomers: {
+        count: newcomers.length,
+        amount: fromCents(
+          newcomers.reduce((sum, newcomer) => sum + newcomer.amount, 0),
+        ),
+        names: newcomers
+          .map((newcomer) => newcomer.name)
+          .filter((name): name is string => Boolean(name))
+          .slice(0, 3),
+      },
+      afterHours: {
+        count: ai.afterHoursCount,
+        amount: fromCents(ai.afterHoursAmount),
+      },
+      rescheduled: {
+        count: ai.rescheduledCount,
+        amount: fromCents(ai.rescheduledAmount),
+      },
+      acquired: {
+        customers: acquired.size,
+        amount: fromCents(acquiredAmount),
+      },
+    },
   };
 }
 
@@ -497,6 +713,7 @@ export async function loadRevenueReport(
   tenantId: string,
   input: RevenueReportInput,
 ): Promise<RevenueReport> {
+  const aiContext = await loadRevenueAiContext(prisma, tenantId, input);
   const today = instantToLocalDateTime(input.now, input.timeZone).date;
   const range = revenuePeriodRange(input.period, input.date);
   const previous = previousRevenueRange(input.period, range, today);
@@ -512,9 +729,16 @@ export async function loadRevenueReport(
     select: {
       status: true,
       startAt: true,
+      source: true,
+      createdAt: true,
       customerId: true,
       finalValue: true,
       customer: { select: { name: true } },
+      events: {
+        where: { type: "RESCHEDULED", source: "AI" },
+        select: { id: true },
+        take: 1,
+      },
       items: {
         orderBy: { createdAt: "asc" },
         select: {
@@ -531,6 +755,9 @@ export async function loadRevenueReport(
     rows.map((row) => ({
       status: row.status,
       startAt: row.startAt,
+      source: row.source,
+      createdAt: row.createdAt,
+      rescheduledByAi: row.events.length > 0,
       customerId: row.customerId,
       customerName: row.customer.name,
       finalValue: row.finalValue,
@@ -545,5 +772,97 @@ export async function loadRevenueReport(
       })),
     })),
     input,
+    aiContext,
   );
+}
+
+/**
+ * O primeiro agendamento de cada cliente, os clientes importados, o horário
+ * de atendimento e o histórico concluído dos clientes trazidos pela IA.
+ */
+async function loadRevenueAiContext(
+  prisma: PrismaClient,
+  tenantId: string,
+  input: RevenueReportInput,
+): Promise<RevenueAiContext> {
+  const [firsts, imported, rules, closed] = await Promise.all([
+    prisma.appointment.findMany({
+      where: { tenantId },
+      orderBy: [{ customerId: "asc" }, { createdAt: "asc" }],
+      distinct: ["customerId"],
+      select: { customerId: true, createdAt: true, source: true },
+    }),
+    prisma.externalEntityMap.findMany({
+      where: { tenantId, entityType: "CUSTOMER" },
+      select: { internalId: true },
+    }),
+    prisma.availabilityRule.findMany({
+      where: { tenantId, active: true },
+      select: { dayOfWeek: true, startTime: true, endTime: true },
+    }),
+    prisma.availabilityException.findMany({
+      where: { tenantId, available: false, startTime: null },
+      select: { date: true },
+    }),
+  ]);
+  const context: RevenueAiContext = {
+    firstAppointments: new Map(
+      firsts.map((first) => [
+        first.customerId,
+        { createdAt: first.createdAt, source: first.source },
+      ]),
+    ),
+    importedCustomerIds: new Set(imported.map((entry) => entry.internalId)),
+    openingWindows: rules.map((rule) => ({
+      weekday: rule.dayOfWeek,
+      startMinute: databaseTimeToMinutes(rule.startTime),
+      endMinute: databaseTimeToMinutes(rule.endTime),
+    })),
+    closedDates: new Set(
+      closed.map((exception) => databaseDate(exception.date)),
+    ),
+    acquiredRows: [],
+  };
+  const acquired = [...aiAcquiredCustomerIds(context)];
+  if (acquired.length === 0) return context;
+  const history = await prisma.appointment.findMany({
+    where: {
+      tenantId,
+      customerId: { in: acquired },
+      status: "COMPLETED",
+      startAt: { lt: input.now },
+    },
+    select: {
+      status: true,
+      startAt: true,
+      customerId: true,
+      finalValue: true,
+      items: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          serviceId: true,
+          serviceNameSnapshot: true,
+          priceTypeSnapshot: true,
+          priceSnapshot: true,
+        },
+      },
+    },
+  });
+  return {
+    ...context,
+    acquiredRows: history.map((row) => ({
+      status: row.status,
+      startAt: row.startAt,
+      customerId: row.customerId,
+      customerName: null,
+      finalValue: row.finalValue,
+      items: row.items.map((item) => ({
+        serviceId: item.serviceId,
+        serviceName: item.serviceNameSnapshot,
+        colorToken: null,
+        priceType: item.priceTypeSnapshot,
+        price: item.priceSnapshot,
+      })),
+    })),
+  };
 }

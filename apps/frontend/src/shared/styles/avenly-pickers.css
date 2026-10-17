@@ -226,12 +226,14 @@
 .date-picker-row {
   display: contents;
 }
+/* O número fica no centro exato da célula; a bolinha de dia ocupado mora
+   fora do fluxo, logo abaixo dele. Empilhados no flex, os 4 px da bolinha e
+   o espaço entre os dois empurravam o número para cima (2026-10-16). */
 .date-picker-day {
+  position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
   min-width: 0;
   height: 44px;
   border-radius: 12px;
@@ -287,6 +289,10 @@
   background: transparent;
 }
 .date-picker-dot {
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  translate: -50% 0;
   width: 4px;
   height: 4px;
   border-radius: 50%;

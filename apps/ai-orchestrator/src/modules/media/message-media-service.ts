@@ -6,7 +6,11 @@ import type {
   DownloadMediaInput,
   DownloadMediaResult,
 } from "../channel/ports/WhatsAppProvider.js";
-import { decodeBase64Media, readMediaProto } from "./media-bytes.js";
+import {
+  decodeBase64Media,
+  readMediaExpiry,
+  readMediaProto,
+} from "./media-bytes.js";
 
 /**
  * Bytes de mídia para exibição sob demanda (Goal013/WU-05).
@@ -56,12 +60,31 @@ export type MessageMediaProviderFactory = (channel: {
   credentialVersion: number;
 }) => MessageMediaProvider;
 
+/**
+ * Se ainda vale tentar buscar os bytes, sem rede: falso quando a mídia é
+ * grande demais, quando não há URL hospedada nem proto para o download sob
+ * demanda, ou quando o link assinado do WhatsApp já venceu
+ * (`readMediaExpiry`). Verdadeiro não garante sucesso — só a busca sabe.
+ */
+export function isMediaRetrievable(
+  attachment: { tooLarge: boolean; mediaUrl: string | null },
+  rawPayload: unknown,
+  now: Date = new Date(),
+): boolean {
+  if (attachment.tooLarge) return false;
+  if (attachment.mediaUrl) return true;
+  if (!readMediaProto(rawPayload)) return false;
+  const expiry = readMediaExpiry(rawPayload);
+  return !expiry || expiry.getTime() > now.getTime();
+}
+
 export class MessageMediaService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly buildProvider: MessageMediaProviderFactory,
     private readonly fetchHostedMedia: typeof fetch = fetch,
     private readonly logger: DiagnosticLogger = noopDiagnosticLogger,
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
   async resolve(
@@ -113,6 +136,10 @@ export class MessageMediaService {
 
     const proto = readMediaProto(message.rawPayload);
     if (!proto) return { ok: false, reason: "MEDIA_UNAVAILABLE" };
+    // Link da CDN vencido: o WhatsApp recusaria, então nem se gasta a ida.
+    if (!isMediaRetrievable(attachment, message.rawPayload, this.now())) {
+      return { ok: false, reason: "MEDIA_UNAVAILABLE" };
+    }
 
     let provider: MessageMediaProvider;
     try {

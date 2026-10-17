@@ -50,6 +50,31 @@ export function readMediaProto(
 }
 
 /**
+ * Até quando o WhatsApp ainda entrega os bytes do proto guardado.
+ *
+ * O `directPath` (e a `URL`) da mídia é um link assinado da CDN com a validade
+ * no parâmetro `oe`, um timestamp Unix em hexadecimal — na prática uns 30 dias
+ * depois do upload de quem enviou. Passado esse instante a CDN recusa o
+ * download, então o download sob demanda nem precisa ser tentado. `undefined`
+ * quando o proto não diz: aí só a tentativa responde.
+ */
+export function readMediaExpiry(raw: unknown): Date | undefined {
+  const message = readProviderMessage(raw);
+  if (!message) return undefined;
+  for (const key of mediaProtoKeys) {
+    const media = message[key];
+    if (!isRecord(media)) continue;
+    for (const field of ["directPath", "URL", "url"]) {
+      const value = media[field];
+      if (typeof value !== "string") continue;
+      const match = /[?&]oe=([0-9a-f]{1,12})(?:&|$)/iu.exec(value);
+      if (match) return new Date(Number.parseInt(match[1], 16) * 1000);
+    }
+  }
+  return undefined;
+}
+
+/**
  * Decodifica base64 puro ou data URL (`data:audio/ogg;codecs=opus;base64,...`),
  * que é como o Go devolve o download sob demanda.
  */

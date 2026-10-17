@@ -54,7 +54,10 @@ import type {
   MessageKindValue,
 } from "../media/media-metadata.js";
 import type { TranscriptStatusValue } from "../media/message-attachment-store.js";
-import { MessageMediaService } from "../media/message-media-service.js";
+import {
+  isMediaRetrievable,
+  MessageMediaService,
+} from "../media/message-media-service.js";
 import {
   CUSTOMER_MEMORY_KINDS,
   type CustomerMemoryRecord,
@@ -1799,6 +1802,12 @@ function messageDto(message: {
   deliveryState?: "PENDING" | "SENT" | "FAILED" | "UNKNOWN" | null;
   deliveryDetail?: string | null;
   attachments?: MessageDtoAttachment[];
+  /**
+   * Payload bruto do provedor. Quando veio na leitura, decide se a mídia
+   * ainda pode ser buscada (proto presente e link do WhatsApp no prazo);
+   * quando não veio (`lastMessage` da lista), fica só o `tooLarge`.
+   */
+  rawPayload?: unknown;
 }) {
   const attachment = message.attachments?.[0];
   return {
@@ -1825,10 +1834,14 @@ function messageDto(message: {
           transcript: attachment.transcript,
           transcriptStatus: attachment.transcriptStatus,
           transcriptError: attachment.transcriptError,
-          // Dica para a UI decidir se oferece "ver midia": so falsa quando ja
-          // se sabe de antemao que a midia e grande demais. Nao garante que o
-          // download sob demanda vai ter sucesso — isso so a rota sabe.
-          mediaAvailable: !attachment.tooLarge,
+          // Dica para a UI decidir se busca a midia: falsa quando ja se sabe
+          // de antemao que ela nao vem (grande demais, sem proto ou com o link
+          // do WhatsApp vencido). Verdadeira nao garante que o download sob
+          // demanda vai ter sucesso — isso so a rota sabe.
+          mediaAvailable:
+            "rawPayload" in message
+              ? isMediaRetrievable(attachment, message.rawPayload)
+              : !attachment.tooLarge,
         }
       : null,
   };

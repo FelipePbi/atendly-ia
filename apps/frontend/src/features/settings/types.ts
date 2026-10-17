@@ -18,6 +18,7 @@ export type SettingsScenario =
   | "conversations"
   | "account"
   | "account-deletion"
+  | "activity"
   | "loading"
   | "error";
 export interface SettingsService {

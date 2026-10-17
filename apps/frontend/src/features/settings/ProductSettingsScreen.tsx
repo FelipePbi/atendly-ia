@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import type { SettingsState } from "@/data";
+import { ActivityScreen } from "@/features/activity/ActivityScreen";
 import { ReminderSettingsSection } from "@/features/reminders/ReminderSettingsSection";
 import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
@@ -85,7 +86,8 @@ function isHubScenario(scenario: SettingsScenario): boolean {
     scenario === "availability" ||
     scenario === "conversations" ||
     scenario === "account" ||
-    scenario === "account-deletion"
+    scenario === "account-deletion" ||
+    scenario === "activity"
   );
 }
 
@@ -104,6 +106,7 @@ function openHrefFor(scenario: SettingsScenario): string {
   if (scenario === "conversations") return "/configuracoes/conversas";
   if (scenario === "account" || scenario === "account-deletion")
     return "/configuracoes/conta";
+  if (scenario === "activity") return "/configuracoes/atividade";
   return "/configuracoes/negocio";
 }
 
@@ -198,5 +201,11 @@ function SettingsSection({
   if (scenario === "account") return <AccountSettings />;
   if (scenario === "account-deletion")
     return <AccountDeletionScreen settings={settings} />;
+  if (scenario === "activity")
+    return (
+      <ActivityScreen
+        timeZone={settings.business?.timezone ?? "America/Sao_Paulo"}
+      />
+    );
   return <BusinessSettings settings={settings} onSaved={setSettings} />;
 }

@@ -100,6 +100,7 @@ export function openHrefForPath(pathname: string): string {
     return "/configuracoes/agenda";
   if (section === "conversas") return "/configuracoes/conversas";
   if (section === "conta") return "/configuracoes/conta";
+  if (section === "atividade") return "/configuracoes/atividade";
   return "/configuracoes/negocio";
 }
 

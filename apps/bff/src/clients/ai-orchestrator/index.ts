@@ -191,11 +191,7 @@ const ignoredContactSchema = z.object({
 // Goal139: onde a marcacao foi feita, e a lista dos contatos ignorados do
 // canal ativo. A IA tambem devolve `limit` e `offset`; o BFF so repassa o que
 // o contrato publico declara.
-const ignoredOriginSchema = z.enum([
-  "ONBOARDING",
-  "CONVERSATION",
-  "SETTINGS",
-]);
+const ignoredOriginSchema = z.enum(["ONBOARDING", "CONVERSATION", "SETTINGS"]);
 
 const ignoredContactListSchema = z.object({
   items: z.array(
@@ -840,7 +836,10 @@ export class AiOrchestratorClient {
    * relevancia decrescente. A colecao e a criacao ficam sob `/memory`; o item
    * altera permissao e remove, inclusive memoria inferida.
    */
-  async listCustomerMemory(context: InternalRequestContext, customerId: string) {
+  async listCustomerMemory(
+    context: InternalRequestContext,
+    customerId: string,
+  ) {
     return (
       await this.http.request({
         method: "GET",
@@ -943,8 +942,31 @@ export class AiOrchestratorClient {
    * `Handoff` OPEN para ela, e sem o takeover do dono: as duas regras moram na
    * leitura da IA, nao aqui. A central so materializa o que veio.
    */
+  /** Mensagens de clientes por hora da semana, no fuso pedido (D-178). */
+  async inboundHours(
+    context: InternalRequestContext,
+    query: { from: string; to: string; timeZone: string },
+  ) {
+    return (
+      await this.http.request({
+        method: "GET",
+        path: "/internal/inbound-hours",
+        context,
+        query: { ...query },
+        schema: envelope(
+          z.object({
+            hours: z.array(z.number().int().nonnegative()).length(168),
+          }),
+        ),
+      })
+    ).data.hours;
+  }
+
   /** Registro de atividade da IA e das conversas (D-176). */
-  async activity(context: InternalRequestContext, query: InternalActivityQuery) {
+  async activity(
+    context: InternalRequestContext,
+    query: InternalActivityQuery,
+  ) {
     return (
       await this.http.request({
         method: "GET",

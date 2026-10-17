@@ -1034,7 +1034,7 @@ Resposta: `{ items, nextCursor }`, `nextCursor` nulo no fim. Cada item:
 
 Nenhum campo carrega senha, hash, token, credencial ou chave: o diff só percorre campos permitidos e qualquer chave com cara de segredo é descartada antes de gravar. A troca de senha e a conexão da Minha Agenda aparecem só como fato. A conclusão automática de atendimento (`SYSTEM`) e cada item importado (`INTEGRATION`) não viram atividade; a importação aparece como início e conclusão, com as contagens.
 
-## Faturamento (D-177)
+## Faturamento (D-177, D-178)
 
 `GET /v1/revenue`, sob `requireTenantContext`: quanto o negócio da sessão atendeu num período, já somado pelo Scheduling (`GET /internal/revenue`). O negócio vem só da sessão; `tenantId` na query é ignorado. O navegador recebe totais, nunca a lista de atendimentos.
 
@@ -1059,7 +1059,10 @@ Regra do valor: atendimento `COMPLETED` vale o valor final registrado; sem ele, 
 | `services` | `[{ serviceId, name, colorToken, amount, count, share }]` do maior para o menor; `serviceId` nulo é "Outros atendimentos" (avulso); valor final de vários serviços é dividido na proporção dos preços fixos |
 | `customers` | até cinco `[{ customerId, name, amount, count }]`, só com valor |
 | `weekdays` | sete `{ weekday, amount, count }`, `weekday` 0 = domingo |
-| `series` | no ano, doze meses; no mês e na semana, um item por dia; no dia, vazio. `{ start, amount, count, expectedAmount }` |
+| `series` | no ano, doze meses; no mês e na semana, um item por dia; no dia, vazio. `{ start, amount, count, expectedAmount, aiAmount }`; `aiAmount` é a parte do faturado que a IA marcou |
+| `window` | `{ from, to }`: o período em instantes ISO, cortado em agora |
+| `ai` | o que a IA fez (D-178): `billed` e `expected` `{ amount, count }` dos atendimentos com `source = AI`; `share` (parte da IA no faturado, `null` sem faturado); `newCustomers` `{ count, amount, names }` (primeiro agendamento da pessoa foi da IA, criado no período, sem importação; até três nomes); `afterHours` `{ count, amount }` (concluídos que a IA marcou fora do horário de atendimento ou em dia fechado); `rescheduled` `{ count, amount }` (concluídos que a IA remarcou); `acquired` `{ customers, amount }` (todos os clientes trazidos pela IA e o faturado de todo o histórico deles) |
+| `messages` | `{ total, outsideHours }`: mensagens de clientes recebidas no período e quantas fora do horário (hora inteira fora do horário daquele dia). Vem da IA (`GET /internal/inbound-hours`, contagem por hora da semana) cruzada aqui com o horário; `null` se a IA não responder ou não houver horário cadastrado. A falha não derruba a resposta |
 
 ## Central de notificações e alertas persistentes (Goal022/WU-04)
 

@@ -1024,12 +1024,30 @@ export const revenuePeriodSchema = z.enum(["day", "week", "month", "year"]);
 const revenueAmountSchema = z.number().nonnegative();
 const revenueCountSchema = z.number().int().nonnegative();
 export type RevenuePeriod = z.infer<typeof revenuePeriodSchema>;
+const revenueTallySchema = z.object({
+  amount: revenueAmountSchema,
+  count: revenueCountSchema,
+});
+// O que a IA fez (D-178): só o que a agenda prova.
+export const revenueAiSchema = z.object({
+  billed: revenueTallySchema,
+  expected: revenueTallySchema,
+  share: z.number().min(0).max(1).nullable(),
+  newCustomers: revenueTallySchema.extend({ names: z.array(z.string()) }),
+  afterHours: revenueTallySchema,
+  rescheduled: revenueTallySchema,
+  acquired: z.object({
+    customers: revenueCountSchema,
+    amount: revenueAmountSchema,
+  }),
+});
 export const revenueReportSchema = z.object({
   period: revenuePeriodSchema,
   start: z.string(),
   end: z.string(),
   today: z.string(),
   timezone: z.string().min(1),
+  window: z.object({ from: z.string(), to: z.string() }),
   billed: z.object({
     amount: revenueAmountSchema,
     count: revenueCountSchema,
@@ -1085,8 +1103,17 @@ export const revenueReportSchema = z.object({
       amount: revenueAmountSchema,
       count: revenueCountSchema,
       expectedAmount: revenueAmountSchema,
+      aiAmount: revenueAmountSchema,
     }),
   ),
+  ai: revenueAiSchema,
+  // Mensagens de clientes no período, e quantas fora do horário de
+  // atendimento (D-178). Preenchido pelo BFF; nulo quando a IA não respondeu
+  // ou não há horário cadastrado para comparar.
+  messages: z
+    .object({ total: revenueCountSchema, outsideHours: revenueCountSchema })
+    .nullable()
+    .default(null),
 });
 
 export const dashboardSchema = z.object({
@@ -1475,6 +1502,7 @@ export type ActivityChange = z.infer<typeof activityChangeSchema>;
 export type ActivityEntry = z.infer<typeof activityEntrySchema>;
 export type ActivityPage = z.infer<typeof activityPageSchema>;
 export type RevenueReport = z.infer<typeof revenueReportSchema>;
+export type RevenueAi = z.infer<typeof revenueAiSchema>;
 export type Message = z.infer<typeof messageSchema>;
 export type MessageKind = z.infer<typeof messageKindSchema>;
 export type MessageAttachmentKind = z.infer<typeof messageAttachmentKindSchema>;

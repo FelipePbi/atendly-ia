@@ -13,12 +13,22 @@ const MAX_ENTRIES = 48;
 
 let owner: string | null = null;
 const entries = new Map<string, unknown>();
+const resetListeners = new Set<() => void>();
 
 /** Troca o dono da memória; outro dono (ou nenhum) começa vazio. */
 export function claimSessionMemory(identity: string | null): void {
   if (identity === owner) return;
   owner = identity;
   entries.clear();
+  for (const listener of resetListeners) listener();
+}
+
+/**
+ * Memória que não cabe aqui (blobs de mídia do chat, por exemplo) e precisa
+ * ser esvaziada junto, quando a sessão troca de dono.
+ */
+export function onSessionMemoryReset(listener: () => void): void {
+  resetListeners.add(listener);
 }
 
 /** Grava o valor como o mais recente da chave. */

@@ -204,8 +204,11 @@ Com o chat ao lado (desktop):
 
 - mensagens;
 - autoria interna discreta;
-- áudios e transcrição;
-- imagens/documentos;
+- áudios e transcrição: o primeiro toque em "Ouvir" já toca; pausar, mudar a posição pela onda (também pelo teclado) e a velocidade (1×, 1,5×, 2×); só um áudio toca por vez;
+- imagens em miniatura no balão (quadrada, legenda embaixo), que aparecem sozinhas e ampliam ao clicar; enquanto vêm, o lugar delas fica parado, sem esqueleto piscando;
+- figurinhas (inclusive animadas) aparecem sozinhas, fora do balão;
+- documentos e vídeos com rótulo, nome e tamanho, abertos por "Ver mídia";
+- mídia que o WhatsApp não guarda mais (cerca de 30 dias depois do envio) aparece como "Mídia indisponível" (D-175);
 - eventos internos recolhíveis/discretos;
 - campo de resposta;
 - sugestão da IA quando humano atende;

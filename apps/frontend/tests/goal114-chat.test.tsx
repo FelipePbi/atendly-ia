@@ -542,6 +542,7 @@ describe("a timeline do quadro", () => {
   });
 
   test("o motivo da espera vira a linha do K2, logo depois da imagem recebida", async () => {
+    getMedia.mockReturnValue(new Promise(() => undefined));
     await renderThread(
       conversationFixture({
         handoffReason: "image_received",
@@ -589,7 +590,8 @@ describe("a timeline do quadro", () => {
     expect(rows.indexOf(notice.closest(".conversation-event") as Element)).toBe(
       2,
     );
-    expect(screen.getByRole("button", { name: /Ver mídia/ })).toBeVisible();
+    // A imagem vem sozinha (2026-10-16): o lugar dela já está no balão.
+    expect(await screen.findByText("Carregando imagem…")).toBeInTheDocument();
   });
 
   test("áudio e transcrição ficam dentro da mesma bolha", async () => {

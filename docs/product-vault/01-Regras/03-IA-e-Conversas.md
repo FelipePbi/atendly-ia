@@ -221,6 +221,8 @@ A IA entende áudio e pode tratar uma confirmação clara em áudio como confirm
 
 Imagem recebida gera handoff no MVP. A IA não interpreta conteúdo visual.
 
+Isso é só sobre a IA: a profissional vê imagens, figurinhas e áudios no chat ([[03-UX-UI/04-Especificacao-das-Telas]], D-175).
+
 ## Documentos
 
 Documentos podem aparecer na conversa, mas não são interpretados pela IA no MVP.

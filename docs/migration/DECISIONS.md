@@ -7765,3 +7765,25 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 
 **Revisar se:** o resumo por IA voltar a ser pedido, ou o produto ganhar métricas de gasto realizado no perfil.
 
+
+## D-175 — No chat, imagem e figurinha aparecem sozinhas e o áudio toca no primeiro toque; mídia continua sob demanda, sem cópia própria, e o link vencido do WhatsApp já vira "Mídia indisponível"
+
+**Status:** ACCEPTED em 2026-10-16, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Muda o comportamento de interface da D-033 (6) para imagem, figurinha e áudio; mantém a D-029 (nenhum byte de mídia guardado pela plataforma). Regra em `docs/product-vault/03-UX-UI/04-Especificacao-das-Telas.md` (Chat) e na resposta 235a de `99-Perguntas-e-Respostas.md`.
+
+**Contexto:** desde o Goal017 nenhuma mídia buscava bytes sozinha: a imagem era um quadro listrado com "Ver mídia" que abria num diálogo, a figurinha era só o rótulo "Figurinha" e o áudio pedia dois toques (um para buscar, outro no player nativo). O usuário pediu ver a mídia como num chat: áudio tocável, figurinhas (inclusive animadas) e imagens em miniatura no balão, ampliadas ao clicar. Documentos e PDFs ficam como estão. Ao investigar, apareceu que o `directPath` guardado no proto de cada mídia é um link assinado da CDN do WhatsApp que vence (parâmetro `oe`, cerca de 30 dias depois do envio); passado esse prazo o download sob demanda sempre falha, mas o DTO dizia `mediaAvailable: true` para tudo que não fosse `tooLarge`.
+
+**Decisão:**
+
+1. **Imagem** aparece sozinha como miniatura quadrada de 240 px (recorte central) quando o balão chega a ~400 px da área visível da conversa; clicar amplia num diálogo. A legenda vem depois da imagem. Enquanto carrega, o quadro listrado do K2 fica parado no lugar, do mesmo tamanho (sem esqueleto piscando e sem mudar a altura da conversa); a imagem entra com fade de opacidade, desligado com movimento reduzido.
+2. **Figurinha** aparece sozinha, 128 px, fora do balão. O WebP animado anima pelo próprio navegador.
+3. **Áudio** continua sob demanda (sem baixar todos os áudios da conversa), mas o primeiro toque busca e já toca. Player próprio: tocar/pausar, a onda mostra o quanto tocou, posição por controle deslizante sobre a onda (clique, arraste e setas do teclado, com o tempo dito em texto) e velocidade 1×/1,5×/2×. Só um áudio toca por vez.
+4. **Documento e vídeo** não mudam: rótulo neutro com nome e tamanho e "Ver mídia".
+5. **Indisponível:** imagem sem bytes na origem mostra "Mídia indisponível"; figurinha, "Figurinha indisponível". Recusa da rota de mídia vira o mesmo estado; falha de rede oferece "Tentar de novo".
+6. **Sem cópia própria:** a mídia continua vindo do WhatsApp na hora, pelo proxy do BFF (D-029). O que já veio fica em memória na aba (blob local, até 64 MB, esvaziado ao sair ou trocar de conta, como a memória da D-167); no máximo três buscas correm ao mesmo tempo; a rota de mídia do BFF responde com `cache-control: private, max-age=86400`.
+7. **Link vencido:** a IA lê a validade `oe` do proto guardado. Vencida, o DTO já diz `mediaAvailable: false` (a tela mostra "Mídia indisponível" sem ir ao WhatsApp) e a rota de bytes recusa `MEDIA_UNAVAILABLE` sem chamar o Evolution. Sem proto e sem URL hospedada, também `false`.
+
+**Alternativas:** guardar os bytes (MinIO/S3) para a mídia durar o mesmo que a conversa (rejeitada aqui: reabre retenção e armazenamento, fora do pedido; fica como evolução); manter "Ver mídia" para imagem (rejeitada pelo usuário); `<img src>` direto na rota do BFF (perderia as recusas com código e o cancelamento da fila); baixar todos os áudios ao abrir a conversa (uma ida ao WhatsApp por áudio que talvez ninguém ouça); usar o `<audio controls>` nativo (dois toques para ouvir e visual fora do K3).
+
+**Consequências:** abrir uma conversa com imagens e figurinhas faz até três buscas simultâneas ao WhatsApp por meio do número conectado; com o número desconectado, a busca falha e a tela mostra "Mídia indisponível". Mensagens com mais de ~30 dias perdem a mídia mesmo com a conversa ainda dentro da retenção (90 dias na Comercial). GIF (vídeo com `gifPlayback`) e figurinhas Lottie continuam fora: o primeiro como vídeo com "Ver mídia", a segunda cai em "Figurinha indisponível" se o navegador não decodificar.
+
+**Revisar se:** o produto adotar armazenamento próprio de mídia, o WhatsApp mudar a validade dos links, ou o volume de buscas chamar atenção anti-abuso do WhatsApp.

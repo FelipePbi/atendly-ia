@@ -493,16 +493,23 @@ export function MessageBubble({
         source === "CUSTOMER" && "is-customer",
         attachmentKind === "AUDIO" && "is-audio",
         attachmentKind === "IMAGE" && "is-image",
+        attachmentKind === "STICKER" && "is-sticker",
       )}
     >
       <div className="message-bubble">
-        {message.body && <span className="message-text">{message.body}</span>}
+        {/* Legenda da imagem vem depois dela, como no WhatsApp. */}
+        {message.body && attachmentKind !== "IMAGE" && (
+          <span className="message-text">{message.body}</span>
+        )}
         {message.attachment && (
           <MessageAttachmentView
             attachment={message.attachment}
             conversationId={conversationId}
             messageId={message.id}
           />
+        )}
+        {message.body && attachmentKind === "IMAGE" && (
+          <span className="message-text message-caption">{message.body}</span>
         )}
       </div>
       <span className="message-meta">

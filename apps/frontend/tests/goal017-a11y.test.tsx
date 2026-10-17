@@ -402,8 +402,13 @@ describe("chat da conversa", () => {
     ]);
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: /Ver mídia/ }));
-    await screen.findByRole("img", { name: "Imagem enviada na conversa" });
+    // A miniatura vem sozinha (2026-10-16); clicar amplia no diálogo.
+    await user.click(
+      await screen.findByRole("button", { name: "Ampliar imagem" }),
+    );
+    await screen.findByRole("img", {
+      name: "Imagem da conversa em tamanho maior",
+    });
 
     await expectNoA11yViolations(document.body);
   });

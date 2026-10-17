@@ -1424,34 +1424,105 @@
   align-items: center;
   gap: 6px;
 }
-.message-image-tile {
-  box-sizing: content-box;
-  width: 220px;
-  height: 150px;
-  padding: 0 12px;
+/* Imagem: miniatura de tamanho fixo no balão (a chegada dos bytes não muda a
+   altura da conversa nem tira o fim dela da tela), ampliada ao clicar. O
+   quadro listrado do K2 é o lugar da imagem enquanto ela vem — parado, sem
+   esqueleto piscando. */
+.message-image-tile,
+.message-image-thumb {
+  box-sizing: border-box;
+  width: 240px;
+  max-width: 100%;
+  aspect-ratio: 1;
   border: 0;
   border-radius: 12px;
+}
+.message-image-tile {
+  padding: 0 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   background: repeating-linear-gradient(
     135deg,
     #efeae2 0 8px,
     #e5ded4 8px 16px
   );
   color: #5f574e;
-  font-family: ui-monospace, Menlo, monospace;
-  font-size: 11px;
-  line-height: normal;
+  font-size: 13px;
+  line-height: 1.3;
   text-align: center;
 }
-button.message-image-tile {
+/* Sem imagem para mostrar, o quadro não precisa ocupar o lugar dela. */
+.message-image-tile.is-unavailable {
+  height: 112px;
+  aspect-ratio: auto;
+  background: #efeae2;
+}
+.message-image-retry {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #cfc6ba;
+  border-radius: 999px;
+  background: #fffdfa;
+  color: #0b4a4e;
+  font: inherit;
+  font-weight: 600;
   cursor: pointer;
 }
-button.message-image-tile:focus-visible {
+.message-image-retry:focus-visible {
   outline: 2px solid #0f5f63;
   outline-offset: 2px;
+}
+.message-image-thumb {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  background: #efeae2;
+  cursor: zoom-in;
+}
+.message-image-thumb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity var(--at-duration-fast, 160ms) ease-out;
+}
+.message-image-thumb.is-loaded img {
+  opacity: 1;
+}
+.message-image-thumb:focus-visible {
+  outline: 2px solid #0f5f63;
+  outline-offset: 2px;
+}
+.message-caption {
+  display: block;
+  max-width: 240px;
+  margin-top: 6px;
+  padding: 0 6px 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .message-image-thumb img {
+    transition: none;
+  }
+}
+/* Figurinha: fora do balão, 128 px, como no WhatsApp. */
+.message-group.is-sticker .message-bubble {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.message-sticker {
+  width: 128px;
+  height: 128px;
+  display: block;
+  object-fit: contain;
+}
+.message-sticker.is-loading {
+  border-radius: 12px;
+  background: #efeae2;
 }
 .message-audio-row {
   display: flex;
@@ -1485,6 +1556,13 @@ button.message-image-tile:focus-visible {
 .message-audio-play:focus-visible {
   outline: 2px solid #0f5f63;
   outline-offset: 2px;
+}
+.message-audio-track {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
 }
 .message-audio-wave {
   height: 24px;
@@ -1526,10 +1604,44 @@ button.message-image-tile:focus-visible {
   text-decoration: underline;
   cursor: pointer;
 }
-.message-audio-player {
+/* A onda é o trilho: o range transparente por cima dela recebe clique,
+   arraste e setas do teclado. */
+.message-audio-seek {
+  position: absolute;
+  inset: -6px 0;
   width: 100%;
-  max-width: 320px;
-  min-height: 36px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.message-audio-track:has(.message-audio-seek:focus-visible) {
+  border-radius: 6px;
+  outline: 2px solid #0f5f63;
+  outline-offset: 4px;
+}
+.message-audio-rate {
+  min-width: 40px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: #efeae2;
+  color: #3f3a34;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.message-group.is-outgoing .message-audio-rate {
+  background: #c8e0de;
+}
+.message-audio-rate:focus-visible {
+  outline: 2px solid #0f5f63;
+  outline-offset: 2px;
+}
+.message-audio-element {
+  display: none;
 }
 .message-transcript {
   margin: 0;

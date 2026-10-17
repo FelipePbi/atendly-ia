@@ -280,6 +280,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Avenly.
 233. **O que apagar ao expirar?** — **A — Conteúdo, preservando metadados mínimos.** **Vigente.**
 234. **Usuário pode apagar conversa inteira manualmente?** — **B — Não no MVP.** **Vigente.**
 235. **Inbox suporta mídia?** — **A — Sim, tipos suportados.** **Vigente.**
+235a. **Como a mídia aparece no chat?** — **Imagem e figurinha aparecem sozinhas; áudio toca no primeiro toque; documento e vídeo abrem por "Ver mídia" (decisão de 2026-10-16, D-175).** A Avenly não guarda cópia: a mídia vem do WhatsApp na hora em que é vista, e o WhatsApp só a mantém por cerca de 30 dias depois do envio — depois disso a conversa mostra "Mídia indisponível". Isso é sobre a pessoa ver a mídia; a IA continua sem interpretar imagem e documento (237, 238). **Vigente.**
 236. **IA entende áudio?** — **A — Sim.** **Vigente.**
 237. **IA interpreta imagem?** — **C — Não; handoff.** **Vigente.**
 238. **IA analisa documentos?** — **B — Mostra, mas não analisa.** **Vigente.**

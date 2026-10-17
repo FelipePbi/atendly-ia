@@ -11,22 +11,36 @@
  *   `FAILED` nunca mostra texto de transcrição, mesmo que o dado trouxesse um;
  * - áudio com bytes na origem pode ser ouvido: o player nasce do mesmo proxy
  *   sob demanda (`getMedia`), e ler a transcrição não substitui ouvir;
- * - imagem, documento e vídeo só buscam bytes sob demanda, pelo proxy
- *   (`getMedia`) — nenhuma URL de mídia aparece na árvore, só o blob local;
- * - `mediaAvailable: false` nunca oferece "Ver mídia"; `tooLarge` aparece
+ * - imagem e figurinha aparecem sozinhas pelo proxy (`getMedia`), imagem
+ *   como miniatura que amplia ao clicar; documento e vídeo só buscam bytes
+ *   sob demanda — nenhuma URL de mídia aparece na árvore, só o blob local
+ *   (desde 2026-10-16; antes a imagem também esperava "Ver mídia");
+ * - áudio toca no primeiro toque, pausa, muda de posição e de velocidade, e
+ *   só um toca por vez;
+ * - `mediaAvailable: false` nunca busca nada: imagem diz "Mídia
+ *   indisponível", documento não oferece "Ver mídia"; `tooLarge` aparece
  *   como metadado;
  * - as três recusas de mídia (`MESSAGE_ATTACHMENT_NOT_FOUND`,
  *   `MEDIA_TOO_LARGE`, `MEDIA_UNAVAILABLE`) têm copy própria, nunca erro
  *   genérico.
  */
 
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { BffHttpError, type Conversation, type Message } from "@/data";
 import { ConversationThread } from "@/features/conversations/ConversationThread";
+import { clearMediaCache } from "@/features/conversations/mediaCache";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
+
+import { expectNoA11yViolations } from "./support/a11y";
 
 const getConversation = vi.fn();
 const listMessages = vi.fn();
@@ -119,6 +133,7 @@ beforeEach(() => {
   listConversations.mockReset();
   sendMessage.mockReset();
   getMedia.mockReset();
+  clearMediaCache();
   URL.createObjectURL = vi.fn(() => "blob:mock-media-url");
   URL.revokeObjectURL = vi.fn();
 });
@@ -294,37 +309,227 @@ describe("áudio: transcriptStatus nos quatro estados", () => {
   });
 });
 
-describe("imagem, documento e vídeo sob demanda pelo proxy", () => {
-  test("mediaAvailable oferece Ver mídia, e o proxy devolve o conteúdo como blob local", async () => {
+function imageBytes() {
+  return {
+    blob: new Blob(["fake-bytes"], { type: "image/jpeg" }),
+    contentType: "image/jpeg",
+    fileName: null,
+  };
+}
+
+function refusal(upstreamCode: string) {
+  return new BffHttpError({
+    code: "UPSTREAM_ERROR",
+    details: { upstreamCode },
+    message: "upstream refused",
+    requestId: "req-1",
+    status: 502,
+  });
+}
+
+function imageMessage(
+  attachment: Partial<NonNullable<Message["attachment"]>> = {},
+  overrides: Partial<Message> = {},
+) {
+  return messageFixture({
+    attachment: attachmentFixture({
+      fileName: null,
+      kind: "IMAGE",
+      mimetype: "image/jpeg",
+      ...attachment,
+    }),
+    body: "",
+    direction: "INBOUND",
+    kind: "IMAGE",
+    source: "CUSTOMER",
+    ...overrides,
+  });
+}
+
+function stickerMessage(id: string, mediaAvailable = true) {
+  return messageFixture({
+    attachment: attachmentFixture({
+      fileName: null,
+      kind: "STICKER",
+      mediaAvailable,
+      mimetype: "image/webp",
+    }),
+    body: "",
+    direction: "INBOUND",
+    id,
+    kind: "STICKER",
+    source: "CUSTOMER",
+  });
+}
+
+describe("imagem: miniatura no balão, ampliada ao clicar", () => {
+  test("aparece sozinha pelo proxy, como blob local, e amplia ao clicar", async () => {
+    getMedia.mockResolvedValue(imageBytes());
+    await renderThread([imageMessage()]);
+    const user = userEvent.setup();
+
+    const thumb = await screen.findByRole("button", { name: "Ampliar imagem" });
+    expect(getMedia).toHaveBeenCalledWith("conv-1", "msg-1", undefined);
+    const image = within(thumb).getByRole("img", { name: "Imagem da conversa" });
+    expect(image).toHaveAttribute("src", "blob:mock-media-url");
+    expect(image.getAttribute("src")).not.toMatch(/whatsapp|minio|http/i);
+
+    await user.click(thumb);
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByRole("img", {
+        name: "Imagem da conversa em tamanho maior",
+      }),
+    ).toHaveAttribute("src", "blob:mock-media-url");
+  });
+
+  test("enquanto carrega, o lugar da imagem diz que carrega, sem texto na tela", async () => {
+    getMedia.mockReturnValue(new Promise(() => undefined));
+    await renderThread([imageMessage()]);
+
+    const status = await screen.findByText("Carregando imagem…");
+    expect(status).toHaveAttribute("role", "status");
+    expect(status).toHaveClass("sr-only");
+    expect(status.parentElement).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByRole("button", { name: "Ampliar imagem" })).toBeNull();
+  });
+
+  test("a legenda vem depois da imagem, como no WhatsApp", async () => {
+    getMedia.mockResolvedValue(imageBytes());
+    await renderThread([imageMessage({}, { body: "Olha como ficou" })]);
+
+    const thumb = await screen.findByRole("button", { name: "Ampliar imagem" });
+    const caption = screen.getByText("Olha como ficou");
+    expect(
+      thumb.compareDocumentPosition(caption) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  test("sem mídia na origem diz Mídia indisponível e não busca nada", async () => {
+    await renderThread([imageMessage({ mediaAvailable: false })]);
+
+    expect(screen.getByText("Mídia indisponível")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Ampliar imagem" })).toBeNull();
+    expect(getMedia).not.toHaveBeenCalled();
+  });
+
+  test.each(["MESSAGE_ATTACHMENT_NOT_FOUND", "MEDIA_TOO_LARGE", "MEDIA_UNAVAILABLE"])(
+    "a recusa %s vira Mídia indisponível, nunca erro técnico",
+    async (upstreamCode) => {
+      getMedia.mockRejectedValue(refusal(upstreamCode));
+      await renderThread([imageMessage()]);
+
+      expect(await screen.findByText("Mídia indisponível")).toBeVisible();
+      expect(screen.queryByText(/upstream refused/)).toBeNull();
+      expect(screen.queryByRole("button", { name: "Tentar de novo" })).toBeNull();
+    },
+  );
+
+  test("falha de rede oferece tentar de novo, que busca outra vez", async () => {
+    getMedia
+      .mockRejectedValueOnce(
+        new BffHttpError({
+          code: "NETWORK_ERROR",
+          message: "Não foi possível acessar a Avenly.",
+          requestId: "req-net",
+          status: 0,
+        }),
+      )
+      .mockResolvedValueOnce(imageBytes());
+    await renderThread([imageMessage()]);
+    const user = userEvent.setup();
+
+    expect(
+      await screen.findByText("Não foi possível carregar a imagem."),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Tentar de novo" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Ampliar imagem" }),
+    ).toBeVisible();
+    expect(getMedia).toHaveBeenCalledTimes(2);
+  });
+
+  test("voltar à conversa mostra a imagem na hora, sem baixar de novo", async () => {
+    getMedia.mockResolvedValue(imageBytes());
+    const first = await renderThread([imageMessage()]);
+    await screen.findByRole("button", { name: "Ampliar imagem" });
+    first.unmount();
+
+    await renderThread([imageMessage()]);
+
+    expect(screen.getByRole("button", { name: "Ampliar imagem" })).toBeVisible();
+    expect(getMedia).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("figurinha: aparece sozinha, fora do balão", () => {
+  test("estática ou animada, vira imagem do blob local sem balão", async () => {
     getMedia.mockResolvedValue({
-      blob: new Blob(["fake-bytes"], { type: "image/png" }),
-      contentType: "image/png",
-      fileName: "foto.png",
+      blob: new Blob(["webp"], { type: "image/webp" }),
+      contentType: "image/webp",
+      fileName: null,
+    });
+    await renderThread([stickerMessage("st-1")]);
+
+    const sticker = await screen.findByRole("img", { name: "Figurinha" });
+    expect(sticker).toHaveAttribute("src", "blob:mock-media-url");
+    expect(sticker.closest(".message-group")).toHaveClass("is-sticker");
+  });
+
+  test("sem mídia na origem diz que a figurinha está indisponível, sem buscar", async () => {
+    await renderThread([stickerMessage("st-1", false)]);
+
+    expect(screen.getByText("Figurinha indisponível")).toBeVisible();
+    expect(getMedia).not.toHaveBeenCalled();
+  });
+
+  test("imagem e figurinha prontas passam no axe", async () => {
+    getMedia.mockResolvedValue(imageBytes());
+    const { container } = await renderThread([
+      imageMessage(),
+      stickerMessage("st-1"),
+    ]);
+    await screen.findByRole("img", { name: "Figurinha" });
+    await screen.findByRole("button", { name: "Ampliar imagem" });
+
+    await expectNoA11yViolations(container);
+  });
+});
+
+describe("documento e vídeo continuam sob demanda", () => {
+  test("documento não busca nada sozinho; Ver mídia busca pelo proxy", async () => {
+    getMedia.mockResolvedValue({
+      blob: new Blob(["pdf"], { type: "application/pdf" }),
+      contentType: "application/pdf",
+      fileName: "orcamento.pdf",
     });
     await renderThread([
       messageFixture({
         attachment: attachmentFixture({
-          fileName: "foto.png",
-          kind: "IMAGE",
-          mediaAvailable: true,
+          fileName: "orcamento.pdf",
+          kind: "DOCUMENT",
+          mimetype: "application/pdf",
         }),
-        kind: "IMAGE",
+        kind: "DOCUMENT",
       }),
     ]);
     const user = userEvent.setup();
 
+    expect(screen.getByText("orcamento.pdf")).toBeVisible();
+    expect(getMedia).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: /Ver mídia/ }));
 
-    await waitFor(() => expect(getMedia).toHaveBeenCalledWith(
-      "conv-1",
-      "msg-1",
-      expect.anything(),
-    ));
-    const image = await screen.findByRole("img", {
-      name: "Imagem enviada na conversa",
-    });
-    expect(image).toHaveAttribute("src", "blob:mock-media-url");
-    expect(image.getAttribute("src")).not.toMatch(/whatsapp|minio|http/i);
+    await waitFor(() =>
+      expect(getMedia).toHaveBeenCalledWith(
+        "conv-1",
+        "msg-1",
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(
+      await screen.findByRole("link", { name: "Abrir documento" }),
+    ).toHaveAttribute("href", "blob:mock-media-url");
   });
 
   test("mediaAvailable false não oferece Ver mídia", async () => {
@@ -382,19 +587,11 @@ describe("imagem, documento e vídeo sob demanda pelo proxy", () => {
   ])(
     "a recusa %s tem copy própria, nunca erro genérico",
     async (upstreamCode, copy) => {
-      getMedia.mockRejectedValue(
-        new BffHttpError({
-          code: "UPSTREAM_ERROR",
-          details: { upstreamCode },
-          message: "upstream refused",
-          requestId: "req-1",
-          status: 502,
-        }),
-      );
+      getMedia.mockRejectedValue(refusal(upstreamCode));
       await renderThread([
         messageFixture({
-          attachment: attachmentFixture({ kind: "IMAGE" }),
-          kind: "IMAGE",
+          attachment: attachmentFixture({ kind: "DOCUMENT" }),
+          kind: "DOCUMENT",
         }),
       ]);
       const user = userEvent.setup();
@@ -408,7 +605,10 @@ describe("imagem, documento e vídeo sob demanda pelo proxy", () => {
 });
 
 describe("áudio: ouvir o original, não só ler a transcrição", () => {
-  function audioMessage(attachment: Partial<NonNullable<Message["attachment"]>>) {
+  function audioMessage(
+    attachment: Partial<NonNullable<Message["attachment"]>>,
+    id = "msg-1",
+  ) {
     return messageFixture({
       attachment: attachmentFixture({
         durationSeconds: 12,
@@ -420,38 +620,123 @@ describe("áudio: ouvir o original, não só ler a transcrição", () => {
         ...attachment,
       }),
       direction: "INBOUND",
+      id,
       kind: "AUDIO",
       source: "CUSTOMER",
     });
   }
 
-  test("mediaAvailable oferece ouvir, e o player sai do blob do proxy", async () => {
-    getMedia.mockResolvedValue({
+  function audioBytes() {
+    return {
       blob: new Blob(["fake-audio"], { type: "audio/ogg" }),
       contentType: "audio/ogg",
       fileName: "audio.ogg",
-    });
+    };
+  }
+
+  // jsdom não toca mídia: play/pause mudam `paused` e disparam o evento, como
+  // o navegador faz.
+  let play: ReturnType<typeof vi.fn>;
+  let pause: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockImplementation(function (this: HTMLMediaElement) {
+        Object.defineProperty(this, "paused", { configurable: true, value: false });
+        this.dispatchEvent(new Event("play"));
+        return Promise.resolve();
+      });
+    pause = vi
+      .spyOn(HTMLMediaElement.prototype, "pause")
+      .mockImplementation(function (this: HTMLMediaElement) {
+        Object.defineProperty(this, "paused", { configurable: true, value: true });
+        this.dispatchEvent(new Event("pause"));
+      });
+  });
+  afterEach(() => {
+    play.mockRestore();
+    pause.mockRestore();
+  });
+
+  test("o primeiro toque busca pelo proxy e já toca; o botão vira Pausar", async () => {
+    getMedia.mockResolvedValue(audioBytes());
     await renderThread([audioMessage({ mediaAvailable: true })]);
     const user = userEvent.setup();
 
     expect(getMedia).not.toHaveBeenCalled();
+    expect(screen.getByText("0:12")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Ouvir áudio" }));
 
-    await waitFor(() =>
-      expect(document.querySelector("audio")).not.toBeNull(),
-    );
-    const player = document.querySelector("audio") as HTMLAudioElement;
+    const pauseButton = await screen.findByRole("button", {
+      name: "Pausar áudio",
+    });
     expect(getMedia).toHaveBeenCalledWith(
       "conv-1",
       "msg-1",
       expect.any(AbortSignal),
     );
+    const player = document.querySelector("audio") as HTMLAudioElement;
     expect(player.getAttribute("src")).toBe("blob:mock-media-url");
-    expect(player).toHaveAttribute("controls");
+    expect(play).toHaveBeenCalledTimes(1);
+
+    await user.click(pauseButton);
+    expect(pause).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Ouvir áudio" })).toBeVisible();
     // A transcrição continua junto: ler e ouvir respondem perguntas distintas.
     expect(
       screen.getByText("Cliente perguntou sobre o horário."),
     ).toBeVisible();
+  });
+
+  test("a posição muda pelo controle deslizante, com o tempo dito em texto", async () => {
+    getMedia.mockResolvedValue(audioBytes());
+    await renderThread([audioMessage({ mediaAvailable: true })]);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Ouvir áudio" }));
+    const seek = await screen.findByRole("slider", { name: "Posição do áudio" });
+    fireEvent.change(seek, { target: { value: "6" } });
+
+    const player = document.querySelector("audio") as HTMLAudioElement;
+    expect(player.currentTime).toBe(6);
+    expect(seek).toHaveAttribute("aria-valuetext", "0:06 de 0:12");
+  });
+
+  test("a velocidade alterna entre 1×, 1,5× e 2×", async () => {
+    getMedia.mockResolvedValue(audioBytes());
+    await renderThread([audioMessage({ mediaAvailable: true })]);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Ouvir áudio" }));
+    const rate = await screen.findByRole("button", { name: /^Velocidade 1×/ });
+    const player = document.querySelector("audio") as HTMLAudioElement;
+
+    await user.click(rate);
+    expect(rate).toHaveTextContent("1,5×");
+    expect(player.playbackRate).toBe(1.5);
+    await user.click(rate);
+    expect(player.playbackRate).toBe(2);
+    await user.click(rate);
+    expect(player.playbackRate).toBe(1);
+  });
+
+  test("só um áudio toca por vez", async () => {
+    getMedia.mockResolvedValue(audioBytes());
+    await renderThread([
+      audioMessage({ mediaAvailable: true }, "a-1"),
+      audioMessage({ mediaAvailable: true }, "a-2"),
+    ]);
+    const user = userEvent.setup();
+    const [first, second] = screen.getAllByRole("button", { name: "Ouvir áudio" });
+
+    await user.click(first);
+    await screen.findByRole("button", { name: "Pausar áudio" });
+    await user.click(second);
+
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: "Pausar áudio" })).toHaveLength(1),
+    );
+    expect(pause).toHaveBeenCalledTimes(1);
   });
 
   test("sem bytes na origem não oferece player, e diz por quê", async () => {
@@ -466,15 +751,7 @@ describe("áudio: ouvir o original, não só ler a transcrição", () => {
   });
 
   test("recusa da rota de mídia vira copy própria, e o áudio não some da tela", async () => {
-    getMedia.mockRejectedValue(
-      new BffHttpError({
-        code: "UPSTREAM_ERROR",
-        details: { upstreamCode: "MEDIA_UNAVAILABLE" },
-        message: "upstream refused",
-        requestId: "req-audio",
-        status: 404,
-      }),
-    );
+    getMedia.mockRejectedValue(refusal("MEDIA_UNAVAILABLE"));
     await renderThread([audioMessage({ mediaAvailable: true })]);
     const user = userEvent.setup();
 
@@ -488,5 +765,19 @@ describe("áudio: ouvir o original, não só ler a transcrição", () => {
     expect(
       screen.getByText("Cliente perguntou sobre o horário."),
     ).toBeVisible();
+  });
+
+  test("player pronto passa no axe e responde ao teclado", async () => {
+    getMedia.mockResolvedValue(audioBytes());
+    const { container } = await renderThread([
+      audioMessage({ mediaAvailable: true }),
+    ]);
+    const user = userEvent.setup();
+
+    screen.getByRole("button", { name: "Ouvir áudio" }).focus();
+    await user.keyboard("{Enter}");
+    await screen.findByRole("button", { name: "Pausar áudio" });
+
+    await expectNoA11yViolations(container);
   });
 });

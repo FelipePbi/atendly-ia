@@ -120,6 +120,10 @@ import {
   ReminderService,
 } from "../reminders/reminder-service.js";
 import {
+  loadRevenueAppointmentList,
+  REVENUE_APPOINTMENT_KINDS,
+} from "../revenue/revenue-appointments.js";
+import {
   loadRevenueReport,
   REVENUE_PERIODS,
 } from "../revenue/revenue-report.js";
@@ -155,7 +159,12 @@ const offerRulesShape = {
   // Antecedencia minima do cliente (Goal073), aditiva ao mesmo corpo:
   // ausente preserva o valor ja gravado, no mesmo padrao das demais regras
   // de oferta.
-  customerChangeMinNoticeMinutes: z.number().int().min(0).max(10_080).optional(),
+  customerChangeMinNoticeMinutes: z
+    .number()
+    .int()
+    .min(0)
+    .max(10_080)
+    .optional(),
 };
 const availabilityBodySchema = z.object({
   timezone: z.string().trim().min(1).max(100),
@@ -255,11 +264,7 @@ const aiCreatedAppointmentEventsQuerySchema = z.object({
   // BigInt de `AppointmentEvent.sequence`, sempre nao negativo; a validacao
   // de forma so aceita digitos e a validacao de valor fica no service, que e
   // quem sabe converter para `BigInt` com seguranca.
-  afterSequence: z
-    .string()
-    .trim()
-    .regex(/^\d+$/)
-    .optional(),
+  afterSequence: z.string().trim().regex(/^\d+$/).optional(),
   limit: z.coerce
     .number()
     .int()
@@ -285,9 +290,27 @@ const serviceBodySchema = z.object({
   active: z.boolean().optional(),
   description: z.string().trim().max(1_000).nullable().optional(),
   colorToken: serviceColorTokenSchema.nullable().optional(),
-  bufferBeforeMinutes: z.number().int().nonnegative().max(240).nullable().optional(),
-  bufferAfterMinutes: z.number().int().nonnegative().max(240).nullable().optional(),
-  recurrenceIntervalDays: z.number().int().positive().max(365).nullable().optional(),
+  bufferBeforeMinutes: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(240)
+    .nullable()
+    .optional(),
+  bufferAfterMinutes: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(240)
+    .nullable()
+    .optional(),
+  recurrenceIntervalDays: z
+    .number()
+    .int()
+    .positive()
+    .max(365)
+    .nullable()
+    .optional(),
 });
 const servicePatchSchema = serviceBodySchema
   .partial()
@@ -327,7 +350,7 @@ const CUSTOMER_PAGE_DEFAULT_LIMIT = 50;
 const customerDependentsQuerySchema = z.object({
   phone: z.string().trim().min(6).max(32),
 });
-const relationActorSchema =z.enum(["AI", "PROFESSIONAL", "CUSTOMER"]);
+const relationActorSchema = z.enum(["AI", "PROFESSIONAL", "CUSTOMER"]);
 const primaryGuardianBodySchema = z.object({
   guardianCustomerId: z.string().trim().min(1).max(128),
   proposedBy: relationActorSchema,
@@ -384,7 +407,10 @@ const activityQuerySchema = z.object({
   action: commaList(z.string().regex(/^[a-z_]+\.[a-z_]+$/)),
   q: z.string().trim().max(100).optional(),
   beforeAt: z.iso.datetime({ offset: true }).optional(),
-  beforeSequence: z.string().regex(/^\d{1,19}$/).optional(),
+  beforeSequence: z
+    .string()
+    .regex(/^\d{1,19}$/)
+    .optional(),
   inclusive: z.enum(["true", "false"]).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
@@ -467,7 +493,11 @@ const unavailabilityBodySchema = z
   .refine(
     (value) =>
       (value.startTime === undefined) === (value.endTime === undefined),
-    { path: ["endTime"], message: "Provide both startTime and endTime, or neither for a whole day." },
+    {
+      path: ["endTime"],
+      message:
+        "Provide both startTime and endTime, or neither for a whole day.",
+    },
   )
   .refine(
     (value) =>
@@ -477,7 +507,8 @@ const unavailabilityBodySchema = z
     { path: ["endTime"], message: "End must be after start." },
   )
   .refine(
-    (value) => (value.decidedBy === undefined) === (value.decidedReason === undefined),
+    (value) =>
+      (value.decidedBy === undefined) === (value.decidedReason === undefined),
     {
       path: ["decidedReason"],
       message: "A human decision requires both an actor and a reason.",
@@ -886,7 +917,10 @@ export async function registerManagementRoutes(
     const { id } = parse(idParamsSchema, request.params);
     const body = parse(customerPatchSchema, request.body);
     const customer = await prisma.$transaction(async (transaction) => {
-      const customers = new AvenlyCustomerService(transaction, context.tenantId);
+      const customers = new AvenlyCustomerService(
+        transaction,
+        context.tenantId,
+      );
       const before = await customers.get(id);
       const after = await customers.update(id, body);
       await customerActivity.updated(
@@ -1282,7 +1316,9 @@ export async function registerManagementRoutes(
           context,
           "settings.availability_updated",
           {
-            ...availabilityActivityFields(previousRules.map(availabilityRuleDto)),
+            ...availabilityActivityFields(
+              previousRules.map(availabilityRuleDto),
+            ),
             ...offerRulesDto(calendar),
             timezone: calendar.timezone,
           },
@@ -1419,7 +1455,10 @@ export async function registerManagementRoutes(
       const context = currentInternalContext(request);
       requireHumanCaller(context);
       await requireCalendar(prisma, context.tenantId);
-      const query = parse(failedNotificationIntentsQuerySchema, request.query ?? {});
+      const query = parse(
+        failedNotificationIntentsQuerySchema,
+        request.query ?? {},
+      );
       return data(
         request,
         await listFailedNotificationIntents(prisma, context.tenantId, query),
@@ -1459,7 +1498,10 @@ export async function registerManagementRoutes(
       const context = currentInternalContext(request);
       requireHumanCaller(context);
       await requireCalendar(prisma, context.tenantId);
-      const query = parse(aiCreatedAppointmentEventsQuerySchema, request.query ?? {});
+      const query = parse(
+        aiCreatedAppointmentEventsQuerySchema,
+        request.query ?? {},
+      );
       return data(
         request,
         await listAiCreatedAppointmentEvents(prisma, context.tenantId, query),
@@ -1576,32 +1618,28 @@ export async function registerManagementRoutes(
   // --- Series de bloqueio/compromisso (Goal009) ---------------------------
   // So humano (BFF): a IA nunca cria bloqueio, compromisso ou serie.
 
-  app.post(
-    "/internal/block-series",
-    internalOnly,
-    async (request, reply) => {
-      const context = currentInternalContext(request);
-      requireHumanCaller(context);
-      const calendar = await requireCalendar(prisma, context.tenantId);
-      const body = parse(blockSeriesBodySchema, request.body);
-      const series = await createBlockSeries(prisma, {
-        tenantId: context.tenantId,
-        timeZone: calendar.timezone,
-        rule: { ...body.rule, title: body.rule.title ?? null },
-        createdBy: context.userId,
-        skipConflicts: body.skipConflicts,
-        forceOverlapReason: body.forceOverlapReason,
-      });
-      await recordAgendaFact(
-        prisma,
-        context,
-        "agenda.block_series_created",
-        series.id,
-        blockSeriesDto(series),
-      );
-      return reply.code(201).send(data(request, blockSeriesDto(series)));
-    },
-  );
+  app.post("/internal/block-series", internalOnly, async (request, reply) => {
+    const context = currentInternalContext(request);
+    requireHumanCaller(context);
+    const calendar = await requireCalendar(prisma, context.tenantId);
+    const body = parse(blockSeriesBodySchema, request.body);
+    const series = await createBlockSeries(prisma, {
+      tenantId: context.tenantId,
+      timeZone: calendar.timezone,
+      rule: { ...body.rule, title: body.rule.title ?? null },
+      createdBy: context.userId,
+      skipConflicts: body.skipConflicts,
+      forceOverlapReason: body.forceOverlapReason,
+    });
+    await recordAgendaFact(
+      prisma,
+      context,
+      "agenda.block_series_created",
+      series.id,
+      blockSeriesDto(series),
+    );
+    return reply.code(201).send(data(request, blockSeriesDto(series)));
+  });
 
   app.patch(
     "/internal/block-series/:id/from-date",
@@ -1633,34 +1671,30 @@ export async function registerManagementRoutes(
     },
   );
 
-  app.delete(
-    "/internal/block-series/:id",
-    internalOnly,
-    async (request) => {
-      const context = currentInternalContext(request);
-      requireHumanCaller(context);
-      const calendar = await requireCalendar(prisma, context.tenantId);
-      const { id } = parse(idParamsSchema, request.params);
-      const existing = await prisma.blockSeries.findFirst({
-        where: { tenantId: context.tenantId, id },
-      });
-      await removeBlockSeriesFuture(prisma, {
-        tenantId: context.tenantId,
-        timeZone: calendar.timezone,
-        seriesId: id,
-      });
-      if (existing) {
-        await recordAgendaFact(
-          prisma,
-          context,
-          "agenda.block_series_removed",
-          id,
-          blockSeriesDto(existing),
-        );
-      }
-      return data(request, { deleted: true as const });
-    },
-  );
+  app.delete("/internal/block-series/:id", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    requireHumanCaller(context);
+    const calendar = await requireCalendar(prisma, context.tenantId);
+    const { id } = parse(idParamsSchema, request.params);
+    const existing = await prisma.blockSeries.findFirst({
+      where: { tenantId: context.tenantId, id },
+    });
+    await removeBlockSeriesFuture(prisma, {
+      tenantId: context.tenantId,
+      timeZone: calendar.timezone,
+      seriesId: id,
+    });
+    if (existing) {
+      await recordAgendaFact(
+        prisma,
+        context,
+        "agenda.block_series_removed",
+        id,
+        blockSeriesDto(existing),
+      );
+    }
+    return data(request, { deleted: true as const });
+  });
 
   app.delete(
     "/internal/time-blocks/:id/occurrence",
@@ -2132,7 +2166,12 @@ export async function registerManagementRoutes(
       // cadastros de hoje dos IDs que a analise gravou, uma consulta por pagina.
       const candidatesOf =
         category === "SERVICE" || category === "CUSTOMER"
-          ? await importCandidateReader(prisma, context.tenantId, category, page)
+          ? await importCandidateReader(
+              prisma,
+              context.tenantId,
+              category,
+              page,
+            )
           : null;
       return data(request, {
         sessionId,
@@ -2407,6 +2446,26 @@ export async function registerManagementRoutes(
         date: query.date ?? localDate(now, calendar.timezone),
         timeZone: calendar.timezone,
         now,
+      }),
+    );
+  });
+
+  // Os atendimentos por trás dos números (D-179): cancelados, faltas e
+  // concluídos sem valor do período, com quem fez cada mudança.
+  app.get("/internal/revenue/appointments", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    const query = parse(
+      revenueQuerySchema.extend({ kind: z.enum(REVENUE_APPOINTMENT_KINDS) }),
+      request.query ?? {},
+    );
+    const calendar = await requireCalendar(prisma, context.tenantId);
+    return data(
+      request,
+      await loadRevenueAppointmentList(prisma, context.tenantId, {
+        kind: query.kind,
+        period: query.period,
+        date: query.date ?? localDate(new Date(), calendar.timezone),
+        timeZone: calendar.timezone,
       }),
     );
   });
@@ -2962,7 +3021,11 @@ function assertOfferRules(rules: {
   maxLeadDays: number;
   granularityMinutes: number;
 }): void {
-  if (rules.granularityMinutes < 5 || rules.granularityMinutes > 120 || rules.granularityMinutes % 5 !== 0) {
+  if (
+    rules.granularityMinutes < 5 ||
+    rules.granularityMinutes > 120 ||
+    rules.granularityMinutes % 5 !== 0
+  ) {
     throw new AppError(
       "INVALID_OFFER_RULES",
       "Granularity must be a multiple of 5 minutes between 5 and 120.",
@@ -3315,7 +3378,9 @@ async function importCandidateReader(
 ): Promise<(stored: unknown) => Array<Record<string, unknown>>> {
   const ids = [
     ...new Set(
-      page.flatMap((item) => storedCandidateIds(item.matchCandidateInternalIds)),
+      page.flatMap((item) =>
+        storedCandidateIds(item.matchCandidateInternalIds),
+      ),
     ),
   ];
   const byId = new Map<string, Record<string, unknown>>();

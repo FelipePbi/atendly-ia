@@ -1,4 +1,7 @@
-import { revenuePeriodSchema } from "@avenly-ia/public-api-contract";
+import {
+  revenueAppointmentKindSchema,
+  revenuePeriodSchema,
+} from "@avenly-ia/public-api-contract";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
@@ -66,6 +69,36 @@ export async function registerV1RevenueRoutes(
         );
       }
       return dataResponse(request, { ...report, messages });
+    },
+  );
+
+  /**
+   * `GET /v1/revenue/appointments` (D-179): os atendimentos por trás dos
+   * números — cancelados, faltas ou concluídos sem valor do período —, com
+   * quem marcou e quem fez a mudança. Mesmo escopo: só o negócio da sessão.
+   */
+  app.get(
+    "/v1/revenue/appointments",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const parsed = revenueQuerySchema
+        .extend({ kind: revenueAppointmentKindSchema })
+        .safeParse(request.query ?? {});
+      if (!parsed.success) {
+        throw new AppError(
+          "VALIDATION_ERROR",
+          "Invalid revenue appointments query.",
+          400,
+          z.flattenError(parsed.error).fieldErrors,
+        );
+      }
+      return dataResponse(
+        request,
+        await scheduling.revenueAppointments(
+          internalContext(request),
+          parsed.data,
+        ),
+      );
     },
   );
 }

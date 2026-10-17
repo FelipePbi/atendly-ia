@@ -1,7 +1,10 @@
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { revenueReportSchema } from "@avenly-ia/public-api-contract";
+import {
+  revenueAppointmentListSchema,
+  revenueReportSchema,
+} from "@avenly-ia/public-api-contract";
 
 /**
  * `GET /v1/revenue` (D-177): o BFF valida a pergunta, repassa ao Scheduling
@@ -115,6 +118,28 @@ const hours = Array.from({ length: 168 }, (_, index) => {
   return 0;
 });
 
+const list = {
+  kind: "cancelled",
+  start: "2026-10-01",
+  end: "2026-10-31",
+  total: 1,
+  items: [
+    {
+      id: "apt-1",
+      date: "2026-10-12",
+      time: "15:30",
+      customerId: "cus-ana",
+      customerName: "Ana",
+      services: ["Cílios 5D"],
+      amount: 150,
+      bookedBy: "AI",
+      changedBy: "USER",
+      note: "era teste",
+      unvaluedReason: null,
+    },
+  ],
+};
+
 let orchestratorDown = false;
 
 let upstream: Array<{ url: URL; tenantId: string | null }> = [];
@@ -140,7 +165,9 @@ beforeEach(async () => {
           ? { hours }
           : url.pathname === "/internal/availability-settings"
             ? availability
-            : report;
+            : url.pathname === "/internal/revenue/appointments"
+              ? list
+              : report;
       return new Response(JSON.stringify({ data, requestId: "up" }), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -219,6 +246,42 @@ describe("GET /v1/revenue (D-177)", () => {
       const response = await app.inject({
         method: "GET",
         url: `/v1/revenue?${query}`,
+      });
+      expect(response.statusCode).toBe(400);
+    }
+    expect(upstream).toHaveLength(0);
+  });
+});
+
+describe("GET /v1/revenue/appointments (D-179)", () => {
+  it("pede a lista pelo negócio da sessão, com o tipo, e devolve o contrato", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/revenue/appointments?period=month&date=2026-10-16&kind=cancelled&tenantId=outro",
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(() =>
+      revenueAppointmentListSchema.parse(response.json().data),
+    ).not.toThrow();
+    expect(response.json().data.items[0]).toMatchObject({
+      bookedBy: "AI",
+      changedBy: "USER",
+    });
+    const call = upstream.find(
+      (entry) => entry.url.pathname === "/internal/revenue/appointments",
+    );
+    expect(call?.tenantId).toBe("tenant-session");
+    expect(call?.url.searchParams.get("kind")).toBe("cancelled");
+    expect(call?.url.searchParams.get("period")).toBe("month");
+    expect(call?.url.searchParams.has("tenantId")).toBe(false);
+  });
+
+  it("recusa tipo desconhecido ou ausente sem chamar o Scheduling", async () => {
+    for (const query of ["kind=all", "period=month"]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/revenue/appointments?${query}`,
       });
       expect(response.statusCode).toBe(400);
     }

@@ -272,7 +272,7 @@ function fromCents(cents: number): number {
 }
 
 /** Valor do acordo pelo snapshot, sem olhar o valor final. */
-function agreementCents(row: RevenueAppointmentRow): number | null {
+export function agreementCents(row: RevenueAppointmentRow): number | null {
   if (row.items.length === 0) return null;
   let total = 0;
   for (const item of row.items) {

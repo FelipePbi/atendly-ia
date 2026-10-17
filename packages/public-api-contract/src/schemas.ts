@@ -1116,6 +1116,43 @@ export const revenueReportSchema = z.object({
     .default(null),
 });
 
+// Os atendimentos por trás dos números do Faturamento (D-179).
+export const revenueAppointmentKindSchema = z.enum([
+  "cancelled",
+  "no_show",
+  "unvalued",
+]);
+export type RevenueAppointmentKind = z.infer<
+  typeof revenueAppointmentKindSchema
+>;
+const revenueActorSchema = z.enum(["AI", "USER", "SYSTEM", "INTEGRATION"]);
+export const revenueAppointmentListSchema = z.object({
+  kind: revenueAppointmentKindSchema,
+  start: z.string(),
+  end: z.string(),
+  total: revenueCountSchema,
+  items: z.array(
+    z.object({
+      id: z.string(),
+      date: z.string(),
+      time: z.string(),
+      customerId: z.string(),
+      customerName: z.string().nullable(),
+      services: z.array(z.string()),
+      amount: revenueAmountSchema.nullable(),
+      bookedBy: revenueActorSchema,
+      changedBy: revenueActorSchema.nullable(),
+      note: z.string().nullable(),
+      unvaluedReason: z
+        .enum(["ON_REQUEST", "STARTING_AT", "NOT_INFORMED", "UNLISTED"])
+        .nullable(),
+    }),
+  ),
+});
+export type RevenueAppointmentList = z.infer<
+  typeof revenueAppointmentListSchema
+>;
+
 export const dashboardSchema = z.object({
   platform: z.object({
     tenantName: z.string(),

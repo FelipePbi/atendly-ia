@@ -1,5 +1,7 @@
 import {
+  type RevenueAppointmentKind,
   type RevenuePeriod,
+  revenueAppointmentListSchema,
   revenueReportSchema,
 } from "@avenly-ia/public-api-contract";
 import { z } from "zod";
@@ -1613,7 +1615,10 @@ export class SchedulingClient {
   }
 
   /** Registro de atividade do Scheduling (D-176), já com o corte do BFF. */
-  async activity(context: InternalRequestContext, query: InternalActivityQuery) {
+  async activity(
+    context: InternalRequestContext,
+    query: InternalActivityQuery,
+  ) {
     return this.get(context, "/internal/activity", internalActivityPageSchema, {
       ...query,
     });
@@ -1625,6 +1630,23 @@ export class SchedulingClient {
     query: { period: RevenuePeriod; date?: string },
   ) {
     return this.get(context, "/internal/revenue", revenueReportSchema, query);
+  }
+
+  /** Os atendimentos por trás dos números do Faturamento (D-179). */
+  async revenueAppointments(
+    context: InternalRequestContext,
+    query: {
+      period: RevenuePeriod;
+      date?: string;
+      kind: RevenueAppointmentKind;
+    },
+  ) {
+    return this.get(
+      context,
+      "/internal/revenue/appointments",
+      revenueAppointmentListSchema,
+      query,
+    );
   }
 
   async dashboard(context: InternalRequestContext) {

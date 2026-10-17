@@ -146,6 +146,10 @@ export async function registerV1ConversationRoutes(
       const { id, messageId } = parseParams(mediaParamsSchema, request.params);
       const media = await ai.getMedia(internalContext(request), id, messageId);
       reply.header("content-type", media.contentType);
+      // A mídia de uma mensagem nunca muda, e cada busca é uma ida ao
+      // WhatsApp: o navegador de quem viu guarda por um dia, só para si
+      // (`private`). Recusas saem pelo tratador de erro, sem este cabeçalho.
+      reply.header("cache-control", "private, max-age=86400");
       if (media.fileName) {
         reply.header(
           "content-disposition",

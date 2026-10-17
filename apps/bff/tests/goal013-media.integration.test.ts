@@ -175,6 +175,8 @@ describe.skipIf(!RUN_INTEGRATION)("Goal013: mídia no BFF", () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toBe("image/png");
     expect(response.headers["content-disposition"]).toContain("foto.png");
+    // Mídia de mensagem não muda: o navegador guarda só para quem viu.
+    expect(response.headers["cache-control"]).toBe("private, max-age=86400");
     expect(Buffer.compare(response.rawPayload, bytes)).toBe(0);
   });
 
@@ -205,6 +207,8 @@ describe.skipIf(!RUN_INTEGRATION)("Goal013: mídia no BFF", () => {
     expect(response.statusCode).toBe(409);
     expect(response.json().error.code).toBe("UPSTREAM_ERROR");
     expect(response.json().error.details.upstreamCode).toBe("MEDIA_UNAVAILABLE");
+    // Recusa não vira cache: a próxima tentativa volta a perguntar.
+    expect(response.headers["cache-control"] ?? "").not.toContain("max-age");
   });
 
   it("repassa a recusa de attachment grande demais (tooLarge) com código próprio", async () => {

@@ -5,7 +5,10 @@ import { z } from "zod";
 
 import { env } from "../../config/env.js";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
-import { startOfTodayInTimeZone, startOfWeekInTimeZone } from "../../lib/dates.js";
+import {
+  startOfTodayInTimeZone,
+  startOfWeekInTimeZone,
+} from "../../lib/dates.js";
 import { AppError, toErrorMessage } from "../../lib/errors.js";
 import {
   authorizeInternalRequest,
@@ -45,6 +48,7 @@ import { EvolutionProvider } from "../channel/adapters/evolution/EvolutionProvid
 import { ChannelConnectionService } from "../channel/ChannelConnectionService.js";
 import { PlatformWhatsAppSender } from "../channel/platform/PlatformWhatsAppSender.js";
 import { deriveConversationEvents } from "../conversations/conversation-events.js";
+import { countInboundMessagesByWeekHour } from "../conversations/inbound-hours.js";
 import {
   type ConversationAwaitingHuman,
   listConversationsAwaitingHuman,
@@ -317,9 +321,18 @@ const activityQuerySchema = z.object({
   action: commaList(z.string().regex(/^[a-z_]+\.[a-z_]+$/u)),
   q: z.string().trim().max(100).optional(),
   beforeAt: z.iso.datetime({ offset: true }).optional(),
-  beforeSequence: z.string().regex(/^\d{1,19}$/u).optional(),
+  beforeSequence: z
+    .string()
+    .regex(/^\d{1,19}$/u)
+    .optional(),
   inclusive: z.enum(["true", "false"]).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+const inboundHoursQuerySchema = z.object({
+  from: z.iso.datetime({ offset: true }),
+  to: z.iso.datetime({ offset: true }),
+  timeZone: z.string().trim().min(1).max(64),
 });
 
 const serviceInstructionBodySchema = z
@@ -381,12 +394,7 @@ export interface InternalRoutesOptions {
   /** Execução do teste real da ativação (Goal019/WU-03). */
   activationTest?: Pick<
     ActivationTestService,
-    | "start"
-    | "restart"
-    | "execute"
-    | "current"
-    | "milestones"
-    | "activeChannel"
+    "start" | "restart" | "execute" | "current" | "milestones" | "activeChannel"
   >;
 }
 
@@ -537,13 +545,16 @@ export async function registerInternalRoutes(
    *
    * Idempotente: negocio sem canal ativo devolve `deactivated: 0` e `200`.
    */
-  app.delete("/internal/channel-connections/evolution", async (request, reply) => {
-    const context = trustedTenantContext(request);
-    const deactivated = await channelConnections.deactivateTenantChannels(
-      context.tenantId,
-    );
-    return reply.send({ ok: true, deactivated });
-  });
+  app.delete(
+    "/internal/channel-connections/evolution",
+    async (request, reply) => {
+      const context = trustedTenantContext(request);
+      const deactivated = await channelConnections.deactivateTenantChannels(
+        context.tenantId,
+      );
+      return reply.send({ ok: true, deactivated });
+    },
+  );
 
   app.put("/internal/ai-tenant-config", async (request, reply) => {
     const context = trustedTenantContext(request);
@@ -919,6 +930,30 @@ export async function registerInternalRoutes(
     );
   });
 
+  /**
+   * Mensagens de clientes por hora da semana (D-178): só contagem, para o
+   * Faturamento mostrar a quem não usa a IA o que chegou fora do horário.
+   */
+  app.get("/internal/inbound-hours", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const query = parseOrThrow(inboundHoursQuerySchema, request.query ?? {});
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: query.timeZone });
+    } catch {
+      throw new AppError("Invalid time zone.", {
+        statusCode: 400,
+        code: "VALIDATION_ERROR",
+      });
+    }
+    return internalData(request, {
+      hours: await countInboundMessagesByWeekHour(prisma, tenantId, {
+        from: new Date(query.from),
+        to: new Date(query.to),
+        timeZone: query.timeZone,
+      }),
+    });
+  });
+
   app.post("/internal/conversations/:id/takeover", async (request) => {
     const { tenantId, userId } = trustedTenantContext(request);
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
@@ -1092,7 +1127,9 @@ export async function registerInternalRoutes(
       tenantId,
       userActor(userId),
       conversation,
-      body.ignored ? "conversation.contact_ignored" : "conversation.contact_unignored",
+      body.ignored
+        ? "conversation.contact_ignored"
+        : "conversation.contact_unignored",
     );
     return internalData(
       request,
@@ -1116,9 +1153,8 @@ export async function registerInternalRoutes(
         code: "CONTACT_PHONE_INVALID",
       });
     }
-    const channel = await channelConnections.resolveTenantEvolutionChannel(
-      tenantId,
-    );
+    const channel =
+      await channelConnections.resolveTenantEvolutionChannel(tenantId);
     const contact = await sessions.setIgnoredByExternalContact({
       tenantId,
       channelId: channel.id,
@@ -1132,7 +1168,9 @@ export async function registerInternalRoutes(
       tenantId,
       userActor(userId),
       { ...contact, channelId: channel.id },
-      body.ignored ? "conversation.contact_ignored" : "conversation.contact_unignored",
+      body.ignored
+        ? "conversation.contact_ignored"
+        : "conversation.contact_unignored",
     );
     return internalData(request, {
       contactId: contact.contactId,
@@ -1149,9 +1187,8 @@ export async function registerInternalRoutes(
   app.get("/internal/contacts/ignored", async (request) => {
     const { tenantId } = trustedTenantContext(request);
     const query = parseOrThrow(ignoredContactsQuerySchema, request.query);
-    const channel = await channelConnections.resolveTenantEvolutionChannel(
-      tenantId,
-    );
+    const channel =
+      await channelConnections.resolveTenantEvolutionChannel(tenantId);
     const { items, total } = await sessions.listIgnoredContacts({
       tenantId,
       channelId: channel.id,
@@ -1522,11 +1559,18 @@ export async function registerInternalRoutes(
       prisma.aiToolCall.findMany({
         where: {
           tenantId,
-          name: { in: ["create_appointment", "confirm_recurring_appointments"] },
+          name: {
+            in: ["create_appointment", "confirm_recurring_appointments"],
+          },
           status: "SUCCEEDED",
           completedAt: { gte: startOfWeek },
         },
-        select: { name: true, arguments: true, result: true, completedAt: true },
+        select: {
+          name: true,
+          arguments: true,
+          result: true,
+          completedAt: true,
+        },
       }),
       prisma.aiRun.findMany({
         where: {
@@ -1547,11 +1591,12 @@ export async function registerInternalRoutes(
     // Dead-letter visivel como atencao. Nao existe endpoint de reenvio em
     // massa: retomar um evento parado e decisao explicita, evento a evento.
     const inboxDeadLetters = await inbox.countDeadLetters(tenantId);
-    const confirmedAppointmentCallsToday = confirmedAppointmentCallsThisWeek.filter(
-      // `completedAt: { gte: startOfWeek }` no filtro ja garante nao-nulo
-      // aqui; a checagem so satisfaz o tipo opcional da coluna no schema.
-      (call) => call.completedAt !== null && call.completedAt >= startOfDay,
-    );
+    const confirmedAppointmentCallsToday =
+      confirmedAppointmentCallsThisWeek.filter(
+        // `completedAt: { gte: startOfWeek }` no filtro ja garante nao-nulo
+        // aqui; a checagem so satisfaz o tipo opcional da coluna no schema.
+        (call) => call.completedAt !== null && call.completedAt >= startOfDay,
+      );
     return internalData(request, {
       conversationsNeedingAttention: attention.map(conversationDto),
       conversationsNeedingAttentionCount: attentionCount,
@@ -1714,10 +1759,7 @@ export async function registerInternalRoutes(
       tenantId,
       maxRows: body.maxRows,
     });
-    app.log.info(
-      { tenantId, ...result },
-      "Tenant purge pass completed",
-    );
+    app.log.info({ tenantId, ...result }, "Tenant purge pass completed");
     return internalData(request, result);
   });
 
@@ -2219,6 +2261,10 @@ export function requiredScope(request: FastifyRequest): InternalScope {
   }
   if (path === "/internal/activity" && method === "GET") {
     return "activity:read";
+  }
+  // Só contagem de mensagens por hora (D-178): é leitura de conversa.
+  if (path === "/internal/inbound-hours" && method === "GET") {
+    return "conversations:read";
   }
   if (path.startsWith("/internal/activation-test")) {
     return method === "GET" ? "activation-test:read" : "activation-test:write";

@@ -23,6 +23,7 @@ import {
   useSystemStatus,
   type UseSystemStatusResult,
 } from "@/shared/runtime/systemStatus";
+import { useAppearanceSummary } from "@/shared/theme/AppearanceProvider";
 
 import type { ImportState } from "../imports/types";
 import {
@@ -155,6 +156,7 @@ function hubGroups(
   status: UseSystemStatusResult,
   readings: HubReadings,
   email: string | null,
+  appearance: string,
 ): HubGroup[] {
   const services = readings.services ? servicesDetail(readings.services) : null;
   const timeZone = settings.business?.timezone ?? "America/Sao_Paulo";
@@ -228,6 +230,12 @@ function hubGroups(
           title: "Atividade",
         },
         {
+          detail: appearance,
+          href: "/configuracoes/aparencia",
+          icon: "palette",
+          title: "Aparência",
+        },
+        {
           detail: email,
           href: "/configuracoes/conta",
           icon: "nav-user",
@@ -287,11 +295,13 @@ function HubBody({
   const status = useSystemStatus();
   const { session } = useProductRuntime();
   const readings = useHubReadings();
+  const appearance = useAppearanceSummary();
   const groups = hubGroups(
     settings,
     status,
     readings,
     session?.user.email ?? null,
+    appearance,
   );
   return (
     <>

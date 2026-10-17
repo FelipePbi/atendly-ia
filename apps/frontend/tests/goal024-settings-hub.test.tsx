@@ -91,7 +91,7 @@ function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState 
 }
 
 describe("hub com fonte de agenda Avenly", () => {
-  test("lista as nove linhas, cada uma apontando para a rota certa", () => {
+  test("lista as dez linhas, cada uma apontando para a rota certa", () => {
     render(<SettingsHub settings={settingsFixture()} />);
 
     const expected: Array<[string, string]> = [
@@ -104,6 +104,8 @@ describe("hub com fonte de agenda Avenly", () => {
       ["Conversas", "/configuracoes/conversas"],
       // Registro de atividade (D-176).
       ["Atividade", "/configuracoes/atividade"],
+      // Aparência da conta (D-181).
+      ["Aparência", "/configuracoes/aparencia"],
       ["Conta", "/configuracoes/conta"],
     ];
     for (const [title, href] of expected) {
@@ -173,6 +175,6 @@ describe("hub sem fonte de agenda escolhida", () => {
       "href",
       "/configuracoes/agenda",
     );
-    expect(rowLinks()).toHaveLength(9);
+    expect(rowLinks()).toHaveLength(10);
   });
 });

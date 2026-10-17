@@ -14,6 +14,7 @@ import { BrandLoader } from "@/shared/ui/Brand";
 import { AccountDeletionScreen } from "./AccountDeletionScreen";
 import { AccountSettings } from "./AccountSettings";
 import { AiSettings } from "./AiSettings";
+import { AppearanceSettings } from "./AppearanceSettings";
 import { AvailabilitySettings } from "./AvailabilitySettings";
 import { BusinessKnowledgeSettings } from "./BusinessKnowledgeSettings";
 import { BusinessSettings } from "./BusinessSettings";
@@ -87,6 +88,7 @@ function isHubScenario(scenario: SettingsScenario): boolean {
     scenario === "conversations" ||
     scenario === "account" ||
     scenario === "account-deletion" ||
+    scenario === "appearance" ||
     scenario === "activity"
   );
 }
@@ -107,6 +109,7 @@ function openHrefFor(scenario: SettingsScenario): string {
   if (scenario === "account" || scenario === "account-deletion")
     return "/configuracoes/conta";
   if (scenario === "activity") return "/configuracoes/atividade";
+  if (scenario === "appearance") return "/configuracoes/aparencia";
   return "/configuracoes/negocio";
 }
 
@@ -199,6 +202,7 @@ function SettingsSection({
     return <AvailabilitySettings settings={settings} onSaved={setSettings} />;
   if (scenario === "conversations") return <ConversationsSettings />;
   if (scenario === "account") return <AccountSettings />;
+  if (scenario === "appearance") return <AppearanceSettings />;
   if (scenario === "account-deletion")
     return <AccountDeletionScreen settings={settings} />;
   if (scenario === "activity")

@@ -17,6 +17,7 @@ export type SettingsScenario =
   | "availability"
   | "conversations"
   | "account"
+  | "appearance"
   | "account-deletion"
   | "activity"
   | "loading"

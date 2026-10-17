@@ -265,7 +265,7 @@ afterEach(() => {
 describe("a gaveta: ver é ler", () => {
   test("abrir marca as não lidas visíveis pelo id e mantém o destaque até fechar", async () => {
     const user = userEvent.setup();
-    const { container } = render(homeInShell());
+    render(homeInShell());
 
     await user.click(
       await screen.findByRole("button", { name: "Notificações, 2 não lidas" }),
@@ -285,7 +285,7 @@ describe("a gaveta: ver é ler", () => {
         .getByRole("listitem", { name: /^Informativa: Sua IA está ativa/ })
         .classList.contains("is-unread"),
     ).toBe(true);
-    expect(container.querySelectorAll(".notifications-row.is-unread")).toHaveLength(2);
+    expect(drawer.querySelectorAll(".notifications-row.is-unread")).toHaveLength(2);
   });
 
   test("fechar zera o badge e o sino na hora, sem esperar o próximo poll", async () => {

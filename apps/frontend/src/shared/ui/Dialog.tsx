@@ -2,6 +2,7 @@
 
 import clsx from "clsx";
 import { type ReactNode, useEffect, useId, useRef } from "react";
+import { createPortal } from "react-dom";
 
 import { Icon } from "@/shared/icons/Icon";
 
@@ -59,7 +60,7 @@ export function Dialog({
     };
   }, [onClose, open]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
   const wrapClassName = clsx("overlay", {
     "bottom-sheet-wrap": variant === "sheet",
     "drawer-wrap": variant === "drawer",
@@ -69,7 +70,10 @@ export function Dialog({
     "bottom-sheet": variant === "sheet",
     drawer: variant === "drawer",
   });
-  return (
+  // No `body`, fora da árvore da tela: dentro do conteúdo, uma animação ou
+  // transição da página cria contexto de empilhamento próprio, e a barra
+  // inferior do celular ficava por cima da folha (2026-10-17).
+  return createPortal(
     <div
       className={wrapClassName}
       role="presentation"
@@ -103,6 +107,7 @@ export function Dialog({
         </div>
         {children}
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

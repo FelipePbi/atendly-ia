@@ -1018,6 +1018,77 @@ export const activityPageSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 
+// Faturamento (D-177): quanto o negócio atendeu no período, somado no
+// servidor pelo preço gravado em cada atendimento. Valores em reais.
+export const revenuePeriodSchema = z.enum(["day", "week", "month", "year"]);
+const revenueAmountSchema = z.number().nonnegative();
+const revenueCountSchema = z.number().int().nonnegative();
+export type RevenuePeriod = z.infer<typeof revenuePeriodSchema>;
+export const revenueReportSchema = z.object({
+  period: revenuePeriodSchema,
+  start: z.string(),
+  end: z.string(),
+  today: z.string(),
+  timezone: z.string().min(1),
+  billed: z.object({
+    amount: revenueAmountSchema,
+    count: revenueCountSchema,
+    unvaluedCount: revenueCountSchema,
+    averageTicket: revenueAmountSchema.nullable(),
+  }),
+  expected: z.object({
+    amount: revenueAmountSchema,
+    count: revenueCountSchema,
+    unvaluedCount: revenueCountSchema,
+  }),
+  previous: z.object({
+    start: z.string(),
+    end: z.string(),
+    amount: revenueAmountSchema,
+    count: revenueCountSchema,
+    partial: z.boolean(),
+  }),
+  lost: z.object({
+    cancelledCount: revenueCountSchema,
+    cancelledAmount: revenueAmountSchema,
+    noShowCount: revenueCountSchema,
+    noShowAmount: revenueAmountSchema,
+  }),
+  services: z.array(
+    z.object({
+      serviceId: z.string().nullable(),
+      name: z.string(),
+      colorToken: serviceColorTokenSchema.nullable(),
+      amount: revenueAmountSchema,
+      count: revenueCountSchema,
+      share: z.number().min(0).max(1),
+    }),
+  ),
+  customers: z.array(
+    z.object({
+      customerId: z.string(),
+      name: z.string().nullable(),
+      amount: revenueAmountSchema,
+      count: revenueCountSchema,
+    }),
+  ),
+  weekdays: z.array(
+    z.object({
+      weekday: z.number().int().min(0).max(6),
+      amount: revenueAmountSchema,
+      count: revenueCountSchema,
+    }),
+  ),
+  series: z.array(
+    z.object({
+      start: z.string(),
+      amount: revenueAmountSchema,
+      count: revenueCountSchema,
+      expectedAmount: revenueAmountSchema,
+    }),
+  ),
+});
+
 export const dashboardSchema = z.object({
   platform: z.object({
     tenantName: z.string(),
@@ -1403,6 +1474,7 @@ export type ActivityKind = z.infer<typeof activityKindSchema>;
 export type ActivityChange = z.infer<typeof activityChangeSchema>;
 export type ActivityEntry = z.infer<typeof activityEntrySchema>;
 export type ActivityPage = z.infer<typeof activityPageSchema>;
+export type RevenueReport = z.infer<typeof revenueReportSchema>;
 export type Message = z.infer<typeof messageSchema>;
 export type MessageKind = z.infer<typeof messageKindSchema>;
 export type MessageAttachmentKind = z.infer<typeof messageAttachmentKindSchema>;

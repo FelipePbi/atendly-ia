@@ -1,3 +1,7 @@
+import {
+  type RevenuePeriod,
+  revenueReportSchema,
+} from "@avenly-ia/public-api-contract";
 import { z } from "zod";
 
 import { env } from "../../config/env.js";
@@ -1613,6 +1617,14 @@ export class SchedulingClient {
     return this.get(context, "/internal/activity", internalActivityPageSchema, {
       ...query,
     });
+  }
+
+  /** Faturamento do período (D-177), já somado pelo Scheduling. */
+  async revenue(
+    context: InternalRequestContext,
+    query: { period: RevenuePeriod; date?: string },
+  ) {
+    return this.get(context, "/internal/revenue", revenueReportSchema, query);
   }
 
   async dashboard(context: InternalRequestContext) {

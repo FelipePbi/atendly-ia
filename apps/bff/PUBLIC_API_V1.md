@@ -1034,6 +1034,33 @@ Resposta: `{ items, nextCursor }`, `nextCursor` nulo no fim. Cada item:
 
 Nenhum campo carrega senha, hash, token, credencial ou chave: o diff só percorre campos permitidos e qualquer chave com cara de segredo é descartada antes de gravar. A troca de senha e a conexão da Minha Agenda aparecem só como fato. A conclusão automática de atendimento (`SYSTEM`) e cada item importado (`INTEGRATION`) não viram atividade; a importação aparece como início e conclusão, com as contagens.
 
+## Faturamento (D-177)
+
+`GET /v1/revenue`, sob `requireTenantContext`: quanto o negócio da sessão atendeu num período, já somado pelo Scheduling (`GET /internal/revenue`). O negócio vem só da sessão; `tenantId` na query é ignorado. O navegador recebe totais, nunca a lista de atendimentos.
+
+Query:
+
+| Campo | Valores |
+| --- | --- |
+| `period` | `day`, `week`, `month` (default) ou `year`; a semana vai de segunda a domingo |
+| `date` | `YYYY-MM-DD`, qualquer dia do período, no fuso do calendário; ausente é hoje |
+
+Formato inválido responde `400 VALIDATION_ERROR` sem chamar o Scheduling.
+
+Regra do valor: atendimento `COMPLETED` vale o valor final registrado; sem ele, a soma dos preços gravados no acordo (snapshot do dia), só quando todos os itens são `FIXED`; senão, não tem valor e conta em `unvaluedCount`. Mudar o preço do serviço não muda o passado. `expected` são os `CONFIRMED` que ainda vão começar; `lost` usa o preço do acordo de `CANCELLED` e `NO_SHOW`. Valores em reais.
+
+| Campo | Significado |
+| --- | --- |
+| `period`, `start`, `end`, `today`, `timezone` | período pedido (`end` inclusivo) e o hoje do negócio |
+| `billed` | `{ amount, count, unvaluedCount, averageTicket }`; `averageTicket` é `amount ÷ (count − unvaluedCount)`, `null` sem atendimento com valor |
+| `expected` | `{ amount, count, unvaluedCount }` |
+| `previous` | `{ start, end, amount, count, partial }`: período anterior de mesmo tamanho; com o pedido ainda correndo, `partial` e o mesmo trecho (1 a 16 de setembro contra 1 a 16 de outubro) |
+| `lost` | `{ cancelledCount, cancelledAmount, noShowCount, noShowAmount }` |
+| `services` | `[{ serviceId, name, colorToken, amount, count, share }]` do maior para o menor; `serviceId` nulo é "Outros atendimentos" (avulso); valor final de vários serviços é dividido na proporção dos preços fixos |
+| `customers` | até cinco `[{ customerId, name, amount, count }]`, só com valor |
+| `weekdays` | sete `{ weekday, amount, count }`, `weekday` 0 = domingo |
+| `series` | no ano, doze meses; no mês e na semana, um item por dia; no dia, vazio. `{ start, amount, count, expectedAmount }` |
+
 ## Central de notificações e alertas persistentes (Goal022/WU-04)
 
 Quatro rotas, todas sob `requireTenantContext` e escopadas pelo tenant da sessão; nenhuma aceita `tenantId` no corpo ou na query — um valor estranho ali é simplesmente ignorado, o escopo vem sempre da sessão. A reconciliação das espécies que dependem dos donos (`CUSTOMER_WAITING_HUMAN`, `REMINDER_FAILED`, `IMPORT_COMPLETED`, `AI_APPOINTMENT_CREATED`, `SETUP_INCOMPLETE`) roda dentro de `GET /v1/notifications` e `GET /v1/notifications/summary`, sob o throttle persistido do motor (`NOTIFICATIONS_RECONCILE_MIN_INTERVAL_SECONDS`); as condições de canal (`WHATSAPP_DISCONNECTED`, `AI_UNAVAILABLE`) reconciliam dentro de `GET /v1/status` (Goal022/WU-03). Fonte indisponível nunca vira `500`: a leitura responde `200` com o que está gravado.

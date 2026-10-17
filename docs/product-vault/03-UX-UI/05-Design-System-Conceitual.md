@@ -25,6 +25,14 @@ Base neutra com cor de marca como destaque.
 
 Não usar muitas cores para decorar dados. Cores funcionais devem comunicar estado.
 
+### Cor de destaque e modo ([[../../migration/DECISIONS#D-181|D-181]])
+
+A cor de marca é o destaque, e a profissional pode trocá-lo por uma de seis opções elegantes, nunca infantis: Verde-petróleo (padrão), Rosé, Champanhe, Azul sereno, Lavanda e Terracota. A cor muda só o destaque — botões, links, seleção e os tons de fundo que acompanham. Papel, tinta, bordas, cores de estado (perigo, aviso, sucesso) e a identidade dos serviços na Agenda não mudam com ela.
+
+O modo é escolha separada: Claro, Escuro ou Automático. No escuro, o papel é um marrom quase preto e quente (não preto puro), a tinta é o creme do claro e o destaque fica claro, com o texto em cima dele no papel escuro. Faixas grandes na cor de destaque (como o painel da entrada) viram o tom escuro da cor, nunca um bloco pastel.
+
+Toda combinação passa WCAG AA em todo par texto/fundo. Toda cor da interface vem de um token: cor fixa num componente fica igual em todos os temas e some no escuro.
+
 ## Identidade visual de serviço na Agenda
 
 O Design System deve definir um padrão consistente para aplicar a identidade visual opcional do serviço nos eventos da Agenda, nas visualizações `Dia`, `Semana` e `Mês`, inclusive em estados compactos e locais com pouco espaço.

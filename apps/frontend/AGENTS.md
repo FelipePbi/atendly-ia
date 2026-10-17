@@ -60,6 +60,15 @@ Preserve tokens e identidade visual quando úteis, mas **não preserve telas ant
 
 Não introduza novo design system, Tailwind/shadcn ou biblioteca visual apenas por preferência.
 
+### Cor e tema (D-181)
+
+Toda cor vem de um token `--at-color-*` de `src/shared/styles/tokens.css` (o padrão claro). `themes.css` redefine os tokens para as cores de destaque (`[data-accent]`) e para o escuro (`html[data-theme="dark"]`); o script do `<head>` (`src/shared/theme/`) põe os atributos antes da primeira pintura. Use `--at-color-*` direto onde a cor precisa acompanhar uma miniatura com `data-accent` própria — os apelidos como `--accent` são resolvidos no `<html>`.
+
+- Cor literal (`#hex`, `rgba(...)`, `white`/`black`) num `avenly-*.css` ou componente faz `tests/theme-tokens.test.ts` falhar; crie o token, com valor claro em `tokens.css` e escuro em `themes.css`.
+- Clarear/escurecer com `color-mix` usa `var(--at-mix-light)`/`var(--at-mix-dark)`, que se invertem no escuro; sombra usa `rgb(var(--at-shadow-rgb) / alfa)`.
+- Testes que conferem a cor do quadro aprovado leem a folha com `readLightStylesheet` (`tests/support/stylesheet.ts`).
+- `tests/theme-contrast.test.ts` confere 4,5:1 dos pares semânticos nas doze combinações.
+
 ## UX states
 
 Para toda superfície relevante, considerar quando aplicável:

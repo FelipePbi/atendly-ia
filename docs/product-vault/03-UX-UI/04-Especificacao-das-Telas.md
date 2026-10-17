@@ -397,6 +397,16 @@ Depois: histórico somente leitura.
 - retenção Comercial;
 - retenção Pessoal.
 
+### Aparência
+
+Linha "Aparência" no grupo "Dados e conta", entre Atividade e Conta (`/configuracoes/aparencia`, [[../../migration/DECISIONS#D-181|D-181]]), com a escolha atual na segunda linha ("Rosé · Escuro").
+
+- **Cor:** seis cartões — Verde-petróleo (com "Padrão"), Rosé, Champanhe, Azul sereno, Lavanda e Terracota —, cada um com uma miniatura da interface na própria cor (barra, cartão, etiqueta e botão), no modo em uso. Duas colunas no celular, três a partir de 600 px.
+- **Modo:** Claro, Escuro e Automático ("Segue o aparelho"), com ícone de sol, lua e tela.
+- Escolher aplica na hora, sem "Salvar": a própria tela é a prévia, e a troca atravessa as cores (com movimento reduzido, só opacidade). A escolha fica salva na conta e vale em qualquer aparelho.
+- Se não der para salvar na conta, a aparência volta para a anterior e aparece "Não deu para salvar na sua conta. A aparência voltou para a anterior; tente de novo."
+- Uma nota diz que vale para a pessoa em qualquer aparelho e que as clientes não veem nada disso.
+
 ### Conta
 
 - dados da conta;
@@ -405,7 +415,7 @@ Depois: histórico somente leitura.
 
 ### Atividade
 
-Linha "Atividade" no grupo "Dados e conta", entre Conversas e Conta (`/configuracoes/atividade`, D-176). Mostra tudo o que você e a IA fizeram no negócio, do mais recente para o mais antigo, agrupado por dia ("Hoje", "Ontem", "Quinta, 16 de outubro").
+Linha "Atividade" no grupo "Dados e conta", entre Conversas e Aparência (`/configuracoes/atividade`, D-176). Mostra tudo o que você e a IA fizeram no negócio, do mais recente para o mais antigo, agrupado por dia ("Hoje", "Ontem", "Quinta, 16 de outubro").
 
 Cada linha:
 

@@ -7895,3 +7895,26 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Consequências:** o Início faz uma leitura a mais do faturamento por período escolhido; voltar ao Início ou ao Faturamento reaproveita o que a aba já leu.
 
 **Revisar se:** o Início ganhar personalização de blocos, ou o faturamento passar a vir do recebido (pagamento).
+
+## D-181 — Aparência da conta: seis cores de destaque e modo claro, escuro ou automático, escolhidos pela pessoa e salvos na conta
+
+**Status:** ACCEPTED em 2026-10-17, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Substitui "MVP apenas tema claro" (`docs/product-vault/03-UX-UI/01-Principios-de-UX-UI.md`). Tela em `docs/product-vault/03-UX-UI/04-Especificacao-das-Telas.md` (Configurações › Aparência); direção visual em `docs/product-vault/03-UX-UI/05-Design-System-Conceitual.md` (Cor de destaque e modo).
+
+**Contexto:** o usuário pediu que a profissional possa mudar o visual da conta: cores pensadas para o público da beleza, com o verde-petróleo atual como padrão, e modo escuro separado da cor. O CSS tinha cerca de mil cores fixas espalhadas pelos `avenly-*.css` e alguns traços de SVG nos componentes, o que impedia qualquer tema.
+
+**Decisão:**
+
+1. Seis cores de destaque: Verde-petróleo (padrão), Rosé, Champanhe, Azul sereno, Lavanda e Terracota. A cor muda só a família de destaque (botões, links, seleção, tons de fundo que acompanham); papel, tinta, bordas e cores de estado (perigo, aviso, sucesso) não mudam com ela, e as cores de serviço da Agenda são as que a profissional escolheu, iguais em todos os temas.
+2. Modo independente da cor: Claro (padrão), Escuro ou Automático (segue o aparelho). Qualquer cor combina com qualquer modo.
+3. Toda cor do CSS passa por um token `--at-color-*` de `tokens.css`; o padrão claro tem exatamente os valores de antes (estilos computados das telas principais iguais antes e depois). `themes.css` redefine os tokens por `[data-accent]` e `html[data-theme="dark"]`. `tests/theme-tokens.test.ts` falha com cor literal nova fora dos tokens, com exceções nomeadas (logo de terceiro, máscara, sombra do nome sobre a cor do serviço).
+4. A escolha é da pessoa, não do negócio: `GET/PATCH /v1/settings/appearance` no BFF, por usuário, vale em qualquer aparelho e antes de concluir o onboarding. Sem linha, o padrão. Não entra no registro de atividade.
+5. Sem piscar: uma cópia local guarda a última escolha, e um script no `<head>` do layout raiz põe `data-accent`/`data-theme` no `<html>` antes da primeira pintura. Ao entrar, a conta vence a cópia local.
+6. Troca na hora, sem "Salvar": a tela é a prévia, e cada cor mostra uma miniatura pintada pelos próprios tokens. Fundo, texto e bordas atravessam em 240 ms; com movimento reduzido, só um véu de opacidade (como a D-173). Se a conta recusar, a aparência volta para a anterior e a tela avisa.
+7. Todo par texto/fundo das cores semânticas passa WCAG AA (4,5:1) nas doze combinações, conferido a partir do próprio CSS (`tests/theme-contrast.test.ts`); as telas principais foram varridas com axe no navegador em cada combinação.
+8. No escuro o destaque é claro e o texto em cima dele é o papel escuro; o painel da entrada (login), que é uma faixa grande na cor, vira o tom escuro da cor em vez de um bloco pastel.
+
+**Alternativas:** cor livre (seletor de cor) — sem garantia de contraste e fácil de ficar infantil; preferência por negócio — a escolha é de quem usa; tema só no aparelho — não acompanharia a pessoa em outro aparelho.
+
+**Consequências:** cor nova em CSS precisa de token (ou de exceção justificada no teste). Cada nova cor de destaque precisa de nove valores no claro e cinco no escuro; os demais tons saem dela.
+
+**Revisar se:** surgir equipe com mais de uma pessoa por negócio, ou a marca ganhar uma segunda cor oficial.

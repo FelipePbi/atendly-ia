@@ -127,9 +127,7 @@ Evitar modal em ações facilmente reversíveis, como marcar falta quando pode s
 
 ## Tema
 
-MVP apenas tema claro.
-
-Dark mode fica para evolução futura.
+A profissional escolhe a aparência da conta em Configurações › Aparência ([[../../migration/DECISIONS#D-181|D-181]]): uma de seis cores de destaque e o modo Claro, Escuro ou Automático (segue o aparelho), independentes entre si. O padrão é o verde-petróleo no claro. A escolha vale em qualquer aparelho em que ela entrar.
 
 ## Relacionado
 

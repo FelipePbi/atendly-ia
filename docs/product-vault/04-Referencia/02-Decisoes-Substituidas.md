@@ -20,6 +20,12 @@ Direção atual:
 - não há reimportação;
 - não há sincronização.
 
+## MVP apenas tema claro
+
+**Substituída em 2026-10-17 (D-181).**
+
+Direção atual: a profissional escolhe em Configurações › Aparência uma de seis cores de destaque e o modo Claro, Escuro ou Automático. O padrão continua sendo o verde-petróleo no claro.
+
 ## Resumo por IA no perfil do cliente
 
 **Substituída em 2026-10-16 (D-174).**

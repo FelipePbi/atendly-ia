@@ -271,6 +271,19 @@ html[data-theme="dark"] .entry-shell {
   color: var(--at-color-ink);
   background: var(--at-color-primary-tint);
 }
+/* O texto "sobre a cor" do painel passa a ser a tinta clara, e os círculos
+ * de fundo ficam no tom da cor, discretos como no claro. */
+html[data-theme="dark"] .entry-panel {
+  --at-color-on-primary: var(--at-color-ink);
+}
+html[data-theme="dark"] .entry-shell::before,
+html[data-theme="dark"] .entry-panel::before {
+  background: var(--at-color-primary-tint-strong);
+}
+html[data-theme="dark"] .entry-shell::after,
+html[data-theme="dark"] .entry-panel::after {
+  background: var(--at-color-primary-tint-press);
+}
 
 /* --- Troca de tema --------------------------------------------------------
  * Durante a troca (o script põe `data-theme-switching` por ~300 ms), fundo,

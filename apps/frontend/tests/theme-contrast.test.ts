@@ -152,6 +152,9 @@ const TEXT_PAIRS: Array<[string, string]> = [
   ["warning-ink", "warning-hover"],
   ["warning-deep", "warning-tint-strong"],
   ["danger-ink", "danger-bg"],
+  // Texto do aviso de erro da casca (`.alert-error .alert-text`).
+  ["ink-soft", "danger-bg"],
+  ["ink-muted", "warning-bg"],
   ["danger-ink", "danger-tint"],
   ["danger-ink", "danger-tint-strong"],
   ["danger-border", "surface"],
@@ -228,5 +231,29 @@ describe("D-181: contraste de cada combinação", () => {
       color("canvas"),
       color("surface-active"),
     ]);
+  });
+});
+
+describe("dia de outro mês na Agenda", () => {
+  test("o número usa a tinta média, que passa 4,5:1 no fundo", () => {
+    const css = readFileSync(
+      path.join(stylesDir, "avenly-agenda.css"),
+      "utf8",
+    ).replace(/\r\n/g, "\n");
+    expect(css).toMatch(
+      /\.month-day\.is-outside \.month-day-number \{\n {2}color: var\(--at-color-ink-muted\);\n\}/,
+    );
+  });
+});
+
+describe("aviso de erro da casca", () => {
+  test("o texto usa a tinta suave, que passa 4,5:1 sobre o rosado do erro", () => {
+    const css = readFileSync(
+      path.join(stylesDir, "avenly.css"),
+      "utf8",
+    ).replace(/\r\n/g, "\n");
+    expect(css).toMatch(
+      /\.alert-error \.alert-text \{\n {2}color: var\(--fg-soft\);\n\}/,
+    );
   });
 });

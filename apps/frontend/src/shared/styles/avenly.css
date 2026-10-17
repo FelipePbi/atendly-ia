@@ -1060,6 +1060,10 @@ p {
   background: var(--danger-soft);
   border-color: color-mix(in oklch, var(--danger), var(--at-mix-light) 70%);
 }
+/* O cinza-claro do texto não chega a 4,5:1 sobre o rosado do erro (4,42). */
+.alert-error .alert-text {
+  color: var(--fg-soft);
+}
 .alert-info {
   background: var(--info-soft);
   border-color: color-mix(in oklch, var(--info), var(--at-mix-light) 76%);

@@ -1430,8 +1430,10 @@ button.week-bar:focus-visible,
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+/* Dia de outro mês: mais claro que o do mês, mas legível (4,5:1). O tom
+ * "faint" ficava em 3,1:1 no claro (D-181). */
 .month-day.is-outside .month-day-number {
-  color: var(--at-color-ink-faint);
+  color: var(--at-color-ink-muted);
 }
 /* Hoje no Mês: o mesmo quadrado de cantos arredondados do cabeçalho da
    Semana, na escala do número daqui (pedido de 2026-10-12). */

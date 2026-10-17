@@ -20,7 +20,7 @@ Tudo o que é operação manual do negócio:
 - Agenda Avenly;
 - serviços;
 - agendamentos manuais;
-- faturamento (implementação futura — não comunicar até existir).
+- faturamento (D-177: soma dos atendimentos por dia, semana, mês e ano, por serviço; não é financeiro nem pagamento).
 
 Em aberto: se **Clientes e histórico** entram no Grátis (presumido que sim, por fazerem parte da agenda — confirmar).
 

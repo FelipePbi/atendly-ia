@@ -7809,3 +7809,26 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Consequências:** três tabelas novas com a mesma forma e o mesmo helper copiado em cada serviço; a lista de ações e o catálogo de tipos precisam ganhar toda ação nova (o teste do catálogo recusa ação em dois tipos). O id da pessoa não sai do BFF: a tela só distingue "você" de "a IA", o que basta enquanto o negócio tem uma pessoa.
 
 **Revisar se:** o produto ganhar mais de uma pessoa por negócio (mostrar quem), o volume tornar a intercalação de três fontes lenta, ou a retenção precisar de prazo próprio para o registro.
+
+## D-177 — Faturamento: tela própria no menu, somada no servidor pelo preço gravado em cada atendimento; faturado é só o concluído e o previsto fica à parte
+
+**Status:** ACCEPTED em 2026-10-16, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Refina a regra de "Valor final" de `docs/product-vault/01-Regras/02-Agenda-e-Agendamentos.md` para esta tela e tira o "faturamento" de "implementação futura" em `05-Go-to-Market/02-Oferta-e-Planos.md`. Não abre o módulo financeiro, pagamento nem sinal, que seguem fora do MVP (`02-Escopo-do-MVP.md`, `AGENTS.md`). Tela em `docs/product-vault/03-UX-UI/04-Especificacao-das-Telas.md` (Faturamento).
+
+**Contexto:** cada serviço tem preço, e a profissional não tinha onde ver quanto atendeu no dia, na semana, no mês e no ano, nem de onde vem a receita. O agendamento já guarda o snapshot comercial de cada item (`AppointmentItem.priceTypeSnapshot` e `priceSnapshot`, Goal007/008) e, opcionalmente, o valor final cobrado (`Appointment.finalValue`). A regra vigente dizia que, sem valor final, o preço previsto não representa receita realizada.
+
+**Decisão:**
+
+1. Item próprio no menu, **Faturamento** (`/faturamento`), depois de Serviços na barra lateral; no celular, um atalho no topo do "Mais". Não "Financeiro": não há despesa, cobrança, pagamento nem caixa.
+2. **Faturado** é a soma dos atendimentos `COMPLETED` do período. **Previsto** é a soma dos `CONFIRMED` que ainda vão começar. Os dois aparecem separados e nunca se somam. Confirmado que já passou sem ter sido concluído não entra em nenhum dos dois (a conclusão automática chega em 30 minutos).
+3. Valor de um atendimento: o valor final registrado, quando existe; senão, a soma dos preços do acordo, **só quando todos os itens têm preço fixo**. "A partir de", "sob consulta", "não informado" e o atendimento avulso sem valor final não viram número: contam como "N atendimentos concluídos sem valor", com a dica de registrar o valor final. É a mesma regra do total do acordo (resposta 87) e da resposta 590.
+4. O preço é sempre o do dia do atendimento (o snapshot do item), nunca o do catálogo de hoje: mudar o preço do serviço não reescreve meses passados. Não foi preciso snapshot novo. O serviço é agrupado pelo nome atual dele.
+5. Por serviço: valor, quantidade e participação no faturado. Com valor final num atendimento de vários serviços, ele é dividido na proporção dos preços fixos do acordo (em partes iguais sem essa proporção), sem perder centavo. Atendimento avulso entra em "Outros atendimentos".
+6. Cartões do período: faturado, previsto, atendimentos concluídos, ticket médio (faturado ÷ concluídos com valor) e comparação com o período anterior de mesmo tamanho ("+12% que setembro"). Com o período ainda correndo, a comparação corta no mesmo ponto (1 a 16 de outubro contra 1 a 16 de setembro). Sem faturamento no anterior, não inventa porcentagem.
+7. Gráficos: no ano, mês a mês com o melhor mês destacado; no mês e na semana, dia a dia; cada barra abre o período dela. Também: clientes que mais faturaram (cinco), dia da semana mais forte (mês e ano) e faltas e cancelamentos, com o valor do acordo que deixou de entrar.
+8. Agregação no Scheduling (`GET /internal/revenue?period&date`, fuso do calendário, semana de segunda a domingo), repassada pelo BFF em `GET /v1/revenue` com o negócio da sessão. O navegador recebe totais, nunca a lista de atendimentos. Gráfico em HTML/CSS próprio, sem biblioteca.
+
+**Alternativas:** chamar de "Financeiro" (sugere despesa, pagamento e sinal, fora do MVP); contar só atendimento com valor final (o campo é opcional: sem ele, a maior parte dos atendimentos ficaria de fora, contra o pedido); tratar "a partir de" como o valor mínimo (a resposta 590 diz que não vira preço previsto); somar no navegador a partir da lista da agenda (traria todos os atendimentos do ano para a tela); comparar o mês corrente com o anterior inteiro (o começo do mês sempre pareceria queda).
+
+**Consequências:** o faturado de um atendimento sem valor final é o preço combinado, não um valor confirmado como cobrado; a tela diz isso em uma linha, e o perfil do cliente mantém a regra antiga (só valor final). O ano faz uma leitura de até dois anos de atendimentos do negócio por requisição, sem índice novo (`Appointment(tenantId, startAt, endAt)` já cobre).
+
+**Revisar se:** o produto ganhar pagamento ou sinal (o faturado passaria a poder vir do recebido), mais de um profissional por negócio, ou o volume de um negócio tornar a leitura do ano lenta.

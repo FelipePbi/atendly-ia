@@ -55,7 +55,8 @@ Não criar infraestrutura especial de beta apenas para esse momento.
 - cancelamento e remarcação;
 - recorrência orientada pela configuração do serviço;
 - status e histórico operacional;
-- valor final cobrado opcional.
+- valor final cobrado opcional;
+- faturamento dos atendimentos (D-177): quanto foi atendido por dia, semana, mês e ano, por serviço, sem cobrança, pagamento ou caixa.
 
 ### IA e WhatsApp
 
@@ -123,7 +124,7 @@ Não criar infraestrutura especial de beta apenas para esse momento.
 - pedido automático de avaliação;
 - pagamentos;
 - cobrança de sinal;
-- módulo financeiro;
+- módulo financeiro (despesas, recebimentos, caixa — o Faturamento só soma atendimentos);
 - multi-profissional;
 - múltiplos usuários/permissões;
 - vários números de WhatsApp por negócio;

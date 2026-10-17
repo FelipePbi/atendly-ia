@@ -278,6 +278,44 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 - modalidade por serviço quando aplicável;
 - ao lado da lista (a partir de 1024 px), trocar de serviço mantém o anterior até o novo chegar e troca com um crossfade curto, sem esqueleto.
 
+## Faturamento
+
+Item próprio no menu (`/faturamento`, D-177): depois de Serviços na barra lateral; no celular, atalho no topo do "Mais". Responde "quanto eu atendi e de onde vem a minha receita". Não é financeiro: sem despesa, cobrança, pagamento ou caixa. Regra do valor em [[01-Regras/02-Agenda-e-Agendamentos#Faturamento]].
+
+Período:
+
+- Dia, Semana, Mês (padrão) e Ano; setas para o período anterior e o seguinte; fora do período atual, um botão "Hoje" / "Esta semana" / "Este mês" / "Este ano" volta;
+- a semana vai de segunda a domingo; tudo no fuso do negócio;
+- trocar de período mantém o anterior na tela até o novo chegar, sem esqueleto.
+
+Resumo:
+
+- **Faturado** em destaque, com a linha "Atendimentos concluídos, pelo preço combinado ou pelo valor final que você registrou.";
+- comparação com o período anterior de mesmo tamanho ("+12% que setembro", "−8% que ontem", "Igual a 2025"); com o período ainda correndo, compara o mesmo trecho e diz qual ("Comparando 1 a 16 de outubro com 1 a 16 de setembro."); sem faturamento no anterior, só "Setembro não teve faturamento para comparar";
+- atendimentos concluídos, ticket médio e **Previsto** (confirmados pela frente), separado do faturado;
+- "N atendimentos concluídos sem valor (sob consulta, “a partir de” ou sem preço). Registre o valor final no atendimento para ele entrar aqui.", só quando houver.
+
+Gráficos:
+
+- no Ano, **Mês a mês**; no Mês e na Semana, **Dia a dia**; o Dia não tem gráfico;
+- o melhor mês (ou dia) ganha a cor cheia e o valor por cima, e o título diz qual ("Melhor mês: março, R$ 3.200,00"); o previsto entra claro e listrado em cima do faturado, com legenda;
+- cada barra é um botão que abre o período dela (mês no ano, dia no mês e na semana) e diz ao leitor de tela o período, o faturado, os atendimentos e o previsto;
+- **Por serviço**: barra de composição nas cores dos serviços e uma linha por serviço com valor, quantidade de atendimentos e participação ("65% do faturamento"), que fecha em 100%.
+
+Também, quando houver dado:
+
+- **Clientes que mais faturaram** (cinco), cada nome abre o perfil;
+- **Dia da semana mais forte** (no Mês e no Ano): "Sábado: 34% do faturado, R$ 1.200,00", com as barras de segunda a domingo;
+- **Faltas e cancelamentos**: quantas e quanto deixou de entrar, pelo valor do acordo.
+
+Layout: uma coluna no celular; a partir de 1024 px, resumo, gráfico e serviços à esquerda e o resto numa coluna ao lado. Valores em R$ no formato pt-BR.
+
+Estados:
+
+- carregando: sem esqueleto; o "A" animado só se a leitura passar de ~150 ms; a tela entra com fade;
+- vazio: "Nenhum atendimento neste período", com a navegação de período ainda disponível;
+- erro: "Não foi possível carregar o faturamento" com "Tentar novamente"; falha ao trocar de período mantém o que já estava na tela, com o aviso e "Tentar novamente".
+
 ## Mais / Configurações
 
 A partir de 1024 px, a lista de Configurações fica ao lado da seção aberta, inclusive em Importação. Trocar de seção mantém a lista montada e troca só o painel, com um crossfade curto, sem passar por "Carregando configurações". Cada seção busca só o próprio dado quando abre. As configurações já lidas na aba aparecem na hora e são relidas em segundo plano.

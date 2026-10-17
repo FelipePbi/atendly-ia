@@ -17,5 +17,8 @@ GET /user/contacts
 POST /instance/connect
 POST /instance/create
 POST /instance/pair
+# Link da foto de perfil de uma cliente, baixada pelo BFF da CDN do WhatsApp —
+# EvolutionClient.getAvatarUrl (fotos de perfil, 2026-10-15).
+POST /user/avatar
 POST /message/downloadmedia
 POST /send/text

@@ -103,28 +103,30 @@ export class ContactPhotoCache {
 }
 
 /**
- * Baixa a imagem do link devolvido pela Evolution. Só aceita a CDN do
- * WhatsApp em https, sem redirecionamento, e só imagem pequena.
+ * Baixa a imagem do link devolvido pela Evolution. O destino é a origem da CDN
+ * de fotos de perfil do WhatsApp, fixada em configuração: do link só servem o
+ * caminho e a assinatura, e link de outra origem é recusado sem requisição.
+ * Sem redirecionamento, e só imagem pequena.
  */
 export async function downloadContactPhoto(
   url: string,
 ): Promise<ContactPhoto | null> {
-  let target: URL;
+  let link: URL;
   try {
-    target = new URL(url);
+    link = new URL(url);
   } catch {
     return null;
   }
-  if (
-    target.protocol !== "https:" ||
-    !target.hostname.endsWith(".whatsapp.net")
-  )
+  if (link.origin !== new URL(env.WHATSAPP_PROFILE_PHOTO_ORIGIN).origin)
     return null;
 
-  const response = await fetch(target, {
-    redirect: "error",
-    signal: AbortSignal.timeout(env.INTERNAL_HTTP_TIMEOUT_MS),
-  });
+  const response = await fetch(
+    new URL(`${link.pathname}${link.search}`, env.WHATSAPP_PROFILE_PHOTO_ORIGIN),
+    {
+      redirect: "error",
+      signal: AbortSignal.timeout(env.INTERNAL_HTTP_TIMEOUT_MS),
+    },
+  );
   const contentType = response.headers.get("content-type") ?? "";
   if (!response.ok || !contentType.startsWith("image/")) return null;
 

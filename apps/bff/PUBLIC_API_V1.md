@@ -749,7 +749,7 @@ O que a transcrição garante: quando `transcriptStatus` é `DONE`, `transcript`
 
 Sem foto é `204` sem corpo, com `cache-control: private, max-age=600`: pessoa sem telefone (dependente), número sem WhatsApp conectado, foto inexistente ou escondida do número da profissional, ou falha na consulta. O consumidor mostra as iniciais; não é erro. Cliente ou conversa de outro negócio segue as recusas normais da rota de detalhe (`404`).
 
-A foto nunca é gravada: o BFF pede o link à Evolution, baixa a imagem só da CDN do WhatsApp e a guarda apenas em memória (foto por 6 h, "sem foto" por 10 min), com no máximo 3 consultas ao WhatsApp ao mesmo tempo. O link assinado da CDN nunca sai do BFF.
+A foto nunca é gravada: o BFF pede o link à Evolution, baixa a imagem só da CDN do WhatsApp (origem fixada em `WHATSAPP_PROFILE_PHOTO_ORIGIN`, padrão `https://pps.whatsapp.net`; link de outra origem é recusado sem requisição) e a guarda apenas em memória (foto por 6 h, "sem foto" por 10 min), com no máximo 3 consultas ao WhatsApp ao mesmo tempo. O link assinado da CDN nunca sai do BFF.
 
 ## Conversa: eventos de agenda que a IA fez (Goal070)
 

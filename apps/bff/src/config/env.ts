@@ -65,6 +65,9 @@ const envSchema = z.object({
   SCHEDULING_SERVICE_BASE_URL: stringEnv("http://localhost:3003"),
   EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),
   EVOLUTION_GO_API_KEY: stringEnv(),
+  // Origem da CDN de fotos de perfil do WhatsApp. A foto da cliente só é
+  // baixada daqui; link devolvido pela Evolution com outra origem é recusado.
+  WHATSAPP_PROFILE_PHOTO_ORIGIN: stringEnv("https://pps.whatsapp.net"),
   INTERNAL_SERVICE_TOKEN: serviceTokenEnv(),
   // Credenciais por chamador/uso. Vazias, são derivadas de
   // INTERNAL_SERVICE_TOKEN por HMAC — nunca o próprio valor bruto, para que o

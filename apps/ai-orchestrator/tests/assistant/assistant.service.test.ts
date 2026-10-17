@@ -1468,7 +1468,9 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
         },
         {
           file: "modules/internal/routes.ts",
-          line: 799,
+          // Deslocada pelo registro de atividade (D-176) e pela mídia com link
+          // vencido da CDN; a linha é o número real, não um valor escolhido.
+          line: 847,
           category: "person_typed_text",
           origin: undefined,
         },
@@ -2507,10 +2509,10 @@ function makeTempSourceTree(files: Record<string, string>): string {
 }
 
 describe("todo egresso HTTP fora da porta do canal é enumerado com resíduo zero (Goal041 / WU-04)", () => {
-  it("descobre os 9 sítios das duas árvores, com resíduo zero e exatamente 1 portador de prosa ao número da cliente", () => {
+  it("descobre os 10 sítios das duas árvores (o 10º é o download da foto de perfil da cliente, 2026-10-15), com resíduo zero e exatamente 1 portador de prosa ao número da cliente", () => {
     const discovery = discoverHttpEgressSites(aiOrchestratorSrcPath, bffSrcPath);
     expect(discovery.excluded).toEqual([]);
-    expect(discovery.sites).toHaveLength(9);
+    expect(discovery.sites).toHaveLength(10);
     const proseSites = discovery.sites.filter(
       (site) => site.category === "product_prose_to_client_number",
     );
@@ -2518,10 +2520,11 @@ describe("todo egresso HTTP fora da porta do canal é enumerado com resíduo zer
     expect(httpEgressRelativePath(proseSites[0].filePath)).toBe(
       "ai-orchestrator/src/modules/channel/adapters/evolution/EvolutionProvider.ts",
     );
-    expect(proseSites[0].line).toBe(73);
+    // Deslocada pela trava WHATSAPP_OUTBOUND_DISABLED (2026-10-15).
+    expect(proseSites[0].line).toBe(87);
   });
 
-  it("classifica cada um dos 9 sítios na categoria que a resolução de destino computa, sem lista escrita à mão e sem pular arquivo nenhum", () => {
+  it("classifica cada um dos 10 sítios na categoria que a resolução de destino computa, sem lista escrita à mão e sem pular arquivo nenhum", () => {
     const discovery = discoverHttpEgressSites(aiOrchestratorSrcPath, bffSrcPath);
     const sites = discovery.sites
       .map((site) => ({
@@ -2538,12 +2541,14 @@ describe("todo egresso HTTP fora da porta do canal é enumerado com resíduo zer
       },
       {
         file: "ai-orchestrator/src/modules/channel/adapters/evolution/EvolutionProvider.ts",
-        line: 73,
+        // Esta e a de baixo, deslocadas pela trava WHATSAPP_OUTBOUND_DISABLED
+        // (2026-10-15).
+        line: 87,
         category: "product_prose_to_client_number",
       },
       {
         file: "ai-orchestrator/src/modules/channel/adapters/evolution/EvolutionProvider.ts",
-        line: 172,
+        line: 186,
         category: "env_vars_EVOLUTION_BASE_URL_and_EVOLUTION_DOWNLOAD_MEDIA_PATH",
       },
       {
@@ -2574,6 +2579,13 @@ describe("todo egresso HTTP fora da porta do canal é enumerado com resíduo zer
         file: "bff/src/clients/password-reset-delivery.ts",
         line: 32,
         category: "env_var_RESEND_API_URL",
+      },
+      {
+        // Foto de perfil da cliente (2026-10-15): o link vem da Evolution, mas
+        // o destino é a origem da CDN fixada em configuração.
+        file: "bff/src/modules/whatsapp/contact-photo.ts",
+        line: 123,
+        category: "env_var_WHATSAPP_PROFILE_PHOTO_ORIGIN",
       },
       {
         file: "bff/src/routes/health.ts",
@@ -6271,25 +6283,25 @@ describe("Goal046 / WU-04 — o conjunto de categorias de recusa é conferido co
 });
 
 describe("Goal046 / WU-04 — a árvore real produz os números desta rodada, e as invariantes de reconhecimento não são vácuas", () => {
-  it("1 superfície, 4 ligações resolvidas, 11 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — os mesmos números da baseline do Goal045, exceto o de arquivos varridos pela resolução de instanciação e o de rotas: com o modelo AgendaViewPreference do Goal073 gerado em apps/bff/src/generated/prisma, o modelo HumanTakeover do Goal074 gerado em apps/ai-orchestrator/src/generated/prisma modules/prompts/service-instructions.ts do Goal078, lib/calendar-source.ts do Goal109 e lib/whatsapp-contacts.ts do BFF, elas somam hoje 212 arquivos .ts (122 em apps/ai-orchestrator/src, com modules/outbox/ai-reply-dispatch.ts do despacho em partes de 2026-10-11, 90 em apps/bff/src), e a 11ª rota é o GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) — o número computado pelo AST (212) prevalece sobre qualquer contagem anterior capturada antes desse arquivo existir na árvore", () => {
+  it("1 superfície, 4 ligações resolvidas, 12 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — os mesmos números da baseline do Goal045, exceto o de arquivos varridos pela resolução de instanciação e o de rotas: com o modelo AgendaViewPreference do Goal073 gerado em apps/bff/src/generated/prisma, o modelo HumanTakeover do Goal074 gerado em apps/ai-orchestrator/src/generated/prisma modules/prompts/service-instructions.ts do Goal078, lib/calendar-source.ts do Goal109, lib/whatsapp-contacts.ts do BFF, o registro de atividade (D-176: modules/activity/ e o modelo ActivityLog gerado nas duas árvores, clients/activity-source.ts do BFF) e modules/whatsapp/contact-photo.ts do BFF, elas somam hoje 222 arquivos .ts (125 em apps/ai-orchestrator/src, com modules/outbox/ai-reply-dispatch.ts do despacho em partes de 2026-10-11, 97 em apps/bff/src), a 11ª rota é o GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) e a 12ª é o POST /user/avatar da foto de perfil da cliente (2026-10-15) — o número computado pelo AST (222) prevalece sobre qualquer contagem anterior capturada antes desse arquivo existir na árvore", () => {
     const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
 
     expect(internalClientSurfaces).toHaveLength(1);
     expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
-    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(212);
-    expect(requests).toHaveLength(11);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(222);
+    expect(requests).toHaveLength(12);
     expect(nonGoBoundInstantiations).toHaveLength(2);
     expect(nonTransportMemberCalls).toHaveLength(0);
   });
 
-  it("product-transport-routes.txt continua com as mesmas 11 rotas do conjunto que a árvore real alcança — as 10 do Goal046 e o GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11)", () => {
+  it("product-transport-routes.txt continua com as mesmas 12 rotas do conjunto que a árvore real alcança — as 10 do Goal046, o GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) e o POST /user/avatar da foto de perfil da cliente (2026-10-15)", () => {
     const routesFilePath = join(
       dirname(fileURLToPath(import.meta.url)),
       "../support/product-transport-routes.txt",
     );
     const routes = readProductTransportRoutesFile(routesFilePath);
-    expect(routes).toHaveLength(11);
+    expect(routes).toHaveLength(12);
     const { requests } = discoverGoServiceHttpRequests(
       aiOrchestratorSrcPath,
       bffSrcPath,
@@ -11954,20 +11966,20 @@ describe("Goal047 / WU-04 (§5) — as categorias de recusa deste caminho existe
   });
 });
 
-describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta rodada, e as 47 ocorrências de this.http. são classificadas sem recusa alguma", () => {
-  it("1 superfície, 4 ligações, 212 arquivos varridos, 11 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal, exceto o de arquivos varridos, pelo modelo AgendaViewPreference do Goal073, pelo modelo HumanTakeover do Goal074, por modules/prompts/service-instructions.ts do Goal078, por lib/calendar-source.ts do Goal109, por lib/whatsapp-contacts.ts do BFF e por modules/outbox/ai-reply-dispatch.ts (2026-10-11), e o de rotas, pelo GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11)", () => {
+describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta rodada, e as 49 ocorrências de this.http. são classificadas sem recusa alguma", () => {
+  it("1 superfície, 4 ligações, 222 arquivos varridos, 12 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal, exceto o de arquivos varridos, pelo modelo AgendaViewPreference do Goal073, pelo modelo HumanTakeover do Goal074, por modules/prompts/service-instructions.ts do Goal078, por lib/calendar-source.ts do Goal109, por lib/whatsapp-contacts.ts do BFF, por modules/outbox/ai-reply-dispatch.ts (2026-10-11), pelo registro de atividade (D-176) e por modules/whatsapp/contact-photo.ts do BFF (2026-10-15), e o de rotas, pelo GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) e pelo POST /user/avatar da foto de perfil da cliente (2026-10-15)", () => {
     const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
 
     expect(internalClientSurfaces).toHaveLength(1);
     expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
-    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(212);
-    expect(requests).toHaveLength(11);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(222);
+    expect(requests).toHaveLength(12);
     expect(nonGoBoundInstantiations).toHaveLength(2);
     expect(nonTransportMemberCalls).toHaveLength(0);
   });
 
-  it("as 47 ocorrências de this.http. em apps/bff/src/clients/ — as 46 do Goal047 e o this.http.request de EvolutionClient.getContacts (GET /user/contacts, validação de 2026-10-11) — estão todas na forma direta this.http.<membro>(, sem exceção, e a leitura completa não lança recusa alguma sobre a árvore real", () => {
+  it("as 49 ocorrências de this.http. em apps/bff/src/clients/ — as 46 do Goal047, o this.http.request de EvolutionClient.getContacts (GET /user/contacts, validação de 2026-10-11), o de EvolutionClient.getAvatarUrl (POST /user/avatar, foto de perfil da cliente, 2026-10-15) e o do registro de atividade no cliente do AI Orchestrator (D-176) — estão todas na forma direta this.http.<membro>(, sem exceção, e a leitura completa não lança recusa alguma sobre a árvore real", () => {
     const clientsRoot = join(bffSrcPath, "clients");
     const files = listTypeScriptSources(clientsRoot);
     let totalOccurrences = 0;
@@ -11977,8 +11989,8 @@ describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta roda
       totalOccurrences += (source.match(/\bthis\.http\./gu) ?? []).length;
       totalDirectCalls += (source.match(/\bthis\.http\.[A-Za-z_$][\w$]*\(/gu) ?? []).length;
     }
-    expect(totalOccurrences).toBe(47);
-    expect(totalDirectCalls).toBe(47);
+    expect(totalOccurrences).toBe(49);
+    expect(totalDirectCalls).toBe(49);
     expect(() =>
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath),
     ).not.toThrow();

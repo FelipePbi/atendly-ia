@@ -142,10 +142,34 @@ describe("downloadContactPhoto", () => {
     expect([...(result?.body ?? [])]).toEqual([9, 8, 7]);
   });
 
+  it("requests the configured CDN origin, taking only path and signature from the link", async () => {
+    const fetchMock = stubFetch(
+      new Response(new Uint8Array([1]), {
+        headers: { "content-type": "image/jpeg" },
+      }),
+    );
+
+    await downloadContactPhoto(
+      "https://someone:secret@pps.whatsapp.net/v/t61/abc.jpg?oe=6720A1B2#x",
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [target, init] = fetchMock.mock.calls[0] as unknown as [
+      URL,
+      RequestInit,
+    ];
+    expect(String(target)).toBe(
+      "https://pps.whatsapp.net/v/t61/abc.jpg?oe=6720A1B2",
+    );
+    expect(init.redirect).toBe("error");
+  });
+
   it("refuses links outside the WhatsApp CDN without fetching them", async () => {
     const fetchMock = stubFetch(new Response("x"));
 
     for (const url of [
+      "https://mmg.whatsapp.net/v/abc.jpg",
+      "https://pps.whatsapp.net:8443/v/abc.jpg",
       "http://pps.whatsapp.net/v/abc.jpg",
       "https://evil.example/whatsapp.net.jpg",
       "https://whatsapp.net.evil.example/abc.jpg",

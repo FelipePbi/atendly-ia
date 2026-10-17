@@ -119,6 +119,10 @@ import {
   MAX_REMINDER_LEAD_MINUTES,
   ReminderService,
 } from "../reminders/reminder-service.js";
+import {
+  loadRevenueReport,
+  REVENUE_PERIODS,
+} from "../revenue/revenue-report.js";
 import { AvenlyServiceService } from "../services/avenly-service-service.js";
 import {
   TENANT_PURGE_MAX_ROWS_LIMIT,
@@ -383,6 +387,27 @@ const activityQuerySchema = z.object({
   beforeSequence: z.string().regex(/^\d{1,19}$/).optional(),
   inclusive: z.enum(["true", "false"]).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+// Faturamento (D-177): um dia qualquer do período pedido, no fuso do negócio.
+const revenueQuerySchema = z.object({
+  period: z.enum(REVENUE_PERIODS),
+  date: dateSchema
+    .refine((value) => {
+      const [year, month, day] = value.split("-").map(Number) as [
+        number,
+        number,
+        number,
+      ];
+      const parsed = new Date(Date.UTC(year, month - 1, day));
+      return (
+        year >= 2000 &&
+        year <= 2100 &&
+        parsed.getUTCMonth() === month - 1 &&
+        parsed.getUTCDate() === day
+      );
+    }, "Invalid calendar date.")
+    .optional(),
 });
 
 const customerChildParamsSchema = z.object({
@@ -2365,6 +2390,25 @@ export async function registerManagementRoutes(
       limit: query.limit,
     });
     return data(request, page);
+  });
+
+  // --- Faturamento (D-177) -------------------------------------------------
+  // Só leitura, só do negócio do cabeçalho, somado aqui: o navegador recebe
+  // os totais, nunca a lista de atendimentos.
+  app.get("/internal/revenue", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    const query = parse(revenueQuerySchema, request.query ?? {});
+    const calendar = await requireCalendar(prisma, context.tenantId);
+    const now = new Date();
+    return data(
+      request,
+      await loadRevenueReport(prisma, context.tenantId, {
+        period: query.period,
+        date: query.date ?? localDate(now, calendar.timezone),
+        timeZone: calendar.timezone,
+        now,
+      }),
+    );
   });
 
   app.get("/internal/dashboard", internalOnly, async (request) => {

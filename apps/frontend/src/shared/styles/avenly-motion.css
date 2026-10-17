@@ -167,6 +167,7 @@
    o "A" animado, se a leitura demorar) e o painel entra com fade quando a
    primeira leitura chega — também com movimento reduzido (D-173). */
 .dashboard-page.is-arriving,
+.revenue-page.is-arriving,
 .activity-days.is-arriving {
   animation: motion-fade-in var(--at-duration-moderate) var(--at-ease-standard)
     both;
@@ -839,6 +840,7 @@ html.is-view-transition .motion-enter-back {
   .service-form-screen.is-entering > :not(.pushed-bar),
   .service-list-arrive,
   .dashboard-page.is-arriving,
+  .revenue-page.is-arriving,
   .activity-days.is-arriving,
   .conversation-list-page.is-arriving > .conversation-tabs,
   .conversation-list-page.is-arriving > .conversation-lens-note,

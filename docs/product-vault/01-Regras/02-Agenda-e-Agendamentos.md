@@ -213,6 +213,14 @@ O profissional pode registrar opcionalmente o valor efetivamente cobrado após o
 
 Se o valor final não for informado, não se deve assumir que o preço previsto representa receita efetivamente realizada.
 
+Exceção na tela **Faturamento** (D-177): atendimento concluído sem valor final conta pelo preço do acordo, só quando todos os serviços dele têm preço fixo, e a tela diz que o faturado é "pelo preço combinado ou pelo valor final que você registrou". O valor final, quando existe, sempre vence. "A partir de", "sob consulta" e "não informado" sem valor final não viram número: entram como atendimentos sem valor. Fora dessa tela (métricas do cliente, por exemplo), a regra acima continua.
+
+## Faturamento
+
+Faturado é a soma dos atendimentos **concluídos**; previsto é a soma dos **confirmados** que ainda vão acontecer. Os dois nunca se somam. Falta e cancelamento não entram em nenhum dos dois: aparecem à parte, com o valor do acordo que deixou de entrar.
+
+O preço é sempre o gravado no atendimento no dia em que foi confirmado (snapshot comercial): mudar o preço do serviço não muda o faturamento de períodos passados.
+
 ## Recorrência por serviço
 
 Um serviço pode ser configurado como recorrente, por exemplo:

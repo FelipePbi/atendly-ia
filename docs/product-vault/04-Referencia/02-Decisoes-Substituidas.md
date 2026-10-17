@@ -26,6 +26,18 @@ Direção atual:
 
 Direção atual: o perfil não mostra resumo gerado por IA. O Resumo traz o Histórico em linguagem natural, o próximo atendimento detalhado e as preferências.
 
+## Preço previsto nunca conta como receita
+
+**Refinada em 2026-10-16 (D-177).**
+
+Direção atual: na tela Faturamento, atendimento concluído sem valor final conta pelo preço do acordo quando todos os serviços dele têm preço fixo, e a tela diz que o faturado é "pelo preço combinado ou pelo valor final". "A partir de", "sob consulta" e "não informado" continuam sem virar número. Fora dessa tela, a regra antiga vale.
+
+## Faturamento como implementação futura
+
+**Substituída em 2026-10-16 (D-177).**
+
+Direção atual: Faturamento existe como item próprio do menu. Não é módulo financeiro: soma atendimentos, sem despesa, cobrança, pagamento ou caixa.
+
 ## Reimportação
 
 **Removida do MVP e da experiência definida.**

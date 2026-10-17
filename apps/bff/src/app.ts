@@ -28,6 +28,7 @@ import { registerV1OnboardingRoutes } from "./modules/onboarding/routes.js";
 import { RetentionSweepWorker } from "./modules/retention/RetentionSweepWorker.js";
 import { registerV1RetentionSettingsRoutes } from "./modules/retention/routes.js";
 import { defaultRetentionPorts } from "./modules/retention/sweep.js";
+import { registerV1RevenueRoutes } from "./modules/revenue/routes.js";
 import { registerV1ServiceRoutes } from "./modules/services/routes.js";
 import { registerV1SettingsRoutes } from "./modules/settings/routes.js";
 import { registerV1StatusRoutes } from "./modules/status/routes.js";
@@ -125,6 +126,7 @@ export async function buildApp() {
   await registerV1AuthRoutes(app);
   await registerV1OnboardingRoutes(app);
   await registerV1DashboardRoutes(app);
+  await registerV1RevenueRoutes(app);
   await registerV1StatusRoutes(app);
   await registerV1ConversationRoutes(app);
   await registerV1CalendarRoutes(app);

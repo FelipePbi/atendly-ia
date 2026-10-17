@@ -20,6 +20,7 @@ Bottom navigation:
 Dentro de **Mais**:
 
 - Serviços
+- Faturamento
 - WhatsApp
 - IA
 - Configurações da Agenda
@@ -46,6 +47,7 @@ Sidebar:
 - Agenda
 - Clientes
 - Serviços
+- Faturamento
 - Configurações
 
 Topbar:

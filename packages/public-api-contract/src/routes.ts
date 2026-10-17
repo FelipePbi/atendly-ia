@@ -56,6 +56,7 @@ import {
   registerResultSchema,
   reminderSettingsSchema,
   retentionSettingsSchema,
+  revenueReportSchema,
   seriesOccurrencePreviewSchema,
   serviceAiInstructionSchema,
   serviceListSchema,
@@ -183,6 +184,9 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
 
   // activity (D-176)
   { method: "GET", pathPattern: "/v1/activity", schema: activityPageSchema },
+
+  // revenue (D-177)
+  { method: "GET", pathPattern: "/v1/revenue", schema: revenueReportSchema },
 
   // knowledge
   { method: "GET", pathPattern: "/v1/knowledge/documents", schema: z.array(knowledgeDocumentSchema) },

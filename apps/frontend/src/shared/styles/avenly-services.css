@@ -386,19 +386,19 @@
    (65 px; 81 px a partir de 768 px), para a área dos itens rolar sozinha. O
    respiro no fim deixa a última linha acima do "+". */
 .service-list-screen:not(.has-state) {
-  height: calc(100dvh - 65px - env(safe-area-inset-bottom));
+  height: calc(100dvh - var(--shell-status-h, 0px) - 65px - env(safe-area-inset-bottom));
 }
 .service-list-screen .service-panel-scroll {
   padding-bottom: 88px;
 }
 @media (min-width: 768px) {
   .service-list-screen:not(.has-state) {
-    height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+    height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
   }
 }
 @media (min-width: 1100px) {
   .service-list-screen:not(.has-state) {
-    height: 100dvh;
+    height: calc(100dvh - var(--shell-status-h, 0px));
   }
 }
 .service-panel-header {
@@ -456,7 +456,7 @@
 /* "Selecione um serviço" no centro da coluna do detalhe, na altura da
    lista ao lado (S1 Landscape/Desktop). */
 .list-detail:has(> .list-detail-list > .service-panel) .list-detail-empty {
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--shell-status-h, 0px));
   padding: 40px;
   box-sizing: border-box;
   font-size: 14px;
@@ -468,7 +468,7 @@
 }
 @media (min-width: 1024px) and (max-width: 1099px) {
   .list-detail:has(> .list-detail-list > .service-panel) .list-detail-empty {
-    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+    min-height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
   }
 }
 .service-row.is-open {
@@ -479,7 +479,7 @@
 }
 .directory-page.service-form-screen {
   width: 100%;
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--shell-status-h, 0px));
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -1223,7 +1223,7 @@
 
 /* Vazio da lista de Serviços (S2, Goal122) */
 .service-panel.has-state {
-  min-height: calc(100dvh - 65px - env(safe-area-inset-bottom));
+  min-height: calc(100dvh - var(--shell-status-h, 0px) - 65px - env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   padding-bottom: 0;
@@ -1343,7 +1343,7 @@
 }
 @media (min-width: 768px) {
   .service-panel.has-state {
-    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+    min-height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
   }
   .service-state {
     padding-bottom: 28px;
@@ -1361,7 +1361,7 @@
 }
 @media (min-width: 1100px) {
   .service-panel.has-state {
-    min-height: 100dvh;
+    min-height: calc(100dvh - var(--shell-status-h, 0px));
   }
   .service-state {
     padding-top: 0;

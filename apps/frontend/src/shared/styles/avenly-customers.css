@@ -495,7 +495,7 @@
    a janela inteira. O respiro no fim deixa a última linha acima do "+". */
 .customer-list-screen {
   width: 100%;
-  height: calc(100dvh - 65px - env(safe-area-inset-bottom));
+  height: calc(100dvh - var(--shell-status-h, 0px) - 65px - env(safe-area-inset-bottom));
   margin: 0;
 }
 .customer-list-screen .customer-panel-scroll {
@@ -503,16 +503,16 @@
 }
 @media (min-width: 768px) {
   .customer-list-screen {
-    height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+    height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
   }
 }
 @media (min-width: 1100px) {
   .customer-list-screen {
-    height: 100dvh;
+    height: calc(100dvh - var(--shell-status-h, 0px));
   }
 }
 .directory-shell:not(:has(> nav)) .customer-list-screen {
-  height: 100dvh;
+  height: calc(100dvh - var(--shell-status-h, 0px));
 }
 /* Busca aberta no celular: a barra inferior some e a casca não reserva os
    65 px dela, senão a janela rolaria junto com a área dos itens. */
@@ -882,7 +882,7 @@
 
 /* Novo cliente (CL4): o formulário ocupa a tela e o CTA fica fixo no rodapé. */
 .customer-profile.customer-form-screen {
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--shell-status-h, 0px));
   padding-bottom: 0;
   display: flex;
   flex-direction: column;
@@ -1313,7 +1313,7 @@
   padding-top: 14px;
 }
 .customer-profile.is-fill {
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--shell-status-h, 0px));
   padding-bottom: 0;
   display: flex;
   flex-direction: column;
@@ -1325,7 +1325,7 @@
 }
 @media (min-width: 1024px) and (max-width: 1099px) {
   .customer-profile.is-fill {
-    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+    min-height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
   }
   .customer-profile.is-fill .customer-appts-footer,
   .customer-profile.is-fill .customer-save-bar {
@@ -1878,7 +1878,7 @@
 /* Vazio (CL2) e erro (CL10) da lista de Clientes (Goal121); carregando (CL9) ocupa a mesma altura, como o quadro. */
 .customer-panel.has-state,
 .customer-panel.is-loading {
-  min-height: calc(100dvh - 65px - env(safe-area-inset-bottom));
+  min-height: calc(100dvh - var(--shell-status-h, 0px) - 65px - env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   padding-bottom: 0;
@@ -1995,7 +1995,7 @@
 @media (min-width: 768px) {
   .customer-panel.has-state,
   .customer-panel.is-loading {
-    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+    min-height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
   }
   .customer-state {
     padding-bottom: 90px;
@@ -2011,20 +2011,20 @@
 @media (min-width: 1100px) {
   .customer-panel.has-state,
   .customer-panel.is-loading {
-    min-height: 100dvh;
+    min-height: calc(100dvh - var(--shell-status-h, 0px));
   }
 }
 
 /* Detalhe vazio de Clientes: centrado na altura da coluna, não só em 60vh (CL3). */
 .list-detail:has(.customer-panel) .list-detail-empty {
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--shell-status-h, 0px));
   font-size: 14px;
 }
 @media (min-width: 1024px) and (max-width: 1099px) {
   .directory-shell:has(> nav)
     .list-detail:has(.customer-panel)
     .list-detail-empty {
-    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+    min-height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
     box-sizing: border-box;
     padding-top: calc(105px + env(safe-area-inset-bottom));
   }
@@ -2038,7 +2038,7 @@
 }
 @media (min-width: 1024px) and (max-width: 1099px) {
   .directory-shell:not(:has(> nav)) .list-detail-list {
-    height: 100dvh;
+    height: calc(100dvh - var(--shell-status-h, 0px));
   }
 }
 

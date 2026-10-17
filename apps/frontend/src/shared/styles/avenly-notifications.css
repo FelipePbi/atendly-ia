@@ -251,7 +251,7 @@
 
 /* Vazio (NT2): o sino descansa dentro do anel que respira. */
 .notifications-page.is-pushed:has(.notifications-empty) {
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--shell-status-h, 0px));
   display: flex;
   flex-direction: column;
 }

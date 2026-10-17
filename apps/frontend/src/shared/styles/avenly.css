@@ -6251,24 +6251,23 @@ button.ignored-row:focus-visible,
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-/* Cartão flutuante (pedido de 2026-10-12): o `main` de toda tela tem padding
-   0, e o aviso colava nas bordas da área de conteúdo. Agora ele se solta com
+/* Cartão solto (pedido de 2026-10-12): o `main` de toda tela tem padding 0,
+   e o aviso colava nas bordas da área de conteúdo. Agora ele se solta com
    margem em volta, sombra suave, cantos de 14 px e mais respiro interno.
-   Os avisos que se ocultam por 1h ficam numa camada de altura zero, presa ao
-   topo da área de conteúdo: flutuam sobre a tela e não empurram o layout. */
+   A camada dos avisos ocupa espaço no topo da área de conteúdo e empurra a
+   tela (bug de 2026-10-16): flutuando por cima, ela tapava "Novo cliente" e
+   o "Mais ações" do perfil. A casca mede a camada em `--shell-status-h`, e
+   as telas de altura cheia descontam isso do `100dvh` para não rolar.
+   `flow-root` segura as margens do aviso dentro da camada medida. O topo tem
+   a mesma distância das laterais (20 px; 12 px no celular). */
 .shell-status-layer {
-  position: sticky;
-  top: 0;
-  z-index: var(--at-z-sticky);
-  height: 0;
-  overflow: visible;
+  display: flow-root;
 }
-/* `top` relativo desloca sem ocupar espaço: a camada continua com altura 0.
-   O topo tem a mesma distância das laterais (20 px; 12 px no celular). */
 .shell-status-layer > .shell-status-banner {
-  position: relative;
-  top: 20px;
-  margin: 0 20px 8px;
+  margin: 20px 20px 0;
+}
+.shell-status-layer > .shell-status-banner + .shell-status-banner {
+  margin-top: 8px;
 }
 .shell-status-banner {
   margin: 16px 20px 8px;
@@ -6303,8 +6302,7 @@ button.ignored-row:focus-visible,
    sai: o título e a ação já dizem o que aconteceu e o que fazer. */
 @media (max-width: 767px) {
   .shell-status-layer > .shell-status-banner {
-    top: 12px;
-    margin: 0 12px 8px;
+    margin: 12px 12px 0;
   }
   .shell-status-banner {
     margin: 10px 12px 8px;
@@ -9119,7 +9117,7 @@ main#main-content:focus-visible {
 .list-detail-list {
   position: sticky;
   top: 0;
-  height: 100dvh;
+  height: calc(100dvh - var(--shell-status-h, 0px));
   overflow-y: auto;
   border-right: 1px solid var(--border);
   background: var(--bg);
@@ -9144,7 +9142,7 @@ main#main-content:focus-visible {
 }
 @media (min-width: 1024px) and (max-width: 1099px) {
   .list-detail-list {
-    height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+    height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
   }
 }
 .pushed-bar {

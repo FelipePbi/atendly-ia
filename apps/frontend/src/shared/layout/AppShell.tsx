@@ -3,7 +3,15 @@
 import clsx from "clsx";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
   NotificationsDrawerProvider,
@@ -112,6 +120,7 @@ function AppShellChrome({
   }, [accountOpen]);
   const [moreOpen, setMoreOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   const firstRender = useRef(true);
 
   const styleModule =
@@ -154,6 +163,12 @@ function AppShellChrome({
     !whatsappInBand &&
     !whatsappBannerHidden;
   const showAiBanner = !deletionDueAt && aiUnavailable && !aiBannerHidden;
+  const statusLayerRef = useRef<HTMLDivElement>(null);
+  useShellStatusHeight(
+    frameRef,
+    statusLayerRef,
+    Boolean(deletionDueAt || showWhatsappBanner || showAiBanner),
+  );
   // O aviso ocultado sai da árvore: o foco não pode ficar num botão que sumiu.
   const hideBanner = (hide: () => void) => () => {
     hide();
@@ -193,6 +208,7 @@ function AppShellChrome({
             "conversation-detail-shell",
           hideTabBar && "is-pushed",
         )}
+        ref={frameRef}
       >
         <aside className="sidebar" aria-label="Navegação da aplicação">
           <div className="sidebar-brand">
@@ -329,21 +345,22 @@ function AppShellChrome({
           ref={mainRef}
           tabIndex={-1}
         >
-          {deletionDueAt && (
-            <PersistentStatusBanner
-              text={accountDeletionBannerCopy(
-                accountDeletionDaysRemaining(deletionDueAt),
+          {/* Os avisos ocupam o topo da área de conteúdo e empurram a tela:
+              flutuando por cima (2026-10-12), tapavam botões do topo das
+              telas (bug de 2026-10-16). A altura da camada vai para
+              `--shell-status-h`, que as telas de altura cheia descontam. */}
+          {(deletionDueAt || showWhatsappBanner || showAiBanner) && (
+            <div className="shell-status-layer" ref={statusLayerRef}>
+              {deletionDueAt && (
+                <PersistentStatusBanner
+                  text={accountDeletionBannerCopy(
+                    accountDeletionDaysRemaining(deletionDueAt),
+                  )}
+                  title="Exclusão de conta agendada"
+                  href="/configuracoes/conta"
+                  linkLabel="Ver exclusão da conta"
+                />
               )}
-              title="Exclusão de conta agendada"
-              href="/configuracoes/conta"
-              linkLabel="Ver exclusão da conta"
-            />
-          )}
-          {/* Avisos que se ocultam por 1h flutuam sobre a tela, sem empurrar o
-              layout (pedido de 2026-10-12). A exclusão de conta, que não se
-              oculta, continua no fluxo acima. */}
-          {(showWhatsappBanner || showAiBanner) && (
-            <div className="shell-status-layer">
               {showWhatsappBanner && (
                 <PersistentStatusBanner
                   text="Reconecte o WhatsApp para a IA voltar a responder."
@@ -575,6 +592,39 @@ function accountDeletionBannerCopy(days: number): string {
     return "Falta 1 dia para os dados serem apagados. Cancele em Configurações → Conta enquanto o prazo corre.";
   }
   return `Faltam ${days} dias para os dados serem apagados. Cancele em Configurações → Conta enquanto o prazo corre.`;
+}
+
+/**
+ * Publica a altura da camada de avisos em `--shell-status-h` na casca. As
+ * telas de altura cheia (`100dvh`) descontam esse valor: o aviso empurra a
+ * tela sem fazê-la rolar. Sem aviso, a variável sai e vale o `0px` do CSS.
+ * Medida antes da pintura, para a tela não piscar com a altura cheia.
+ */
+function useShellStatusHeight(
+  frameRef: RefObject<HTMLDivElement | null>,
+  layerRef: RefObject<HTMLDivElement | null>,
+  visible: boolean,
+) {
+  useLayoutEffect(() => {
+    const frame = frameRef.current;
+    const layer = layerRef.current;
+    if (!visible || !frame || !layer) return;
+    const publish = () =>
+      frame.style.setProperty(
+        "--shell-status-h",
+        `${layer.getBoundingClientRect().height}px`,
+      );
+    publish();
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(publish);
+    observer?.observe(layer);
+    return () => {
+      observer?.disconnect();
+      frame.style.removeProperty("--shell-status-h");
+    };
+  }, [frameRef, layerRef, visible]);
 }
 
 /**

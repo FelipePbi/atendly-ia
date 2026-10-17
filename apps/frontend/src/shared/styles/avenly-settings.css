@@ -785,7 +785,7 @@
 }
 
 .settings-state-shell {
-  min-height: calc(100dvh - 120px);
+  min-height: calc(100dvh - var(--shell-status-h, 0px) - 120px);
   display: grid;
   place-items: center;
 }
@@ -1053,7 +1053,7 @@
     flex: 1;
   }
   .settings-state-shell {
-    min-height: calc(100dvh - 180px);
+    min-height: calc(100dvh - var(--shell-status-h, 0px) - 180px);
   }
   .settings-state-card {
     padding: 28px 20px;
@@ -1519,7 +1519,7 @@ button.business-row:last-child {
 
 /* Goal097 (AG3): regras de horário com um único Salvar */
 .settings-page.is-pushed:has(.rules-screen) {
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--shell-status-h, 0px));
   display: flex;
   flex-direction: column;
 }
@@ -1740,7 +1740,7 @@ button.business-row:last-child {
 }
 @media (min-width: 1024px) and (max-width: 1099px) {
   .settings-page.is-pushed:has(.rules-screen) {
-    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+    min-height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
   }
   .rules-save {
     bottom: calc(81px + env(safe-area-inset-bottom));
@@ -2452,7 +2452,7 @@ button.business-row:last-child {
 
 /* Goal104 (Mais-WhatsApp:C1): Conta em grupos de linhas */
 .settings-page.is-pushed:has(.account-screen) {
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--shell-status-h, 0px));
   padding-bottom: 0;
   display: flex;
   flex-direction: column;
@@ -2558,7 +2558,7 @@ a.account-danger-card {
 }
 @media (min-width: 1024px) and (max-width: 1099px) {
   .settings-page.is-pushed:has(.account-screen) {
-    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+    min-height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2569,7 +2569,7 @@ a.account-danger-card {
 
 /* Goal106 (Mais-WhatsApp:W1): WhatsApp conectado em Configurações */
 .settings-page.is-pushed:has(.wa-screen) {
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--shell-status-h, 0px));
   padding-bottom: 0;
   display: flex;
   flex-direction: column;
@@ -2758,7 +2758,7 @@ a.account-danger-card {
 }
 @media (min-width: 1024px) and (max-width: 1099px) {
   .settings-page.is-pushed:has(.wa-screen) {
-    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+    min-height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2779,7 +2779,7 @@ a.account-danger-card {
   gap: var(--s5);
 }
 .imports-page.is-pushed:has(.imports-empty) {
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--shell-status-h, 0px));
   padding-bottom: 0;
   display: flex;
   flex-direction: column;
@@ -2792,7 +2792,7 @@ a.account-danger-card {
 }
 @media (min-width: 1024px) and (max-width: 1099px) {
   .imports-page.is-pushed:has(.imports-empty) {
-    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+    min-height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
   }
 }
 .imports-empty {
@@ -3307,7 +3307,7 @@ a.account-danger-card {
 
 /* Goal124 (Mais-WhatsApp:C2): excluir conta em rota própria */
 .settings-page.is-pushed:has(.deletion-screen) {
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--shell-status-h, 0px));
   padding-bottom: 0;
   display: flex;
   flex-direction: column;
@@ -3483,7 +3483,7 @@ a.account-danger-card {
 }
 @media (min-width: 1024px) and (max-width: 1099px) {
   .settings-page.is-pushed:has(.deletion-screen) {
-    min-height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+    min-height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
   }
   .deletion-footer {
     bottom: calc(81px + env(safe-area-inset-bottom));

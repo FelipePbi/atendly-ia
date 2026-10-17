@@ -187,7 +187,7 @@ describe("aviso de WhatsApp desconectado: ocultar por 1h", () => {
     expect(left[0]).toHaveTextContent("IA indisponível");
   });
 
-  test("os avisos que se ocultam ficam na camada flutuante; a exclusão não", async () => {
+  test("todos os avisos ficam na camada do topo, que ocupa espaço", async () => {
     statusGet.mockResolvedValue(
       statusFixture({
         ai: {
@@ -204,6 +204,26 @@ describe("aviso de WhatsApp desconectado: ocultar por 1h", () => {
     for (const alert of alerts) {
       expect(alert.parentElement).toHaveClass("shell-status-layer");
     }
+  });
+
+  test("a casca publica a altura dos avisos em --shell-status-h e tira ao ocultar (bug de 2026-10-16)", async () => {
+    // jsdom não faz layout: a altura medida da camada vem do espião.
+    const rect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        return {
+          height: this.classList.contains("shell-status-layer") ? 92 : 0,
+        } as DOMRect;
+      });
+    const { container } = renderShell();
+    const banner = await screen.findByRole("alert");
+    const frame = container.querySelector(".app-frame") as HTMLElement;
+    expect(frame.style.getPropertyValue("--shell-status-h")).toBe("92px");
+    await userEvent.click(
+      within(banner).getByRole("button", { name: "Ocultar por 1h" }),
+    );
+    expect(frame.style.getPropertyValue("--shell-status-h")).toBe("");
+    rect.mockRestore();
   });
 
   test("o aviso de exclusão de conta não oferece ocultar", async () => {
@@ -223,6 +243,7 @@ describe("aviso de WhatsApp desconectado: ocultar por 1h", () => {
     expect(
       within(banner).queryByRole("button", { name: /ocultar/i }),
     ).toBeNull();
+    expect(banner.parentElement).toHaveClass("shell-status-layer");
   });
 });
 
@@ -242,20 +263,59 @@ describe("estilo do aviso e do cartão da sidebar", () => {
     );
   });
 
-  test("o aviso flutua sobre a tela: camada de altura 0 presa no topo, sem empurrar", () => {
-    expect(css).toMatch(
-      /\.shell-status-layer \{\s*position: sticky;\s*top: 0;\s*z-index: var\(--at-z-sticky\);\s*height: 0;\s*overflow: visible;/,
+  test("o aviso empurra a tela em vez de flutuar sobre os botões do topo (bug de 2026-10-16)", () => {
+    // Flutuando numa camada de altura 0, o aviso tapava "Novo cliente" e o
+    // "Mais ações" do perfil. Agora a camada ocupa espaço no fluxo.
+    const layer = css.slice(
+      css.indexOf(".shell-status-layer {"),
+      css.indexOf("}", css.indexOf(".shell-status-layer {")),
+    );
+    expect(layer).toMatch(/display: flow-root;/);
+    expect(layer).not.toMatch(/position:|height: 0|z-index/);
+    expect(css).not.toMatch(
+      /\.shell-status-layer > \.shell-status-banner \{[^}]*(position|top):/,
     );
     expect(css).toMatch(
-      /\.shell-status-layer > \.shell-status-banner \{\s*position: relative;\s*top: 20px;\s*margin: 0 20px 8px;/,
+      /\.shell-status-layer > \.shell-status-banner \{\s*margin: 20px 20px 0;/,
     );
     expect(css).toMatch(
-      /@media \(max-width: 767px\) \{\s*\.shell-status-layer > \.shell-status-banner \{\s*top: 12px;\s*margin: 0 12px 8px;/,
+      /@media \(max-width: 767px\) \{\s*\.shell-status-layer > \.shell-status-banner \{\s*margin: 12px 12px 0;/,
     );
-    const floating = css.slice(css.indexOf("/* Cartão flutuante"));
-    expect(floating).toMatch(
+    const card = css.slice(css.indexOf("/* Cartão solto"));
+    expect(card).toMatch(
       /\n\.shell-status-banner \{[^}]*border-radius: 14px;[^}]*box-shadow:/,
     );
+  });
+
+  test("telas de altura cheia descontam a altura do aviso do 100dvh", () => {
+    // Regras no próprio <main> ficam de fora: o aviso mora dentro dele.
+    // Folhas, diálogos e telas sem casca também: não ficam sob o aviso.
+    const outsideShell =
+      /^(\.app-frame > main|\.conversation-detail-main$|\.chat-sheet|\.modal|\.bottom-sheet|\.drawer|\.brand-loader-screen|\.ds-page|\.shell-reference|\.mobile-shell|\.onboarding|\.auth-|\.entry-shell|\.legal-page|\.system-auth|body)/;
+    const files = [
+      "avenly.css",
+      "avenly-agenda.css",
+      "avenly-conversations.css",
+      "avenly-customers.css",
+      "avenly-notifications.css",
+      "avenly-services.css",
+      "avenly-settings.css",
+    ];
+    const missing: string[] = [];
+    for (const file of files) {
+      const source = readFileSync(`src/shared/styles/${file}`, "utf8");
+      for (const rule of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const selector = rule[1].replace(/\/\*[\s\S]*?\*\//g, "").trim();
+        for (const decl of rule[2].matchAll(
+          /(?:^|;)\s*((?:min-|max-)?height):([^;]*100dvh[^;]*)/g,
+        )) {
+          if (outsideShell.test(selector)) continue;
+          if (decl[2].includes("var(--shell-status-h, 0px)")) continue;
+          missing.push(`${file}: ${selector} { ${decl[1]}:${decl[2]} }`);
+        }
+      }
+    }
+    expect(missing).toEqual([]);
   });
 
   test("o foco programático do <main> não desenha a linha verde no topo", () => {

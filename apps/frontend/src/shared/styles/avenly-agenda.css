@@ -2391,7 +2391,7 @@ button.week-bar:focus-visible,
  * coluna da Agenda fica ao lado (`AgendaDayColumn`). Valores portados do
  * quadro A6 (Agenda.dc.html, Agenda-Tablet.dc.html, Agenda-Desktop.dc.html). */
 .agenda-new-screen {
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--shell-status-h, 0px));
   display: flex;
   flex-direction: column;
   background: #f7f4ef;
@@ -2930,7 +2930,7 @@ button.week-bar:focus-visible,
 
 @media (min-width: 1024px) {
   .agenda-new-screen {
-    min-height: calc(100dvh - 54px - 81px - env(safe-area-inset-bottom));
+    min-height: calc(100dvh - var(--shell-status-h, 0px) - 54px - 81px - env(safe-area-inset-bottom));
   }
   .agenda-new-screen-body {
     padding-top: 10px;
@@ -2950,7 +2950,7 @@ button.week-bar:focus-visible,
 
 @media (min-width: 1100px) {
   .agenda-new-screen {
-    min-height: calc(100dvh - 64px);
+    min-height: calc(100dvh - var(--shell-status-h, 0px) - 64px);
   }
   .agenda-new-screen-body {
     padding-top: 14px;
@@ -3732,7 +3732,7 @@ button.agenda-new-hint:focus-visible {
 
 /* Tela do agendamento (A5): barra própria, corpo e rodapé fixo. */
 .agenda-appt {
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--shell-status-h, 0px));
   display: flex;
   flex-direction: column;
   background: #f7f4ef;
@@ -4106,7 +4106,7 @@ button.agenda-new-hint:focus-visible {
 }
 @media (min-width: 1024px) {
   .agenda-appt {
-    min-height: calc(100dvh - 54px - 81px - env(safe-area-inset-bottom));
+    min-height: calc(100dvh - var(--shell-status-h, 0px) - 54px - 81px - env(safe-area-inset-bottom));
   }
   .agenda-appt .pushed-bar {
     padding: 12px 28px 0;
@@ -4118,7 +4118,7 @@ button.agenda-new-hint:focus-visible {
 }
 @media (min-width: 1100px) {
   .agenda-appt {
-    min-height: calc(100dvh - 64px);
+    min-height: calc(100dvh - var(--shell-status-h, 0px) - 64px);
   }
   .agenda-appt .pushed-bar {
     padding: 20px 28px 0;

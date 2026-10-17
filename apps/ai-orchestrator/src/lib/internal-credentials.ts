@@ -48,6 +48,8 @@ export type InternalScope =
   | "customer-summary:write"
   | "activation-test:read"
   | "activation-test:write"
+  // Registro de atividade (D-176): só leitura, do negócio do cabeçalho.
+  | "activity:read"
   | "retention:purge"
   // Purga do negocio inteiro (Goal025/WU-05): escopo proprio, deliberadamente
   // distinto de `retention:purge` — apagar todo o rastro do negocio na IA nao
@@ -79,6 +81,7 @@ const SCOPES_BY_USE: Record<InternalUse, readonly InternalScope[]> = {
     // execucao sao comando comum, nunca provisionamento.
     "activation-test:read",
     "activation-test:write",
+    "activity:read",
     // Purga de conteudo de conversa (Goal023): comando comum vindo da
     // varredura do BFF. Escopo proprio de proposito — quem pode ler conversa
     // nao passa a poder apagar conteudo por consequencia.

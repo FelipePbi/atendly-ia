@@ -88,6 +88,8 @@ function fakePrisma(rows: Row[]) {
     channel: { id: item.channelId, tenantId: item.tenantId },
   });
   return {
+    // Registro de atividade (D-176): gravado, não conferido aqui.
+    activityLog: { create: async () => ({}) },
     conversation: {
       findFirst: async ({ where }: { where: Record<string, unknown> }) => {
         const found = rows.find(

@@ -50,6 +50,9 @@ function headers(tenantId: string, use: "command" | "provisioning" = "command") 
   };
 }
 
+/** Registro de atividade (D-176): gravado, não conferido aqui. */
+const activityPrisma = { activityLog: { create: async () => ({}) } };
+
 describe("rotas internas da instrução privada por serviço (Goal078)", () => {
   let app: FastifyInstance;
   let knowledgeDocuments: ReturnType<typeof fakeKnowledgeDocuments>;
@@ -57,7 +60,7 @@ describe("rotas internas da instrução privada por serviço (Goal078)", () => {
   beforeEach(async () => {
     knowledgeDocuments = fakeKnowledgeDocuments();
     app = Fastify();
-    await registerInternalRoutes(app, {} as never, {
+    await registerInternalRoutes(app, activityPrisma as never, {
       inbox: { countDeadLetters: async () => 0 },
       knowledgeDocuments: knowledgeDocuments.service as never,
     });
@@ -97,7 +100,7 @@ describe("rotas internas da instrução privada por serviço (Goal078)", () => {
     });
     await app.close();
     app = Fastify();
-    await registerInternalRoutes(app, {} as never, {
+    await registerInternalRoutes(app, activityPrisma as never, {
       inbox: { countDeadLetters: async () => 0 },
       knowledgeDocuments: knowledgeDocuments.service as never,
     });
@@ -126,7 +129,12 @@ describe("rotas internas da instrução privada por serviço (Goal078)", () => {
     expect(response.json().data).toEqual({
       content: "Peça para falar comigo antes de marcar.",
     });
-    expect(knowledgeDocuments.calls[0]).toMatchObject({
+    // A rota lê a instrução anterior antes (registro de atividade, D-176).
+    expect(
+      knowledgeDocuments.calls.find(
+        (call) => call.method === "saveServiceInstruction",
+      ),
+    ).toMatchObject({
       method: "saveServiceInstruction",
       args: {
         tenantId: "tenant-a",

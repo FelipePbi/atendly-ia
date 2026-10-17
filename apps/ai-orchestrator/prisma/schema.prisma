@@ -869,3 +869,37 @@ model ActivationTestMilestone {
   @@unique([tenantId, runId, milestone])
   @@index([tenantId, runId, reachedAt])
 }
+
+/// Registro de atividade do negocio (D-176): o que a profissional ou a IA
+/// fizeram, com o antes e o depois de cada campo alterado. Gravado na mesma
+/// transacao da mudanca, nunca editado — a trigger
+/// `ActivityLog_append_only` recusa UPDATE. So sai pela purga do negocio
+/// inteiro. Aqui ficam as conversas, o conhecimento do negocio e a memoria de
+/// cliente; o BFF le junto com os registros do Scheduling e do proprio BFF.
+model ActivityLog {
+  id          String   @id @default(cuid())
+  tenantId    String
+  /// Desempate estrito dentro do mesmo `occurredAt` e cursor da leitura.
+  sequence    BigInt   @unique @default(autoincrement())
+  occurredAt  DateTime @default(now())
+  /// `AI` ou `USER` (constraint SQL `ActivityLog_actor_type_check`).
+  actorType   String
+  /// Usuario quando `USER`; nulo para a IA.
+  actorId     String?
+  /// AGENDA, CUSTOMERS, SERVICES, SETTINGS, IMPORT ou CONVERSATIONS.
+  area        String
+  /// Verbo estavel em ingles (`appointment.rescheduled`); a frase em pt-BR e
+  /// montada na tela.
+  action      String
+  entityType  String
+  entityId    String?
+  /// Nome legivel no momento do registro (cliente, servico); fonte da busca.
+  entityLabel String?
+  /// `[{ field, before, after }]` — so campos de uma lista permitida, nunca
+  /// segredo, senha ou token.
+  changes     Json     @default("[]")
+  /// Contexto da frase (cliente, servicos, horario), sem segredo.
+  details     Json?
+
+  @@index([tenantId, occurredAt(sort: Desc), sequence(sort: Desc)])
+}

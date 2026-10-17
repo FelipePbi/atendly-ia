@@ -14,7 +14,6 @@
  * - as duas entradas (a prévia e a tela parada) e as duas molduras.
  */
 
-import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -50,6 +49,7 @@ import {
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
 import { expectNoA11yViolations } from "./support/a11y";
+import { readLightStylesheet } from "./support/stylesheet";
 
 const analyzeImport = vi.fn();
 const decideImportItem = vi.fn();
@@ -1245,10 +1245,8 @@ describe.each<ImportsFrame>(["onboarding", "platform"])(
 /* --- O CSS ---------------------------------------------------------------- */
 
 function readCss(): string {
-  return readFileSync(
-    path.join(process.cwd(), "src", "shared", "styles", "avenly-imports.css"),
-    "utf8",
-  ).replace(/\r\n/g, "\n");
+  return readLightStylesheet(
+    path.join(process.cwd(), "src", "shared", "styles", "avenly-imports.css")).replace(/\r\n/g, "\n");
 }
 
 function ruleBody(css: string, selector: string): string {

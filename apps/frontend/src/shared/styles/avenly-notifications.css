@@ -66,14 +66,14 @@
   padding: 0 8px 0 0;
   border: 0;
   background: transparent;
-  color: #0f5f63;
+  color: var(--at-color-primary);
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
 }
 .notifications-mark-all:hover:not(:disabled) {
-  color: #0b484c;
+  color: var(--at-color-primary-hover);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -101,7 +101,7 @@
 .notifications-day-title {
   margin: 0;
   padding: 10px var(--notif-px) 4px;
-  color: #716859;
+  color: var(--at-color-ink-muted);
   font-family: var(--font-body);
   font-size: 12px;
   font-weight: 600;
@@ -121,19 +121,19 @@
   padding: 12px var(--notif-px);
   display: flex;
   gap: 12px;
-  color: #221e1a;
+  color: var(--at-color-ink);
 }
 .notifications-row + .notifications-row {
-  border-top: 1px solid #e5ded4;
+  border-top: 1px solid var(--at-color-border);
 }
 .notifications-row.is-attention.is-unread {
-  background: #f8ecd5;
+  background: var(--at-color-warning-bg);
 }
 .notifications-row.is-attention.is-unread + .notifications-row.is-attention.is-unread {
-  border-top-color: #ebd7ae;
+  border-top-color: var(--at-color-warning-border-soft);
 }
 .notifications-row.is-resolved {
-  color: #716859;
+  color: var(--at-color-ink-muted);
 }
 
 .notifications-marker {
@@ -151,16 +151,16 @@
   border-radius: 50%;
 }
 .notifications-level-dot.is-info {
-  background: #0f5f63;
+  background: var(--at-color-primary);
 }
 .notifications-level-dot.is-attention {
-  background: #b7791b;
+  background: var(--at-color-warning-border);
 }
 .notifications-level-dot.is-critical {
   width: 18px;
   height: 18px;
   border-radius: 0;
-  color: #b7791b;
+  color: var(--at-color-warning-border);
 }
 .notifications-level-dot.is-resolved {
   width: 20px;
@@ -168,8 +168,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #dfefe4;
-  color: #2e7d4f;
+  background: var(--at-color-success-bg);
+  color: var(--at-color-success);
 }
 
 .notifications-row-link {
@@ -200,18 +200,18 @@
   font-weight: 600;
 }
 .notifications-row-time {
-  color: #716859;
+  color: var(--at-color-ink-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .notifications-row.is-attention.is-unread .notifications-row-time {
-  color: #7a4e0a;
+  color: var(--at-color-warning-ink);
   font-weight: 600;
 }
 .notifications-row-body p {
   margin: 0;
-  color: #5f574e;
+  color: var(--at-color-ink-soft);
   font-size: 14px;
   line-height: 1.4;
 }
@@ -221,7 +221,7 @@
   text-decoration: line-through;
 }
 .notifications-row.is-resolved .notifications-row-body p {
-  color: #1f5c39;
+  color: var(--at-color-success-ink);
 }
 
 /* O ponto das não lidas é o controle "Marcar como lida" (alvo de 24 px). */
@@ -242,7 +242,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #0f5f63;
+  background: var(--at-color-primary);
 }
 .notifications-unread-dot:disabled {
   opacity: 0.5;
@@ -265,7 +265,7 @@
   gap: 18px;
   padding: 0 44px 60px;
   text-align: center;
-  color: #221e1a;
+  color: var(--at-color-ink);
 }
 .notifications-empty-halo {
   position: relative;
@@ -278,7 +278,7 @@
 .notifications-empty-ring {
   position: absolute;
   inset: 0;
-  border: 1.5px solid #0f5f63;
+  border: 1.5px solid var(--at-color-primary);
   border-radius: 50%;
   opacity: 0.6;
   animation: at-breathe 2.4s ease-out infinite;
@@ -286,10 +286,10 @@
 .notifications-empty-disc {
   width: 64px;
   height: 64px;
-  border: 1px solid #e5ded4;
+  border: 1px solid var(--at-color-border);
   border-radius: 50%;
-  background: #fffdfa;
-  color: #0f5f63;
+  background: var(--at-color-surface);
+  color: var(--at-color-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -308,7 +308,7 @@
 }
 .notifications-empty-text p {
   margin: 0;
-  color: #5f574e;
+  color: var(--at-color-ink-soft);
   font-size: 14px;
   line-height: 1.45;
   text-wrap: pretty;
@@ -317,8 +317,8 @@
   height: 30px;
   padding: 0 12px;
   border-radius: 999px;
-  background: #dceceb;
-  color: #0b4a4e;
+  background: var(--at-color-primary-tint-strong);
+  color: var(--at-color-primary-ink);
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -329,7 +329,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #0f5f63;
+  background: var(--at-color-primary);
 }
 @media (prefers-reduced-motion: reduce) {
   .notifications-empty-ring {
@@ -347,8 +347,8 @@
   padding: 0;
   gap: 0;
   overflow: hidden;
-  background: #f7f4ef;
-  box-shadow: -16px 0 48px rgba(34, 30, 26, 0.18);
+  background: var(--at-color-canvas);
+  box-shadow: -16px 0 48px rgb(var(--at-shadow-rgb) / 0.18);
 }
 .drawer:has(.notifications-drawer-body) .modal-header {
   height: 64px;
@@ -380,7 +380,7 @@
   background: transparent;
 }
 .drawer:has(.notifications-drawer-body) .icon-btn:hover {
-  background: #efeae2;
+  background: var(--at-color-surface-active);
 }
 .notifications-drawer-body {
   --notif-px: 28px;
@@ -406,7 +406,7 @@
 .notifications-drawer-footer {
   margin-top: auto;
   padding: 12px var(--notif-px) 0;
-  border-top: 1px solid #e5ded4;
+  border-top: 1px solid var(--at-color-border);
 }
 .notifications-drawer-footer a {
   min-height: 44px;

@@ -21,7 +21,6 @@
  * - o CSS usa classes novas, escopadas, e só anima com movimento permitido.
  */
 
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -63,6 +62,7 @@ import { OnboardingRuntimeProvider } from "@/features/onboarding/OnboardingRunti
 import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
 
 import { expectNoA11yViolations } from "./support/a11y";
+import { readLightStylesheet } from "./support/stylesheet";
 
 type Category = ImportHistory["categories"][number];
 
@@ -667,10 +667,8 @@ describe("o que não muda", () => {
 });
 
 function readCss(): string {
-  return readFileSync(
-    join(process.cwd(), "src/shared/styles/avenly-imports.css"),
-    "utf8",
-  );
+  return readLightStylesheet(
+    join(process.cwd(), "src/shared/styles/avenly-imports.css"));
 }
 
 /** Só o bloco do 2.I10: do comentário do Goal134 até o do andamento (2.I7), que vem depois. */
@@ -789,10 +787,8 @@ describe("o CSS do 2.I10 tem os valores do quadro", () => {
     expect(primary).toMatch(/background:\s*#0f5f63/);
     expect(primary).toMatch(/color:\s*#f7f4ef/);
     // A altura de 52 px é da regra compartilhada, que este bloco não repete.
-    const shared = readFileSync(
-      join(process.cwd(), "src/shared/styles/avenly.css"),
-      "utf8",
-    );
+    const shared = readLightStylesheet(
+      join(process.cwd(), "src/shared/styles/avenly.css"));
     expect(ruleBody(shared, ".onboarding-actions .btn")).toMatch(/min-height:\s*52px/);
   });
 

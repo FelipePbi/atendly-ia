@@ -286,7 +286,7 @@ describe("as sete linhas do cartão", () => {
       "background: var(--at-color-primary-tint)",
     );
     expect(rule(".hours-day.is-different .hours-day-range")).toContain(
-      "color: #0b4a4e",
+      "color: var(--at-color-primary-ink)",
     );
     expect(rule(".hours-day.is-different .hours-day-range")).toContain(
       "font-weight: 600",

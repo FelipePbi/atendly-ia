@@ -576,7 +576,7 @@ export function ConversationThread({
                 aria-hidden="true"
                 fill="none"
                 height="14"
-                stroke="#716859"
+                style={{ stroke: "var(--at-color-ink-muted)" }}
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth="2"

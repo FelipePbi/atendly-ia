@@ -969,7 +969,7 @@ function SheetCheck() {
       <svg
         fill="none"
         height="12"
-        stroke="#2E7D4F"
+        style={{ stroke: "var(--at-color-success)" }}
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth="3"

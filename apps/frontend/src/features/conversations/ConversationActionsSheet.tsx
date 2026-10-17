@@ -36,7 +36,7 @@ const focusable =
 
 function RowIcon({
   children,
-  stroke = "#5F574E",
+  stroke = "var(--at-color-ink-soft)",
 }: {
   children: ReactNode;
   stroke?: string;
@@ -46,7 +46,7 @@ function RowIcon({
       aria-hidden="true"
       fill="none"
       height="22"
-      stroke={stroke}
+      style={{ stroke }}
       strokeLinecap="round"
       strokeLinejoin="round"
       strokeWidth="1.75"
@@ -252,7 +252,7 @@ function OpenSheet({
             onClick={() => setPersonalOpen((value) => !value)}
             type="button"
           >
-            <RowIcon stroke={personalExpanded ? "#221E1A" : "#5F574E"}>
+            <RowIcon stroke={personalExpanded ? "var(--at-color-ink)" : "var(--at-color-ink-soft)"}>
               <path d="M9 6v12M15 6v12" />
             </RowIcon>
             <span>Marcar como pessoal</span>
@@ -337,7 +337,7 @@ function PersonalOption({
           <svg
             fill="none"
             height="11"
-            stroke="#F7F4EF"
+            style={{ stroke: "var(--at-color-on-primary)" }}
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth="3.5"

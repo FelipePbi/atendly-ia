@@ -231,7 +231,7 @@ function CheckGlyph() {
     <svg
       aria-hidden="true"
       fill="none"
-      stroke="#2E7D4F"
+      style={{ stroke: "var(--at-color-success)" }}
       strokeLinecap="round"
       strokeLinejoin="round"
       strokeWidth="3"
@@ -247,7 +247,7 @@ function CalendarGlyph() {
     <svg
       aria-hidden="true"
       fill="none"
-      stroke="#716859"
+      style={{ stroke: "var(--at-color-ink-muted)" }}
       strokeLinecap="round"
       strokeLinejoin="round"
       strokeWidth="2.25"

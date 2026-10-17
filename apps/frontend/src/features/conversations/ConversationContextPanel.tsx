@@ -85,7 +85,7 @@ function RowIcon({ children }: { children: ReactNode }) {
       aria-hidden="true"
       fill="none"
       height="22"
-      stroke="#5F574E"
+      style={{ stroke: "var(--at-color-ink-soft)" }}
       strokeLinecap="round"
       strokeLinejoin="round"
       strokeWidth="1.75"

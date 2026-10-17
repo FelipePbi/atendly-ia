@@ -28,7 +28,7 @@
   grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
-  border: 1px solid color-mix(in oklch, var(--warning), white 62%);
+  border: 1px solid color-mix(in oklch, var(--warning), var(--at-mix-light) 62%);
   border-radius: var(--r-input);
   color: var(--fg);
   background: var(--warning-soft);

@@ -11,7 +11,6 @@
  * aqui — jsdom não tem layout; foi conferido no navegador em 360 e 390px.
  */
 
-import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { render, screen, within } from "@testing-library/react";
@@ -30,6 +29,8 @@ import {
   weekBarLabelInk,
 } from "@/features/agenda/weekBarLabel";
 import { WeekView } from "@/features/agenda/WeekView";
+
+import { readLightStylesheet } from "./support/stylesheet";
 
 function appointmentFixture(overrides: Partial<Appointment> = {}): Appointment {
   return {
@@ -70,10 +71,8 @@ function appointmentFixture(overrides: Partial<Appointment> = {}): Appointment {
 
 const PALETTE = Object.keys(SERVICE_SWATCH_HEX) as ServiceColorToken[];
 
-const agendaCss = readFileSync(
-  path.join(__dirname, "../src/shared/styles/avenly-agenda.css"),
-  "utf8",
-);
+const agendaCss = readLightStylesheet(
+  path.join(__dirname, "../src/shared/styles/avenly-agenda.css"));
 
 describe("pedido de 2026-10-12: abreviação do nome da cliente", () => {
   test.each([
@@ -135,7 +134,7 @@ describe("pedido de 2026-10-12: cor do texto pela luminância do traço", () => 
 
   test("a paleta do cálculo é a mesma do CSS", () => {
     const strip = (file: string) =>
-      readFileSync(path.join(process.cwd(), file), "utf8").replace(
+      readLightStylesheet(path.join(process.cwd(), file)).replace(
         /\/\*[\s\S]*?\*\//g,
         "",
       );

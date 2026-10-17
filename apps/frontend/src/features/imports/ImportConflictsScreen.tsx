@@ -328,7 +328,7 @@ function CheckMark() {
       aria-hidden="true"
       fill="none"
       height="14"
-      stroke="#2E7D4F"
+      style={{ stroke: "var(--at-color-success)" }}
       strokeLinecap="round"
       strokeLinejoin="round"
       strokeWidth="3"
@@ -346,7 +346,7 @@ function ChevronDown() {
       aria-hidden="true"
       fill="none"
       height="20"
-      stroke="#716859"
+      style={{ stroke: "var(--at-color-ink-muted)" }}
       strokeLinecap="round"
       strokeLinejoin="round"
       strokeWidth="1.75"

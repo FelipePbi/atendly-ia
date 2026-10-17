@@ -3,7 +3,8 @@
  * Direção visual "Recepção" — ver docs/design-reference/claude-design/prototype/project/
  * (Marca.dc.html, Acabamento.dc.html, Movimento.dc.html, QA-Global.dc.html) e
  * docs/product-vault/03-UX-UI/05-Design-System-Conceitual.md.
- * Tema claro apenas — não declarar esquema escuro aqui.
+ * Este arquivo é o tema claro com a cor padrão (petróleo). O escuro e as
+ * outras cores de destaque ficam em themes.css (D-181).
  */
 
 @font-face {
@@ -63,37 +64,97 @@
 :root {
   color-scheme: light;
 
-  /* Cor — papel, superfície, tinta, petróleo (Marca.dc.html, Home.dc.html, Login.dc.html) */
+  /* Cor — papel, superfície, tinta, petróleo (Marca.dc.html, Home.dc.html, Login.dc.html).
+   * Toda cor do CSS sai daqui (D-181): o tema escuro e as cores de destaque
+   * redefinem estes nomes em themes.css, e nenhum outro arquivo declara cor
+   * literal (tests/theme-tokens.test.ts). */
   --at-color-canvas: #f7f4ef;
   --at-color-surface: #fffdfa;
+  --at-color-surface-subtle: #faf6f0;
   --at-color-surface-hover: #f3efe8;
+  --at-color-surface-sunken: #f1ece4;
   --at-color-surface-active: #efeae2;
   --at-color-ink: #221e1a;
+  --at-color-ink-hover: #3a342d;
+  --at-color-ink-active: #0f0d0b;
+  --at-color-ink-raised: #3f3a34;
   --at-color-ink-soft: #5f574e;
   --at-color-ink-muted: #716859;
+  --at-color-ink-faint: #948b80;
+  --at-color-ink-ghost: #b9b1a6;
   --at-color-border: #e5ded4;
   --at-color-border-strong: #d6cec2;
+  --at-color-border-hover: #c9c0b3;
+  --at-color-border-hover-soft: #cdc4b6;
+  --at-color-border-control: #cfc6ba;
 
+  /* Destaque — muda com a cor escolhida em Configurações › Aparência */
   --at-color-primary: #0f5f63;
+  --at-color-primary-raised: #13696e;
   --at-color-primary-hover: #0b484c;
   --at-color-primary-active: #0b484c;
   --at-color-primary-ink: #0b4a4e;
+  --at-color-primary-deep: #0b2f32;
   --at-color-primary-tint: #edf4f3;
+  --at-color-primary-tint-mid: #e3eeed;
+  --at-color-primary-tint-alt: #dcecec;
   --at-color-primary-tint-strong: #dceceb;
+  --at-color-primary-tint-hover: #cde3e1;
+  --at-color-primary-tint-press: #c8e0de;
+  --at-color-primary-tint-border: #c2d9d6;
   --at-color-primary-on-dark: #b9dad7;
+  --at-color-primary-on-dark-strong: #9fd3cf;
   --at-color-on-primary: #f7f4ef;
+  --at-color-on-primary-bright: #ffffff;
+  --at-color-primary-shade: rgb(8 57 60);
 
   --at-color-success: #2e7d4f;
   --at-color-success-ink: #1f5c39;
+  --at-color-success-bg: #dfefe4;
   --at-color-warning-bg: #f8ecd5;
+  --at-color-warning-tint: #f6ecd6;
+  --at-color-warning-hover: #f4e3c0;
+  --at-color-warning-hover-alt: #f3e2bf;
+  --at-color-warning-tint-strong: #f1d9a8;
+  --at-color-warning-border-soft: #ebd7ae;
   --at-color-warning-ink: #7a4e0a;
+  --at-color-warning-deep: #6b4509;
   --at-color-warning-border: #b7791b;
   --at-color-warning-strong: #9a6410;
+  --at-color-danger-tint: #fcf4f2;
+  --at-color-danger-tint-strong: #f6e4e1;
   --at-color-danger-bg: #f8e2de;
+  --at-color-danger-border-soft: #f1c9c2;
   --at-color-danger-border: #b3392e;
+  --at-color-danger-border-input: #b8483d;
   --at-color-danger-hover: #9e3128;
   --at-color-danger-ink: #8a2a21;
   --at-color-danger-ink-soft: #6e2a22;
+  --at-color-violet: #8e5a86;
+  --at-color-coral: #b8674a;
+  --at-color-coral-ink: #8a3a2a;
+
+  /* Mistura: `color-mix(..., var(--at-mix-light) N%)` clareia no tema claro e
+   * aproxima da superfície no escuro; `--at-mix-dark` faz o inverso. */
+  --at-mix-light: white;
+  --at-mix-dark: black;
+  /* Sombra e véu: canais RGB, para `rgb(var(--at-shadow-rgb) / .08)`. */
+  --at-shadow-rgb: 34 30 26;
+
+  /* Identidade do serviço na Agenda — a cor que a profissional escolhe; igual
+   * em todos os temas. As `-deep` são as do cartão da Semana no celular, com
+   * nome branco por cima (espelho em weekBarLabel.ts). */
+  --at-swatch-neutral: var(--at-color-ink-ghost);
+  --at-swatch-rose: #c07a88;
+  --at-swatch-amber: #b8674a;
+  --at-swatch-emerald: #7c8a3e;
+  --at-swatch-sky: #8e5a86;
+  --at-swatch-violet: #8b7bb5;
+  --at-swatch-slate: #5b6e9a;
+  --at-swatch-rose-deep: #9d6470;
+  --at-swatch-amber-deep: #ab6045;
+  --at-swatch-emerald-deep: #6e7b37;
+  --at-swatch-violet-deep: #7c6da1;
 
   /* Tipografia — Literata (display) + Hanken Grotesk (corpo); fallback declarado, sem terceiros em runtime */
   --at-font-display: "Literata", Georgia, serif;
@@ -152,9 +213,9 @@
   --at-icon-stroke: 1.75;
 
   /* Sombra — sutil; separação por borda/superfície/espaço é a preferência (Design-System-Conceitual) */
-  --at-shadow-sm: 0 1px 2px rgba(34, 30, 26, 0.06);
-  --at-shadow-md: 0 8px 20px rgba(34, 30, 26, 0.08);
-  --at-shadow-lg: 0 16px 40px rgba(34, 30, 26, 0.1);
+  --at-shadow-sm: 0 1px 2px rgb(var(--at-shadow-rgb) / 0.06);
+  --at-shadow-md: 0 8px 20px rgb(var(--at-shadow-rgb) / 0.08);
+  --at-shadow-lg: 0 16px 40px rgb(var(--at-shadow-rgb) / 0.1);
 
   /* Foco — nunca só cor, sempre anel visível */
   --at-focus-ring-color: var(--at-color-primary);

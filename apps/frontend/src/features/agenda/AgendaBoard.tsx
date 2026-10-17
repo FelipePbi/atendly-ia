@@ -706,7 +706,7 @@ export function AgendaBoard({
                   className="agenda-date-chevron"
                   fill="none"
                   height="16"
-                  stroke="#716859"
+                  style={{ stroke: "var(--at-color-ink-muted)" }}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth="2"
@@ -1260,7 +1260,7 @@ function AgendaNewRow({
         className="agenda-new-row-chevron"
         fill="none"
         height="20"
-        stroke="#716859"
+        style={{ stroke: "var(--at-color-ink-muted)" }}
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth="1.75"

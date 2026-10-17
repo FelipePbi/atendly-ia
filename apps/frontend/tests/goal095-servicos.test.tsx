@@ -20,7 +20,6 @@
  * pelo `visual:compare` contra os quadros.
  */
 
-import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import {
@@ -43,6 +42,7 @@ import type { ShellConfig } from "@/shared/layout/ShellConfig";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
 import { expectNoA11yViolations } from "./support/a11y";
+import { readLightStylesheet } from "./support/stylesheet";
 
 const push = vi.fn();
 const replace = vi.fn();
@@ -723,10 +723,8 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
   );
 
   test("intervalo, instruções e recorrência abertos escondem o valor da linha por CSS", async () => {
-    const css = readFileSync(
-      path.join(process.cwd(), "src/shared/styles/avenly-services.css"),
-      "utf8",
-    );
+    const css = readLightStylesheet(
+      path.join(process.cwd(), "src/shared/styles/avenly-services.css"));
     const rule =
       /\.service-option\.is-open:is\(([^)]*)\)\s+\.service-option-value\s*\{\s*display:\s*none/.exec(
         css,
@@ -899,10 +897,8 @@ describe("cor obrigatória no formulário de serviço", () => {
 });
 
 describe("Goal095 prova 4: a paleta", () => {
-  const css = readFileSync(
-    path.join(process.cwd(), "src/shared/styles/avenly-services.css"),
-    "utf8",
-  ).replace(/\/\*[\s\S]*?\*\//g, "");
+  const css = readLightStylesheet(
+    path.join(process.cwd(), "src/shared/styles/avenly-services.css")).replace(/\/\*[\s\S]*?\*\//g, "");
 
   function swatchOf(token: string): string | undefined {
     const rule = new RegExp(

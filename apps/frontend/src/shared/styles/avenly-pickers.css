@@ -29,7 +29,7 @@
 }
 .picker-pill:hover:not(:disabled) {
   background: var(--at-color-surface-active);
-  border-color: #c9c0b3;
+  border-color: var(--at-color-border-hover);
 }
 .picker-pill:active:not(:disabled) {
   background: var(--at-color-border);
@@ -209,7 +209,7 @@
   text-align: center;
 }
 .date-picker-weekdays [data-closed] {
-  color: #948b80;
+  color: var(--at-color-ink-faint);
 }
 .date-picker-viewport {
   overflow: hidden;
@@ -260,7 +260,7 @@
   box-shadow: 0 0 0 2px var(--at-color-primary);
 }
 .date-picker-day[data-muted] {
-  color: #948b80;
+  color: var(--at-color-ink-faint);
 }
 .date-picker-day[data-today] {
   color: var(--at-color-primary);
@@ -282,7 +282,7 @@
     0 0 0 4px var(--at-color-primary);
 }
 .date-picker-day[aria-disabled="true"] {
-  color: #b9b1a6;
+  color: var(--at-color-ink-ghost);
   cursor: default;
 }
 .date-picker-day[aria-disabled="true"]:hover {
@@ -305,7 +305,7 @@
   background: var(--at-color-on-primary);
 }
 .date-picker-day[data-busy][aria-disabled="true"] .date-picker-dot {
-  background: #b9b1a6;
+  background: var(--at-color-ink-ghost);
 }
 .date-picker-foot {
   display: flex;
@@ -508,7 +508,7 @@
   left: 0;
   box-sizing: border-box;
   height: 44px;
-  border: 1.5px solid #c2d9d6;
+  border: 1.5px solid var(--at-color-primary-tint-border);
   border-radius: 12px;
   background: var(--at-color-primary-tint);
   pointer-events: none;
@@ -567,7 +567,7 @@
   align-items: center;
   justify-content: center;
   height: 44px;
-  color: #948b80;
+  color: var(--at-color-ink-faint);
   font-size: 22px;
   font-variant-numeric: tabular-nums;
   font-weight: 500;

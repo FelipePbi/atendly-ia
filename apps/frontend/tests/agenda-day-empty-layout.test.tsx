@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { DayView } from "@/features/agenda/DayView";
+
+import { readLightStylesheet } from "./support/stylesheet";
 
 /**
  * Agenda > Dia sem atendimento, igual ao quadro A2 do protótipo
@@ -20,7 +21,7 @@ import { DayView } from "@/features/agenda/DayView";
  */
 const stylesDir = path.join(__dirname, "../src/shared/styles");
 const css = ["avenly.css", "avenly-agenda.css"]
-  .map((file) => readFileSync(path.join(stylesDir, file), "utf8"))
+  .map((file) => readLightStylesheet(path.join(stylesDir, file)))
   .join("\n");
 
 function ruleBody(selector: string): string {

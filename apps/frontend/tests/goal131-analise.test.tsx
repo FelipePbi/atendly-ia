@@ -23,7 +23,6 @@
  *   "Importação" (o quadro só mostra o da moldura).
  */
 
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { render, screen, within } from "@testing-library/react";
@@ -37,6 +36,7 @@ import {
 } from "@/features/imports/ImportsLayout";
 
 import { expectNoA11yViolations } from "./support/a11y";
+import { readLightStylesheet } from "./support/stylesheet";
 
 const getImportState = vi.fn();
 const analyzeImport = vi.fn();
@@ -235,10 +235,8 @@ describe("pedidos durante a análise", () => {
 });
 
 function readCss(): string {
-  return readFileSync(
-    join(process.cwd(), "src/shared/styles/avenly-imports.css"),
-    "utf8",
-  );
+  return readLightStylesheet(
+    join(process.cwd(), "src/shared/styles/avenly-imports.css"));
 }
 
 /** Corpo da regra `selector { … }` (primeira ocorrência em `css`). */

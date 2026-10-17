@@ -9,7 +9,6 @@
  * seguem como estavam.
  */
 
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -25,6 +24,7 @@ import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
 import { expectNoA11yViolations } from "./support/a11y";
 import { asServerSearch } from "./support/customer-list-server";
+import { readLightStylesheet } from "./support/stylesheet";
 
 const customersList = vi.fn();
 const calendarGetCalendar = vi.fn();
@@ -101,7 +101,7 @@ const BRUNO: Customer = {
 };
 
 function stylesheet(file: string) {
-  return readFileSync(resolve(__dirname, "../src/shared/styles", file), "utf8");
+  return readLightStylesheet(resolve(__dirname, "../src/shared/styles", file));
 }
 
 beforeEach(() => {

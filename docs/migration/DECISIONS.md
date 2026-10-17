@@ -7875,3 +7875,23 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Consequências:** uma leitura por toque, só do período e do tipo pedidos; nenhuma lista chega com a resposta do faturamento.
 
 **Revisar se:** o cancelamento pela cliente no WhatsApp passar a ter `source` próprio (hoje aparece como "pela IA", que foi quem executou).
+
+## D-180 — O Início mostra o faturamento de hoje e da semana
+
+**Status:** ACCEPTED em 2026-10-17, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Amplia a D-177. Tela em `docs/product-vault/03-UX-UI/04-Especificacao-das-Telas.md` (Início › Faturamento no Início).
+
+**Contexto:** o usuário pediu trazer o faturamento para o Início, com o dia (inclusive a previsão) e a opção de ver a semana, e mais indicativos, pensando em celular e desktop. O Início já tinha o cartão curto "O que a IA fez por você" (D-178), mas nenhum número de faturamento do dia.
+
+**Decisão:**
+
+1. Uma seção "Faturamento" com abas Hoje (padrão) e Semana, lida de `GET /v1/revenue` (`period=day` ou `week`), a mesma leitura do Faturamento e a mesma memória da aba (`revenue:<período>:hoje`).
+2. O número grande é o total do período, faturado mais previsto, porque no meio do dia o que interessa é quanto o dia vai render; a barra e os dois valores mostram quanto disso já entrou. Faturado e previsto continuam separados, como na D-177.
+3. Indicativos: atendimentos concluídos de quantos, ticket médio, variação contra ontem ou a semana anterior (só com faturamento no período e base para comparar) e quanto a IA marcou (faturado + previsto dela). Na Semana, uma coluna por dia com o valor.
+4. Lugar: no celular, depois da agenda de hoje; a partir de 768 px, na coluna da direita, antes de "Esta semana".
+5. É complemento: sem esqueleto, entra com fade quando chega, mantém o período anterior durante a troca e some se a leitura falhar.
+
+**Alternativas:** mostrar só o faturado do dia (no começo do dia seria sempre zero); um seletor de período completo como no Faturamento (o Início é para olhar rápido; o resto fica em "Ver faturamento completo").
+
+**Consequências:** o Início faz uma leitura a mais do faturamento por período escolhido; voltar ao Início ou ao Faturamento reaproveita o que a aba já leu.
+
+**Revisar se:** o Início ganhar personalização de blocos, ou o faturamento passar a vir do recebido (pagamento).

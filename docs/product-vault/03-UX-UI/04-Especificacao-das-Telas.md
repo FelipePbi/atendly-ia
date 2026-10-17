@@ -82,6 +82,15 @@ Telas previstas:
 
 Pode adicionar mais contexto e métricas simples.
 
+### Faturamento no Início
+
+Uma seção "Faturamento" ([[../../migration/DECISIONS#D-180|D-180]]): no celular, logo depois da agenda de hoje; a partir de 768 px, na coluna da direita. Abas **Hoje** (padrão; a escolha fica lembrada na aba) e **Semana**:
+
+- o total do período (faturado + previsto), "no total de hoje" / "no total da semana", com uma barra do que já foi faturado e do que ainda está previsto, e os dois valores separados;
+- "N de M atendimentos concluídos", ticket médio, a variação contra ontem ou a semana anterior — só quando já houve faturamento e há com o que comparar ("−100% que ontem" num dia que nem começou não informa nada) — e quanto a IA marcou no período;
+- na Semana, uma coluna por dia, de segunda a domingo, com o valor (faturado + previsto) em cima e "hoje" no dia corrente;
+- "Ver faturamento completo" leva ao Faturamento. A leitura é a mesma do Faturamento e fica lembrada na aba; trocar de aba mantém o período anterior na tela até o novo chegar; se a leitura falhar, a seção não aparece.
+
 ### Carregamento
 
 - sem esqueleto: enquanto a primeira leitura não chega, a área do conteúdo fica vazia; se passar de ~150 ms, aparece o "A" animado no centro (o carregamento padrão);

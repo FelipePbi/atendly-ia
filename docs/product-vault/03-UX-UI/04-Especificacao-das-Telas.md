@@ -335,6 +335,30 @@ Depois: histórico somente leitura.
 - sair de todos os dispositivos;
 - exclusão de conta.
 
+### Atividade
+
+Linha "Atividade" no grupo "Dados e conta", entre Conversas e Conta (`/configuracoes/atividade`, D-176). Mostra tudo o que você e a IA fizeram no negócio, do mais recente para o mais antigo, agrupado por dia ("Hoje", "Ontem", "Quinta, 16 de outubro").
+
+Cada linha:
+
+- marca de quem fez: "IA" ou o ícone de pessoa;
+- frase em português, com "Você" ou "A IA" como sujeito: "A IA remarcou Ana de 14:00 para 15:30 em 20/10", "Você alterou o cadastro de Ana Souza";
+- antes e depois de cada campo alterado ("Nome Ana → Ana Souza"), o antes riscado;
+- nota quando houver (motivo do cancelamento, resumo do que a IA passou, itens importados);
+- hora e área.
+
+Linha de cliente, agendamento ou conversa abre o detalhe, que volta para Atividade.
+
+Filtros, em duas colunas no celular: Período (todo o período, hoje, 7, 30 ou 90 dias), Quem fez (você e a IA, só você, só a IA), Área (Agenda, Clientes, Serviços, Conversas, Configurações, Importação) e Tipo de ação (criou ou marcou, alterou, cancelou ou removeu). Busca pelo nome do cliente, serviço ou contato, no servidor.
+
+Rolagem sob demanda como na lista de Clientes: a próxima leva chega perto do fim; falha numa leva mostra "Tentar novamente" sem perder o que já veio.
+
+Estados:
+
+- carregando: sem esqueleto; o "A" animado só se a leitura passar de ~150 ms; a lista entra com fade;
+- vazio: "Ainda não há atividade", ou "Nenhuma atividade encontrada" com filtro;
+- erro: "Atividade indisponível" com "Tentar novamente".
+
 ## Notificações
 
 Central com:

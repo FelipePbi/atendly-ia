@@ -87,6 +87,22 @@ Ao confirmar um agendamento, preço e duração acordados ficam associados àque
 - uma nova sessão após 24h pode voltar à IA automaticamente;
 - em erro crítico da IA, o cliente não recebe mensagem automática de infraestrutura.
 
+## Registro de atividade
+
+Tudo o que a profissional ou a IA fazem no negócio fica registrado (D-176):
+
+- agendamento marcado, remarcado, cancelado, concluído, com falta, presença confirmada ou valor final, por qualquer um dos dois;
+- cadastro e edição de cliente, responsável, observação, etiqueta e preferência (inclusive o que a IA aprende sobre a pessoa);
+- criação, edição e arquivamento de serviço e a instrução privada para a IA;
+- bloqueio, compromisso pessoal, horário extra e indisponibilidade;
+- mudança de configuração: negócio, IA ligada/pausada/estilo, horários, regras de oferta, lembretes, avisos, retenção, WhatsApp e conta;
+- assumir, devolver, encerrar e categorizar conversa, contato ignorado e quando a IA passa a conversa para a profissional;
+- importação da Minha Agenda (início e conclusão, com as contagens).
+
+Cada registro diz quem fez (você ou a IA), quando, o quê e, numa alteração, o valor de antes e o de depois de cada campo. O registro só cresce: ninguém edita nem apaga uma linha; ele só sai junto com o negócio inteiro, na exclusão da conta. Cada negócio vê apenas o próprio registro.
+
+Não viram atividade: a conclusão automática de atendimento vencido e cada item importado um a um (a importação aparece como um passo só).
+
 ## Conversas pessoais
 
 Conversas são organizadas em:

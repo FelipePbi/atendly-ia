@@ -565,7 +565,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Avenly.
 483. **Ignorar IA fica fora do processamento da IA?** — **A — Sim.** **Vigente.**
 484. **Pessoal volta a ser analisado quando?** — **C — Nova sessão de 24h pode ser reavaliada, salvo Ignorar IA.** **Vigente.**
 485. **Registrar autoria de ações?** — **A — Sim, histórico operacional.** **Vigente.**
-486. **Mostrar histórico ao usuário?** — **B — Seção de histórico de alterações.** **Vigente.**
+486. **Mostrar histórico ao usuário?** — **B — Seção de histórico de alterações.** **Vigente.** Além do histórico por agendamento, a tela Configurações → Atividade mostra o registro do negócio inteiro (D-176).
 487. **Edição concorrente manual enquanto IA opera?** — **C — Bloquear temporariamente a edição manual.** **Vigente.**
 488. **Profissional altera enquanto IA remarca?** — **B recomendado**, mas 487C prevalece durante a operação transacional; após liberar, IA trabalha com estado atual.
 489. **LLM indisponível?** — **A — Não responder e colocar conversa para humano.** **Vigente.**

@@ -25,6 +25,7 @@ Dentro de **Mais**:
 - Configurações da Agenda
 - Negócio
 - Importação
+- Atividade
 - Conta
 
 ## Tablet
@@ -76,6 +77,7 @@ Seções conceituais:
 - IA
 - WhatsApp
 - Importação
+- Atividade
 - Conta
 
 Configurações devem estar divididas por objetivo, evitando uma única tela longa.

@@ -64,11 +64,13 @@ export async function registerV1ServiceRoutes(
   async function requireOwnService(
     context: InternalRequestContext,
     serviceId: string,
-  ): Promise<void> {
+  ): Promise<{ name: string }> {
     const services = await scheduling.listServices(context);
-    if (!services.some((service) => service.id === serviceId)) {
+    const service = services.find((item) => item.id === serviceId);
+    if (!service) {
       throw new AppError("SERVICE_NOT_FOUND", "Service was not found.", 404);
     }
+    return service;
   }
 
   app.get(
@@ -134,10 +136,14 @@ export async function registerV1ServiceRoutes(
       const { id } = parseParams(idSchema, request.params);
       const body = parseBody(aiInstructionSchema, request.body);
       const context = internalContext(request);
-      await requireOwnService(context, id);
+      const service = await requireOwnService(context, id);
+      // O nome vai só para o registro de atividade da IA (D-176).
       return dataResponse(
         request,
-        await ai.saveServiceInstruction(context, id, body),
+        await ai.saveServiceInstruction(context, id, {
+          ...body,
+          serviceName: service.name,
+        }),
       );
     },
   );

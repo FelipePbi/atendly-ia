@@ -981,6 +981,43 @@ const schedulingDashboardSchema = z.object({
   calendar: calendarStateSchema,
 });
 
+// Registro de atividade do negócio (D-176): o que a profissional ou a IA
+// fizeram, com o antes e o depois de cada campo. A frase em pt-BR é montada
+// no frontend a partir de `action`, `entity`, `changes` e `details`.
+export const activityAreaSchema = z.enum([
+  "AGENDA",
+  "CUSTOMERS",
+  "SERVICES",
+  "SETTINGS",
+  "IMPORT",
+  "CONVERSATIONS",
+]);
+export const activityKindSchema = z.enum(["CREATED", "CHANGED", "REMOVED"]);
+const activityValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+export const activityChangeSchema = z.object({
+  field: z.string(),
+  before: activityValueSchema,
+  after: activityValueSchema,
+});
+export const activityEntrySchema = z.object({
+  id: z.string(),
+  occurredAt: z.string(),
+  actor: z.enum(["AI", "USER"]),
+  area: activityAreaSchema,
+  action: z.string(),
+  entity: z.object({
+    type: z.string(),
+    id: z.string().nullable(),
+    label: z.string().nullable(),
+  }),
+  changes: z.array(activityChangeSchema),
+  details: z.record(z.string(), z.unknown()).nullable(),
+});
+export const activityPageSchema = z.object({
+  items: z.array(activityEntrySchema),
+  nextCursor: z.string().nullable(),
+});
+
 export const dashboardSchema = z.object({
   platform: z.object({
     tenantName: z.string(),
@@ -1361,6 +1398,11 @@ export type CustomerListPerson = z.infer<typeof customerListPersonSchema>;
 export type CustomerListItem = z.infer<typeof customerListItemSchema>;
 export type CustomerList = z.infer<typeof customerListSchema>;
 export type Dashboard = z.infer<typeof dashboardSchema>;
+export type ActivityArea = z.infer<typeof activityAreaSchema>;
+export type ActivityKind = z.infer<typeof activityKindSchema>;
+export type ActivityChange = z.infer<typeof activityChangeSchema>;
+export type ActivityEntry = z.infer<typeof activityEntrySchema>;
+export type ActivityPage = z.infer<typeof activityPageSchema>;
 export type Message = z.infer<typeof messageSchema>;
 export type MessageKind = z.infer<typeof messageKindSchema>;
 export type MessageAttachmentKind = z.infer<typeof messageAttachmentKindSchema>;

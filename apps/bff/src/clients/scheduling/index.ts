@@ -6,6 +6,10 @@ import {
   calendarSourceSchema,
 } from "../../lib/calendar-source.js";
 import {
+  internalActivityPageSchema,
+  type InternalActivityQuery,
+} from "../activity-source.js";
+import {
   InternalHttpClient,
   type InternalRequestContext,
 } from "../internal-http-client.js";
@@ -1602,6 +1606,13 @@ export class SchedulingClient {
         hasMore: z.boolean(),
       }),
     );
+  }
+
+  /** Registro de atividade do Scheduling (D-176), já com o corte do BFF. */
+  async activity(context: InternalRequestContext, query: InternalActivityQuery) {
+    return this.get(context, "/internal/activity", internalActivityPageSchema, {
+      ...query,
+    });
   }
 
   async dashboard(context: InternalRequestContext) {

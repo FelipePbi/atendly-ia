@@ -2,6 +2,10 @@ import { z } from "zod";
 
 import { env } from "../../config/env.js";
 import {
+  internalActivityPageSchema,
+  type InternalActivityQuery,
+} from "../activity-source.js";
+import {
   InternalHttpClient,
   type InternalRequestContext,
 } from "../internal-http-client.js";
@@ -818,7 +822,7 @@ export class AiOrchestratorClient {
   async saveServiceInstruction(
     context: InternalRequestContext,
     serviceId: string,
-    input: { content: string },
+    input: { content: string; serviceName?: string },
   ) {
     return (
       await this.http.request({
@@ -939,6 +943,19 @@ export class AiOrchestratorClient {
    * `Handoff` OPEN para ela, e sem o takeover do dono: as duas regras moram na
    * leitura da IA, nao aqui. A central so materializa o que veio.
    */
+  /** Registro de atividade da IA e das conversas (D-176). */
+  async activity(context: InternalRequestContext, query: InternalActivityQuery) {
+    return (
+      await this.http.request({
+        method: "GET",
+        path: "/internal/activity",
+        context,
+        query: { ...query },
+        schema: envelope(internalActivityPageSchema),
+      })
+    ).data;
+  }
+
   async listConversationsAwaitingHuman(
     context: InternalRequestContext,
     query: { limit?: number } = {},

@@ -2,6 +2,11 @@ import { z } from "zod";
 
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { AppError } from "../../lib/errors.js";
+import {
+  activityCreate,
+  diffFields,
+  userActor,
+} from "../activity/activity-log.js";
 
 /**
  * Prazo de retencao configuravel por negocio (Goal023/WU-01, G-29).
@@ -212,11 +217,29 @@ export async function applyRetentionPatch(
     );
   }
 
-  await prisma.retentionSettings.upsert({
-    where: { tenantId },
-    create: { tenantId, ...next, updatedBy },
-    update: { ...next, updatedBy },
-  });
+  const changes = diffFields({ ...current }, next, [
+    "commercialRetentionDays",
+    "personalRetentionDays",
+  ]);
+  await prisma.$transaction([
+    prisma.retentionSettings.upsert({
+      where: { tenantId },
+      create: { tenantId, ...next, updatedBy },
+      update: { ...next, updatedBy },
+    }),
+    // Mudança de prazo é configuração do negócio (D-176), no mesmo commit.
+    ...(changes.length > 0
+      ? [
+          activityCreate(prisma, tenantId, {
+            actor: userActor(updatedBy),
+            area: "SETTINGS",
+            action: "settings.retention_updated",
+            entityType: "retention_settings",
+            changes,
+          }),
+        ]
+      : []),
+  ]);
 
   // O `PATCH` devolve a mesma forma do `GET`, inclusive a última varredura
   // concluída: gravar prazo não varre, e a resposta não pode sugerir que

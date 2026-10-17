@@ -33,6 +33,7 @@ import {
   currentTenantContext,
   requireTenantContext,
 } from "../../lib/tenant-context.js";
+import { recordActivity, userActor } from "../activity/activity-log.js";
 
 const emailSchema = z.string().email().trim().toLowerCase();
 // Nome do dono da conta (Goal064): aparado, de 1 a 120 caracteres. Ausente,
@@ -245,9 +246,20 @@ export async function registerV1AuthRoutes(
           401,
         );
       }
-      await getPrisma().user.update({
-        where: { id: user.id },
-        data: { passwordHash: await hashPassword(body.newPassword) },
+      const passwordHash = await hashPassword(body.newPassword);
+      await getPrisma().$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id: user.id },
+          data: { passwordHash },
+        });
+        // Só o fato: nenhuma senha, nem o hash, entra no registro (D-176).
+        await recordActivity(tx, currentTenantContext(request).tenantId, {
+          actor: userActor(user.id),
+          area: "SETTINGS",
+          action: "account.password_changed",
+          entityType: "user",
+          entityId: user.id,
+        });
       });
       // Troca efetiva de senha invalida todas as sessões do usuário, inclusive
       // a que fez a chamada e qualquer Bearer emitido antes. O dispositivo

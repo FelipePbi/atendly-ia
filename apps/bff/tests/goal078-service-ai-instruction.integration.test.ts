@@ -151,6 +151,8 @@ describe.skipIf(!RUN_INTEGRATION)("Goal078: instrução privada por serviço", (
     expect(written.json().data).toEqual({ content: "Nunca oferecer desconto sem autorização." });
     expect(upstream.find((call) => call.method === "PUT")?.body).toEqual({
       content: "Nunca oferecer desconto sem autorização.",
+      // Só para o registro de atividade da IA (D-176).
+      serviceName: "Corte de cabelo",
     });
   });
 

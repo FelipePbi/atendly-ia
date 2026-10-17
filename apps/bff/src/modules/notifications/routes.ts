@@ -9,6 +9,7 @@ import {
   currentTenantContext,
   requireTenantContext,
 } from "../../lib/tenant-context.js";
+import { diffFields, recordActivity, userActor } from "../activity/activity-log.js";
 import { reconcileNotificationCenter } from "./reconcile.js";
 import { loadPreferences } from "./store.js";
 
@@ -193,13 +194,33 @@ export async function registerV1NotificationRoutes(
     async (request) => {
       const tenant = currentTenantContext(request);
       const body = parseBody(preferencesBodySchema, request.body);
-      await getPrisma().notificationPreference.upsert({
-        where: { tenantId: tenant.tenantId },
-        create: {
-          tenantId: tenant.tenantId,
-          aiAppointmentCreated: body.aiAppointmentCreated,
-        },
-        update: { aiAppointmentCreated: body.aiAppointmentCreated },
+      await getPrisma().$transaction(async (tx) => {
+        const before = await tx.notificationPreference.findUnique({
+          where: { tenantId: tenant.tenantId },
+        });
+        await tx.notificationPreference.upsert({
+          where: { tenantId: tenant.tenantId },
+          create: {
+            tenantId: tenant.tenantId,
+            aiAppointmentCreated: body.aiAppointmentCreated,
+          },
+          update: { aiAppointmentCreated: body.aiAppointmentCreated },
+        });
+        // Sem linha, a preferência vigente é a padrão: não avisar.
+        const changes = diffFields(
+          { aiAppointmentCreated: before?.aiAppointmentCreated ?? false },
+          { aiAppointmentCreated: body.aiAppointmentCreated },
+          ["aiAppointmentCreated"],
+        );
+        if (changes.length > 0) {
+          await recordActivity(tx, tenant.tenantId, {
+            actor: userActor(tenant.userId),
+            area: "SETTINGS",
+            action: "settings.notifications_updated",
+            entityType: "notification_preference",
+            changes,
+          });
+        }
       });
       return dataResponse(request, {
         aiAppointmentCreated: body.aiAppointmentCreated,

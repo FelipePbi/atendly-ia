@@ -33,6 +33,12 @@ import {
 } from "../../lib/tenant-context.js";
 import { reconcileBusinessTimezone } from "../../lib/timezone-reconciliation.js";
 import { assertAiActivationNotBlockedByDeletion } from "../account/service.js";
+import {
+  activityCreate,
+  diffFields,
+  recordActivity,
+  userActor,
+} from "../activity/activity-log.js";
 import { aiActivatedDedupeKey } from "../notifications/species.js";
 import { materialize } from "../notifications/store.js";
 import { internalContext } from "../tenant/context.js";
@@ -140,7 +146,30 @@ export async function registerV1SettingsRoutes(
       // Scheduling nem arriscar `FAILED` por um servico que nao precisava
       // ser chamado.
       const timezoneChanged = current?.timezone !== body.timezone;
+      const businessChanges = diffFields(
+        businessActivityFields(current),
+        businessActivityFields({
+          businessName: body.name,
+          category: body.category,
+          timezone: body.timezone,
+          modalities,
+          address,
+        }),
+        BUSINESS_ACTIVITY_FIELDS,
+      );
       await prisma.$transaction([
+        ...(businessChanges.length > 0
+          ? [
+              activityCreate(prisma, tenant.tenantId, {
+                actor: userActor(tenant.userId),
+                area: "SETTINGS",
+                action: "settings.business_updated",
+                entityType: "business",
+                entityLabel: body.name,
+                changes: businessChanges,
+              }),
+            ]
+          : []),
         prisma.tenant.update({
           where: { id: tenant.tenantId },
           data: { name: body.name },
@@ -271,12 +300,23 @@ export async function registerV1SettingsRoutes(
           ...pausedAtWrite,
         },
       };
-      if (activating) {
-        // A ativação e a notificação nascem juntas: falha ao gravar a
-        // notificação desfaz o `enabled: true` desta mesma passada.
-        const occurredAt = new Date();
-        await getPrisma().$transaction(async (tx) => {
-          await tx.aiSettings.upsert(upsertArgs);
+      const aiChanges = diffFields(
+        { enabled: current?.enabled ?? false, tone: current?.tone ?? null },
+        { enabled: body.enabled, tone: body.tone },
+        ["enabled", "tone"],
+      );
+      const aiAction = activating
+        ? "settings.ai_enabled"
+        : pausing
+          ? "settings.ai_paused"
+          : "settings.ai_updated";
+      // A ativação e a notificação nascem juntas: falha ao gravar a
+      // notificação desfaz o `enabled: true` desta mesma passada. A atividade
+      // (D-176) vai no mesmo commit.
+      const occurredAt = new Date();
+      await getPrisma().$transaction(async (tx) => {
+        await tx.aiSettings.upsert(upsertArgs);
+        if (activating) {
           await materialize(tx, tenant.tenantId, [
             {
               kind: "AI_ACTIVATED",
@@ -286,10 +326,17 @@ export async function registerV1SettingsRoutes(
               payload: {},
             },
           ]);
-        });
-      } else {
-        await getPrisma().aiSettings.upsert(upsertArgs);
-      }
+        }
+        if (aiChanges.length > 0) {
+          await recordActivity(tx, tenant.tenantId, {
+            actor: userActor(tenant.userId),
+            area: "SETTINGS",
+            action: aiAction,
+            entityType: "ai_settings",
+            changes: aiChanges,
+          });
+        }
+      });
       const projected = await syncAi(request, ai);
       return dataResponse(
         request,
@@ -626,4 +673,32 @@ function resolveAvailabilityTimezone(
     );
   }
   return businessTimezone;
+}
+
+/** Campos do negócio no antes/depois da atividade (D-176). */
+const BUSINESS_ACTIVITY_FIELDS = [
+  "name",
+  "category",
+  "timezone",
+  "modalities",
+  "address",
+] as const;
+
+function businessActivityFields(
+  profile: {
+    businessName: string;
+    category: string | null;
+    timezone: string;
+    modalities: readonly string[];
+    address: string | null;
+  } | null,
+): Record<string, string | null> {
+  if (!profile) return {};
+  return {
+    name: profile.businessName,
+    category: profile.category,
+    timezone: profile.timezone,
+    modalities: [...profile.modalities].sort().join(",") || null,
+    address: profile.address,
+  };
 }

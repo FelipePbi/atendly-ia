@@ -4,6 +4,7 @@ import {
   accountDeletionResultSchema,
   accountProfileResultSchema,
   activationTestRunSchema,
+  activityPageSchema,
   agendaViewPreferenceSchema,
   appointmentEventSchema,
   appointmentHoldSchema,
@@ -179,6 +180,9 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
 
   // dashboard
   { method: "GET", pathPattern: "/v1/dashboard", schema: dashboardSchema },
+
+  // activity (D-176)
+  { method: "GET", pathPattern: "/v1/activity", schema: activityPageSchema },
 
   // knowledge
   { method: "GET", pathPattern: "/v1/knowledge/documents", schema: z.array(knowledgeDocumentSchema) },

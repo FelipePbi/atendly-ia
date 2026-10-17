@@ -225,6 +225,20 @@ describe("inferência de memória a partir do atendimento confirmado no turno", 
         sourceMessageIds: ["message-1"],
       },
     ]);
+    // O que a IA aprendeu aparece no registro de atividade como ato da IA
+    // (D-176), no mesmo commit da memória.
+    expect(subject.state.activities).toEqual([
+      expect.objectContaining({
+        tenantId: TENANT,
+        actorType: "AI",
+        actorId: null,
+        area: "CUSTOMERS",
+        action: "customer.memory_added",
+        changes: [
+          { field: "memory.PREFERRED_PERIOD", before: null, after: "tarde" },
+        ],
+      }),
+    ]);
   });
 
   it("rascunho não confirmado não vira memória, mesmo com sinal claro", async () => {

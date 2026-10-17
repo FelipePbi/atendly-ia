@@ -90,6 +90,8 @@ Logs e mensagens exibidas ao profissional não devem expor segredos, credenciais
 
 Conteúdo completo de conversa não deve ser tratado como requisito para todo log operacional; apenas o necessário para diagnóstico.
 
+O registro de atividade do negócio ([[01-Regras/01-Regras-de-Negocio#Registro de atividade]]) guarda nomes, telefones e valores de antes e depois, mas nunca senha, hash, token, credencial ou chave: troca de senha e conexão da Minha Agenda aparecem só como fato. Textos longos (perguntas frequentes, instrução para a IA, observações) entram cortados. O registro sai junto com o negócio na exclusão da conta.
+
 ## Exclusão de cliente
 
 A interface do MVP não oferece um fluxo self-service de exclusão de dados do cliente por solicitação. Esse tema deve ser tratado posteriormente em especificação jurídica/operacional apropriada.

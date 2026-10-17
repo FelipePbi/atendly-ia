@@ -4,6 +4,7 @@ import {
 } from "../http/BffHttpClient";
 import { BffAccountService } from "./BffAccountService";
 import { BffActivationTestService } from "./BffActivationTestService";
+import { BffActivityService } from "./BffActivityService";
 import { BffAuthService } from "./BffAuthService";
 import { BffCalendarService } from "./BffCalendarService";
 import { BffConversationService } from "./BffConversationService";
@@ -22,6 +23,7 @@ import { BffWhatsAppService } from "./BffWhatsAppService";
 export interface BffServiceRegistry {
   account: BffAccountService;
   activationTest: BffActivationTestService;
+  activity: BffActivityService;
   auth: BffAuthService;
   calendar: BffCalendarService;
   conversations: BffConversationService;
@@ -56,6 +58,7 @@ export function createBffServiceRegistry(
   return {
     account: new BffAccountService(http),
     activationTest: new BffActivationTestService(http),
+    activity: new BffActivityService(http),
     auth: new BffAuthService(http),
     calendar: new BffCalendarService(http),
     conversations: new BffConversationService(http),

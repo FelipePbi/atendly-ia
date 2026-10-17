@@ -64,6 +64,9 @@ export const TENANT_PURGE_TABLES = [
   "ReminderSettings",
   // Sem relacao com nenhuma outra tabela desta lista.
   "CalendarSettings",
+  // Registro de atividade (D-176): sem chave estrangeira, so cresce; sai
+  // apenas aqui, com o negocio inteiro.
+  "ActivityLog",
 ] as const;
 
 export type TenantPurgeTable = (typeof TENANT_PURGE_TABLES)[number];
@@ -159,6 +162,7 @@ const TABLE_META: Record<TenantPurgeTable, TableMeta> = {
     sql: Prisma.sql`"CalendarSettings"`,
     idColumn: "tenantId",
   },
+  ActivityLog: { sql: Prisma.sql`"ActivityLog"`, idColumn: "id" },
 };
 
 /**

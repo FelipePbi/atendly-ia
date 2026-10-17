@@ -329,9 +329,14 @@ describe("versão notificável: caminho único de escrita", () => {
       )
       .join("\n");
 
-    // Trigger seria exatamente o segundo caminho que D-006 proíbe: a versão
-    // subiria fora da transação que decidiu a mutação.
-    expect(sql).not.toMatch(/CREATE\s+TRIGGER/i);
+    // Trigger em `Appointment` seria exatamente o segundo caminho que D-006
+    // proíbe: a versão subiria fora da transação que decidiu a mutação. A
+    // única trigger de tabela permitida é a que recusa UPDATE no registro
+    // de atividade (D-176), que não escreve nada.
+    expect(sql).not.toMatch(/CREATE\s+TRIGGER[^;]*\bON\s+"Appointment"/i);
+    expect(sql.match(/CREATE\s+TRIGGER\s+"(\w+)"/gi) ?? []).toEqual([
+      'CREATE TRIGGER "ActivityLog_append_only"',
+    ]);
     // Nenhum `SET "notifiableVersion" = ...`: a coluna nasce com default
     // constante e nunca é escrita em SQL de migration.
     expect(sql).not.toMatch(/"notifiableVersion"\s*=/i);

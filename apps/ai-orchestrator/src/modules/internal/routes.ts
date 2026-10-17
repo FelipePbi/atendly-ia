@@ -27,6 +27,19 @@ import {
   ActivationTestRunStore,
 } from "../activation-test/ActivationTestRunStore.js";
 import { ActivationTestService } from "../activation-test/ActivationTestService.js";
+import {
+  ACTIVITY_AREAS,
+  diffFields,
+  listActivity,
+  parseActivitySequence,
+  userActor,
+} from "../activity/activity-log.js";
+import {
+  clipActivityText,
+  recordContactActivity,
+  recordConversationActivity,
+  recordKnowledgeActivity,
+} from "../activity/orchestrator-activity.js";
 import { AssistantService } from "../assistant/assistant.service.js";
 import { EvolutionProvider } from "../channel/adapters/evolution/EvolutionProvider.js";
 import { ChannelConnectionService } from "../channel/ChannelConnectionService.js";
@@ -281,8 +294,40 @@ const serviceInstructionParamsSchema = z.object({
   serviceId: z.string().trim().min(1).max(128),
 });
 
+/** Lista separada por vírgula (`area=AGENDA,CUSTOMERS`). */
+const commaList = <T extends z.ZodType<string, string>>(item: T) =>
+  z
+    .string()
+    .trim()
+    .max(4_000)
+    .transform((value) =>
+      value
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean),
+    )
+    .pipe(z.array(item).max(80))
+    .optional();
+
+const activityQuerySchema = z.object({
+  from: z.iso.datetime({ offset: true }).optional(),
+  to: z.iso.datetime({ offset: true }).optional(),
+  actor: z.enum(["AI", "USER"]).optional(),
+  area: commaList(z.enum(ACTIVITY_AREAS)),
+  action: commaList(z.string().regex(/^[a-z_]+\.[a-z_]+$/u)),
+  q: z.string().trim().max(100).optional(),
+  beforeAt: z.iso.datetime({ offset: true }).optional(),
+  beforeSequence: z.string().regex(/^\d{1,19}$/u).optional(),
+  inclusive: z.enum(["true", "false"]).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
 const serviceInstructionBodySchema = z
-  .object({ content: z.string().trim() })
+  .object({
+    content: z.string().trim(),
+    /** Nome do serviço, só para o registro de atividade (D-176). */
+    serviceName: z.string().trim().max(200).optional(),
+  })
   .strict();
 
 // Numero do WhatsApp do negocio, projetado por quem pede o teste: e para ele
@@ -842,6 +887,38 @@ export async function registerInternalRoutes(
     return reply.code(201).send(internalData(request, messageDto(message)));
   });
 
+  /**
+   * Registro de atividade da IA e das conversas (D-176): só leitura, só do
+   * negócio do cabeçalho. O BFF intercala com as outras fontes e decide o
+   * corte (`before*`).
+   */
+  app.get("/internal/activity", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const query = parseOrThrow(activityQuerySchema, request.query ?? {});
+    return internalData(
+      request,
+      await listActivity(prisma, tenantId, {
+        from: query.from ? new Date(query.from) : undefined,
+        to: query.to ? new Date(query.to) : undefined,
+        actor: query.actor,
+        areas: query.area,
+        actions: query.action,
+        q: query.q,
+        before: query.beforeAt
+          ? {
+              occurredAt: new Date(query.beforeAt),
+              sequence:
+                query.beforeSequence !== undefined
+                  ? parseActivitySequence(query.beforeSequence)
+                  : undefined,
+              inclusive: query.inclusive === "true",
+            }
+          : undefined,
+        limit: query.limit,
+      }),
+    );
+  });
+
   app.post("/internal/conversations/:id/takeover", async (request) => {
     const { tenantId, userId } = trustedTenantContext(request);
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
@@ -851,6 +928,13 @@ export async function registerInternalRoutes(
       orderBy: { createdAt: "desc" },
     });
     if (existingOwnerTakeover?.reason !== "OWNER_TAKEOVER") {
+      await recordConversationActivity(
+        prisma,
+        tenantId,
+        userActor(userId),
+        conversation,
+        "conversation.taken_over",
+      );
       await prisma.handoff.create({
         data: {
           tenantId,
@@ -909,6 +993,15 @@ export async function registerInternalRoutes(
       where: { id },
       data: { humanHandoff: false, status: "ACTIVE", handoffPausedUntil: null },
     });
+    if (conversation.humanHandoff) {
+      await recordConversationActivity(
+        prisma,
+        tenantId,
+        userActor(userId),
+        conversation,
+        "conversation.released_to_ai",
+      );
+    }
     await sessions.resolveContext({
       tenantId,
       channelId: conversation.channelId,
@@ -935,6 +1028,7 @@ export async function registerInternalRoutes(
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
     const body = parseOrThrow(categoryOverrideSchema, request.body);
     const conversation = await requireConversation(prisma, tenantId, id);
+    const categoryBefore = conversationDto(conversation).category;
     await sessions.resolveContext({
       tenantId,
       channelId: conversation.channelId,
@@ -949,10 +1043,28 @@ export async function registerInternalRoutes(
       ...(body.scope ? { scope: body.scope } : {}),
       actor: userId,
     });
-    return internalData(
-      request,
-      conversationDto(await requireConversation(prisma, tenantId, id)),
+    const categorized = conversationDto(
+      await requireConversation(prisma, tenantId, id),
     );
+    if (categorized.category !== categoryBefore) {
+      await recordConversationActivity(
+        prisma,
+        tenantId,
+        userActor(userId),
+        conversation,
+        "conversation.category_changed",
+        {
+          changes: [
+            {
+              field: "category",
+              before: categoryBefore,
+              after: categorized.category,
+            },
+          ],
+        },
+      );
+    }
+    return internalData(request, categorized);
   });
 
   /** Contato ignorado: regra do contato, prevalece sobre a sessao. */
@@ -975,6 +1087,13 @@ export async function registerInternalRoutes(
       actor: userId,
       source: ignoredSourceFromOrigin(body.origin ?? "CONVERSATION"),
     });
+    await recordConversationActivity(
+      prisma,
+      tenantId,
+      userActor(userId),
+      conversation,
+      body.ignored ? "conversation.contact_ignored" : "conversation.contact_unignored",
+    );
     return internalData(
       request,
       conversationDto(await requireConversation(prisma, tenantId, id)),
@@ -1008,6 +1127,13 @@ export async function registerInternalRoutes(
       actor: userId,
       source: ignoredSourceFromOrigin(body.origin ?? "ONBOARDING"),
     });
+    await recordContactActivity(
+      prisma,
+      tenantId,
+      userActor(userId),
+      { ...contact, channelId: channel.id },
+      body.ignored ? "conversation.contact_ignored" : "conversation.contact_unignored",
+    );
     return internalData(request, {
       contactId: contact.contactId,
       externalContactId: contact.externalContactId,
@@ -1047,14 +1173,23 @@ export async function registerInternalRoutes(
   });
 
   app.post("/internal/conversations/:id/resolve", async (request) => {
-    const { tenantId } = trustedTenantContext(request);
+    const { tenantId, userId } = trustedTenantContext(request);
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
-    await requireConversation(prisma, tenantId, id);
+    const conversation = await requireConversation(prisma, tenantId, id);
     await resolveConversationHandoffs(prisma, tenantId, id);
     await prisma.conversation.update({
       where: { id },
       data: { humanHandoff: false, status: "CLOSED", handoffPausedUntil: null },
     });
+    if (conversation.status !== "CLOSED") {
+      await recordConversationActivity(
+        prisma,
+        tenantId,
+        userActor(userId),
+        conversation,
+        "conversation.resolved",
+      );
+    }
     return internalData(
       request,
       conversationDto(await requireConversation(prisma, tenantId, id)),
@@ -1105,9 +1240,22 @@ export async function registerInternalRoutes(
   });
 
   app.post("/internal/knowledge/documents", async (request, reply) => {
-    const { tenantId } = trustedTenantContext(request);
+    const { tenantId, userId } = trustedTenantContext(request);
     const body = parseOrThrow(createKnowledgeDocumentSchema, request.body);
     const document = await knowledgeDocuments.create({ tenantId, ...body });
+    await recordKnowledgeActivity(prisma, tenantId, userActor(userId), {
+      action: "knowledge.document_created",
+      entityType: "knowledge_document",
+      entityId: document.id,
+      label: document.title,
+      changes: [
+        {
+          field: "content",
+          before: null,
+          after: await knowledgeContent(prisma, tenantId, document.id),
+        },
+      ],
+    });
     return reply
       .code(201)
       .send(internalData(request, knowledgeDocumentDto(document)));
@@ -1121,25 +1269,66 @@ export async function registerInternalRoutes(
   });
 
   app.put("/internal/knowledge/documents/:id", async (request) => {
-    const { tenantId } = trustedTenantContext(request);
+    const { tenantId, userId } = trustedTenantContext(request);
     const { id } = parseOrThrow(knowledgeDocumentParamsSchema, request.params);
     const body = parseOrThrow(editKnowledgeDocumentSchema, request.body);
+    const previous = await knowledgeDocuments.get(tenantId, id);
+    const previousContent = await knowledgeContent(prisma, tenantId, id);
     const document = await knowledgeDocuments.edit({ tenantId, id, ...body });
+    const changes = diffFields(
+      { title: previous.title, content: previousContent },
+      {
+        title: document.title,
+        content: await knowledgeContent(prisma, tenantId, document.id),
+      },
+      ["title", "content"],
+    );
+    if (changes.length > 0) {
+      await recordKnowledgeActivity(prisma, tenantId, userActor(userId), {
+        action: "knowledge.document_updated",
+        entityType: "knowledge_document",
+        entityId: document.id,
+        label: document.title,
+        changes,
+      });
+    }
     return internalData(request, knowledgeDocumentDto(document));
   });
 
   app.delete("/internal/knowledge/documents/:id", async (request) => {
-    const { tenantId } = trustedTenantContext(request);
+    const { tenantId, userId } = trustedTenantContext(request);
     const { id } = parseOrThrow(knowledgeDocumentParamsSchema, request.params);
+    const previous = await knowledgeDocuments.get(tenantId, id);
     const document = await knowledgeDocuments.deactivate(tenantId, id);
+    if (previous.status === "ACTIVE") {
+      await recordKnowledgeActivity(prisma, tenantId, userActor(userId), {
+        action: "knowledge.document_removed",
+        entityType: "knowledge_document",
+        entityId: document.id,
+        label: document.title,
+      });
+    }
     return internalData(request, knowledgeDocumentDto(document));
   });
 
   /** Campo livre "Outras informações importantes": documento BUSINESS_INFO
    * único por negocio, com source fixa, salvo so por esta rota. */
   app.put("/internal/knowledge/other-info", async (request) => {
-    const { tenantId } = trustedTenantContext(request);
+    const { tenantId, userId } = trustedTenantContext(request);
     const body = parseOrThrow(otherInfoSchema, request.body);
+    const previousContent = await knowledgeDocuments.getOtherInfo(tenantId);
+    const changes = diffFields(
+      { content: clipActivityText(previousContent) },
+      { content: clipActivityText(body.content) },
+      ["content"],
+    );
+    if (changes.length > 0) {
+      await recordKnowledgeActivity(prisma, tenantId, userActor(userId), {
+        action: "knowledge.other_info_updated",
+        entityType: "knowledge_document",
+        changes,
+      });
+    }
     const document = await knowledgeDocuments.saveOtherInfo({
       tenantId,
       content: body.content,
@@ -1184,6 +1373,26 @@ export async function registerInternalRoutes(
         request.params,
       );
       const body = parseOrThrow(serviceInstructionBodySchema, request.body);
+      const userId = trustedTenantContext(request).userId;
+      const previousContent = await knowledgeDocuments.getServiceInstruction(
+        tenantId,
+        serviceId,
+      );
+      const changes = diffFields(
+        { aiInstruction: clipActivityText(previousContent) },
+        { aiInstruction: clipActivityText(body.content) },
+        ["aiInstruction"],
+      );
+      if (changes.length > 0) {
+        await recordKnowledgeActivity(prisma, tenantId, userActor(userId), {
+          action: "service.ai_instruction_updated",
+          area: "SERVICES",
+          entityType: "service",
+          entityId: serviceId,
+          label: body.serviceName ?? null,
+          changes,
+        });
+      }
       await knowledgeDocuments.saveServiceInstruction({
         tenantId,
         serviceId,
@@ -1208,7 +1417,7 @@ export async function registerInternalRoutes(
   });
 
   app.post("/internal/customers/:id/memory", async (request, reply) => {
-    const { tenantId } = trustedTenantContext(request);
+    const { tenantId, userId } = trustedTenantContext(request);
     const { id } = parseOrThrow(customerParamsSchema, request.params);
     const body = parseOrThrow(createCustomerMemorySchema, request.body);
     const memory = await customerMemory.create({
@@ -1220,6 +1429,7 @@ export async function registerInternalRoutes(
       // cadastro da profissional.
       origin: "PROFESSIONAL",
       aiAllowed: body.aiAllowed,
+      activityActor: userActor(userId),
     });
     return reply
       .code(201)
@@ -1227,7 +1437,7 @@ export async function registerInternalRoutes(
   });
 
   app.patch("/internal/customers/:id/memory/:memoryId", async (request) => {
-    const { tenantId } = trustedTenantContext(request);
+    const { tenantId, userId } = trustedTenantContext(request);
     const { id, memoryId } = parseOrThrow(
       customerMemoryParamsSchema,
       request.params,
@@ -1238,6 +1448,7 @@ export async function registerInternalRoutes(
       customerId: id,
       memoryId,
       aiAllowed: body.aiAllowed,
+      activityActor: userActor(userId),
     });
     return internalData(request, customerMemoryDto(memory));
   });
@@ -1253,6 +1464,7 @@ export async function registerInternalRoutes(
       customerId: id,
       memoryId,
       removedBy: userId,
+      activityActor: userActor(userId),
     });
     return internalData(request, customerMemoryDto(memory));
   });
@@ -1936,6 +2148,20 @@ function jsonValue(value: unknown): Prisma.InputJsonValue {
  * mais a inferência pela primeira associação ativa do usuário, que escolhia um
  * dono quando a associação era ambígua.
  */
+/** Texto do documento (perguntas frequentes), cortado para o registro. */
+async function knowledgeContent(
+  prisma: PrismaClient,
+  tenantId: string,
+  documentId: string,
+): Promise<string | null> {
+  const chunks = await prisma.knowledgeChunk.findMany({
+    where: { tenantId, documentId },
+    orderBy: { createdAt: "asc" },
+    select: { content: true },
+  });
+  return clipActivityText(chunks.map((chunk) => chunk.content).join("\n"));
+}
+
 function trustedTenantContext(request: FastifyRequest): {
   tenantId: string;
   userId: string;
@@ -1990,6 +2216,9 @@ export function requiredScope(request: FastifyRequest): InternalScope {
   }
   if (path === "/internal/dashboard" && method === "GET") {
     return "dashboard:read";
+  }
+  if (path === "/internal/activity" && method === "GET") {
+    return "activity:read";
   }
   if (path.startsWith("/internal/activation-test")) {
     return method === "GET" ? "activation-test:read" : "activation-test:write";

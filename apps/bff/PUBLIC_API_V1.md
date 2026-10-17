@@ -30,6 +30,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Central de notificações (Goal022/WU-04) | `GET /v1/notifications`; `GET /v1/notifications/summary`; `POST /v1/notifications/read`; `GET/PATCH /v1/notifications/preferences` |
 | Ciclo de vida da conta (Goal025/WU-03) | `POST /v1/account/deletion`; `DELETE /v1/account/deletion` |
 | Perfil da conta (Goal067) | `PATCH /v1/account/profile` |
+| Registro de atividade (D-176) | `GET /v1/activity` |
 
 As rotas autenticadas resolvem o negócio a partir da sessão; `tenantId` enviado isoladamente pelo browser não concede autorização.
 
@@ -1000,6 +1001,38 @@ A resposta **não** traz os fatos compostos para a entrega (nome e telefone do c
 | `true` | pedido explícito de aviso: se a mutação de fato mudou algo que o cliente precisaria saber (horário, serviços ou estado), nasce um aviso de alteração para ele |
 
 Cancelar sempre cancela os lembretes pendentes do horário anterior, com `notifyCustomer` ou sem — as duas decisões são independentes. `notifyCustomer` só decide o aviso de alteração, nunca os lembretes em si, e só existe nestas duas rotas: a IA cancela e remarca a pedido do próprio cliente dentro da conversa, e avisá-lo do que ele acabou de pedir seria ruído — por isso ela nunca tem este campo em nenhum contrato dela, e a interface manda-o sempre, explicitamente, marcado por padrão. A recomputação de lembretes e o aviso em si são regra do Scheduling, provada nas suítes de lá; o que este contrato garante é só o transporte do pedido.
+
+## Registro de atividade do negócio (D-176)
+
+`GET /v1/activity`, sob `requireTenantContext`: o que a profissional ou a IA fizeram no negócio da sessão, do mais recente para o mais antigo, com o antes e o depois de cada campo. O negócio vem só da sessão; `tenantId` na query é ignorado. Só leitura: nenhuma rota edita ou apaga o registro.
+
+Cada serviço guarda o próprio registro (`ActivityLog`), gravado na mesma transação da mudança: o Scheduling (agenda, clientes, serviços, grade, lembretes, importação), a IA (conversas, perguntas frequentes, memória de cliente, instrução de serviço) e o BFF (negócio, IA, conta, notificações, retenção, WhatsApp). O BFF intercala as três fontes numa ordem total — instante, fonte, sequência — e o cursor é a posição do último item entregue, então a página seguinte nunca repete nem pula linha. Uma fonte indisponível falha a leitura inteira (`502`): uma página parcial faria o cursor pular o que a fonte não devolveu.
+
+Query, toda opcional:
+
+| Campo | Valores |
+| --- | --- |
+| `from`, `to` | instante ISO com fuso; `from` inclusivo, `to` exclusivo |
+| `actor` | `AI` ou `USER` |
+| `area` | lista separada por vírgula de `AGENDA`, `CUSTOMERS`, `SERVICES`, `SETTINGS`, `IMPORT`, `CONVERSATIONS` |
+| `kind` | lista separada por vírgula de `CREATED`, `CHANGED`, `REMOVED`; cada `action` cai em um tipo só (catálogo em `apps/bff/src/modules/activity/catalog.ts`) |
+| `q` | busca no rótulo da entidade (nome do cliente, do serviço, do contato), sem diferenciar maiúsculas |
+| `cursor` | `nextCursor` da página anterior; cursor adulterado responde `400` |
+| `limit` | 1–50, default 30 |
+
+Resposta: `{ items, nextCursor }`, `nextCursor` nulo no fim. Cada item:
+
+| Campo | Significado |
+| --- | --- |
+| `id` | `fonte:id`, estável |
+| `occurredAt` | instante ISO da mudança |
+| `actor` | `AI` ou `USER`; o id da pessoa não sai do BFF |
+| `area`, `action` | área e verbo estável (`appointment.rescheduled`, `customer.updated`, `settings.ai_paused`…) |
+| `entity` | `{ type, id, label }`; `label` é o nome no momento do registro |
+| `changes` | `[{ field, before, after }]`, só dos campos que mudaram, de uma lista permitida por entidade; valores escalares |
+| `details` | contexto da frase (cliente, serviços, horário local `YYYY-MM-DDTHH:mm`, motivo do cancelamento), ou `null` |
+
+Nenhum campo carrega senha, hash, token, credencial ou chave: o diff só percorre campos permitidos e qualquer chave com cara de segredo é descartada antes de gravar. A troca de senha e a conexão da Minha Agenda aparecem só como fato. A conclusão automática de atendimento (`SYSTEM`) e cada item importado (`INTEGRATION`) não viram atividade; a importação aparece como início e conclusão, com as contagens.
 
 ## Central de notificações e alertas persistentes (Goal022/WU-04)
 

@@ -624,6 +624,21 @@ export function createDatabaseDouble() {
       },
     },
   );
+  // Registro de atividade (D-176): mesma imitação de instante e sequência.
+  let activitySequence = 0n;
+  const activityLog = new Table(
+    "activityLog",
+    {},
+    {
+      journal,
+      defaults: {
+        occurredAt: () => new Date(),
+        sequence: () => (activitySequence += 1n),
+        changes: () => [],
+        details: () => null,
+      },
+    },
+  );
   const blockSeries = new Table(
     "blockSeries",
     { tenantId_id: ["tenantId", "id"] },
@@ -950,6 +965,7 @@ export function createDatabaseDouble() {
     timeBlock,
     appointmentHold,
     appointmentEvent,
+    activityLog,
     appointmentItem,
     appointmentNotificationIntent,
     blockSeries,
@@ -1070,6 +1086,7 @@ export function createDatabaseDouble() {
       appointmentItem,
       appointmentHold,
       appointmentEvent,
+      activityLog,
       appointmentNotificationIntent,
       timeBlock,
       blockSeries,

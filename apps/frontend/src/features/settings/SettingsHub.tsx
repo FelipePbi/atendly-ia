@@ -222,6 +222,12 @@ function hubGroups(
           title: "Conversas",
         },
         {
+          detail: "O que você e a IA fizeram",
+          href: "/configuracoes/atividade",
+          icon: "clock",
+          title: "Atividade",
+        },
+        {
           detail: email,
           href: "/configuracoes/conta",
           icon: "nav-user",

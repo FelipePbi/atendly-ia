@@ -927,6 +927,10 @@ function createPrismaStub(input: {
         return record;
       },
     },
+    // Registro de atividade (D-176): a transferência da IA grava aqui.
+    activityLog: {
+      create: async (args: any) => ({ ...args.data }),
+    },
     handoff: {
       findFirst: async () =>
         store.handoffs.find((handoff) => handoff.status === "OPEN") ?? null,

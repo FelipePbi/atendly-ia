@@ -283,6 +283,8 @@ function fakePrisma(options: { contacts?: ContactRow[]; sessions?: SessionRow[] 
 
   const root = client("root", null);
   const prisma = {
+    // Registro de atividade (D-176): gravado, não conferido aqui.
+    activityLog: { create: async () => ({}) },
     ...root,
     contacts,
     sessions,

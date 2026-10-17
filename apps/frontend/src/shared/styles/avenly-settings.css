@@ -3743,3 +3743,195 @@ html.vt-settings-swap::view-transition-new(settings-panel) {
       var(--at-ease-standard) both !important;
   }
 }
+
+/* Configurações → Atividade (D-176): registro do que a profissional e a IA
+   fizeram, com o antes e o depois. Mobile-first: filtros em duas colunas,
+   lista em cartão agrupada por dia, como a central de notificações. */
+.activity-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 32px;
+}
+.activity-intro {
+  margin: 0;
+  color: var(--at-color-ink-soft);
+  font-size: 15px;
+  line-height: 1.45;
+}
+.activity-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.activity-selects {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.activity-select .select {
+  width: 100%;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+@media (min-width: 1280px) {
+  .activity-selects {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.activity-days {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+.activity-day-title {
+  margin: 0;
+  padding: 12px 16px 4px;
+  color: var(--at-color-ink-muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.activity-day + .activity-day .activity-day-title {
+  padding-top: 18px;
+}
+.activity-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.activity-row {
+  padding: 12px 16px;
+  display: flex;
+  gap: 12px;
+  color: var(--at-color-ink);
+}
+.activity-row + .activity-row {
+  border-top: 1px solid var(--at-color-border);
+}
+.activity-actor {
+  width: 28px;
+  height: 28px;
+  margin-top: 1px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.activity-actor svg {
+  width: 15px;
+  height: 15px;
+}
+.activity-actor.is-ai {
+  background: var(--at-color-primary-tint-strong);
+  color: var(--at-color-primary-ink);
+}
+.activity-actor.is-user {
+  background: var(--at-color-surface-active);
+  color: var(--at-color-ink-soft);
+}
+.activity-row-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.activity-sentence {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.activity-link {
+  color: inherit;
+  text-decoration: none;
+}
+.activity-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.activity-changes {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.activity-change {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.activity-change dt {
+  color: var(--at-color-ink-muted);
+}
+.activity-change dd {
+  margin: 0;
+  min-width: 0;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  overflow-wrap: anywhere;
+}
+.activity-before {
+  color: var(--at-color-ink-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--at-color-border-strong);
+}
+.activity-arrow {
+  color: var(--at-color-ink-muted);
+}
+.activity-after {
+  color: var(--at-color-ink);
+  font-weight: 500;
+}
+.activity-note {
+  margin: 0;
+  color: var(--at-color-ink-soft);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.activity-meta {
+  margin: 0;
+  color: var(--at-color-ink-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.activity-sentinel {
+  height: 1px;
+}
+.activity-more-loading,
+.activity-end {
+  margin: 0;
+  padding: 14px 16px;
+  color: var(--at-color-ink-muted);
+  font-size: 13px;
+  text-align: center;
+}
+.activity-more-error {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  color: var(--at-color-ink-soft);
+}
+.activity-more-error p {
+  margin: 0;
+}

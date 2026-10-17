@@ -6,6 +6,8 @@ import {
   localDateTimeToInstant,
 } from "../../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../../shared/errors/app-error.js";
+import { actorFromSource } from "../../activity/activity-log.js";
+import { customerActivity } from "../../activity/entity-activity.js";
 import { recordAppointmentEvent } from "../../appointments/appointment-event-service.js";
 import { toSnapshot } from "../../appointments/appointment-lifecycle-service.js";
 import { AvenlyAvailability } from "../../availability/avenly-availability.js";
@@ -772,6 +774,12 @@ export class AvenlyCalendarProvider implements CalendarProvider {
       name: input.customerName,
       phone: input.customerPhone,
     });
+    // Cadastro nascido do agendamento (quase sempre pela IA): atividade no
+    // mesmo commit (D-176).
+    const actor = actorFromSource(input.source ?? "AI", this.userId);
+    if (actor) {
+      await customerActivity.created(transaction, this.tenantId, actor, created);
+    }
     return created.id;
   }
 

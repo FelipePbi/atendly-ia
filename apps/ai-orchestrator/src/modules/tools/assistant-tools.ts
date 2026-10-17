@@ -10,6 +10,11 @@ import {
   noopDiagnosticLogger,
 } from "../../lib/diagnostic-log.js";
 import { AppError, InfrastructureError } from "../../lib/errors.js";
+import { AI_ACTOR } from "../activity/activity-log.js";
+import {
+  clipActivityText,
+  recordConversationActivity,
+} from "../activity/orchestrator-activity.js";
 import {
   isOperationalKnowledgeQuery,
   type KnowledgeVectorStore,
@@ -1863,6 +1868,28 @@ export class AssistantToolRegistry {
           status: "OPEN",
         },
       }));
+    if (!existing) {
+      // A IA passou a conversa para a profissional (D-176).
+      const conversation = await this.prisma.conversation.findUnique({
+        where: { id: context.conversationId },
+        select: { id: true, customerName: true, externalContactId: true },
+      });
+      if (conversation) {
+        await recordConversationActivity(
+          this.prisma,
+          context.tenantId,
+          AI_ACTOR,
+          conversation,
+          "conversation.handoff_requested",
+          {
+            details: {
+              reason: clipActivityText(args.reason),
+              summary: clipActivityText(args.summary),
+            },
+          },
+        );
+      }
+    }
 
     const state = await this.getConversationState(context.conversationId);
     await this.prisma.conversation.update({

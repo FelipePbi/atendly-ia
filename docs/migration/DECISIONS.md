@@ -7787,3 +7787,25 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Consequências:** abrir uma conversa com imagens e figurinhas faz até três buscas simultâneas ao WhatsApp por meio do número conectado; com o número desconectado, a busca falha e a tela mostra "Mídia indisponível". Mensagens com mais de ~30 dias perdem a mídia mesmo com a conversa ainda dentro da retenção (90 dias na Comercial). GIF (vídeo com `gifPlayback`) e figurinhas Lottie continuam fora: o primeiro como vídeo com "Ver mídia", a segunda cai em "Figurinha indisponível" se o navegador não decodificar.
 
 **Revisar se:** o produto adotar armazenamento próprio de mídia, o WhatsApp mudar a validade dos links, ou o volume de buscas chamar atenção anti-abuso do WhatsApp.
+
+## D-176 — Registro de atividade do negócio: cada serviço grava o seu, na mesma transação, e o BFF intercala; tela Configurações → Atividade
+
+**Status:** ACCEPTED em 2026-10-16, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Amplia a resposta 486 de `99-Perguntas-e-Respostas.md` ("Seção de histórico de alterações"), que até aqui só existia por agendamento (`AppointmentEvent`).
+
+**Contexto:** a profissional não tinha onde ver o que aconteceu no negócio: o que a IA marcou, remarcou ou cancelou, o que ela mesma mudou num cliente, num serviço ou numa configuração, e o valor de antes. O único histórico era o do agendamento, preso ao detalhe dele e sem cliente, serviço, configuração, conversa ou importação.
+
+**Decisão:**
+
+1. Cada serviço que muda dado de negócio guarda o próprio `ActivityLog` (Scheduling, IA e BFF), com `tenantId`, instante, autor (`AI` ou `USER`, e o usuário quando é pessoa), área (`AGENDA`, `CUSTOMERS`, `SERVICES`, `SETTINGS`, `IMPORT`, `CONVERSATIONS`), verbo estável (`appointment.rescheduled`), entidade com id e rótulo legível do momento, `changes` `[{ field, before, after }]` e `details` para montar a frase.
+2. A linha é gravada na **mesma transação** da mudança. Exceções, gravadas logo depois do commit: bloqueios, compromissos, exceções de disponibilidade, passos da importação, conexão da origem, conversas e conhecimento da IA, exclusão de conta e conexão do WhatsApp — os serviços deles abrem transação própria ou falam com outro sistema. A perda possível é só a de uma queda entre os dois passos.
+3. O registro só cresce: a trigger `ActivityLog_append_only` recusa `UPDATE` nos três bancos. `DELETE` só pela purga do negócio inteiro (Scheduling e IA: `TENANT_PURGE_TABLES`; BFF: cascata do `Tenant`).
+4. Nunca segredo: o antes/depois só percorre uma lista de campos permitidos por entidade, e qualquer chave com cara de senha, token, credencial ou chave é descartada antes de gravar. Troca de senha e conexão da Minha Agenda são só fato. Texto longo entra cortado em 280 caracteres.
+5. Agendamento: a atividade nasce dentro de `recordAppointmentEvent`, então todo caminho que muda um atendimento (tela, IA, série, ciclo de vida) já registra. `SYSTEM` (conclusão automática) e `INTEGRATION` (cada item importado) não viram atividade; a importação aparece como início e conclusão, com contagens.
+6. Leitura: `GET /internal/activity` no Scheduling e na IA (escopo novo `activity:read` na credencial de comando da IA) e `GET /v1/activity` no BFF, que chama as fontes com o tenant da sessão e intercala numa ordem total (instante, fonte, sequência). O cursor é a posição do último item entregue; a página seguinte não repete nem pula linha. Fonte indisponível falha a leitura (`502`), porque página parcial faria o cursor pular o que faltou.
+7. Tela `/configuracoes/atividade`, linha "Atividade" em "Dados e conta": frase em pt-BR com "Você"/"A IA", antes/depois, filtros de período, autor, área e tipo de ação (catálogo em `apps/bff/src/modules/activity/catalog.ts`), busca no rótulo e rolagem sob demanda como em Clientes.
+
+**Alternativas:** envio central para um serviço de auditoria (novo serviço e fila, e a gravação deixaria de ser atômica com a mudança); estender `AppointmentEvent` para tudo (é histórico por atendimento, com FK e leitura por atendimento); gravar só no BFF (a IA muda a agenda direto no Scheduling, sem passar pelo BFF, e o BFF não sabe o valor anterior).
+
+**Consequências:** três tabelas novas com a mesma forma e o mesmo helper copiado em cada serviço; a lista de ações e o catálogo de tipos precisam ganhar toda ação nova (o teste do catálogo recusa ação em dois tipos). O id da pessoa não sai do BFF: a tela só distingue "você" de "a IA", o que basta enquanto o negócio tem uma pessoa.
+
+**Revisar se:** o produto ganhar mais de uma pessoa por negócio (mostrar quem), o volume tornar a intercalação de três fontes lenta, ou a retenção precisar de prazo próprio para o registro.

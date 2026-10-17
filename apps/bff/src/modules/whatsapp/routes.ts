@@ -19,6 +19,7 @@ import {
   requireTenantContext,
 } from "../../lib/tenant-context.js";
 import { selectWhatsappContacts } from "../../lib/whatsapp-contacts.js";
+import { recordActivity, userActor } from "../activity/activity-log.js";
 import { internalContext } from "../tenant/context.js";
 import { disconnectWhatsApp } from "./disconnect.js";
 import {
@@ -178,6 +179,14 @@ export async function registerV1WhatsAppRoutes(
       const body = parseBody(connectSchema, request.body ?? {});
       const instance = await ensureInstance(request, evolution, ai);
       const result = await connect(request, instance, body, evolution, ai);
+      const tenant = currentTenantContext(request);
+      // Pedido de conexão (o QR vem depois); nenhuma credencial entra aqui.
+      await recordActivity(getPrisma(), tenant.tenantId, {
+        actor: userActor(tenant.userId),
+        area: "SETTINGS",
+        action: "settings.whatsapp_connect_started",
+        entityType: "whatsapp",
+      });
       return reply.code(201).send(dataResponse(request, result));
     },
   );
@@ -219,6 +228,12 @@ export async function registerV1WhatsAppRoutes(
           "Pending WhatsApp link discarded by its own owner",
         );
       }
+      await recordActivity(getPrisma(), tenant.tenantId, {
+        actor: userActor(tenant.userId),
+        area: "SETTINGS",
+        action: "settings.whatsapp_disconnected",
+        entityType: "whatsapp",
+      });
       return dataResponse(request, { disconnected: true });
     },
   );

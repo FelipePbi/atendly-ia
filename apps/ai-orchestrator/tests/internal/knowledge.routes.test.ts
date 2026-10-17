@@ -122,6 +122,18 @@ function headers(tenantId: string, use: "command" | "provisioning" = "command") 
   };
 }
 
+/** O registro de atividade (D-176) lê o texto do documento e grava a linha. */
+const activityRows: Array<{ data: Record<string, unknown> }> = [];
+const activityPrisma = {
+  knowledgeChunk: { findMany: async () => [] },
+  activityLog: {
+    create: async (args: { data: Record<string, unknown> }) => {
+      activityRows.push(args);
+      return {};
+    },
+  },
+};
+
 describe("rotas internas de conhecimento", () => {
   let app: FastifyInstance;
   let knowledgeDocuments: ReturnType<typeof fakeKnowledgeDocuments>;
@@ -129,7 +141,7 @@ describe("rotas internas de conhecimento", () => {
   beforeEach(async () => {
     knowledgeDocuments = fakeKnowledgeDocuments([document()]);
     app = Fastify();
-    await registerInternalRoutes(app, {} as never, {
+    await registerInternalRoutes(app, activityPrisma as never, {
       inbox: { countDeadLetters: async () => 0 },
       knowledgeDocuments: knowledgeDocuments.service,
     });
@@ -222,7 +234,10 @@ describe("rotas internas de conhecimento", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().data.version).toBe("2");
-    expect(knowledgeDocuments.calls[0]).toMatchObject({
+    // A rota lê o estado anterior antes (registro de atividade, D-176).
+    expect(
+      knowledgeDocuments.calls.find((call) => call.method === "edit"),
+    ).toMatchObject({
       method: "edit",
       args: { tenantId: "tenant-a", id: "doc-1" },
     });
@@ -237,7 +252,10 @@ describe("rotas internas de conhecimento", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().data.status).toBe("INACTIVE");
-    expect(knowledgeDocuments.calls[0]).toMatchObject({
+    // A rota lê o estado anterior antes (registro de atividade, D-176).
+    expect(
+      knowledgeDocuments.calls.find((call) => call.method === "deactivate"),
+    ).toMatchObject({
       method: "deactivate",
       args: { tenantId: "tenant-a", id: "doc-1" },
     });
@@ -253,9 +271,36 @@ describe("rotas internas de conhecimento", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().data.type).toBe("BUSINESS_INFO");
-    expect(knowledgeDocuments.calls[0]).toMatchObject({
+    // A rota lê o estado anterior antes (registro de atividade, D-176).
+    expect(
+      knowledgeDocuments.calls.find((call) => call.method === "saveOtherInfo"),
+    ).toMatchObject({
       method: "saveOtherInfo",
       args: { tenantId: "tenant-a", content: "Aceitamos pets de pequeno porte." },
+    });
+  });
+
+  it("registra o antes e o depois do campo livre, pela profissional", async () => {
+    activityRows.length = 0;
+    await app.inject({
+      method: "PUT",
+      url: "/internal/knowledge/other-info",
+      headers: headers("tenant-a"),
+      payload: { content: "Aceitamos pets de pequeno porte." },
+    });
+    expect(activityRows.at(-1)?.data).toMatchObject({
+      tenantId: "tenant-a",
+      actorType: "USER",
+      actorId: "user-tenant-a",
+      area: "SETTINGS",
+      action: "knowledge.other_info_updated",
+      changes: [
+        {
+          field: "content",
+          before: null,
+          after: "Aceitamos pets de pequeno porte.",
+        },
+      ],
     });
   });
 
@@ -265,7 +310,7 @@ describe("rotas internas de conhecimento", () => {
       "tenant-a": "Aceitamos pets de pequeno porte.",
     });
     app = Fastify();
-    await registerInternalRoutes(app, {} as never, {
+    await registerInternalRoutes(app, activityPrisma as never, {
       inbox: { countDeadLetters: async () => 0 },
       knowledgeDocuments: knowledgeDocuments.service,
     });

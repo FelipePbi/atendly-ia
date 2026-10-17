@@ -19,6 +19,7 @@ export async function resetTenant(
   prisma: PrismaClient,
   tenantId: string,
 ): Promise<void> {
+  await prisma.activityLog.deleteMany({ where: { tenantId } });
   await prisma.appointmentEvent.deleteMany({ where: { tenantId } });
   await prisma.appointmentItem.deleteMany({ where: { tenantId } });
   await prisma.appointment.deleteMany({ where: { tenantId } });

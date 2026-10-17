@@ -9,6 +9,7 @@ import {
   requireInternalAuth,
 } from "../../shared/auth/internal-auth.js";
 import { AppError } from "../../shared/errors/app-error.js";
+import { actorFromContext } from "../activity/activity-log.js";
 import { AvenlyAppointmentSeriesService } from "../appointments/appointment-series-service.js";
 import { CalendarService } from "./calendar-service.js";
 import { CalendarRemovalService } from "./removal.js";
@@ -281,7 +282,7 @@ export async function registerCalendarRoutes(
         removed: await new CalendarRemovalService(
           prisma,
           context.tenantId,
-        ).deleteAppointment(params.id),
+        ).deleteAppointment(params.id, actorFromContext(context)),
       },
       requestId: request.id,
     };
@@ -304,7 +305,7 @@ export async function registerCalendarRoutes(
         removed: await new CalendarRemovalService(
           prisma,
           context.tenantId,
-        ).deleteCustomer(params.id),
+        ).deleteCustomer(params.id, actorFromContext(context)),
       },
       requestId: request.id,
     };

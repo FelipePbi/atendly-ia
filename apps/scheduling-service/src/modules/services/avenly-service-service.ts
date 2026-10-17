@@ -269,7 +269,7 @@ export class AvenlyServiceService {
     });
   }
 
-  private async requireService(serviceId: string) {
+  async requireService(serviceId: string) {
     const service = await this.database.service.findUnique({
       where: { tenantId_id: { tenantId: this.tenantId, id: serviceId } },
     });

@@ -176,6 +176,8 @@ describe("rotas internas de memória do cliente e resumo", () => {
       value: "Prefere sala silenciosa",
       origin: "PROFESSIONAL",
       aiAllowed: false,
+      // Quem fez, para o registro de atividade (D-176).
+      activityActor: { type: "USER", id: "user-1" },
     });
   });
 
@@ -222,6 +224,7 @@ describe("rotas internas de memória do cliente e resumo", () => {
       customerId: CUSTOMER,
       memoryId: "memory-1",
       aiAllowed: false,
+      activityActor: { type: "USER", id: "user-1" },
     });
   });
 
@@ -239,6 +242,7 @@ describe("rotas internas de memória do cliente e resumo", () => {
       customerId: CUSTOMER,
       memoryId: "memory-1",
       removedBy: "user-1",
+      activityActor: { type: "USER", id: "user-1" },
     });
   });
 

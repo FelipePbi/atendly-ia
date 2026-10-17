@@ -56,6 +56,7 @@ const ACCESSOR = {
   ProcessedEvent: "processedEvent",
   ChannelConnection: "channelConnection",
   AiTenantConfig: "aiTenantConfig",
+  ActivityLog: "activityLog",
 } as const satisfies Record<(typeof TENANT_PURGE_TABLES)[number], string>;
 
 describe.skipIf(!databaseUrl)("tenant purge against PostgreSQL", () => {
@@ -203,6 +204,15 @@ describe.skipIf(!databaseUrl)("tenant purge against PostgreSQL", () => {
     });
 
     await prisma.aiTenantConfig.create({ data: { tenantId } });
+    await prisma.activityLog.create({
+      data: {
+        tenantId,
+        actorType: "AI",
+        area: "CONVERSATIONS",
+        action: "conversation.handoff_requested",
+        entityType: "conversation",
+      },
+    });
 
     const documentId = `knowledge-document-${tenantId}`;
     await prisma.knowledgeDocument.create({

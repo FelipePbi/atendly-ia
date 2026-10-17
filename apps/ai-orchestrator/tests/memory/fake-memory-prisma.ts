@@ -62,6 +62,8 @@ export interface FakeMemoryWorld {
   contacts: ContactRow[];
   conversations: ConversationRow[];
   sessions: SessionRow[];
+  /** Registro de atividade (D-176) gravado pela memória. */
+  activities?: Array<Record<string, unknown>>;
 }
 
 export function memoryRow(overrides: Partial<MemoryRow> = {}): MemoryRow {
@@ -97,13 +99,20 @@ function matches<T>(where: Record<string, unknown>) {
 }
 
 export function fakeMemoryPrisma(world: Partial<FakeMemoryWorld> = {}) {
-  const state: FakeMemoryWorld = {
+  const state: Required<FakeMemoryWorld> = {
     memories: world.memories ?? [],
     contacts: world.contacts ?? [],
     conversations: world.conversations ?? [],
     sessions: world.sessions ?? [],
+    activities: world.activities ?? [],
   };
   let sequence = 0;
+  const activityLog = {
+    create: async ({ data }: { data: Record<string, unknown> }) => {
+      state.activities.push(data);
+      return { ...data };
+    },
+  };
 
   const customerMemory = {
     findMany: async ({
@@ -153,9 +162,7 @@ export function fakeMemoryPrisma(world: Partial<FakeMemoryWorld> = {}) {
     },
   };
 
-  const prisma = {
-    customerMemory,
-    contact: {
+  const contact = {
       findUnique: async ({
         where,
       }: {
@@ -172,7 +179,12 @@ export function fakeMemoryPrisma(world: Partial<FakeMemoryWorld> = {}) {
         const found = state.contacts.find(matches<ContactRow>(where));
         return found ? { ...found } : null;
       },
-    },
+  };
+
+  const prisma = {
+    customerMemory,
+    activityLog,
+    contact,
     conversation: {
       findFirst: async ({ where }: { where: Record<string, unknown> }) => {
         const found = state.conversations.find(matches<ConversationRow>(where));
@@ -188,7 +200,7 @@ export function fakeMemoryPrisma(world: Partial<FakeMemoryWorld> = {}) {
       },
     },
     $transaction: async <T>(fn: (tx: unknown) => Promise<T>): Promise<T> =>
-      fn({ customerMemory }),
+      fn({ customerMemory, contact, activityLog }),
   };
 
   return { state, prisma: prisma as unknown as PrismaClient };

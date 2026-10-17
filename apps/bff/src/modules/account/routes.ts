@@ -13,6 +13,7 @@ import {
   currentTenantContext,
   requireTenantContext,
 } from "../../lib/tenant-context.js";
+import { diffFields, recordActivity, userActor } from "../activity/activity-log.js";
 import { nameSchema } from "../auth/routes.js";
 import {
   accountDeletionEffects,
@@ -78,6 +79,14 @@ export async function registerV1AccountRoutes(
         },
       );
 
+      await recordActivity(getPrisma(), tenant.tenantId, {
+        actor: userActor(sessionUser.id),
+        area: "SETTINGS",
+        action: "account.deletion_requested",
+        entityType: "account",
+        details: { dueAt: result.deletion.dueAt.toISOString() },
+      });
+
       return dataResponse(request, {
         status: result.deletion.status,
         dueAt: result.deletion.dueAt.toISOString(),
@@ -96,6 +105,12 @@ export async function registerV1AccountRoutes(
         { tenant, now: new Date() },
         { store, log: request.log },
       );
+      await recordActivity(getPrisma(), tenant.tenantId, {
+        actor: userActor(tenant.userId),
+        area: "SETTINGS",
+        action: "account.deletion_cancelled",
+        entityType: "account",
+      });
 
       return dataResponse(request, {
         status: cancelled.status,
@@ -112,10 +127,28 @@ export async function registerV1AccountRoutes(
     { preHandler: requireTenantContext },
     async (request) => {
       const sessionUser = currentUser(request);
+      const tenant = currentTenantContext(request);
       const body = parseBody(profileSchema, request.body);
-      const user = await getPrisma().user.update({
-        where: { id: sessionUser.id },
-        data: { name: body.name },
+      const user = await getPrisma().$transaction(async (tx) => {
+        const before = await tx.user.findUniqueOrThrow({
+          where: { id: sessionUser.id },
+        });
+        const after = await tx.user.update({
+          where: { id: sessionUser.id },
+          data: { name: body.name },
+        });
+        const changes = diffFields(before, after, ["name"]);
+        if (changes.length > 0) {
+          await recordActivity(tx, tenant.tenantId, {
+            actor: userActor(sessionUser.id),
+            area: "SETTINGS",
+            action: "account.profile_updated",
+            entityType: "user",
+            entityId: sessionUser.id,
+            changes,
+          });
+        }
+        return after;
       });
       return dataResponse(request, { user: userDto(user) });
     },

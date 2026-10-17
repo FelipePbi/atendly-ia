@@ -1,6 +1,15 @@
 import { env } from "../../config/env.js";
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { AppError } from "../../lib/errors.js";
+import {
+  type ActivityActor,
+  type ActivityChange,
+  AI_ACTOR,
+} from "../activity/activity-log.js";
+import {
+  clipActivityText,
+  recordMemoryActivity,
+} from "../activity/orchestrator-activity.js";
 import type { AppointmentDraft } from "../assistant/assistant.service.js";
 import {
   type CustomerMemoryKind,
@@ -49,6 +58,21 @@ export interface ListCustomerMemoryInput {
   includeInactive?: boolean;
 }
 
+/** Antes/depois da memória: o campo é o tipo (`memory.PREFERRED_DAY`). */
+function memoryChanges(
+  kind: string,
+  before: string | null,
+  after: string | null,
+): ActivityChange[] {
+  return [
+    {
+      field: `memory.${kind}`,
+      before: clipActivityText(before),
+      after: clipActivityText(after),
+    },
+  ];
+}
+
 export interface CreateCustomerMemoryInput {
   tenantId: string;
   customerId: string;
@@ -62,6 +86,8 @@ export interface CreateCustomerMemoryInput {
   sourceMessageIds?: string[];
   observedAt?: Date;
   now?: Date;
+  /** Quem cadastrou, para o registro de atividade (D-176). */
+  activityActor?: ActivityActor;
 }
 
 export interface UpdateCustomerMemoryPermissionInput {
@@ -69,6 +95,7 @@ export interface UpdateCustomerMemoryPermissionInput {
   customerId: string;
   memoryId: string;
   aiAllowed: boolean;
+  activityActor?: ActivityActor;
 }
 
 export interface RemoveCustomerMemoryInput {
@@ -77,6 +104,7 @@ export interface RemoveCustomerMemoryInput {
   memoryId: string;
   removedBy?: string | null;
   now?: Date;
+  activityActor?: ActivityActor;
 }
 
 export interface LoadCustomerMemoryForPromptInput {
@@ -233,6 +261,16 @@ export class CustomerMemoryService
           data: { supersededById: row.id },
         });
       }
+      if (input.activityActor) {
+        await recordMemoryActivity(
+          tx,
+          input.tenantId,
+          input.activityActor,
+          input.customerId,
+          "customer.memory_added",
+          memoryChanges(kind, superseded?.value ?? null, value),
+        );
+      }
       return row;
     });
 
@@ -242,10 +280,30 @@ export class CustomerMemoryService
   async setPermission(
     input: UpdateCustomerMemoryPermissionInput,
   ): Promise<CustomerMemoryRecord> {
-    await this.requireMemory(input);
-    const updated = await this.prisma.customerMemory.update({
-      where: { id: input.memoryId },
-      data: { aiAllowed: input.aiAllowed },
+    const existing = await this.requireMemory(input);
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.customerMemory.update({
+        where: { id: input.memoryId },
+        data: { aiAllowed: input.aiAllowed },
+      });
+      if (input.activityActor && existing.aiAllowed !== row.aiAllowed) {
+        await recordMemoryActivity(
+          tx,
+          input.tenantId,
+          input.activityActor,
+          input.customerId,
+          "customer.memory_ai_access",
+          [
+            {
+              field: "aiAllowed",
+              before: existing.aiAllowed,
+              after: row.aiAllowed,
+            },
+          ],
+          { kind: row.kind, value: clipActivityText(row.value) },
+        );
+      }
+      return row;
     });
     return toRecord(updated);
   }
@@ -260,12 +318,25 @@ export class CustomerMemoryService
   ): Promise<CustomerMemoryRecord> {
     const existing = await this.requireMemory(input);
     if (existing.removedAt) return toRecord(existing);
-    const removed = await this.prisma.customerMemory.update({
-      where: { id: input.memoryId },
-      data: {
-        removedAt: input.now ?? new Date(),
-        removedBy: input.removedBy ?? null,
-      },
+    const removed = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.customerMemory.update({
+        where: { id: input.memoryId },
+        data: {
+          removedAt: input.now ?? new Date(),
+          removedBy: input.removedBy ?? null,
+        },
+      });
+      if (input.activityActor) {
+        await recordMemoryActivity(
+          tx,
+          input.tenantId,
+          input.activityActor,
+          input.customerId,
+          "customer.memory_removed",
+          memoryChanges(row.kind, row.value, null),
+        );
+      }
+      return row;
     });
     return toRecord(removed);
   }
@@ -498,6 +569,15 @@ export class CustomerMemoryService
           data: { supersededById: created.id },
         });
       }
+      // O que a IA aprendeu sobre a pessoa é alteração da IA (D-176).
+      await recordMemoryActivity(
+        tx,
+        input.tenantId,
+        AI_ACTOR,
+        input.customerId,
+        "customer.memory_added",
+        memoryChanges(created.kind, superseded?.value ?? null, created.value),
+      );
       return true;
     });
   }

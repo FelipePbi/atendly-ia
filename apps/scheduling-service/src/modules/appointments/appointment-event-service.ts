@@ -5,6 +5,7 @@ import type {
   PrismaClient,
 } from "../../generated/prisma/client.js";
 import { AppError } from "../../shared/errors/app-error.js";
+import { recordAppointmentActivity } from "../activity/appointment-activity.js";
 
 /**
  * Histórico operacional do atendimento (Goal008): um evento por mutação,
@@ -40,6 +41,8 @@ export async function recordAppointmentEvent(
       after: event.after,
     },
   });
+  // A atividade do negócio (D-176) nasce no mesmo commit do evento.
+  await recordAppointmentActivity(transaction, tenantId, appointmentId, event);
 }
 
 export interface AppointmentEventRecord {

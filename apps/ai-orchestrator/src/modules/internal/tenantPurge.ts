@@ -39,6 +39,9 @@ export const TENANT_PURGE_TABLES = [
   // Raizes: nada mais no negocio ainda referencia estas duas.
   "ChannelConnection",
   "AiTenantConfig",
+  // Registro de atividade (D-176): sem chave estrangeira, so cresce; sai
+  // apenas aqui, com o negocio inteiro.
+  "ActivityLog",
 ] as const;
 
 export type TenantPurgeTable = (typeof TENANT_PURGE_TABLES)[number];
@@ -100,6 +103,7 @@ const TABLE_META: Record<TenantPurgeTable, TableMeta> = {
   ProcessedEvent: { sql: Prisma.sql`"ProcessedEvent"`, idColumn: "id" },
   ChannelConnection: { sql: Prisma.sql`"ChannelConnection"`, idColumn: "id" },
   AiTenantConfig: { sql: Prisma.sql`"AiTenantConfig"`, idColumn: "tenantId" },
+  ActivityLog: { sql: Prisma.sql`"ActivityLog"`, idColumn: "id" },
 };
 
 /**

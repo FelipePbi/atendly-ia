@@ -15,6 +15,7 @@ import { defaultAccountPurgePorts } from "./modules/account/purge.js";
 import { registerV1AccountRoutes } from "./modules/account/routes.js";
 import { AccountPurgeWorker } from "./modules/account/worker.js";
 import { registerV1ActivationTestRoutes } from "./modules/activation-test/routes.js";
+import { registerV1ActivityRoutes } from "./modules/activity/routes.js";
 import { registerV1AuthRoutes } from "./modules/auth/routes.js";
 import { registerV1CalendarRoutes } from "./modules/calendar/routes.js";
 import { registerV1ConversationRoutes } from "./modules/conversations/routes.js";
@@ -136,6 +137,7 @@ export async function buildApp() {
   await registerV1NotificationRoutes(app);
   await registerV1WhatsAppRoutes(app);
   await registerV1ActivationTestRoutes(app);
+  await registerV1ActivityRoutes(app);
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {

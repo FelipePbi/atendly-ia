@@ -358,6 +358,8 @@ const HUB_ROWS: Array<[string, string]> = [
   ["Agenda", "/configuracoes/agenda"],
   ["Importação", "/importacao"],
   ["Conversas", "/configuracoes/conversas"],
+  // Registro de atividade (D-176).
+  ["Atividade", "/configuracoes/atividade"],
   ["Conta", "/configuracoes/conta"],
 ];
 
@@ -379,7 +381,7 @@ describe("Goal097 prova 1: hub M1", () => {
     expect(rowsByGroup).toEqual([
       ["Serviços", "IA", "WhatsApp"],
       ["Negócio", "Agenda"],
-      ["Importação", "Conversas", "Conta"],
+      ["Importação", "Conversas", "Atividade", "Conta"],
     ]);
 
     for (const [title, href] of HUB_ROWS) {

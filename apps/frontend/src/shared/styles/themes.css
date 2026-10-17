@@ -1,0 +1,315 @@
+/*
+ * Aparência da conta (D-181): cor de destaque × claro/escuro.
+ *
+ * `tokens.css` é o padrão (petróleo, claro). Aqui:
+ *   - `[data-accent="…"]` troca só a família `--at-color-primary-*`;
+ *   - `html[data-theme="dark"]` troca papel, tinta, bordas e estados;
+ *   - `[data-theme="dark"] [data-accent="…"]` dá a cor no escuro.
+ * As cores valem em qualquer elemento, não só no <html>: a miniatura de cada
+ * cor em Configurações › Aparência é a própria cascata, com
+ * `data-accent` nela. Por isso a família da cor usa `--at-color-*` direto
+ * (os apelidos como `--accent` são resolvidos no <html>).
+ * Quem põe os atributos é o script do <head> (src/shared/theme/), antes da
+ * primeira pintura. "Automático" vira `light` ou `dark` lá, pelo sistema.
+ *
+ * Todo par texto/fundo de cada combinação passa WCAG AA (4,5:1 para texto);
+ * tests/theme-contrast.test.ts confere a partir destes valores.
+ */
+
+/* --- Cores de destaque no claro ----------------------------------------- */
+
+/* O padrão também é declarado, para a miniatura do petróleo dentro de uma
+ * conta em outra cor. Mesmos valores de tokens.css. */
+[data-accent="verde"] {
+  --at-color-primary: #0f5f63;
+  --at-color-primary-raised: #13696e;
+  --at-color-primary-hover: #0b484c;
+  --at-color-primary-active: #0b484c;
+  --at-color-primary-ink: #0b4a4e;
+  --at-color-primary-deep: #0b2f32;
+  --at-color-primary-tint: #edf4f3;
+  --at-color-primary-tint-mid: #e3eeed;
+  --at-color-primary-tint-alt: #dcecec;
+  --at-color-primary-tint-strong: #dceceb;
+  --at-color-primary-tint-hover: #cde3e1;
+  --at-color-primary-tint-press: #c8e0de;
+  --at-color-primary-tint-border: #c2d9d6;
+  --at-color-primary-on-dark: #b9dad7;
+  --at-color-primary-on-dark-strong: #9fd3cf;
+  --at-color-primary-shade: rgb(8 57 60);
+}
+[data-accent="rose"] {
+  --at-color-primary: #9a4559;
+  --at-color-primary-hover: #7e3647;
+  --at-color-primary-active: #7e3647;
+  --at-color-primary-ink: #7a3446;
+  --at-color-primary-deep: #4a1a26;
+  --at-color-primary-tint: #f9eef0;
+  --at-color-primary-tint-strong: #f1dde2;
+  --at-color-primary-on-dark: #f6dbe1;
+  --at-color-primary-on-dark-strong: #fbe8ec;
+}
+[data-accent="champanhe"] {
+  --at-color-primary: #7a5c22;
+  --at-color-primary-hover: #614818;
+  --at-color-primary-active: #614818;
+  --at-color-primary-ink: #5f4716;
+  --at-color-primary-deep: #3a2a0b;
+  --at-color-primary-tint: #f7f1e5;
+  --at-color-primary-tint-strong: #eee3cb;
+  --at-color-primary-on-dark: #f2e5c5;
+  --at-color-primary-on-dark-strong: #f8efd9;
+}
+[data-accent="azul"] {
+  --at-color-primary: #2d5888;
+  --at-color-primary-hover: #22446b;
+  --at-color-primary-active: #22446b;
+  --at-color-primary-ink: #21436b;
+  --at-color-primary-deep: #11253d;
+  --at-color-primary-tint: #eef3f8;
+  --at-color-primary-tint-strong: #dde6f1;
+  --at-color-primary-on-dark: #c9daee;
+  --at-color-primary-on-dark-strong: #dfe9f6;
+}
+[data-accent="lavanda"] {
+  --at-color-primary: #65508f;
+  --at-color-primary-hover: #503f73;
+  --at-color-primary-active: #503f73;
+  --at-color-primary-ink: #4f3d72;
+  --at-color-primary-deep: #2a1f40;
+  --at-color-primary-tint: #f3f0f8;
+  --at-color-primary-tint-strong: #e5dff1;
+  --at-color-primary-on-dark: #e2daf2;
+  --at-color-primary-on-dark-strong: #eee9f8;
+}
+[data-accent="terracota"] {
+  --at-color-primary: #9c4a2f;
+  --at-color-primary-hover: #7f3b25;
+  --at-color-primary-active: #7f3b25;
+  --at-color-primary-ink: #7c3a24;
+  --at-color-primary-deep: #45190b;
+  --at-color-primary-tint: #f9efea;
+  --at-color-primary-tint-strong: #f1ddd3;
+  --at-color-primary-on-dark: #f8dcd2;
+  --at-color-primary-on-dark-strong: #fae6de;
+}
+
+/* --- Escuro: papel, tinta e estados ------------------------------------- */
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --at-color-canvas: #161412;
+  --at-color-surface: #1e1b18;
+  --at-color-surface-subtle: #221f1b;
+  --at-color-surface-hover: #25221e;
+  --at-color-surface-sunken: #2a2622;
+  --at-color-surface-active: #2b2723;
+  --at-color-ink: #efe9e0;
+  --at-color-ink-hover: #d9d1c5;
+  --at-color-ink-active: #fbf8f3;
+  --at-color-ink-raised: #ddd5ca;
+  --at-color-ink-soft: #c8beb1;
+  --at-color-ink-muted: #aaa093;
+  --at-color-ink-faint: #857c71;
+  --at-color-ink-ghost: #5f584f;
+  --at-color-border: #34302b;
+  --at-color-border-strong: #443e38;
+  --at-color-border-hover: #524b44;
+  --at-color-border-hover-soft: #4e4740;
+  --at-color-border-control: #4b453e;
+
+  /* No escuro o destaque é claro: o texto em cima dele é o papel escuro.
+   * A cor de cada destaque no escuro vem logo abaixo. */
+  --at-color-on-primary: var(--at-color-canvas);
+  --at-color-on-primary-bright: var(--at-color-canvas);
+
+  --at-color-success: #6cc391;
+  --at-color-success-ink: #8fd6aa;
+  --at-color-success-bg: #17291f;
+  --at-color-warning-bg: #2f2512;
+  --at-color-warning-tint: #2b2312;
+  --at-color-warning-hover: #3a2e16;
+  --at-color-warning-hover-alt: #392d16;
+  --at-color-warning-tint-strong: #4a3a1a;
+  --at-color-warning-border-soft: #4d3e20;
+  --at-color-warning-ink: #f0c27a;
+  --at-color-warning-deep: #f5cf92;
+  --at-color-warning-border: #c99134;
+  --at-color-warning-strong: #e0ac55;
+  --at-color-danger-tint: #2a1b19;
+  --at-color-danger-tint-strong: #3a2220;
+  --at-color-danger-bg: #3b201d;
+  --at-color-danger-border-soft: #5a2f2a;
+  --at-color-danger-border: #ef7f72;
+  --at-color-danger-border-input: #f08a7e;
+  --at-color-danger-hover: #f59a8f;
+  --at-color-danger-ink: #f4a79d;
+  --at-color-danger-ink-soft: #ebb8b0;
+  --at-color-violet: #c99bc1;
+  --at-color-coral: #e39a7f;
+  --at-color-coral-ink: #f0b39e;
+
+  --at-mix-light: var(--at-color-surface);
+  --at-mix-dark: white;
+  --at-shadow-rgb: 0 0 0;
+}
+
+[data-theme="dark"][data-accent="verde"],
+[data-theme="dark"] [data-accent="verde"] {
+  --at-color-primary: #6dbab3;
+  --at-color-primary-hover: #88cac4;
+  --at-color-primary-active: #88cac4;
+  --at-color-primary-ink: #94d2cc;
+  --at-color-primary-deep: #c4e8e4;
+}
+[data-theme="dark"][data-accent="rose"],
+[data-theme="dark"] [data-accent="rose"] {
+  --at-color-primary: #e49aab;
+  --at-color-primary-hover: #ecb2bf;
+  --at-color-primary-active: #ecb2bf;
+  --at-color-primary-ink: #f0b6c3;
+  --at-color-primary-deep: #f8dbe1;
+}
+[data-theme="dark"][data-accent="champanhe"],
+[data-theme="dark"] [data-accent="champanhe"] {
+  --at-color-primary: #d6b46e;
+  --at-color-primary-hover: #e2c58b;
+  --at-color-primary-active: #e2c58b;
+  --at-color-primary-ink: #e6cb94;
+  --at-color-primary-deep: #f3e5c4;
+}
+[data-theme="dark"][data-accent="azul"],
+[data-theme="dark"] [data-accent="azul"] {
+  --at-color-primary: #8fb5e3;
+  --at-color-primary-hover: #a9c7eb;
+  --at-color-primary-active: #a9c7eb;
+  --at-color-primary-ink: #aecbee;
+  --at-color-primary-deep: #d9e6f6;
+}
+[data-theme="dark"][data-accent="lavanda"],
+[data-theme="dark"] [data-accent="lavanda"] {
+  --at-color-primary: #b9a5e4;
+  --at-color-primary-hover: #cbbbec;
+  --at-color-primary-active: #cbbbec;
+  --at-color-primary-ink: #cdbfee;
+  --at-color-primary-deep: #e6dff7;
+}
+[data-theme="dark"][data-accent="terracota"],
+[data-theme="dark"] [data-accent="terracota"] {
+  --at-color-primary: #e8977b;
+  --at-color-primary-hover: #efb099;
+  --at-color-primary-active: #efb099;
+  --at-color-primary-ink: #f0b39e;
+  --at-color-primary-deep: #f8dcd1;
+}
+
+/* --- Tons derivados -------------------------------------------------------
+ * No padrão claro esses tons são os do quadro aprovado (tokens.css). Nas
+ * outras combinações saem da cor e dos dois tons-base, para que cada cor
+ * nova precise de poucos valores. */
+[data-accent]:not([data-accent="verde"]),
+[data-theme="dark"][data-accent],
+[data-theme="dark"] [data-accent] {
+  --at-color-primary-raised: color-mix(
+    in srgb,
+    var(--at-color-primary) 88%,
+    var(--at-mix-light)
+  );
+  --at-color-primary-tint-mid: color-mix(
+    in srgb,
+    var(--at-color-primary-tint) 50%,
+    var(--at-color-primary-tint-strong)
+  );
+  --at-color-primary-tint-alt: var(--at-color-primary-tint-strong);
+  --at-color-primary-tint-hover: color-mix(
+    in srgb,
+    var(--at-color-primary) 12%,
+    var(--at-color-primary-tint-strong)
+  );
+  --at-color-primary-tint-press: color-mix(
+    in srgb,
+    var(--at-color-primary) 16%,
+    var(--at-color-primary-tint-strong)
+  );
+  --at-color-primary-tint-border: color-mix(
+    in srgb,
+    var(--at-color-primary) 24%,
+    var(--at-color-primary-tint-strong)
+  );
+  --at-color-primary-shade: color-mix(
+    in srgb,
+    var(--at-color-primary-deep) 80%,
+    var(--at-color-primary)
+  );
+}
+/* No escuro os tons-base saem da cor sobre a superfície escura, e o
+ * "destaque sobre fundo escuro" é a própria tinta da cor. Vem depois do
+ * bloco acima e com a mesma força: vence nele. */
+[data-theme="dark"][data-accent],
+[data-theme="dark"] [data-accent] {
+  --at-color-primary-tint: color-mix(
+    in srgb,
+    var(--at-color-primary) 14%,
+    var(--at-color-surface)
+  );
+  --at-color-primary-tint-strong: color-mix(
+    in srgb,
+    var(--at-color-primary) 24%,
+    var(--at-color-surface)
+  );
+  --at-color-primary-on-dark: var(--at-color-primary-ink);
+  --at-color-primary-on-dark-strong: var(--at-color-primary-deep);
+  --at-color-primary-shade: var(--at-color-canvas);
+}
+
+/* --- Telas que mudam de forma no escuro ----------------------------------
+ * O painel da entrada é uma faixa grande na cor de destaque; no escuro ela
+ * vira o tom escuro da cor, com a tinta clara, em vez de um bloco pastel. */
+html[data-theme="dark"] .entry-panel,
+html[data-theme="dark"] .entry-shell {
+  color: var(--at-color-ink);
+  background: var(--at-color-primary-tint);
+}
+
+/* --- Troca de tema --------------------------------------------------------
+ * Durante a troca (o script põe `data-theme-switching` por ~300 ms), fundo,
+ * texto e bordas atravessam em 240 ms. Com movimento reduzido (D-173) a
+ * troca também acontece, só de opacidade: um véu da cor nova cobre a tela e
+ * some, sem nada se mover. */
+html[data-theme-switching] *,
+html[data-theme-switching] *::before,
+html[data-theme-switching] *::after {
+  transition:
+    background-color var(--at-duration-moderate) var(--at-ease-standard),
+    border-color var(--at-duration-moderate) var(--at-ease-standard),
+    color var(--at-duration-moderate) var(--at-ease-standard),
+    fill var(--at-duration-moderate) var(--at-ease-standard),
+    stroke var(--at-duration-moderate) var(--at-ease-standard) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme-switching] *,
+  html[data-theme-switching] *::before,
+  html[data-theme-switching] *::after {
+    transition: none !important;
+  }
+  html[data-theme-switching]::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: var(--at-z-skip-link);
+    pointer-events: none;
+    background: var(--at-color-canvas);
+    animation: theme-veil var(--at-duration-moderate) var(--at-ease-standard)
+      both;
+    animation-duration: var(--at-duration-moderate) !important;
+  }
+}
+@keyframes theme-veil {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}

@@ -40,11 +40,6 @@ const ALLOWED: ReadonlyArray<{ file: string; literal: string; why: string }> = [
     literal: "#fff",
     why: "logo da Minha Agenda, marca de terceiro",
   },
-  {
-    file: "src/app/layout.tsx",
-    literal: "#f7f4ef",
-    why: "cor da barra do navegador; vira por tema junto com o tema escuro",
-  },
 ];
 
 const LITERAL =

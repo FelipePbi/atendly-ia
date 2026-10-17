@@ -61,12 +61,19 @@ export const CARD_SWATCH_HEX: Readonly<Record<ServiceColorToken, string>> = {
 
 /** Traço de serviço sem cor (`.week-bar-stripe b` sem `--swatch`). */
 export const NEUTRAL_SWATCH_HEX = "#b9b1a6";
+/** O mesmo traço no tema escuro (`--at-color-ink-ghost` de themes.css). */
+export const DARK_NEUTRAL_SWATCH_HEX = "#5f584f";
 
 /** Opacidade do traço de um atendimento que já passou, no celular. */
 export const PAST_STRIPE_OPACITY = 0.4;
 
 /** O que pode estar por baixo de um cartão passado: o fundo e a faixa fora do expediente. */
 const PAST_UNDERLAYS = ["#f7f4ef", "#efeae2"] as const;
+/** Os mesmos fundos no tema escuro (canvas e surface-active de themes.css). */
+export const DARK_PAST_UNDERLAYS = ["#161412", "#2b2723"] as const;
+
+/** Claro ou escuro: muda o que fica por baixo do nome (D-181). */
+export type WeekBarTheme = "dark" | "light";
 
 export const LIGHT_INK = "#ffffff";
 export const DARK_INK = "#000000";
@@ -130,11 +137,17 @@ export function readableInk(backgrounds: readonly string[]): string {
 export function weekBarLabelBackgrounds(
   tokens: ReadonlyArray<ServiceColorToken | null>,
   isPast: boolean,
+  theme: WeekBarTheme = "light",
 ): string[] {
   const first = tokens[0];
-  const swatch = first ? CARD_SWATCH_HEX[first] : NEUTRAL_SWATCH_HEX;
+  const dark = theme === "dark";
+  const swatch = first
+    ? CARD_SWATCH_HEX[first]
+    : dark
+      ? DARK_NEUTRAL_SWATCH_HEX
+      : NEUTRAL_SWATCH_HEX;
   if (!isPast) return [swatch];
-  return PAST_UNDERLAYS.map((underlay) =>
+  return (dark ? DARK_PAST_UNDERLAYS : PAST_UNDERLAYS).map((underlay) =>
     blendHex(swatch, PAST_STRIPE_OPACITY, underlay),
   );
 }
@@ -143,11 +156,12 @@ export function weekBarLabelBackgrounds(
 export function weekBarLabelInk(
   tokens: ReadonlyArray<ServiceColorToken | null>,
   isPast: boolean,
+  theme: WeekBarTheme = "light",
 ): string {
   // Pedido de 2026-10-12: nas cores do servico o nome fica branco; as quatro
   // cores mais claras foram escurecidas so no cartao (CARD_SWATCH_HEX) para
   // passar de 4,5:1. Cinza "sem cor" e cartao passado (traco esmaecido)
   // seguem a regra de contraste.
   if (!isPast && tokens[0]) return LIGHT_INK;
-  return readableInk(weekBarLabelBackgrounds(tokens, isPast));
+  return readableInk(weekBarLabelBackgrounds(tokens, isPast, theme));
 }

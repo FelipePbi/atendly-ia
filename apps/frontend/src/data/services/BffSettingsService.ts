@@ -3,6 +3,7 @@ import type {
   AgendaInitialView,
   AgendaViewPreference,
   AiTone,
+  AppearancePreference,
   AvailabilitySettings,
   BusinessAddressParts,
   BusinessModality,
@@ -51,6 +52,9 @@ export interface AgendaViewPreferenceInput {
   /** `null` limpa a escolha; ausente preserva. */
   initialView?: AgendaInitialView | null;
 }
+
+/** Aparência da conta (D-181); campo ausente preserva o que está gravado. */
+export type AppearancePreferenceInput = Partial<AppearancePreference>;
 
 export interface ReminderSettingsInput {
   // `rules` é sempre obrigatório na escrita, mesmo vazio (`[]` desliga os
@@ -144,6 +148,30 @@ export class BffSettingsService {
       schema: routeSchema<AgendaViewPreference>(
         "PATCH",
         "/v1/settings/agenda-view",
+      ),
+      signal,
+    });
+  }
+
+  getAppearance(signal?: AbortSignal) {
+    return this.http.request({
+      path: "/v1/settings/appearance",
+      schema: routeSchema<AppearancePreference>(
+        "GET",
+        "/v1/settings/appearance",
+      ),
+      signal,
+    });
+  }
+
+  updateAppearance(input: AppearancePreferenceInput, signal?: AbortSignal) {
+    return this.http.request({
+      body: input,
+      method: "PATCH",
+      path: "/v1/settings/appearance",
+      schema: routeSchema<AppearancePreference>(
+        "PATCH",
+        "/v1/settings/appearance",
       ),
       signal,
     });

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { type CSSProperties, useEffect, useState } from "react";
 
 import { type TimeBlock } from "@/data";
+import { useResolvedTheme } from "@/shared/theme/AppearanceProvider";
 
 import { agendaDayHref, appointmentHref } from "./agendaLinks";
 import {
@@ -316,6 +317,7 @@ function WeekEntryBar({
   selectedBlockId: string | null;
   startHour: number;
 }) {
+  const theme = useResolvedTheme();
   const presentation = describeEntry(entry);
   const timeRange = `${minutesToTime(entry.startMinutes)}–${minutesToTime(entry.endMinutes)}`;
   // Nome e serviço no nome acessível, sem perder o tipo (`typeLabel`): sem ele,
@@ -335,6 +337,7 @@ function WeekEntryBar({
   const tokens = appointment
     ? appointmentServiceColors(appointment, colors)
     : [];
+  const labelInk = weekBarLabelInk(tokens, isPast, theme);
   const serviceText = appointment
     ? appointment.services.map((service) => service.name).join(" + ") ||
       appointment.title ||
@@ -377,9 +380,9 @@ function WeekEntryBar({
             aria-hidden="true"
             className={clsx(
               "week-bar-label",
-              weekBarLabelInk(tokens, isPast) === LIGHT_INK && "is-light",
+              labelInk === LIGHT_INK && "is-light",
             )}
-            style={{ color: weekBarLabelInk(tokens, isPast) }}
+            style={{ color: labelInk }}
           >
             {appointment.customer?.name?.trim()
               ? abbreviateClientName(appointment.customer.name)

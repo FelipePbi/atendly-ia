@@ -14,6 +14,7 @@ import {
   parseBodyWithAiConversationStyle,
   resolveAiConversationStyle,
 } from "../../lib/ai-conversation-style.js";
+import { currentUser, requireAuth } from "../../lib/auth.js";
 import {
   businessAddressPartsDto,
   businessAddressPartsSchema,
@@ -112,6 +113,16 @@ const agendaViewPreferenceSchema = z.object({
   // `null` explicito limpa a escolha; ausente preserva.
   initialView: agendaInitialViewSchema.nullable().optional(),
 });
+
+// Aparencia da conta (D-181). Ausente preserva o que ja esta gravado.
+const appearancePreferenceSchema = z
+  .object({
+    accent: z
+      .enum(["VERDE", "ROSE", "CHAMPANHE", "AZUL", "LAVANDA", "TERRACOTA"])
+      .optional(),
+    mode: z.enum(["LIGHT", "DARK", "SYSTEM"]).optional(),
+  })
+  .strict();
 
 export async function registerV1SettingsRoutes(
   app: FastifyInstance,
@@ -437,6 +448,42 @@ export async function registerV1SettingsRoutes(
         hiddenWeekdays: row.hiddenWeekdays,
         initialView: row.initialView,
       });
+    },
+  );
+
+  // --- Aparencia da conta (D-181) -----------------------------------------
+  // Por usuario, nao por negocio: a escolha acompanha a pessoa em qualquer
+  // aparelho, e so precisa de sessao (vale tambem antes do onboarding). Sem
+  // linha, o padrao do produto, nunca gravado por esta leitura. Nao entra no
+  // registro de atividade: e preferencia de quem usa, nao configuracao do
+  // negocio.
+
+  app.get(
+    "/v1/settings/appearance",
+    { preHandler: requireAuth },
+    async (request) => {
+      const row = await getPrisma().appearancePreference.findUnique({
+        where: { userId: currentUser(request).id },
+      });
+      return dataResponse(request, {
+        accent: row?.accent ?? "VERDE",
+        mode: row?.mode ?? "LIGHT",
+      });
+    },
+  );
+
+  app.patch(
+    "/v1/settings/appearance",
+    { preHandler: requireAuth },
+    async (request) => {
+      const body = parseBody(appearancePreferenceSchema, request.body);
+      const userId = currentUser(request).id;
+      const row = await getPrisma().appearancePreference.upsert({
+        where: { userId },
+        create: { userId, ...body },
+        update: body,
+      });
+      return dataResponse(request, { accent: row.accent, mode: row.mode });
     },
   );
 }

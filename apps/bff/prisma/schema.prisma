@@ -62,11 +62,12 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  whatsappInstance    WhatsAppInstance?
-  legalAcceptances    LegalAcceptance[]
-  passwordResetTokens PasswordResetToken[]
-  tenantMemberships   TenantMember[]
-  sessions            UserSession[]
+  whatsappInstance     WhatsAppInstance?
+  legalAcceptances     LegalAcceptance[]
+  passwordResetTokens  PasswordResetToken[]
+  tenantMemberships    TenantMember[]
+  sessions             UserSession[]
+  appearancePreference AppearancePreference?
 }
 
 /// Identidade de sessão revogável consultada a cada autenticação. O JWT carrega
@@ -136,34 +137,34 @@ model TenantMember {
 }
 
 model BusinessProfile {
-  id                    String             @id @default(cuid())
-  tenantId              String             @unique
-  businessName          String             @default("")
-  category              String?
-  timezone              String             @default("America/Sao_Paulo")
-  language              String             @default("pt-BR")
-  currency              String             @default("BRL")
+  id                              String             @id @default(cuid())
+  tenantId                        String             @unique
+  businessName                    String             @default("")
+  category                        String?
+  timezone                        String             @default("America/Sao_Paulo")
+  language                        String             @default("pt-BR")
+  currency                        String             @default("BRL")
   /// Selecao multipla, nunca fabricada por backfill; vazia por default.
-  modalities            BusinessModality[] @default([])
+  modalities                      BusinessModality[] @default([])
   /// Nulo enquanto o negocio nao tem local proprio. So exigido (nao vazio)
   /// quando `modalities` contem ON_SITE; retirar ON_SITE nao apaga o valor.
-  address               String?
+  address                         String?
   /// Endereco em partes (CEP, UF, cidade, bairro, rua, numero, complemento).
   /// `address` continua sendo o texto unico que a IA le, montado a partir
   /// destas partes quando elas existem. Nulo em endereco anterior ao
   /// formulario dividido.
-  addressParts          Json?
+  addressParts                    Json?
   /// Contador simples incrementado a cada mudanca de dado de negocio (nome,
   /// categoria, timezone, modalidade, endereco) — nunca timestamp, que empata
   /// sob relogio grosso.
-  businessContextVersion          Int      @default(1)
+  businessContextVersion          Int                @default(1)
   /// Ultima versao efetivamente projetada para a IA por outra Work Unit deste
   /// Goal. Nasce atras da corrente (default 0 contra 1) para toda linha, nova
   /// ou existente: o contexto ganhou campos que ainda nao foram projetados.
-  businessContextProjectedVersion Int      @default(0)
-  onboardingCompletedAt DateTime?
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
+  businessContextProjectedVersion Int                @default(0)
+  onboardingCompletedAt           DateTime?
+  createdAt                       DateTime           @default(now())
+  updatedAt                       DateTime           @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
@@ -182,11 +183,11 @@ model LegalAcceptance {
 }
 
 model WhatsAppInstance {
-  id     String @id @default(cuid())
-  userId String @unique
+  id                     String                 @id @default(cuid())
+  userId                 String                 @unique
   /// Dono de negócio do vínculo. Nulo apenas para estoque legado cuja
   /// proveniência ficou ambígua na migração: essas linhas não autorizam uso.
-  tenantId String? @unique
+  tenantId               String?                @unique
   evolutionInstanceId    String?
   evolutionInstanceName  String                 @unique
   /// Envelope cifrado `v1.<keyId>.<iv>.<ct>` a partir de credentialVersion >= 1.
@@ -212,15 +213,15 @@ model WhatsAppInstance {
 }
 
 model AiSettings {
-  id       String  @id @default(cuid())
-  tenantId String  @unique
-  enabled  Boolean @default(false)
+  id               String    @id @default(cuid())
+  tenantId         String    @unique
+  enabled          Boolean   @default(false)
   /// Nulo enquanto o negocio nao escolheu um estilo: onboarding trata isso como
   /// pendencia (`AI_TONE_NOT_SELECTED`). Por isso a coluna nao tem `@default` —
   /// diferente de `AiTenantConfig.tone` na IA, aqui o equilibrado so vale como
   /// projecao enviada a IA quando o negocio ainda nao escolheu, nunca como valor
   /// gravado silenciosamente para esta linha.
-  tone      AiTone?
+  tone             AiTone?
   /// Execucao do teste real que autorizou a ativacao automatica (Goal019).
   ///
   /// Nulo e "nao foi ligada por teste" — nunca "o teste falhou". Guarda o ID
@@ -233,9 +234,9 @@ model AiSettings {
   /// `PATCH /v1/settings/ai` grava. Qualquer outra escrita que muda `enabled`
   /// (ligar, autoativacao, troca de canal, exclusao de conta) grava nulo. Nulo
   /// tambem e "pausa anterior a este Goal": nenhum instante e inventado.
-  pausedAt  DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  pausedAt         DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
@@ -251,12 +252,12 @@ model AiSettings {
 /// So duas categorias, as unicas que o produto reconhece hoje. Nao existe
 /// campo, parametro ou default para uma terceira categoria "nao classificada".
 model RetentionSettings {
-  tenantId String @id
+  tenantId                String   @id
   /// Prazo do conteudo comercial, em dias. Allowlist fechada em codigo
   /// (30/90/180/365); o banco nao valida o valor.
-  commercialRetentionDays Int @default(90)
+  commercialRetentionDays Int      @default(90)
   /// Prazo do conteudo pessoal, em dias. Mesma allowlist.
-  personalRetentionDays   Int @default(30)
+  personalRetentionDays   Int      @default(30)
   /// Quem gravou o prazo vigente (`TenantMember.userId` da sessao que fez o
   /// `PATCH`). Rastro de decisao, nunca controle: nada le esta coluna para
   /// decidir prazo, purga ou permissao. TEXT solto e nulavel, no mesmo padrao
@@ -498,6 +499,36 @@ model AgendaViewPreference {
   updatedAt      DateTime           @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+/// Cor de destaque da conta (D-181). `VERDE` e o petroleo do produto.
+enum AppearanceAccent {
+  VERDE
+  ROSE
+  CHAMPANHE
+  AZUL
+  LAVANDA
+  TERRACOTA
+}
+
+/// Claro, escuro ou seguir o sistema do aparelho (D-181).
+enum AppearanceMode {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
+/// Aparencia escolhida pela pessoa, por usuario e nao por negocio (D-181):
+/// vale em qualquer aparelho em que ela entrar. A **ausencia da linha** e o
+/// padrao do produto (petroleo, claro), nunca gravada so pela leitura.
+model AppearancePreference {
+  userId    String           @id
+  accent    AppearanceAccent @default(VERDE)
+  mode      AppearanceMode   @default(LIGHT)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 /// Registro de atividade do negocio (D-176): o que a profissional ou a IA

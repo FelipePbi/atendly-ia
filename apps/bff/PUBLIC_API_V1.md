@@ -24,7 +24,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers`; `PATCH /v1/customers/:id`; `PUT /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/primary-guardian/confirm`; `DELETE /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/notes`; `PATCH /v1/customers/:id/notes/:noteId`; `DELETE /v1/customers/:id/notes/:noteId`; `POST /v1/customers/:id/tags`; `PATCH /v1/customers/:id/tags/:tagId`; `DELETE /v1/customers/:id/tags/:tagId`; `GET/POST /v1/customers/:id/memory`; `PATCH/DELETE /v1/customers/:id/memory/:memoryId`; `POST /v1/customers/:id/summary` (Goal012) |
 | Conhecimento do negócio (Goal012) | `GET/POST /v1/knowledge/documents`; `GET/PUT/DELETE /v1/knowledge/documents/:id`; `GET/PUT /v1/knowledge/other-info` |
 | Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id`; `GET/PUT /v1/services/:id/ai-instruction` (Goal078) |
-| Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability`; `GET /v1/settings/reminders`; `PATCH /v1/settings/reminders` (Goal021); `GET/PATCH /v1/settings/retention` (Goal023/WU-01); `GET/PATCH /v1/settings/agenda-view` (Goal073/WU-03) |
+| Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability`; `GET /v1/settings/reminders`; `PATCH /v1/settings/reminders` (Goal021); `GET/PATCH /v1/settings/retention` (Goal023/WU-01); `GET/PATCH /v1/settings/agenda-view` (Goal073/WU-03); `GET/PATCH /v1/settings/appearance` (D-181) |
 | WhatsApp | `GET /v1/whatsapp`; `GET /v1/whatsapp/qr` (Goal071/WU-01); `GET /v1/whatsapp/contacts`; `POST /v1/whatsapp/connect`; `POST /v1/whatsapp/reconnect`; `DELETE /v1/whatsapp` |
 | Teste real de ativação (Goal019/WU-05) | `GET /v1/activation-test`; `POST /v1/activation-test`; `POST /v1/activation-test/restart` |
 | Central de notificações (Goal022/WU-04) | `GET /v1/notifications`; `GET /v1/notifications/summary`; `POST /v1/notifications/read`; `GET/PATCH /v1/notifications/preferences` |
@@ -973,6 +973,31 @@ Corpo/resposta:
 | `initialView` | `DAY`, `WEEK`, `MONTH` ou `null` | vista com que a Agenda abre; ausente na escrita preserva o valor já gravado, `null` explícito limpa a escolha |
 
 `PATCH` recusa com `400 VALIDATION_ERROR`, sem gravar nada: sete dias ocultos (ocultaria a semana inteira), dia repetido ou dia fora de `0`-`6`. Sem sessão, `401 UNAUTHORIZED`. `tenantId` vem sempre da sessão; esta rota nunca lê nem grava a preferência de outro negócio.
+
+## Aparência da conta (D-181)
+
+Duas rotas sob `requireAuth`, só do BFF: a cor de destaque e o modo claro/escuro são **da pessoa**, não do negócio. A escolha vale em qualquer aparelho em que ela entrar e não precisa de negócio configurado (vale também durante o onboarding). A **ausência da linha** é o padrão do produto, `VERDE` e `LIGHT`, nunca gravado só pela leitura. Não entra no registro de atividade: é preferência de quem usa, não configuração do negócio.
+
+| Rota | O que faz |
+| --- | --- |
+| `GET /v1/settings/appearance` | lê a aparência da pessoa da sessão |
+| `PATCH /v1/settings/appearance` | grava um ou os dois campos |
+
+Corpo/resposta:
+
+```json
+{
+  "accent": "CHAMPANHE",
+  "mode": "DARK"
+}
+```
+
+| Campo | Valores | Significado |
+| --- | --- | --- |
+| `accent` | `VERDE`, `ROSE`, `CHAMPANHE`, `AZUL`, `LAVANDA`, `TERRACOTA` | cor de destaque da interface; ausente na escrita preserva o valor gravado |
+| `mode` | `LIGHT`, `DARK`, `SYSTEM` | claro, escuro ou seguir o aparelho; ausente na escrita preserva o valor gravado |
+
+`PATCH` recusa com `400 VALIDATION_ERROR`, sem gravar nada, valor fora da lista ou campo desconhecido. Sem sessão, `401 UNAUTHORIZED`. `userId` vem sempre da sessão. O frontend guarda uma cópia local só para pintar a primeira tela sem piscar; a fonte é esta rota.
 
 ### Estado de envio de um agendamento
 

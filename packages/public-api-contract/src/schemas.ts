@@ -266,6 +266,22 @@ export const agendaViewPreferenceSchema = z.object({
   initialView: agendaInitialViewSchema.nullable(),
 });
 
+// Aparencia da conta (D-181): cor de destaque e claro/escuro, por usuario.
+// Sem linha gravada, o padrao do produto (VERDE, LIGHT).
+export const appearanceAccentSchema = z.enum([
+  "VERDE",
+  "ROSE",
+  "CHAMPANHE",
+  "AZUL",
+  "LAVANDA",
+  "TERRACOTA",
+]);
+export const appearanceModeSchema = z.enum(["LIGHT", "DARK", "SYSTEM"]);
+export const appearancePreferenceSchema = z.object({
+  accent: appearanceAccentSchema,
+  mode: appearanceModeSchema,
+});
+
 export const retentionDaysSchema = z.union([
   z.literal(30),
   z.literal(90),
@@ -1515,6 +1531,9 @@ export type RetentionDays = z.infer<typeof retentionDaysSchema>;
 export type RetentionSettings = z.infer<typeof retentionSettingsSchema>;
 export type AgendaInitialView = z.infer<typeof agendaInitialViewSchema>;
 export type AgendaViewPreference = z.infer<typeof agendaViewPreferenceSchema>;
+export type AppearanceAccent = z.infer<typeof appearanceAccentSchema>;
+export type AppearanceMode = z.infer<typeof appearanceModeSchema>;
+export type AppearancePreference = z.infer<typeof appearancePreferenceSchema>;
 export type CalendarSource = z.infer<typeof calendarSourceSchema>;
 export type CalendarState = z.infer<typeof calendarStateSchema>;
 export type Conversation = z.infer<typeof conversationSchema>;

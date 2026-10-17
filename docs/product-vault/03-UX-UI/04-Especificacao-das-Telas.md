@@ -293,7 +293,7 @@ Resumo:
 - **Faturado** em destaque, com a linha "Atendimentos concluídos, pelo preço combinado ou pelo valor final que você registrou.";
 - comparação com o período anterior de mesmo tamanho ("+12% que setembro", "−8% que ontem", "Igual a 2025"); com o período ainda correndo, compara o mesmo trecho e diz qual ("Comparando 1 a 16 de outubro com 1 a 16 de setembro."); sem faturamento no anterior, só "Setembro não teve faturamento para comparar";
 - atendimentos concluídos, ticket médio e **Previsto** (confirmados pela frente), separado do faturado;
-- "N atendimentos concluídos sem valor (sob consulta, “a partir de” ou sem preço). Registre o valor final no atendimento para ele entrar aqui.", só quando houver.
+- "N atendimentos concluídos sem valor (sob consulta, “a partir de” ou sem preço). Registre o valor final no atendimento para ele entrar aqui.", só quando houver; o aviso inteiro é clicável ("Ver qual" / "Ver quais") e abre a lista desses atendimentos ([[../../migration/DECISIONS#D-179|D-179]]).
 
 Gráficos:
 
@@ -317,7 +317,14 @@ Também, quando houver dado:
 
 - **Clientes que mais faturaram** (cinco), cada nome abre o perfil;
 - **Dia da semana mais forte** (no Mês e no Ano): "Sábado: 34% do faturado, R$ 1.200,00", com as barras de segunda a domingo;
-- **Faltas e cancelamentos**: quantas e quanto deixou de entrar, pelo valor do acordo.
+- **Faltas e cancelamentos**: quantas e quanto deixou de entrar, pelo valor do acordo. Cada número maior que zero é clicável ("Ver quais") e abre a lista do período (D-179).
+
+**Lista dos atendimentos** (D-179), num painel lateral a partir de 1024 px e numa folha de baixo no celular, com o período no topo:
+
+- cancelamentos e faltas: o resumo de quem fez ("5 por você · 3 pela IA"), e uma linha por atendimento, do mais recente para o mais antigo, com dia e hora, cliente, serviços, o valor do acordo, quem cancelou ou registrou a falta ("Cancelado pela IA", "Cancelado por você", "Cancelado automaticamente", "Veio cancelado da importação"; sem registro, "Sem registro de quem fez"), "Marcado pela IA" quando foi a IA que marcou, e o motivo escrito entre aspas;
+- sem valor: o motivo ("Serviço sob consulta", "Preço “a partir de”", "Serviço sem preço", "Atendimento avulso") e "Registrar valor";
+- cada linha abre o atendimento — é lá que se registra o valor final; no máximo 200 linhas, com "Mostrando os 200 mais recentes de N atendimentos" quando houver mais;
+- carregando sem esqueleto (o texto só aparece se passar de ~150 ms); erro com "Tentar novamente".
 
 Layout: uma coluna no celular; a partir de 1024 px, resumo, gráfico e serviços à esquerda e o resto numa coluna ao lado. Valores em R$ no formato pt-BR.
 

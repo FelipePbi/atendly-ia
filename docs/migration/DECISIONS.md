@@ -7855,3 +7855,23 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Consequências:** a leitura do faturamento passa a buscar, além do período, o primeiro agendamento de cada cliente do negócio, os clientes importados, o horário de atendimento e o histórico concluído dos clientes trazidos pela IA; cresce com o número de clientes, não de atendimentos. Cliente cujo primeiro agendamento foi da IA, mas que já era cliente antes da plataforma sem ter sido importado, conta como trazido pela IA.
 
 **Revisar se:** o produto ganhar preço de plano no sistema (o retorno da assinatura passa a ser calculável), ou a IA passar a marcar em nome de mais de um profissional.
+
+## D-179 — Faltas, cancelamentos e atendimentos sem valor do Faturamento abrem a lista dos atendimentos, com quem fez cada mudança
+
+**Status:** ACCEPTED em 2026-10-17, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Amplia a D-177. Tela em `docs/product-vault/03-UX-UI/04-Especificacao-das-Telas.md` (Faturamento).
+
+**Contexto:** o cartão "Faltas e cancelamentos" dizia só quantos e quanto ("8 · R$ 640,00"), e o aviso de "atendimentos concluídos sem valor" pedia para registrar o valor final sem dizer em qual atendimento. O usuário pediu para tocar e ver quais foram, e, nos cancelamentos, se foram manuais ou da IA. Cada mudança de estado já fica em `AppointmentEvent` com `source` (`AI`, `USER`, `SYSTEM`, `INTEGRATION`) e o motivo digitado (`reason`).
+
+**Decisão:**
+
+1. Cada número de "Faltas e cancelamentos" maior que zero e o aviso de "sem valor" abrem a lista dos atendimentos do período: painel lateral a partir de 1024 px, folha de baixo no celular.
+2. A lista vem pronta do Scheduling (`GET /internal/revenue/appointments?period&date&kind`, `kind` = `cancelled`, `no_show` ou `unvalued`), repassada pelo BFF em `GET /v1/revenue/appointments` com o negócio da sessão: do mais recente para o mais antigo, no máximo 200, com o total.
+3. Quem cancelou ou registrou a falta é o `source` do último evento `CANCELLED` (ou `NO_SHOW`) do atendimento; sem evento, a tela diz "Sem registro de quem fez" — nunca presume. Quem marcou é o `source` do atendimento. O motivo é o texto que a pessoa escreveu no cancelamento, entre aspas.
+4. O valor de cada cancelado ou falta é o do acordo, como na D-177; sem preço fixo, "sem valor". Nos sem valor, o motivo é o tipo de preço do primeiro item que impediu o número (sob consulta, "a partir de", sem preço) ou "atendimento avulso".
+5. Cada linha abre o atendimento (`/agenda/agendamento?id=`), onde o valor final é registrado.
+
+**Alternativas:** levar para a Agenda filtrada (não existe filtro por estado e período, e perderia o contexto do Faturamento); mostrar só o resumo por quem fez, sem a lista (não responde "quais foram").
+
+**Consequências:** uma leitura por toque, só do período e do tipo pedidos; nenhuma lista chega com a resposta do faturamento.
+
+**Revisar se:** o cancelamento pela cliente no WhatsApp passar a ter `source` próprio (hoje aparece como "pela IA", que foi quem executou).

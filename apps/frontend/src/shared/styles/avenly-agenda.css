@@ -1536,7 +1536,8 @@ button.week-bar:focus-visible,
   color: var(--at-color-ink-soft);
   font-weight: 500;
 }
-@media (min-width: 768px) {
+/* Linhas com nome a partir de 600 px (LINES_MIN_WIDTH, MonthView.tsx). */
+@media (min-width: 600px) {
   .month-map {
     margin-inline: 0;
   }
@@ -1552,7 +1553,7 @@ button.week-bar:focus-visible,
     font-size: 10.5px;
   }
 }
-@media (min-width: 768px) and (orientation: portrait) {
+@media (min-width: 600px) and (orientation: portrait) {
   .month-day {
     --cell-h: 140px;
   }

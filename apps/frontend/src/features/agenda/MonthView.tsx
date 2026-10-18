@@ -26,8 +26,12 @@ const WEEKDAY_LABELS = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
 // continua 0=domingo…6=sábado), para casar rótulo e coluna com `hiddenWeekdays`.
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
-/** Abaixo de 768 px o dia é uma pilha de traços; a partir dele, linhas com nome. */
-const LINES_MIN_WIDTH = 768;
+/**
+ * Abaixo de 600 px (celular) o dia é uma pilha de traços; a partir dele,
+ * linhas com nome. Era 768 px até 2026-10-18: o tablet em pé ficava com os
+ * traços do celular (mesma regra da Semana, D-198 vizinho).
+ */
+const LINES_MIN_WIDTH = 600;
 const LINES_TWO_MIN_WIDTH = 1024;
 const MAX_STRIPES = 5;
 

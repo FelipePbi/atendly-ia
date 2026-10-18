@@ -585,6 +585,31 @@ describe("4 — o Mês é uma pilha de traços por dia", () => {
     expect(within(cell).getByText("+2")).toBeVisible();
     expect(cell.querySelector(".month-stripe")).toBeNull();
   });
+
+  // 2026-10-18: o tablet em pé (menos de 768 px) também tem as linhas com
+  // nome; os traços ficam só no celular.
+  test("tablet em pé (712 px) mostra linhas com nome, não traços", async () => {
+    window.innerWidth = 712;
+    listAppointments.mockResolvedValue([
+      appointmentFixture({
+        customer: customerOf("c1", "Ana Paula"),
+        endTime: "09:00",
+        id: "apt-a",
+        startTime: "08:00",
+      }),
+    ]);
+    const user = setup();
+    renderBoard();
+
+    const month = await openMonth(user);
+    const cell = dayCell(month, /^29 de setembro/);
+    expect(
+      Array.from(cell.querySelectorAll(".month-line")).map(
+        (line) => line.textContent,
+      ),
+    ).toEqual(["Ana Paula · Corte feminino"]);
+    expect(cell.querySelector(".month-stripe")).toBeNull();
+  });
 });
 
 describe("5 — Mês: o primeiro toque seleciona, o segundo abre o Dia", () => {

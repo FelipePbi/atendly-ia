@@ -1,8 +1,10 @@
 "use client";
 
+import clsx from "clsx";
 import { type FormEvent, useEffect, useState } from "react";
 
 import { type AvailabilityException, type CalendarState } from "@/data";
+import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
 import { DateField, TimeField } from "@/shared/ui/pickers/PickerFields";
@@ -34,6 +36,8 @@ function exceptionRangeLabel(exception: AvailabilityException): string {
  * passou a ser criado em "Bloquear horário"; esta tela continua listando as
  * duas exceções dos próximos 90 dias para que qualquer uma possa ser removida.
  * A regra semanal continua em Configurações; aqui só a exceção pontual.
+ * Layout (D-191): coluna centrada de leitura, cartões com respiro entre si,
+ * campos lado a lado onde cabem e cada item com data, tipo e horário.
  */
 export function AvailabilityExceptions() {
   const [calendar, setCalendar] = useState<CalendarState | null>(null);
@@ -127,79 +131,111 @@ export function AvailabilityExceptions() {
       loading={loading}
       title="Horário extra"
     >
-      {error && (
-        <p className="form-error" role="alert">
-          {error}
-        </p>
-      )}
-      {!loading && calendar && !allowed ? (
-        <ReadOnlyState operation={operationLabel("manageAvailability")} />
-      ) : (
-        !loading &&
-        calendar && (
-          <form
-            className="agenda-form-card"
-            onSubmit={(event) => void submitExtra(event)}
-          >
-            <h2>Liberar horário</h2>
-            <div className="agenda-form-grid">
-              <label className="field is-wide">
-                <span>Data</span>
-                <DateField
-                  min={isoDate(new Date())}
-                  onValueChange={(value) => setDate(value)}
-                  required
-                  value={date}
-                />
-              </label>
-              <label className="field">
-                <span>Início</span>
-                <TimeField
-                  onValueChange={(value) => setStartTime(value)}
-                  required
-                  value={startTime}
-                />
-              </label>
-              <label className="field">
-                <span>Fim</span>
-                <TimeField
-                  onValueChange={(value) => setEndTime(value)}
-                  required
-                  value={endTime}
-                />
-              </label>
-            </div>
-            <div className="agenda-form-footer">
-              <Button loading={busy} type="submit">
-                Liberar horário extra
-              </Button>
-            </div>
-          </form>
-        )
-      )}
+      <div className="agenda-exceptions">
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        {!loading && calendar && !allowed ? (
+          <ReadOnlyState operation={operationLabel("manageAvailability")} />
+        ) : (
+          !loading &&
+          calendar && (
+            <form
+              className="agenda-form-card"
+              onSubmit={(event) => void submitExtra(event)}
+            >
+              <h2>Liberar horário</h2>
+              <div className="agenda-form-grid agenda-exceptions-fields">
+                <label className="field is-wide">
+                  <span>Data</span>
+                  <DateField
+                    min={isoDate(new Date())}
+                    onValueChange={(value) => setDate(value)}
+                    required
+                    value={date}
+                  />
+                </label>
+                <label className="field">
+                  <span>Início</span>
+                  <TimeField
+                    onValueChange={(value) => setStartTime(value)}
+                    required
+                    value={startTime}
+                  />
+                </label>
+                <label className="field">
+                  <span>Fim</span>
+                  <TimeField
+                    onValueChange={(value) => setEndTime(value)}
+                    required
+                    value={endTime}
+                  />
+                </label>
+              </div>
+              <div className="agenda-form-footer">
+                <Button loading={busy} type="submit">
+                  Liberar horário extra
+                </Button>
+              </div>
+            </form>
+          )
+        )}
 
-      {!loading && calendar && allowed && (
-        <section className="agenda-form-card">
-          <h2>Horários extras e dias fechados</h2>
-          {exceptions.length === 0 ? (
-            <p className="muted">
-              Nenhum horário extra ou dia fechado nos próximos 90 dias.
-            </p>
-          ) : (
-            <ol className="agenda-series-list">
-              {exceptions.map((exception) => (
-                <li className="agenda-series-item" key={exception.id}>
-                  <strong>{formatDate(exception.date)}</strong>
-                  <span>
-                    {exception.available ? "Horário extra" : "Fechado"}
-                  </span>
-                  <span>{exceptionRangeLabel(exception)}</span>
-                  {exception.reason && <span>{exception.reason}</span>}
-                  {exception.decidedReason && (
-                    <span>Decisão: {exception.decidedReason}</span>
-                  )}
-                  <div className="agenda-series-actions">
+        {!loading && calendar && allowed && (
+          <section className="agenda-form-card">
+            <h2>Horários extras e dias fechados</h2>
+            {exceptions.length === 0 ? (
+              <div className="empty-state agenda-exceptions-empty">
+                <div className="state-icon">
+                  <Icon name="calendar" />
+                </div>
+                <p>Nenhum horário extra ou dia fechado nos próximos 90 dias.</p>
+              </div>
+            ) : (
+              <ol className="agenda-exceptions-list">
+                {exceptions.map((exception) => (
+                  <li
+                    className={clsx(
+                      "agenda-exception-item",
+                      exception.available ? "is-extra" : "is-closed",
+                    )}
+                    key={exception.id}
+                  >
+                    <div className="agenda-exception-main">
+                      <div className="agenda-exception-head">
+                        <time dateTime={exception.date}>
+                          {formatDate(exception.date)}
+                        </time>
+                        <span
+                          className={clsx(
+                            "badge",
+                            exception.available
+                              ? "badge-success"
+                              : "badge-danger",
+                          )}
+                        >
+                          {exception.available ? "Horário extra" : "Fechado"}
+                        </span>
+                      </div>
+                      <span className="agenda-exception-range">
+                        <Icon name="clock" />
+                        <span>{exceptionRangeLabel(exception)}</span>
+                      </span>
+                      {exception.reason && (
+                        <span className="agenda-exception-note">
+                          {exception.reason}
+                        </span>
+                      )}
+                      {exception.decidedReason && (
+                        <span className="agenda-exception-note">
+                          Decisão: {exception.decidedReason}
+                        </span>
+                      )}
+                    </div>
                     <Button
+                      className="agenda-exception-remove"
                       loading={removingId === exception.id}
                       onClick={() => void remove(exception)}
                       type="button"
@@ -207,13 +243,13 @@ export function AvailabilityExceptions() {
                     >
                       Remover
                     </Button>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
-      )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        )}
+      </div>
     </AppointmentFlowShell>
   );
 }

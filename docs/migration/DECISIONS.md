@@ -7984,3 +7984,13 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Decisão:** o botão "Mais" da barra inferior abre um modal no centro da tela com quatro atalhos — Notificações (com o contador), Serviços, Faturamento e Configurações — e, abaixo, "Sua conta" e "Sair". Tocar num atalho navega e fecha o modal. Com a sidebar nada muda.
 
 **Consequências:** telas novas fora da barra inferior entram como atalho; configuração nova entra na tela de Configurações, não no "Mais".
+
+## D-193 — "Excluir conta" vira a última linha da Conta, sem cartão de perigo no pé
+
+**Status:** ACCEPTED em 2026-10-18, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Diverge do quadro C1 (Mais-WhatsApp), que mostra um cartão rosado fixado no pé da tela.
+
+**Contexto:** o cartão de "Excluir conta" chamava atenção demais para uma ação que quase ninguém procura.
+
+**Decisão:** em `/configuracoes/conta`, "Excluir conta" é a última opção da tela, numa linha própria depois de "Sobre", com a altura e a tipografia das outras linhas. Só o rótulo usa a cor de perigo (`--at-color-danger-ink`); "Você tem 7 dias para desistir" fica à direita, em cinza, com a seta comum. A linha não é cartão e não fica presa ao pé da tela. Os outros estados (carregando, leitura falhou, exclusão agendada com "Cancelar exclusão" e conta excluída) usam a mesma linha, com o detalhe embaixo do rótulo. O destino (`/configuracoes/conta/excluir`) e o fluxo de exclusão e de cancelamento não mudam. "Desconectar WhatsApp" continua com o cartão.
+
+**Consequências:** a comparação visual do C1 ignora essa diferença em relação ao quadro.

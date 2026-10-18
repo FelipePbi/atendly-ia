@@ -238,7 +238,7 @@ export function AccountSettings() {
             </span>
           </Link>
         </AccountGroup>
-        <div className="account-danger">
+        <div className="business-group account-delete-group">
           <AccountDeletionSection
             accountDeletion={accountDeletion}
             onCancelOpen={() => setCancellingDeletion(true)}
@@ -397,10 +397,12 @@ function AccountGroup({
 type AccountDeletionSummary = { status: string; dueAt: string | null } | null;
 
 /**
- * A área de atenção de Excluir conta, com quatro leituras do mesmo
+ * A linha de Excluir conta, última opção da tela, com quatro leituras do mesmo
  * `GET /v1/status`: carregando, indisponível, sem pedido (ou cancelado, que
  * admite pedir de novo) e agendado. Nunca assume "sem pedido" enquanto a
  * primeira leitura não chegou — isso esconderia uma exclusão já agendada.
+ * É uma linha como as outras (D-193): o sentido destrutivo fica só na cor do
+ * rótulo, sem cartão e sem fixar no pé da tela.
  */
 function AccountDeletionSection({
   accountDeletion,
@@ -413,71 +415,82 @@ function AccountDeletionSection({
 }) {
   if (!accountDeletion && statusPhase === "loading") {
     return (
-      <section aria-hidden="true" className="account-danger-card">
-        <div className="account-danger-copy">
-          <h2>Excluir conta</h2>
-          <p>Carregando o estado da exclusão...</p>
-        </div>
-      </section>
+      <div aria-hidden="true" className="business-row account-delete-row">
+        <span className="account-delete-copy">
+          <span className="business-row-label">Excluir conta</span>
+          <span className="account-delete-detail">
+            Carregando o estado da exclusão...
+          </span>
+        </span>
+      </div>
     );
   }
 
   if (!accountDeletion) {
     return (
-      <section className="account-danger-card">
-        <div className="account-danger-copy">
-          <h2>Excluir conta</h2>
-          <p role="alert">
+      <div className="business-row account-delete-row">
+        <span className="account-delete-copy">
+          <span className="business-row-label">Excluir conta</span>
+          <span className="account-delete-detail" role="alert">
             Não foi possível carregar o estado da exclusão agora. Atualize a
             página e tente de novo.
-          </p>
-        </div>
-      </section>
+          </span>
+        </span>
+      </div>
     );
   }
 
   if (accountDeletion.status === "SCHEDULED" && accountDeletion.dueAt) {
     const days = accountDeletionDaysRemaining(accountDeletion.dueAt);
     return (
-      <section className="account-danger-card is-stacked">
-        <div className="account-danger-copy">
-          <h2>Exclusão da conta agendada</h2>
-          <p role="status">{daysRemainingCopy(days)}</p>
-        </div>
+      <div className="business-row account-delete-row">
+        <span className="account-delete-copy">
+          <span className="business-row-label" id="account-delete-label">
+            Exclusão da conta agendada
+          </span>
+          <span
+            className="account-delete-detail"
+            id="account-delete-detail"
+            role="status"
+          >
+            {daysRemainingCopy(days)}
+          </span>
+        </span>
         <button
-          className="btn btn-secondary"
+          aria-describedby="account-delete-label account-delete-detail"
+          className="account-action"
           type="button"
           onClick={onCancelOpen}
         >
           Cancelar exclusão
         </button>
-      </section>
+      </div>
     );
   }
 
   if (accountDeletion.status === "PURGED") {
     return (
-      <section className="account-danger-card">
-        <div className="account-danger-copy">
-          <h2>Conta excluída</h2>
-          <p>Os dados desta conta já foram apagados.</p>
-        </div>
-      </section>
+      <div className="business-row account-delete-row">
+        <span className="account-delete-copy">
+          <span className="business-row-label">Conta excluída</span>
+          <span className="account-delete-detail">
+            Os dados desta conta já foram apagados.
+          </span>
+        </span>
+      </div>
     );
   }
 
   return (
     <Link
-      className="account-danger-card is-action"
+      className="business-row account-delete-row"
       href="/configuracoes/conta/excluir"
     >
-      <span className="account-danger-copy">
-        <span className="account-danger-title">Excluir conta</span>
-        <span className="account-danger-detail">
-          Você tem 7 dias para desistir
-        </span>
+      <span className="business-row-label">Excluir conta</span>
+      <span className="business-row-value">
+        Você tem 7 dias para desistir
+        <Icon name="chevron-right" />
       </span>
-      <Icon name="chevron-right" />
     </Link>
   );
 }

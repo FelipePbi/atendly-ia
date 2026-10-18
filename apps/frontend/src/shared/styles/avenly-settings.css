@@ -2443,20 +2443,7 @@ button.business-row:last-child {
 }
 
 /* Goal104 (Mais-WhatsApp:C1): Conta em grupos de linhas */
-.settings-page.is-pushed:has(.account-screen) {
-  min-height: calc(100dvh - var(--shell-status-h, 0px));
-  padding-bottom: 0;
-  display: flex;
-  flex-direction: column;
-}
-.settings-page.is-pushed:has(.account-screen) > .settings-pushed-body {
-  padding-bottom: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
 .account-screen {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -2488,6 +2475,30 @@ button.business-row:last-child {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+/* D-193: Excluir conta é a última linha da tela, não um cartão no pé. */
+.account-delete-row .business-row-label {
+  color: var(--at-color-danger-ink);
+}
+.account-delete-row .business-row-value {
+  color: var(--muted);
+}
+.account-delete-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.account-delete-copy .business-row-label {
+  flex: initial;
+}
+.account-delete-detail {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.account-delete-row .account-action {
+  flex: none;
+}
 .account-danger {
   margin-top: auto;
   padding: 0 0 40px;
@@ -2510,16 +2521,8 @@ button.business-row:last-child {
   line-height: normal;
   text-align: left;
 }
-.account-danger-card.is-stacked {
-  align-items: flex-start;
-  flex-direction: column;
-}
-a.account-danger-card,
 button.account-danger-card {
   cursor: pointer;
-}
-a.account-danger-card {
-  text-decoration: none;
 }
 .account-danger-card .icon {
   width: 16px;
@@ -2534,8 +2537,7 @@ a.account-danger-card {
   flex-direction: column;
   gap: 2px;
 }
-.account-danger-title,
-.account-danger-copy h2 {
+.account-danger-title {
   margin: 0;
   font-family: var(--font-body);
   font-size: 15px;
@@ -2543,15 +2545,9 @@ a.account-danger-card {
   letter-spacing: normal;
   line-height: normal;
 }
-.account-danger-detail,
-.account-danger-copy p {
+.account-danger-detail {
   margin: 0;
   font-size: 13px;
-}
-@media (min-width: 1024px) and (max-width: 1099px) {
-  .settings-page.is-pushed:has(.account-screen) {
-    min-height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
-  }
 }
 @media (prefers-reduced-motion: reduce) {
   .account-action {

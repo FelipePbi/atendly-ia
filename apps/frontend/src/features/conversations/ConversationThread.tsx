@@ -62,6 +62,7 @@ import {
 import type { InboxLens } from "./inboxLenses";
 import { refreshIntervalMs } from "./inboxLenses";
 import { MessageTimeline } from "./MessageTimeline";
+import { useMarkConversationRead } from "./useMarkConversationRead";
 
 /** Leitura da casca mais nova que isso não é refeita quando o chat abre. */
 const FRESH_SNAPSHOT_MS = 5_000;
@@ -126,6 +127,14 @@ export function ConversationThread({
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const markedRead = useCallback(
+    (id: string, unreadCount: number) =>
+      setConversation((current) =>
+        current?.id === id ? { ...current, unreadCount } : current,
+      ),
+    [],
+  );
+  useMarkConversationRead(conversation, messages, markedRead);
 
   const load = useCallback(
     async (signal?: AbortSignal, background = false) => {

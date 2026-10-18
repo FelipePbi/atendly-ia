@@ -23,12 +23,17 @@ const ACCOUNT_DESTINATION = MORE_DESTINATIONS.find(
  * barra, sobram só os dois. Abre num modal centralizado.
  */
 export function MoreMenu({
+  conversationsBadge = null,
+  conversationsBadgeSpoken = null,
   isCurrent,
   notificationsBadge,
   onLogout,
   onNavigate,
   shortcuts = bottomNavOverflow(MOBILE_TAB_SECTIONS.length),
 }: {
+  /** Contador de não lidas de Conversas (D-195), quando ela cai no "Mais". */
+  conversationsBadge?: string | null;
+  conversationsBadgeSpoken?: string | null;
   isCurrent: (href: string) => boolean;
   notificationsBadge: string | null;
   onLogout: () => void;
@@ -53,6 +58,14 @@ export function MoreMenu({
               <span className="more-tile-label">{item.label}</span>
               {item.section === "notificacoes" && notificationsBadge && (
                 <span className="badge-count">{notificationsBadge}</span>
+              )}
+              {item.section === "conversas" && conversationsBadge && (
+                <>
+                  <span aria-hidden="true" className="badge-count">
+                    {conversationsBadge}
+                  </span>
+                  <span className="sr-only">, {conversationsBadgeSpoken}</span>
+                </>
               )}
             </Link>
           ))}

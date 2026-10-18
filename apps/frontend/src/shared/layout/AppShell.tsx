@@ -26,6 +26,10 @@ import {
 } from "@/shared/motion/PageTransition";
 import { supportsViewTransition } from "@/shared/motion/viewTransition";
 import {
+  ConversationAlertsProvider,
+  useConversationAlerts,
+} from "@/shared/runtime/conversationAlerts";
+import {
   getProductServices,
   useProductRuntime,
 } from "@/shared/runtime/ProductRuntime";
@@ -38,6 +42,7 @@ import {
 } from "@/shared/runtime/systemStatus";
 import { Brand } from "@/shared/ui/Brand";
 import { Dialog } from "@/shared/ui/Dialog";
+import { MessageAlertHost } from "@/shared/ui/MessageAlertHost";
 import { ToastHost } from "@/shared/ui/ToastHost";
 
 import {
@@ -56,6 +61,7 @@ import {
   notificationsBadgeLabel,
   SETTINGS_DESTINATION,
   SIDEBAR_DESTINATIONS,
+  unreadConversationsLabel,
 } from "./navigation";
 import type { ShellConfig } from "./ShellConfig";
 import { useStatusBannerSnooze } from "./statusBannerSnooze";
@@ -80,13 +86,18 @@ export type AppShellProps = ShellConfig & {
  *
  * `NotificationsDrawerProvider` monta a gaveta da central (Goal077 §3): o
  * item "Notificações" da sidebar e o sino da Home abrem a mesma gaveta.
+ *
+ * `ConversationAlertsProvider` (D-195) lê as conversas não lidas: o contador
+ * de "Conversas" na navegação e o aviso de mensagem nova no topo.
  */
 export function AppShell(props: AppShellProps) {
   return (
     <SystemStatusProvider>
-      <NotificationsDrawerProvider>
-        <AppShellChrome {...props} />
-      </NotificationsDrawerProvider>
+      <ConversationAlertsProvider>
+        <NotificationsDrawerProvider>
+          <AppShellChrome {...props} />
+        </NotificationsDrawerProvider>
+      </ConversationAlertsProvider>
     </SystemStatusProvider>
   );
 }
@@ -153,6 +164,10 @@ function AppShellChrome({
   const notificationsBadge = notificationsBadgeLabel(
     status.notificationsSummary?.unreadCount ?? 0,
   );
+  const unreadConversations =
+    useConversationAlerts()?.unreadConversations ?? 0;
+  const conversationsBadge = notificationsBadgeLabel(unreadConversations);
+  const conversationsBadgeSpoken = unreadConversationsLabel(unreadConversations);
   const whatsappDisconnected = status.whatsappView === "off";
   const aiUnavailable =
     status.aiView === "pending" || status.aiView === "unknown";
@@ -242,6 +257,16 @@ function AppShellChrome({
               >
                 <Icon name={item.icon} />
                 <span>{item.label}</span>
+                {item.section === "conversas" && conversationsBadge && (
+                  <>
+                    <span aria-hidden="true" className="badge-count">
+                      {conversationsBadge}
+                    </span>
+                    <span className="sr-only">
+                      , {conversationsBadgeSpoken}
+                    </span>
+                  </>
+                )}
               </Link>
             ))}
             <Link
@@ -396,7 +421,12 @@ function AppShellChrome({
           )}
           {children}
         </main>
-        <ToastHost />
+        {/* Avisos flutuantes numa coluna só (D-195): mensagem nova em cima,
+            toasts embaixo, sem sobrepor. */}
+        <div className="shell-float-layer">
+          <MessageAlertHost />
+          <ToastHost />
+        </div>
         {showBottomNav && action && (
           <Link className="fab" href={action.href} aria-label={action.label}>
             <Icon name={action.icon} />
@@ -425,6 +455,16 @@ function AppShellChrome({
                 {item.section === "notificacoes" && notificationsBadge && (
                   <span className="badge-count">{notificationsBadge}</span>
                 )}
+                {item.section === "conversas" && conversationsBadge && (
+                  <>
+                    <span aria-hidden="true" className="bottom-nav-badge">
+                      {conversationsBadge}
+                    </span>
+                    <span className="sr-only">
+                      , {conversationsBadgeSpoken}
+                    </span>
+                  </>
+                )}
               </Link>
             ))}
             <BottomNavMenuButtons
@@ -444,6 +484,8 @@ function AppShellChrome({
         variant="modal"
       >
         <MoreMenu
+          conversationsBadge={conversationsBadge}
+          conversationsBadgeSpoken={conversationsBadgeSpoken}
           isCurrent={isCurrent}
           notificationsBadge={notificationsBadge}
           onLogout={() => void logout()}

@@ -892,4 +892,14 @@ html.is-view-transition .motion-enter-back {
     animation: motion-fade-in var(--at-duration-base) var(--at-ease-standard)
       both !important;
   }
+  /* Aviso de mensagem nova (D-195): sem descer do topo, só aparece e some
+     com fade — surgir de uma vez sobre a tela assusta mais que o fade. */
+  .message-alert {
+    animation: motion-fade-in var(--at-duration-moderate)
+      var(--at-ease-standard) both !important;
+  }
+  .message-alert.is-leaving {
+    animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit)
+      both !important;
+  }
 }

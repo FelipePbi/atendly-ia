@@ -747,7 +747,7 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     await user.click(within(picker).getByRole("button", { name: "Usar esta cor" }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Cor #7A9E7E" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Cor personalizada" })).toBeChecked();
     expect(within(optionRow("Cor na agenda")).getByText("Personalizada")).toBeVisible();
     const bar = container.querySelector(".service-agenda-preview-bar");
     expect(bar).toHaveAttribute("data-color", "CUSTOM");
@@ -770,10 +770,9 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     await renderEditForm({ ...edited(), colorToken: null, colorHex: "#123abc" });
     await user.click(optionRow("Cor na agenda"));
 
-    expect(screen.getByRole("radio", { name: "Cor #123ABC" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Cor personalizada" })).toBeChecked();
     await user.click(screen.getByRole("radio", { name: "Oliva" }));
-    // A cor que o serviço tinha continua em "Suas cores" para voltar a ela.
-    expect(screen.getByRole("radio", { name: "Cor #123ABC" })).not.toBeChecked();
+    expect(screen.queryByRole("radio", { name: "Cor personalizada" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
     await waitFor(() =>
@@ -784,8 +783,9 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     );
   });
 
-  // Suas cores (2026-10-18): a cor criada para um serviço fica à mão nos outros.
-  test("a cor personalizada de outro serviço aparece em 'Suas cores' e vira a cor deste", async () => {
+  // Suas cores (2026-10-18): a cor criada para um serviço fica à mão nos
+  // outros, dentro do seletor, que abre centralizado.
+  test("o seletor mostra 'Suas cores' e uma delas vira a cor deste serviço", async () => {
     const user = userEvent.setup();
     const other: Service = {
       ...edited(),
@@ -795,19 +795,30 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
       name: "Aplicação 5D",
     };
     const twin: Service = { ...other, id: "s3", name: "Manutenção 5D" };
-    await renderEditForm(edited(), "", [other, twin]);
+    const { container } = await renderEditForm(edited(), "", [other, twin]);
     await user.click(optionRow("Cor na agenda"));
+    // Fora do seletor só as sugeridas.
+    expect(screen.queryByText("Suas cores")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Escolher outra cor" }));
 
-    expect(screen.getByText("Suas cores")).toBeVisible();
+    const picker = screen.getByRole("dialog", {
+      name: "Outra cor para Corte feminino",
+    });
+    expect(container.ownerDocument.querySelector(".bottom-sheet-wrap")).toBeNull();
+    const group = within(picker).getByRole("group", { name: "Suas cores" });
     // Uma entrada por cor, dizendo onde ela já é usada.
-    const saved = screen.getByRole("radio", {
+    const saved = within(group).getByRole("button", {
       name: "Cor #FF5AD8, usada em Aplicação 5D, Manutenção 5D",
     });
-    expect(saved).not.toBeChecked();
+    expect(saved).toHaveAttribute("aria-pressed", "false");
     await user.click(saved);
-    expect(saved).toBeChecked();
-    expect(within(optionRow("Cor na agenda")).getByText("Personalizada")).toBeVisible();
+    expect(saved).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(picker).getByRole("textbox", { name: /Código da cor/ }),
+    ).toHaveValue("FF5AD8");
+    await user.click(within(picker).getByRole("button", { name: "Usar esta cor" }));
 
+    expect(screen.getByRole("radio", { name: "Cor personalizada" })).toBeChecked();
     await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
     await waitFor(() =>
       expect(serviceCatalogUpdate).toHaveBeenCalledWith(
@@ -817,10 +828,12 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     );
   });
 
-  test("sem cor personalizada em nenhum serviço, 'Suas cores' não aparece", async () => {
+  test("sem cor personalizada em nenhum serviço, o seletor não mostra 'Suas cores'", async () => {
     const user = userEvent.setup();
     await renderEditForm(edited());
     await user.click(optionRow("Cor na agenda"));
+    await user.click(screen.getByRole("button", { name: "Escolher outra cor" }));
+    expect(screen.getByRole("dialog")).toBeVisible();
     expect(screen.queryByText("Suas cores")).not.toBeInTheDocument();
   });
 

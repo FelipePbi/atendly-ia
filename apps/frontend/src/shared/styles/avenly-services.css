@@ -1010,22 +1010,6 @@
     0 0 0 3px var(--bg),
     0 0 0 5px var(--accent);
 }
-/* Suas cores: as personalizadas já usadas, numa linha própria abaixo das
-   seis sugeridas (2026-10-18). */
-.service-color-saved {
-  flex-basis: 100%;
-  padding-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-}
-.service-color-saved-label {
-  flex-basis: 100%;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-}
 .service-color-choice input:focus-visible + .service-color-circle {
   outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
   outline-offset: 6px;
@@ -1181,6 +1165,17 @@
   gap: 8px;
   align-items: end;
 }
+/* Celular: no modal centralizado (2026-10-18) a coluna é mais estreita que na
+   folha; R, G e B encolhem para o código de seis dígitos caber inteiro. */
+@media (max-width: 420px) {
+  .service-picker-codes {
+    grid-template-columns: minmax(0, 1fr) repeat(3, 44px);
+    gap: 6px;
+  }
+  .service-picker-hex-input {
+    padding: 0 10px;
+  }
+}
 .service-picker-hex,
 .service-picker-channel {
   min-width: 0;
@@ -1244,6 +1239,38 @@
 .service-picker-channel input::-webkit-outer-spin-button {
   margin: 0;
   -webkit-appearance: none;
+}
+/* Suas cores, dentro do seletor (2026-10-18): as cores próprias que o
+   negócio já usa, para reusar com um toque. */
+.service-picker-saved {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.service-picker-saved-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.service-picker-saved-color {
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+.service-picker-saved-color .service-color-circle {
+  width: 32px;
+  height: 32px;
+}
+.service-picker-saved-color[aria-pressed="true"] .service-color-circle {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--accent);
+}
+.service-picker-saved-color:focus-visible {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 4px;
 }
 .service-picker-marks {
   display: flex;

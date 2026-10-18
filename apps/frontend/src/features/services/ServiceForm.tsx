@@ -576,6 +576,25 @@ export function ServiceForm({
             <span className="sr-only">{option.label}</span>
           </label>
         ))}
+        {isHexColor(color) && (
+          <label className="service-color-choice">
+            <input
+              checked
+              name="service-color"
+              type="radio"
+              value={color}
+              onChange={() => setColorError(null)}
+            />
+            <span
+              aria-hidden="true"
+              className="service-color-circle"
+              {...swatchProps(color)}
+            >
+              {checkMark}
+            </span>
+            <span className="sr-only">Cor personalizada</span>
+          </label>
+        )}
         <button
           aria-label="Escolher outra cor"
           className="service-color-more"
@@ -586,49 +605,6 @@ export function ServiceForm({
             <Icon name="plus" />
           </span>
         </button>
-        {savedColors.length > 0 && (
-          <div className="service-color-saved">
-            <span aria-hidden="true" className="service-color-saved-label">
-              Suas cores
-            </span>
-            {savedColors.map((saved) => {
-              const label =
-                saved.usedBy.length > 0
-                  ? `Cor ${saved.hex.toUpperCase()}, usada em ${saved.usedBy.join(", ")}`
-                  : `Cor ${saved.hex.toUpperCase()}`;
-              return (
-                <label
-                  className="service-color-choice"
-                  key={saved.hex}
-                  title={label}
-                >
-                  <input
-                    checked={
-                      isHexColor(color) && color.toLowerCase() === saved.hex
-                    }
-                    name="service-color"
-                    type="radio"
-                    value={saved.hex}
-                    onChange={() => {
-                      setColor(saved.hex);
-                      setColorError(null);
-                    }}
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="service-color-circle"
-                    {...swatchProps(saved.hex)}
-                  >
-                    {isHexColor(color) &&
-                      color.toLowerCase() === saved.hex &&
-                      checkMark}
-                  </span>
-                  <span className="sr-only">{label}</span>
-                </label>
-              );
-            })}
-          </div>
-        )}
       </div>
       {colorError ? (
         <span
@@ -641,8 +617,8 @@ export function ServiceForm({
       ) : (
         <span className="service-option-help">
           Seis cores sugeridas ou toque em <strong>+</strong> para escolher
-          qualquer outra no seletor de cores. As cores que você cria ficam em
-          Suas cores para usar em outros serviços.
+          qualquer outra no seletor de cores, onde ficam também as suas cores já
+          usadas em outros serviços.
         </span>
       )}
       <div className="service-agenda-preview">
@@ -664,6 +640,7 @@ export function ServiceForm({
         <ServiceColorPicker
           initial={isHexColor(color) ? color : null}
           open
+          saved={savedColors}
           serviceName={name.trim()}
           summary={summary}
           onClose={closePicker}

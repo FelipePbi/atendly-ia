@@ -10,6 +10,7 @@ import {
   isHexColor,
   rgbToHex,
   rgbToHsv,
+  type SavedServiceColor,
   swatchProps,
 } from "@/shared/serviceColor";
 import { Dialog } from "@/shared/ui/Dialog";
@@ -17,20 +18,38 @@ import { Dialog } from "@/shared/ui/Dialog";
 /** Cor de partida quando o serviço ainda não tem cor personalizada. */
 const START_HSV: Hsv = { h: 130, s: 0.23, v: 0.62 };
 
+const checkMark = (
+  <svg
+    aria-hidden="true"
+    fill="none"
+    height="14"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth="3"
+    viewBox="0 0 24 24"
+    width="14"
+  >
+    <path d="M5 12.5l4.5 4.5L19 7.5" />
+  </svg>
+);
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
 /**
  * "Outra cor" do serviço (quadro "Serviço · cor personalizada"): campo de
- * tom, régua de matiz, código hex editável com R/G/B ao lado e a prévia
- * "Assim na agenda". Abre pelo "+" das cores sugeridas (2026-10-18).
+ * tom, régua de matiz, código hex editável com R/G/B ao lado, "Suas cores"
+ * e a prévia "Assim na agenda". Abre pelo "+" das cores sugeridas, num modal
+ * centralizado (2026-10-18).
  */
 export function ServiceColorPicker({
   initial,
   onClose,
   onPick,
   open,
+  saved = [],
   serviceName,
   summary,
 }: {
@@ -38,6 +57,8 @@ export function ServiceColorPicker({
   onClose: () => void;
   onPick: (color: HexColor) => void;
   open: boolean;
+  /** Cores próprias que o negócio já usa (`savedServiceColors`). */
+  saved?: SavedServiceColor[];
   serviceName: string;
   summary: string;
 }) {
@@ -119,7 +140,7 @@ export function ServiceColorPicker({
       onClose={onClose}
       open={open}
       title={`Outra cor para ${serviceName || "o serviço"}`}
-      variant="sheet"
+      variant="modal"
     >
       <div className="service-picker">
         <div
@@ -201,6 +222,51 @@ export function ServiceColorPicker({
             </label>
           ))}
         </div>
+        {saved.length > 0 && (
+          <div
+            aria-labelledby="service-picker-saved-label"
+            className="service-picker-saved"
+            role="group"
+          >
+            <span
+              className="service-picker-code-label"
+              id="service-picker-saved-label"
+            >
+              Suas cores
+            </span>
+            <div className="service-picker-saved-list">
+              {saved.map((entry) => {
+                const label =
+                  entry.usedBy.length > 0
+                    ? `Cor ${entry.hex.toUpperCase()}, usada em ${entry.usedBy.join(", ")}`
+                    : `Cor ${entry.hex.toUpperCase()}`;
+                const current = color.toLowerCase() === entry.hex;
+                return (
+                  <button
+                    aria-label={label}
+                    aria-pressed={current}
+                    className="service-picker-saved-color"
+                    key={entry.hex}
+                    title={label}
+                    type="button"
+                    onClick={() => {
+                      applyHex(entry.hex);
+                      setHexDraft(entry.hex.slice(1).toUpperCase());
+                    }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="service-color-circle"
+                      {...swatchProps(entry.hex)}
+                    >
+                      {current && checkMark}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <div className="service-agenda-preview">
           <span className="service-agenda-preview-label">Assim na agenda</span>
           <div className="service-agenda-preview-row">

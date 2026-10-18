@@ -173,19 +173,43 @@
   color: var(--muted);
   font-size: 12px;
 }
+/* Os três números do período lado a lado, cada um na própria caixa
+   (pedido de 2026-10-18). No celular estreito as caixas empilham, com o
+   rótulo à esquerda e o valor à direita. */
 .revenue-stats {
   margin: 18px 0 0;
   padding-top: 16px;
   border-top: 1px solid var(--border);
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px 12px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
 }
 .revenue-stat {
   min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--at-radius-sm);
+  background: var(--surface-interactive);
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+@media (max-width: 519.98px) {
+  .revenue-stat {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    column-gap: 12px;
+  }
+  .revenue-stat dd {
+    text-align: right;
+  }
+}
+@media (min-width: 520px) {
+  .revenue-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
 }
 .revenue-stat dt {
   color: var(--muted);
@@ -198,9 +222,6 @@
   font-size: 20px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-}
-.revenue-stat.is-expected {
-  grid-column: 1 / -1;
 }
 .revenue-stat-sub {
   display: block;
@@ -643,12 +664,6 @@
   .revenue-card,
   .revenue-summary {
     padding: 22px 24px;
-  }
-  .revenue-stats {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .revenue-stat.is-expected {
-    grid-column: auto;
   }
   .revenue-bars {
     height: 280px;

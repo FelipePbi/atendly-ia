@@ -937,14 +937,6 @@
   .settings-page-header .badge {
     margin-top: 12px;
   }
-  /* Configurações centraliza a barra inferior num cartão de até 520px, em vez
-     da borda a borda que o resto do produto usa. */
-  .settings-bottom-nav {
-    left: 50%;
-    right: auto;
-    transform: translateX(-50%);
-    width: min(100%, 520px);
-  }
   .settings-overview {
     grid-template-columns: 1fr;
     padding: 16px;

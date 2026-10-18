@@ -7918,3 +7918,17 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Consequências:** cor nova em CSS precisa de token (ou de exceção justificada no teste). Cada nova cor de destaque precisa de nove valores no claro e cinco no escuro; os demais tons saem dela.
 
 **Revisar se:** surgir equipe com mais de uma pessoa por negócio, ou a marca ganhar uma segunda cor oficial.
+
+## D-182 — Ajustes de layout no tablet: indicadores do Faturamento em linha, barra inferior de Configurações de ponta a ponta e vão entre o mês e o seletor da Agenda
+
+**Status:** ACCEPTED em 2026-10-18, a pedido do usuário, a partir de fotos de um tablet. Fora do IA Loop, sem Goal próprio. Desvia do protótipo nos três pontos abaixo.
+
+**Contexto:** no tablet, os três números do Faturamento ficavam numa grade 2+1 sem destaque; a barra inferior de Configurações saía como um cartão centralizado de até 520 px, diferente das outras telas; e na Agenda com o tablet deitado o título do mês encostava no seletor Dia/Semana/Mês.
+
+**Decisão:**
+
+1. Faturamento: "Atendimentos concluídos", "Ticket médio" e "Previsto" ficam lado a lado a partir de 520 px, cada um numa caixa com borda e o fundo `--surface-interactive`. Abaixo de 520 px as caixas empilham, com o rótulo à esquerda e o valor à direita.
+2. Configurações usa a mesma barra inferior de ponta a ponta das outras telas: sai a exceção que a centralizava em 520 px.
+3. Agenda, de 1024 a 1279 px: o chevron do título ocupa o próprio espaço (sem a margem de -24 px), e o vão de 20 px entre o título e o seletor volta a existir. No desktop largo nada muda.
+
+**Consequências:** o quadro de Configurações do protótipo deixa de valer para a barra inferior.

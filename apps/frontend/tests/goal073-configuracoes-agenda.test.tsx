@@ -267,97 +267,21 @@ describe("Antecedência e intervalos: um só Salvar grava os quatro campos", () 
   });
 });
 
-// Goal097 (AG1): "Dias visíveis" e "Visualização inicial" são linhas que abrem
-// uma folha com o controle de antes e um "Salvar"; o pedido é o mesmo.
-describe("Como você vê a Agenda", () => {
-  test("mostra os dias visíveis e a visualização inicial lidos", async () => {
-    getAgendaViewPreference.mockResolvedValue({
-      hiddenWeekdays: [0, 6],
-      initialView: "WEEK",
-    });
-    const user = userEvent.setup();
+// 2026-10-18: "Como você vê a Agenda" (dias visíveis e visualização inicial)
+// saiu desta tela a pedido do usuário; os dias visíveis seguem na Agenda.
+describe("Como você vê a Agenda saiu de Configurações › Agenda", () => {
+  test("a tela não mostra mais dias visíveis nem visualização inicial", async () => {
     render(<CalendarSettings settings={settingsFixture()} />);
 
-    const daysRow = await screen.findByRole("button", {
-      name: /^Dias visíveis.+/,
-    });
-    expect(daysRow).toHaveTextContent("Seg–Sex · sábado e domingo ocultos");
     expect(
-      screen.getByRole("button", { name: /^Visualização inicial.+/ }),
-    ).toHaveTextContent("Semana");
-
-    await user.click(daysRow);
-    expect(screen.getByRole("button", { name: "Domingo" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByRole("button", { name: "Sábado" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByRole("button", { name: "Segunda" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    await user.click(screen.getByRole("button", { name: "Fechar" }));
-
-    await user.click(
-      screen.getByRole("button", { name: /^Visualização inicial.+/ }),
-    );
-    expect(screen.getByRole("button", { name: "Semana" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-  });
-
-  test("ocultar um dia e escolher a visualização inicial grava a preferência inteira a cada folha", async () => {
-    getAgendaViewPreference.mockResolvedValue({
-      hiddenWeekdays: [],
-      initialView: null,
-    });
-    updateAgendaViewPreference
-      .mockResolvedValueOnce({ hiddenWeekdays: [0], initialView: null })
-      .mockResolvedValueOnce({ hiddenWeekdays: [0], initialView: "DAY" });
-    const user = userEvent.setup();
-    render(<CalendarSettings settings={settingsFixture()} />);
-
-    await user.click(
-      await screen.findByRole("button", { name: /^Dias visíveis.+/ }),
-    );
-    await user.click(screen.getByRole("button", { name: "Domingo" }));
-    await user.click(screen.getByRole("button", { name: "Salvar" }));
-    await waitFor(() =>
-      expect(updateAgendaViewPreference).toHaveBeenNthCalledWith(1, {
-        hiddenWeekdays: [0],
-        initialView: null,
-      }),
-    );
-
-    await user.click(
-      await screen.findByRole("button", { name: /^Visualização inicial.+/ }),
-    );
-    await user.click(screen.getByRole("button", { name: "Dia" }));
-    await user.click(screen.getByRole("button", { name: "Salvar" }));
-    await waitFor(() =>
-      expect(updateAgendaViewPreference).toHaveBeenNthCalledWith(2, {
-        hiddenWeekdays: [0],
-        initialView: "DAY",
-      }),
-    );
-  });
-
-  test("leitura falhada desabilita salvar", async () => {
-    getAgendaViewPreference.mockRejectedValue(new Error("falhou"));
-    const user = userEvent.setup();
-    render(<CalendarSettings settings={settingsFixture()} />);
-
-    await user.click(
-      await screen.findByRole("button", { name: "Dias visíveis" }),
-    );
-    await screen.findByText(
-      "Não foi possível carregar as preferências da Agenda agora. Atualize a página e tente de novo.",
-    );
-    expect(screen.getByRole("button", { name: "Salvar" })).toBeDisabled();
+      await screen.findByRole("link", { name: /Antecedência e intervalos/ }),
+    ).toBeVisible();
+    expect(screen.queryByText("Como você vê a Agenda")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Dias visíveis/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Visualização inicial/ }),
+    ).toBeNull();
+    expect(getAgendaViewPreference).not.toHaveBeenCalled();
   });
 });
 

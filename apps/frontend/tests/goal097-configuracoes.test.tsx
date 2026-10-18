@@ -615,12 +615,8 @@ describe("Goal097 prova 2: AG1 — /configuracoes/agenda", () => {
       expect(link).toHaveTextContent(summary);
     }
 
-    expect(
-      await screen.findByRole("button", { name: /^Dias visíveis/ }),
-    ).toHaveTextContent("Seg–Sáb · domingo oculto");
-    expect(
-      screen.getByRole("button", { name: /^Visualização inicial/ }),
-    ).toHaveTextContent("Semana");
+    // Dias visíveis e visualização inicial saíram desta tela (2026-10-18).
+    expect(screen.queryByRole("button", { name: /^Dias visíveis/ })).toBeNull();
   });
 
   test("os grupos da tela vêm na ordem do protótipo", async () => {
@@ -633,16 +629,16 @@ describe("Goal097 prova 2: AG1 — /configuracoes/agenda", () => {
     const titles = Array.from(
       container.querySelectorAll(".agenda-group-title"),
     ).map((title) => title.textContent);
+    // "Como você vê a Agenda" saiu desta tela (2026-10-18).
     expect(titles).toEqual([
       "Quando você atende",
       "Como a IA oferece horários",
-      "Como você vê a Agenda",
     ]);
   });
 
   test("a tela da Agenda não tem formulário de regras nem de política", async () => {
     await renderRoute("calendar", NARROW, "Dias e horários");
-    await screen.findByRole("button", { name: /^Dias visíveis/ });
+    await screen.findByRole("link", { name: /^Lembretes/ });
 
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
@@ -657,106 +653,6 @@ describe("Goal097 prova 2: AG1 — /configuracoes/agenda", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("Dias visíveis abre a folha e grava a preferência inteira pelo mesmo pedido", async () => {
-    getAgendaViewPreference.mockResolvedValue({
-      hiddenWeekdays: [],
-      initialView: "WEEK",
-    });
-    updateAgendaViewPreference.mockResolvedValue({
-      hiddenWeekdays: [0],
-      initialView: "WEEK",
-    });
-    const user = userEvent.setup();
-    await renderRoute("calendar", NARROW, "Dias e horários");
-
-    await user.click(
-      await screen.findByRole("button", { name: /^Dias visíveis/ }),
-    );
-    await user.click(screen.getByRole("button", { name: "Domingo" }));
-    await user.click(screen.getByRole("button", { name: "Salvar" }));
-
-    await waitFor(() =>
-      expect(updateAgendaViewPreference).toHaveBeenCalledWith({
-        hiddenWeekdays: [0],
-        initialView: "WEEK",
-      }),
-    );
-    expect(updateAgendaViewPreference).toHaveBeenCalledTimes(1);
-    expect(
-      await screen.findByText("Preferências da Agenda salvas.", { ignore: "script, style, .toast-stack *" }),
-    ).toBeVisible();
-  });
-
-  test("Visualização inicial abre a folha e grava pelo mesmo pedido", async () => {
-    getAgendaViewPreference.mockResolvedValue({
-      hiddenWeekdays: [0],
-      initialView: null,
-    });
-    updateAgendaViewPreference.mockResolvedValue({
-      hiddenWeekdays: [0],
-      initialView: "MONTH",
-    });
-    const user = userEvent.setup();
-    await renderRoute("calendar", NARROW, "Dias e horários");
-
-    await user.click(
-      await screen.findByRole("button", { name: /^Visualização inicial/ }),
-    );
-    await user.click(screen.getByRole("button", { name: "Mês" }));
-    await user.click(screen.getByRole("button", { name: "Salvar" }));
-
-    await waitFor(() =>
-      expect(updateAgendaViewPreference).toHaveBeenCalledWith({
-        hiddenWeekdays: [0],
-        initialView: "MONTH",
-      }),
-    );
-    expect(updateAgendaViewPreference).toHaveBeenCalledTimes(1);
-  });
-
-  test("a folha recusa ocultar todos os dias", async () => {
-    getAgendaViewPreference.mockResolvedValue({
-      hiddenWeekdays: [],
-      initialView: null,
-    });
-    updateAgendaViewPreference.mockResolvedValue({
-      hiddenWeekdays: [1, 2, 3, 4, 5, 6],
-      initialView: null,
-    });
-    const user = userEvent.setup();
-    await renderRoute("calendar", NARROW, "Dias e horários");
-
-    await user.click(
-      await screen.findByRole("button", { name: /^Dias visíveis/ }),
-    );
-    for (const day of [
-      "Segunda",
-      "Terça",
-      "Quarta",
-      "Quinta",
-      "Sexta",
-      "Sábado",
-    ]) {
-      await user.click(screen.getByRole("button", { name: day }));
-    }
-
-    const last = screen.getByRole("button", { name: "Domingo" });
-    expect(last).toBeDisabled();
-    expect(
-      screen.getByText("Pelo menos um dia precisa aparecer na Agenda."),
-    ).toBeVisible();
-    await user.click(last);
-    expect(last).toHaveAttribute("aria-pressed", "true");
-
-    await user.click(screen.getByRole("button", { name: "Salvar" }));
-    await waitFor(() =>
-      expect(updateAgendaViewPreference).toHaveBeenCalledTimes(1),
-    );
-    expect(updateAgendaViewPreference).toHaveBeenCalledWith({
-      hiddenWeekdays: [1, 2, 3, 4, 5, 6],
-      initialView: null,
-    });
-  });
 });
 
 describe("Goal097 prova 2: resumos da Agenda (funções)", () => {

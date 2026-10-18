@@ -2101,6 +2101,62 @@ button.business-row:last-child {
   border-radius: 14px;
   background: var(--at-color-surface);
 }
+.reminders-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.reminders-preview-action {
+  min-height: 32px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--at-color-primary-deep);
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.reminders-preview-action:focus-visible {
+  outline: 2px solid var(--at-color-primary);
+  outline-offset: 2px;
+}
+.reminders-example {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.reminders-example-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 120px;
+  padding-block: 12px;
+  font-size: 14px;
+  line-height: 1.4;
+  resize: vertical;
+}
+.reminders-example-input[aria-invalid="true"] {
+  border-color: var(--at-color-danger-border-input);
+}
+.reminders-example-help {
+  color: var(--fg-soft);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.reminders-example-issue {
+  color: var(--at-color-danger-ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.reminders-example-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
 .reminders-preview-title {
   color: var(--muted);
   font-size: 11px;

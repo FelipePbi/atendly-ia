@@ -2562,7 +2562,8 @@ describe("todo egresso HTTP fora da porta do canal é enumerado com resíduo zer
         // ponto (isencao de politica, leitura de antecedencia minima), e o
         // Goal142 (WU-02) a leitura dos dependentes e `includeDependents`; a
         // linha e o numero real, computado pelo AST, nao um valor escolhido.
-        line: 904,
+        // O D-197 somou o campo `messageExample` aos fatos da notificacao.
+        line: 908,
         category: "env_var_SCHEDULING_SERVICE_BASE_URL",
       },
       {

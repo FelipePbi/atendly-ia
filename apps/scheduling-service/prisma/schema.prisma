@@ -288,6 +288,12 @@ model ReminderSettings {
   confirmationEnabled Boolean             @default(false)
   /// Preco no texto do lembrete. `NEVER` e o padrao do vault.
   pricePolicy         ReminderPricePolicy @default(NEVER)
+  /// Mensagem de exemplo escrita pela profissional (D-197): referencia de tom
+  /// do lembrete, com `{nome}`, `{servico}`, `{data}` e `{hora}` no lugar dos
+  /// dados. Nulo e o padrao pelo estilo da IA. Nunca e fonte de fato: o texto
+  /// final continua saindo dos fatos do agendamento. Ate 600 caracteres, pela
+  /// constraint SQL `ReminderSettings_messageExample_check`.
+  messageExample      String?
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @default(now()) @updatedAt
 

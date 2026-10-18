@@ -326,3 +326,135 @@ describe("notification message templates", () => {
     }
   });
 });
+
+// Mensagem de exemplo da profissional (D-197): referencia de tom, nunca fonte
+// de fato. Os mesmos textos estao em
+// apps/frontend/tests/lembrete-mensagem-de-exemplo.test.ts. Mude os dois
+// lados juntos.
+describe("reminder message example", () => {
+  const casual = (overrides: Partial<NotificationFacts>) =>
+    composeNotificationText({ style: "CASUAL", facts: facts(overrides) });
+
+  it("follows the example and fills the real facts", () => {
+    const text = casual({
+      messageExample:
+        "Oii, {nome}! Tudo bem? 😊\n\nPassando pra lembrar do seu {servico} {data}, às {hora}.\nLembre de vir sem rímel 😉",
+    });
+    expect(text).toBe(
+      "Oii, Ana! Tudo bem? 😊\n\nPassando pra lembrar do seu Corte na quarta-feira, 16/09, às 14h30.\n\nLembre de vir sem rímel 😉",
+    );
+  });
+
+  it("asks for confirmation at the end when the business asks for it", () => {
+    const text = casual({
+      confirmationRequested: true,
+      messageExample: "Oii, {nome}!\nSeu {servico} é {data}, às {hora}.",
+    });
+    expect(text).toBe(
+      "Oii, Ana!\n\nSeu Corte é na quarta-feira, 16/09, às 14h30.\n\nConfirma pra mim? Pode responder sim ou não 💛",
+    );
+    // Sem confirmação pedida, nenhuma pergunta e nenhum fechamento do estilo:
+    // o fechamento é o do exemplo.
+    expect(
+      casual({
+        messageExample: "Oii, {nome}!\nSeu {servico} é {data}, às {hora}.",
+      }),
+    ).toBe("Oii, Ana!\n\nSeu Corte é na quarta-feira, 16/09, às 14h30.");
+  });
+
+  it("puts the price right after the sentence about the appointment, only by the policy", () => {
+    const example =
+      "Oi, {nome}!\nTe espero {data}, às {hora}, para {servico}.\nBeijos 💛";
+    expect(casual({ price: 150, messageExample: example })).toBe(
+      "Oi, Ana!\n\nTe espero na quarta-feira, 16/09, às 14h30, para Corte.\n\nValor: R$ 150,00.\n\nBeijos 💛",
+    );
+    expect(casual({ price: null, messageExample: example })).not.toContain(
+      "R$",
+    );
+  });
+
+  it("adds the standard sentence when the example lacks service, date or time", () => {
+    const text = casual({
+      price: 80,
+      messageExample: "Oii, {nome}! 😊\nLembre de vir sem rímel 😉",
+    });
+    expect(text).toBe(
+      "Oii, Ana! 😊\n\nPassando para lembrar do seu atendimento de Corte na quarta-feira, 16/09, às 14h30.\n\nValor: R$ 80,00.\n\nLembre de vir sem rímel 😉",
+    );
+    // Um exemplo sem nenhum campo também nunca sai sem data e horário.
+    expect(casual({ messageExample: "Até lá! 💛" })).toBe(
+      "Até lá! 💛\n\nPassando para lembrar do seu atendimento de Corte na quarta-feira, 16/09, às 14h30.",
+    );
+  });
+
+  it("drops the name and its comma when the customer has no name", () => {
+    expect(
+      casual({
+        customerName: "  ",
+        messageExample:
+          "Oii, {nome}! Tudo bem?\n{nome}\nSeu {servico} é {data}, às {hora}.",
+      }),
+    ).toBe("Oii! Tudo bem?\n\nSeu Corte é na quarta-feira, 16/09, às 14h30.");
+  });
+
+  it("replaces the fields in one pass, so a fact never becomes a field", () => {
+    expect(
+      casual({
+        customerName: "{data} $& Bia",
+        messageExample: "Oi, {nome}!\nSeu {servico} é {data}, às {hora}.",
+      }),
+    ).toBe(
+      "Oi, {data} $& Bia!\n\nSeu Corte é na quarta-feira, 16/09, às 14h30.",
+    );
+  });
+
+  it("keeps the literal date and time when they are invalid", () => {
+    expect(
+      casual({
+        date: "16/09/2026",
+        time: "2pm",
+        messageExample: "Oi!\nSeu {servico} é {data}, às {hora}.",
+      }),
+    ).toBe("Oi!\n\nSeu Corte é no dia 16/09/2026, às 2pm.");
+  });
+
+  it("falls back to the standard message when the example cannot be used", () => {
+    const standard = casual({});
+    // Campo desconhecido: nunca sai "{valor}" ou "{endereco}" para a cliente.
+    expect(casual({ messageExample: "Oi, {nome}! {endereco}" })).toBe(standard);
+    // Vazio ou só espaços é o padrão.
+    expect(casual({ messageExample: "   " })).toBe(standard);
+    expect(casual({ messageExample: null })).toBe(standard);
+    // `{servico}` sem serviço nem título: nada a pôr ali sem inventar.
+    const noSubject = { services: [], title: null };
+    expect(
+      casual({
+        ...noSubject,
+        messageExample: "Oi!\nSeu {servico} é {data}, às {hora}.",
+      }),
+    ).toBe(casual(noSubject));
+  });
+
+  it("never applies the example to a change notice", () => {
+    const notice = { kind: "CHANGE_NOTICE" as const };
+    expect(
+      casual({
+        ...notice,
+        messageExample: "Oi, {nome}!\nSeu {servico} é {data}, às {hora}.",
+      }),
+    ).toBe(casual(notice));
+  });
+
+  it("uses the example the same way in the three styles", () => {
+    const example = "Oi, {nome}!\nSeu {servico} é {data}, às {hora}.";
+    for (const style of AI_CONVERSATION_STYLES) {
+      const text = composeNotificationText({
+        style,
+        facts: facts({ messageExample: example }),
+      });
+      expect(text).toBe(
+        "Oi, Ana!\n\nSeu Corte é na quarta-feira, 16/09, às 14h30.",
+      );
+    }
+  });
+});

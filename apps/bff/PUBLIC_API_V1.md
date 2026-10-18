@@ -890,6 +890,7 @@ Corpo/resposta:
   "configured": true,
   "confirmationEnabled": false,
   "pricePolicy": "NEVER",
+  "messageExample": null,
   "rules": [{ "slot": "FIRST", "leadMinutes": 1440 }]
 }
 ```
@@ -899,7 +900,10 @@ Corpo/resposta:
 | `configured` | booleano, só leitura | `false` quando o negócio nunca gravou a configuração — a resposta traz o default do produto (um lembrete a 24h, `FIRST`); `true` sempre que já gravou, mesmo com `rules: []` |
 | `confirmationEnabled` | booleano | confirmação de presença separada da conclusão (G-27); ausente na escrita grava `false` |
 | `pricePolicy` | `NEVER`, `WHEN_FIXED` | quando o lembrete menciona o preço do atendimento; ausente na escrita grava `NEVER` |
+| `messageExample` | texto até 600 caracteres, ou `null` | mensagem de exemplo escrita pela profissional (D-197): referência de tom do lembrete, com `{nome}`, `{servico}`, `{data}` e `{hora}` no lugar dos dados. `null` é o padrão pelo estilo da IA. Na escrita, ausente **mantém** o texto gravado e `null` ou texto vazio volta ao padrão; resposta de um Scheduling anterior ao campo vale como `null` |
 | `rules` | array de até dois itens, `{ slot: "FIRST" \| "SECOND", leadMinutes: inteiro positivo até 43200 }` | posição e antecedência (minutos) de cada lembrete; **obrigatório** em `PATCH`, mesmo vazio — `rules: []` é a escolha explícita de desligar os lembretes, distinta de nunca ter configurado |
+
+`PATCH` recusa `messageExample` com mais de 600 caracteres, com campo fora dos quatro conhecidos (ex.: `{valor}`) ou com data, horário ou valor escritos à mão (`19/10`, `15h30`, `15:30`, `R$ 150`) com `400 VALIDATION_ERROR` — a regra é `reminderMessageExampleIssue` do contrato, a mesma da tela. O exemplo nunca é fonte de fato: o lembrete troca os campos pelos dados do agendamento, inclui a frase padrão com serviço, data e horário quando o exemplo não traz `{servico}`, `{data}` e `{hora}`, põe o valor só pela `pricePolicy` e a pergunta de confirmação no fim quando `confirmationEnabled`; o aviso de alteração não usa o exemplo.
 
 `PATCH` recusa mais de dois itens, posição repetida ou antecedência fora do intervalo com `400 VALIDATION_ERROR`, sem gravar nada e sem chamar o Scheduling — a mesma validação que a constraint SQL `ReminderRule_leadMinutes_check` espelha do lado de lá. Esta é a única leitura/escrita de configuração de lembrete no contrato público; não existe equivalente do lado da IA — quem configura é sempre humano, no mesmo padrão de disponibilidade e oferta (Goal009).
 

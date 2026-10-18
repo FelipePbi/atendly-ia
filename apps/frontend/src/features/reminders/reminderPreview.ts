@@ -65,24 +65,35 @@ function weekdayIndex(year: number, month: number, day: number): number {
   return sum % 7;
 }
 
-function whenOf(date: string, time: string): string {
-  const literal = `no dia ${date} às ${time}`;
+interface LocalWhen {
+  day: string;
+  clock: string;
+}
+
+function localWhen(date: string, time: string): LocalWhen | null {
   const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(time);
-  if (!dateMatch || !timeMatch) return literal;
+  if (!dateMatch || !timeMatch) return null;
 
   const year = Number(dateMatch[1]);
   const month = Number(dateMatch[2]);
   const day = Number(dateMatch[3]);
   const hour = Number(timeMatch[1]);
   const minute = Number(timeMatch[2]);
-  if (month < 1 || month > 12) return literal;
-  if (day < 1 || day > daysInMonth(year, month)) return literal;
-  if (hour > 23 || minute > 59) return literal;
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > daysInMonth(year, month)) return null;
+  if (hour > 23 || minute > 59) return null;
 
   const weekday = WEEKDAYS[weekdayIndex(year, month, day)];
-  const clock = minute === 0 ? `${hour}h` : `${hour}h${timeMatch[2]}`;
-  return `${weekday}, ${dateMatch[3]}/${dateMatch[2]}, às ${clock}`;
+  return {
+    day: `${weekday}, ${dateMatch[3]}/${dateMatch[2]}`,
+    clock: minute === 0 ? `${hour}h` : `${hour}h${timeMatch[2]}`,
+  };
+}
+
+function whenOf(date: string, time: string): string {
+  const when = localWhen(date, time);
+  return when ? `${when.day}, às ${when.clock}` : `no dia ${date} às ${time}`;
 }
 
 function amountOf(price: number): string {
@@ -99,6 +110,96 @@ export interface ReminderPreviewFacts {
   time: string;
   price: number | null;
   confirmationRequested: boolean;
+  /** Mensagem de exemplo da profissional (D-197); `null` é o padrão. */
+  messageExample?: string | null;
+}
+
+function factualLines(facts: ReminderPreviewFacts): string[] {
+  const appointment = facts.subject
+    ? `atendimento de ${facts.subject}`
+    : "atendimento";
+  const lines = [
+    `Passando para lembrar do seu ${appointment} ${whenOf(facts.date, facts.time)}.`,
+  ];
+  if (facts.price !== null) lines.push(`Valor: ${amountOf(facts.price)}.`);
+  return lines;
+}
+
+const EXAMPLE_FIELDS = ["nome", "servico", "data", "hora"] as const;
+type ExampleField = (typeof EXAMPLE_FIELDS)[number];
+const EXAMPLE_FIELD = /\{([^{}]*)\}/g;
+const FACT_FIELD = /\{(servico|data|hora)\}/;
+
+function isExampleField(value: string): value is ExampleField {
+  return (EXAMPLE_FIELDS as readonly string[]).includes(value);
+}
+
+/**
+ * Cópia de `composeFromExample` do ai-orchestrator (D-197): o exemplo é
+ * referência de tom, os fatos vêm sempre do agendamento. `null` quando o
+ * exemplo não serve e o padrão vale.
+ */
+function composeFromExample(
+  example: string,
+  facts: ReminderPreviewFacts,
+  voice: Voice,
+): string | null {
+  const fields = new Set<ExampleField>();
+  for (const match of example.matchAll(EXAMPLE_FIELD)) {
+    const field = match[1];
+    if (!isExampleField(field)) return null;
+    fields.add(field);
+  }
+  if (fields.has("servico") && facts.subject === null) return null;
+
+  const name = facts.customerName?.trim() || null;
+  const when = localWhen(facts.date, facts.time);
+  const values: Record<ExampleField, string> = {
+    nome: name ?? "",
+    servico: facts.subject ?? "",
+    data: when ? when.day : `no dia ${facts.date}`,
+    hora: when ? when.clock : facts.time,
+  };
+
+  const blocks: string[] = [];
+  let factualBlock = -1;
+  for (const raw of example.split(/\r?\n/)) {
+    let line = raw;
+    if (name === null) {
+      line = line
+        .replace(/[ \t]*,?[ \t]*\{nome\}/g, "")
+        .replace(/^[ \t]*[,;:][ \t]*/, "");
+    }
+    line = line
+      .replace(EXAMPLE_FIELD, (_match, field: ExampleField) => values[field])
+      .replace(/[ \t]{2,}/g, " ")
+      .trim();
+    if (line.length === 0) continue;
+    blocks.push(line);
+    if (FACT_FIELD.test(raw)) factualBlock = blocks.length - 1;
+  }
+
+  const factual = factualLines(facts);
+  if (fields.has("servico") && fields.has("data") && fields.has("hora")) {
+    blocks.splice(factualBlock + 1, 0, ...factual.slice(1));
+  } else {
+    blocks.splice(Math.min(1, blocks.length), 0, ...factual);
+  }
+  if (facts.confirmationRequested) blocks.push(voice.confirmation);
+  return blocks.join("\n\n");
+}
+
+/**
+ * Texto inicial do editor da mensagem de exemplo: a saudação do estilo e a
+ * frase padrão, com os campos no lugar dos dados. A pergunta de confirmação
+ * e o valor ficam de fora porque entram sozinhos, pelas opções da tela.
+ */
+export function defaultReminderMessageExample(tone: AiTone | null): string {
+  const voice = VOICES[tone ?? "BALANCED"];
+  return [
+    voice.greeting("{nome}"),
+    "Passando para lembrar do seu atendimento de {servico} {data}, às {hora}.",
+  ].join("\n\n");
 }
 
 export function composeReminderPreviewText(input: {
@@ -107,14 +208,15 @@ export function composeReminderPreviewText(input: {
 }): string {
   const { facts } = input;
   const voice = VOICES[input.style];
-  const appointment = facts.subject
-    ? `atendimento de ${facts.subject}`
-    : "atendimento";
+  const example = facts.messageExample?.trim();
+  if (example) {
+    const custom = composeFromExample(example, facts, voice);
+    if (custom !== null) return custom;
+  }
   const blocks = [
     voice.greeting(facts.customerName?.trim() || null),
-    `Passando para lembrar do seu ${appointment} ${whenOf(facts.date, facts.time)}.`,
+    ...factualLines(facts),
   ];
-  if (facts.price !== null) blocks.push(`Valor: ${amountOf(facts.price)}.`);
   if (facts.confirmationRequested) {
     blocks.push(voice.confirmation);
   } else if (voice.closing) {
@@ -151,6 +253,7 @@ export interface ReminderPreviewService {
 
 export function reminderPreviewText({
   confirmationEnabled,
+  messageExample = null,
   now,
   pricePolicy,
   services,
@@ -158,6 +261,7 @@ export function reminderPreviewText({
   tone,
 }: {
   confirmationEnabled: boolean;
+  messageExample?: string | null;
   now: Date;
   pricePolicy: ReminderPricePolicy;
   services: readonly ReminderPreviewService[];
@@ -181,6 +285,7 @@ export function reminderPreviewText({
       time: "15:30",
       price,
       confirmationRequested: confirmationEnabled,
+      messageExample,
     },
   });
 }

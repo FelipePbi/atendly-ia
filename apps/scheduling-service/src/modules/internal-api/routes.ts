@@ -190,6 +190,9 @@ const reminderRuleBodySchema = z.object({
 const reminderSettingsBodySchema = z.object({
   confirmationEnabled: z.boolean().optional(),
   pricePolicy: reminderPricePolicySchema.optional(),
+  // Ausente mantem a gravada; `null` volta ao padrao (D-197). O teto de 600
+  // e conferido no servico, depois de aparar o texto.
+  messageExample: z.string().max(2_000).nullable().optional(),
   // Zero e escolha legitima: desligar os lembretes de proposito.
   rules: z.array(reminderRuleBodySchema).max(2),
 });
@@ -2911,6 +2914,7 @@ function availabilityActivityFields(
 function reminderActivityFields(config: {
   confirmationEnabled: boolean;
   pricePolicy: string;
+  messageExample: string | null;
   rules: Array<{ slot: string; leadMinutes: number }>;
 }): Record<string, string | number | boolean | null> {
   const lead = (slot: string) =>
@@ -2920,6 +2924,7 @@ function reminderActivityFields(config: {
     "reminder.SECOND": lead("SECOND"),
     confirmationEnabled: config.confirmationEnabled,
     pricePolicy: config.pricePolicy,
+    messageExample: config.messageExample,
   };
 }
 
@@ -3144,12 +3149,14 @@ function reminderConfigDto(config: {
   configured: boolean;
   confirmationEnabled: boolean;
   pricePolicy: string;
+  messageExample: string | null;
   rules: Array<{ slot: string; leadMinutes: number }>;
 }) {
   return {
     configured: config.configured,
     confirmationEnabled: config.confirmationEnabled,
     pricePolicy: config.pricePolicy,
+    messageExample: config.messageExample,
     rules: config.rules.map((rule) => ({
       slot: rule.slot,
       leadMinutes: rule.leadMinutes,

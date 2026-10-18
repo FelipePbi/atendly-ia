@@ -106,6 +106,12 @@ export interface NotificationFacts {
   price: number | null;
   /** O negocio pede confirmacao pela resposta ao lembrete. */
   confirmationRequested: boolean;
+  /**
+   * Mensagem de exemplo da profissional (D-197), so no lembrete. Nao e fato
+   * nem texto pronto: e a referencia de tom que a entrega aplica em volta dos
+   * fatos acima. `null` no aviso de alteracao e quando o negocio usa o padrao.
+   */
+  messageExample: string | null;
 }
 
 export interface ClaimedNotificationIntent {
@@ -348,6 +354,7 @@ interface TenantDispatchContext {
   timezone: string;
   pricePolicy: ReminderPricePolicy;
   confirmationEnabled: boolean;
+  messageExample: string | null;
   slots: Set<string>;
 }
 
@@ -367,6 +374,7 @@ async function loadTenantContext(
     timezone: calendar.timezone,
     pricePolicy: config.pricePolicy,
     confirmationEnabled: config.confirmationEnabled,
+    messageExample: config.messageExample,
     slots: new Set(config.rules.map((rule) => rule.slot as string)),
   };
 }
@@ -590,6 +598,7 @@ function composeFacts(
     price: showsPrice ? total.amount : null,
     confirmationRequested:
       intent.kind === "REMINDER" && context.confirmationEnabled,
+    messageExample: intent.kind === "REMINDER" ? context.messageExample : null,
   };
 }
 

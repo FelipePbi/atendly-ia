@@ -198,6 +198,63 @@ describe("sugestão aceita a transcrição concluída do último áudio (Goal013
     ).toBe(true);
   });
 
+  it("política: áudio anterior entra no histórico com a transcrição, nunca vazio (2026-10-18)", async () => {
+    const world = cenarioEmAtendimentoHumano();
+    world.store.messages.push(
+      {
+        id: "message-seed-audio-before",
+        conversationId: world.conversationId,
+        direction: "INBOUND",
+        role: "user",
+        body: "",
+        kind: "AUDIO",
+        createdAt: new Date("2026-06-08T09:00:00.000Z"),
+      },
+      {
+        id: "message-seed-sticker",
+        conversationId: world.conversationId,
+        direction: "INBOUND",
+        role: "user",
+        body: "",
+        kind: "STICKER",
+        createdAt: new Date("2026-06-08T09:00:30.000Z"),
+      },
+      {
+        id: "message-seed-text-after",
+        conversationId: world.conversationId,
+        direction: "INBOUND",
+        role: "user",
+        body: "Tem horario amanha?",
+        kind: "TEXT",
+        createdAt: new Date("2026-06-08T09:01:00.000Z"),
+      },
+    );
+    world.store.attachments.push({
+      id: "attachment-seed-audio-before",
+      tenantId: world.tenantId,
+      messageId: "message-seed-audio-before",
+      kind: "AUDIO",
+      transcriptStatus: "DONE",
+      transcript: "Quero fazer o volume russo.",
+    });
+    world.model.carregar([
+      {
+        nota: "devolve sugestoes em texto",
+        text: JSON.stringify({ suggestions: ["Tenho amanha as 14h."] }),
+      },
+    ]);
+
+    await world.generateSuggestions();
+
+    const contents = world.model
+      .chamada(0)
+      .messages.filter((message) => message.role === "user")
+      .map((message) => message.content);
+    expect(contents).toContain("[audio transcrito] Quero fazer o volume russo.");
+    expect(contents).toContain("[figurinha]");
+    expect(contents).not.toContain("");
+  });
+
   it("política: audio sem transcricao concluida (falhou/pendente/nunca chegou) continua sem texto", async () => {
     const world = cenarioEmAtendimentoHumano();
     world.store.messages.push({

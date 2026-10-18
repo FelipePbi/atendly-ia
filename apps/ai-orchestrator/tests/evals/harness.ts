@@ -32,7 +32,6 @@ import type {
   GenerateSuggestionsResult,
 } from "../../src/modules/assistant/assistant.service.js";
 import { AssistantService } from "../../src/modules/assistant/assistant.service.js";
-import type { ChannelInboundMessage } from "../../src/modules/channel/domain/ChannelMessage.js";
 import type {
   KnowledgeSearchInput,
   KnowledgeSearchResult,
@@ -40,15 +39,15 @@ import type {
 } from "../../src/modules/knowledge/knowledge-vector-store.js";
 import type { CustomerMemoryPromptItem } from "../../src/modules/memory/customer-memory.js";
 import {
-  CustomerMemoryService,
   type CustomerMemoryPolicy,
+  CustomerMemoryService,
 } from "../../src/modules/memory/customer-memory-service.js";
-import type { ServiceInstructionPromptItem } from "../../src/modules/prompts/service-instructions.js";
 import type {
   ModelRequest,
   ModelResponse,
   ModelToolCall,
 } from "../../src/modules/model/model-provider.js";
+import type { ServiceInstructionPromptItem } from "../../src/modules/prompts/service-instructions.js";
 import type { SchedulingGateway } from "../../src/modules/scheduling-service/client.js";
 import type {
   ConfirmAppointmentSeriesInput,
@@ -64,8 +63,8 @@ import type { AiConversationStyle } from "../../src/modules/tenant-config/ai-set
 import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
 import { AssistantToolRegistry } from "../../src/modules/tools/assistant-tools.js";
 import {
-  fakeMemoryPrisma,
   type ContactRow,
+  fakeMemoryPrisma,
   type MemoryRow,
   type SessionRow,
 } from "../memory/fake-memory-prisma.js";
@@ -334,7 +333,7 @@ export function createEvalWorld(options: EvalWorldOptions = {}) {
         channelId,
         userId,
         requestId,
-      } as ChannelInboundMessage,
+      },
       businessContext: { ...DEFAULT_BUSINESS_CONTEXT, businessName },
       aiSettings: { aiEnabled: true, tone: style },
       knowledgeRequested: turn.knowledgeRequested,
@@ -699,7 +698,7 @@ function createAgendaStub(
     },
   };
 
-  const gateway = { ...base, ...(options.gateway ?? {}) } as SchedulingGateway;
+  const gateway = { ...base, ...(options.gateway ?? {}) };
 
   return {
     gateway,
@@ -977,6 +976,14 @@ function createPrismaStub(input: {
             item.messageId === args.where.messageId &&
             item.kind === args.where.kind,
         ) ?? null,
+      // 2026-10-18: o histórico do modelo lê a transcrição dos áudios
+      // anteriores pelo anexo, em vez de mandar `""`.
+      findMany: async (args: any) =>
+        store.attachments.filter(
+          (item) =>
+            item.tenantId === args.where.tenantId &&
+            (args.where.messageId?.in ?? []).includes(item.messageId),
+        ),
     },
   } as unknown as PrismaClient;
 

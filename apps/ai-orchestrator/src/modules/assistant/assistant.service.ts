@@ -27,7 +27,10 @@ import type {
   KnowledgeSearchResult,
   KnowledgeVectorStore,
 } from "../knowledge/knowledge-vector-store.js";
-import { markTranscribedAudioTurn } from "../media/audio-turn.js";
+import {
+  markTranscribedAudioTurn,
+  mediaHistoryContent,
+} from "../media/audio-turn.js";
 import {
   toMessageAttachmentKind,
   toMessageKind,
@@ -700,6 +703,36 @@ export class AssistantService {
     };
   }
 
+  /**
+   * Texto que o modelo vê para as mensagens de mídia sem `body`: a
+   * transcrição do áudio (pelo anexo) ou um marcador do que chegou. Mensagem
+   * com texto fica fora do mapa e entra como está.
+   */
+  private async mediaHistoryContents(
+    tenantId: string,
+    messages: ReadonlyArray<{ id: string; body: string; kind: string }>,
+  ): Promise<Map<string, string>> {
+    const media = messages.filter(
+      (message) => !message.body.trim() && message.kind !== "TEXT",
+    );
+    const contents = new Map<string, string>();
+    if (media.length === 0) return contents;
+    const attachments = await this.prisma.messageAttachment.findMany({
+      where: {
+        tenantId,
+        messageId: { in: media.map((message) => message.id) },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    for (const message of media) {
+      const attachment = attachments.find(
+        (item) => item.messageId === message.id,
+      );
+      contents.set(message.id, mediaHistoryContent(message.kind, attachment));
+    }
+    return contents;
+  }
+
   async prepareGraphTurn(
     input: IncomingAssistantMessage & {
       messageRecordIds: string[];
@@ -726,11 +759,15 @@ export class AssistantService {
       orderBy: { createdAt: "desc" },
       take: 30,
     });
+    const mediaContents = await this.mediaHistoryContents(
+      conversation.tenantId,
+      recentMessages,
+    );
     const chronologicalMessages: ModelInputMessage[] = recentMessages
       .reverse()
       .map((message) => ({
         role: message.role === "assistant" ? "assistant" : "user",
-        content: message.body,
+        content: mediaContents.get(message.id) ?? message.body,
       }));
     const state = normalizeStoredState(conversation.state);
     const businessContext = normalizeBusinessContext(
@@ -1428,12 +1465,19 @@ export class AssistantService {
     if (!lastInboundText) {
       return { ok: false, reason: "NO_TEXTUAL_MESSAGE" };
     }
+    // O último áudio já foi resolvido acima; os anteriores vêm pelo anexo.
+    const mediaContents = await this.mediaHistoryContents(
+      input.tenantId,
+      recentMessages.filter((message) => message.id !== lastInboundMessage?.id),
+    );
     const chronologicalMessages: ModelInputMessage[] = recentMessages
       .reverse()
       .map((message) => ({
         role: message.role === "assistant" ? "assistant" : "user",
         content:
-          message.id === lastInboundMessage?.id ? lastInboundText : message.body,
+          message.id === lastInboundMessage?.id
+            ? lastInboundText
+            : (mediaContents.get(message.id) ?? message.body),
       }));
 
     const retrievedKnowledge = await this.retrieveSuggestionKnowledge(

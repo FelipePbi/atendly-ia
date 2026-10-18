@@ -16,3 +16,30 @@ export function markTranscribedAudioTurn(transcript: string): string {
 export function hasTranscribedAudioMarker(text: string): boolean {
   return text.includes(AUDIO_TURN_MARKER);
 }
+
+/**
+ * Conteúdo de uma mensagem sem texto no histórico do modelo (2026-10-18).
+ *
+ * O estoque grava `body` vazio para mídia; a transcrição do áudio mora no
+ * anexo. Sem isto o áudio chegava ao modelo como `""`, e a IA respondia como
+ * se a cliente não tivesse dito nada. Áudio transcrito vira o mesmo marcador
+ * do turno; o resto vira um marcador que diz o que chegou, nunca vazio.
+ */
+export function mediaHistoryContent(
+  kind: string,
+  attachment?: { transcriptStatus?: string | null; transcript?: string | null },
+): string {
+  if (kind === "AUDIO") {
+    const transcript = attachment?.transcript?.trim();
+    return attachment?.transcriptStatus === "DONE" && transcript
+      ? markTranscribedAudioTurn(transcript)
+      : "[audio sem transcricao]";
+  }
+  const labels: Record<string, string> = {
+    IMAGE: "[imagem sem legenda]",
+    STICKER: "[figurinha]",
+    VIDEO: "[video sem legenda]",
+    DOCUMENT: "[documento]",
+  };
+  return labels[kind] ?? "[mensagem sem texto]";
+}

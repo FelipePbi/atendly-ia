@@ -270,6 +270,20 @@ describe.skipIf(!databaseUrl)("tenant purge against PostgreSQL", () => {
         factId: messageId,
       },
     });
+
+    // Convite do retorno de clientes (D-206).
+    await prisma.returnInvitation.create({
+      data: {
+        tenantId,
+        channelId,
+        conversationId,
+        targetId: `return-target-${tenantId}`,
+        campaignId: `return-campaign-${tenantId}`,
+        customerId: `customer-${tenantId}`,
+        kind: "RENEWAL",
+        sentAt: new Date(),
+      },
+    });
   }
 
   /** Uma linha por tabela, para o negocio dado — o que a seed acima grava. */

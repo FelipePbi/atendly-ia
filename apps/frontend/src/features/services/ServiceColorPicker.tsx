@@ -140,7 +140,6 @@ export function ServiceColorPicker({
       onClose={onClose}
       open={open}
       title={`Outra cor para ${serviceName || "o serviço"}`}
-      variant="modal"
     >
       <div className="service-picker">
         <div

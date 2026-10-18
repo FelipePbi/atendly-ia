@@ -18,7 +18,8 @@ import { NotificationsDrawerContent } from "./NotificationsScreen";
 
 /**
  * A partir desta largura (a mesma de lista e detalhe lado a lado) a central
- * abre como gaveta sobre a tela; abaixo dela o sino leva à central em tela
+ * abre num diálogo centrado sobre a tela (D-204; o nome "gaveta" ficou do
+ * painel lateral de antes); abaixo dela o sino leva à central em tela
  * empurrada.
  */
 export const NOTIFICATIONS_DRAWER_QUERY = WIDE_LAYOUT_QUERY;
@@ -53,12 +54,7 @@ export function NotificationsDrawerProvider({
   return (
     <NotificationsDrawerContext.Provider value={value}>
       {children}
-      <Dialog
-        onClose={close}
-        open={isOpen}
-        title="Notificações"
-        variant="drawer"
-      >
+      <Dialog onClose={close} open={isOpen} title="Notificações">
         <NotificationsDrawerContent onNavigate={close} />
       </Dialog>
     </NotificationsDrawerContext.Provider>

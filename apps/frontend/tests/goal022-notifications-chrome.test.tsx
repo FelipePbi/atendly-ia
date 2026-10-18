@@ -128,7 +128,7 @@ describe("entrada de Notificações", () => {
     const dialog = screen.getByRole("dialog", { name: "Mais" });
 
     // Modal no centro, não folha que sobe de baixo.
-    expect(dialog.closest(".bottom-sheet-wrap")).toBeNull();
+    expect(dialog).toHaveClass("modal");
     const tiles = [...dialog.querySelectorAll(".more-tile")].map(
       (tile) => tile.textContent,
     );

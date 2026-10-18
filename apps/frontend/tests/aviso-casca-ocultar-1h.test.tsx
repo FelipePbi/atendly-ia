@@ -296,7 +296,7 @@ describe("estilo do aviso e do cartão da sidebar", () => {
     // Regras no próprio <main> ficam de fora: o aviso mora dentro dele.
     // Folhas, diálogos e telas sem casca também: não ficam sob o aviso.
     const outsideShell =
-      /^(\.app-frame > main|\.conversation-detail-main$|\.chat-sheet|\.modal|\.bottom-sheet|\.drawer|\.brand-loader-screen|\.ds-page|\.shell-reference|\.mobile-shell|\.onboarding|\.auth-|\.entry-shell|\.legal-page|\.system-auth|body)/;
+      /^(\.app-frame > main|\.conversation-detail-main$|\.chat-sheet|\.modal|\.brand-loader-screen|\.ds-page|\.shell-reference|\.mobile-shell|\.onboarding|\.auth-|\.entry-shell|\.legal-page|\.system-auth|body)/;
     const files = [
       "avenly.css",
       "avenly-agenda.css",

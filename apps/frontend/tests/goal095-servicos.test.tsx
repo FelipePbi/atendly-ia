@@ -799,7 +799,7 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
       name: "Aplicação 5D",
     };
     const twin: Service = { ...other, id: "s3", name: "Manutenção 5D" };
-    const { container } = await renderEditForm(edited(), "", [other, twin]);
+    await renderEditForm(edited(), "", [other, twin]);
     await user.click(optionRow("Cor na agenda"));
     // Fora do seletor só as sugeridas.
     expect(screen.queryByText("Suas cores")).not.toBeInTheDocument();
@@ -808,7 +808,7 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     const picker = screen.getByRole("dialog", {
       name: "Outra cor para Corte feminino",
     });
-    expect(container.ownerDocument.querySelector(".bottom-sheet-wrap")).toBeNull();
+    expect(picker).toHaveClass("modal");
     const group = within(picker).getByRole("group", { name: "Suas cores" });
     // Uma entrada por cor, dizendo onde ela já é usada.
     const saved = within(group).getByRole("button", {

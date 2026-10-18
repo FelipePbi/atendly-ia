@@ -1215,7 +1215,6 @@ export function ImportRunScreen({
         }}
         open={confirmOpen}
         title={SINGLE_IMPORT_CONFIRMATION_TITLE}
-        variant="sheet"
       >
         <div className="imports-confirm">
           <p className="imports-confirm-copy">

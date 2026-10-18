@@ -249,7 +249,6 @@ export function CancelFlow({
               role="dialog"
               tabIndex={-1}
             >
-              <div aria-hidden="true" className="agenda-cancel-handle" />
               <div className="agenda-cancel-head">
                 <h2 id={titleId}>Cancelar este agendamento?</h2>
                 <p>

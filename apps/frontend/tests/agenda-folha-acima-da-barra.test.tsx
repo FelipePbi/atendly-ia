@@ -54,12 +54,20 @@ describe("a folha fica acima da barra inferior (bug de 2026-10-12)", () => {
     expect(zToken("at-z-dialog")).toBeGreaterThan(navZ);
   });
 
-  test("o pé da folha no celular respeita a área segura", () => {
+  test("no celular a folha é um cartão centrado, com margem e rolagem por dentro (D-204)", () => {
+    const wrap = conversations.match(/\.chat-sheet-wrap \{([^}]*)\}/)?.[1] ?? "";
+    expect(wrap).toMatch(/align-items: center;/);
+    expect(wrap).toMatch(/justify-content: center;/);
     const sheet = conversations.match(/\n\.chat-sheet \{([^}]*)\}/)?.[1] ?? "";
-    expect(sheet).toMatch(/bottom: 0;/);
-    expect(sheet).toMatch(
-      /padding: [^;]*max\(46px, calc\(12px \+ env\(safe-area-inset-bottom, 0px\)\)\);/,
-    );
+    expect(sheet).toMatch(/position: relative;/);
+    expect(sheet).not.toMatch(/bottom: 0;/);
+    expect(sheet).toMatch(/max-width: calc\(100vw - 32px\);/);
+    expect(sheet).toMatch(/max-height: calc\(100dvh - 32px\);/);
+    expect(sheet).toMatch(/overflow-y: auto;/);
+    expect(sheet).toMatch(/border-radius: 20px;/);
+    // Entrada só com opacidade e escala, sem subir de baixo.
+    expect(sheet).toMatch(/animation: at-dialog /);
+    expect(conversations).not.toMatch(/chat-sheet-handle|@keyframes at-sheet/);
   });
 
   test("a folha é montada no body, fora de qualquer contexto de empilhamento da página", async () => {

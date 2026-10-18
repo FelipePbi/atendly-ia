@@ -1,10 +1,11 @@
 "use client";
 
-import clsx from "clsx";
 import { type ReactNode, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 
 import { Icon } from "@/shared/icons/Icon";
+
+import { cycleFocus, FOCUSABLE_SELECTOR } from "./focusCycle";
 
 type DialogProps = {
   children: ReactNode;
@@ -12,16 +13,20 @@ type DialogProps = {
   onClose: () => void;
   open: boolean;
   title: string;
-  variant?: "modal" | "sheet" | "drawer";
 };
 
+/**
+ * Todo diálogo do app é um cartão flutuante centrado sobre o véu, em qualquer
+ * largura (D-204): no celular também, com margem dos lados, em vez de folha
+ * presa embaixo ou gaveta na lateral. Prende o foco, fecha com Esc ou com um
+ * toque no véu e devolve o foco a quem o abriu.
+ */
 export function Dialog({
   children,
   eyebrow,
   onClose,
   open,
   title,
-  variant = "modal",
 }: DialogProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLElement>(null);
@@ -34,23 +39,12 @@ export function Dialog({
         ? document.activeElement
         : null;
     const panel = panelRef.current;
-    const selector =
-      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-    panel?.querySelector<HTMLElement>(selector)?.focus();
+    panel?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
     document.body.classList.add("has-overlay");
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
       if (event.key !== "Tab" || !panel) return;
-      const items = Array.from(panel.querySelectorAll<HTMLElement>(selector));
-      const first = items[0];
-      const last = items.at(-1);
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last?.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first?.focus();
-      }
+      cycleFocus(panel, event);
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => {
@@ -61,21 +55,12 @@ export function Dialog({
   }, [onClose, open]);
 
   if (!open || typeof document === "undefined") return null;
-  const wrapClassName = clsx("overlay", {
-    "bottom-sheet-wrap": variant === "sheet",
-    "drawer-wrap": variant === "drawer",
-  });
-  const panelClassName = clsx({
-    modal: variant === "modal",
-    "bottom-sheet": variant === "sheet",
-    drawer: variant === "drawer",
-  });
   // No `body`, fora da árvore da tela: dentro do conteúdo, uma animação ou
   // transição da página cria contexto de empilhamento próprio, e a barra
-  // inferior do celular ficava por cima da folha (2026-10-17).
+  // inferior do celular ficava por cima do diálogo (2026-10-17).
   return createPortal(
     <div
-      className={wrapClassName}
+      className="overlay"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -84,13 +69,10 @@ export function Dialog({
       <section
         aria-labelledby={titleId}
         aria-modal="true"
-        className={panelClassName}
+        className="modal"
         ref={panelRef}
         role="dialog"
       >
-        {variant === "sheet" && (
-          <div className="sheet-handle" aria-hidden="true" />
-        )}
         <div className="modal-header">
           <div>
             {eyebrow && <p className="eyebrow">{eyebrow}</p>}

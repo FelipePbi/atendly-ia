@@ -3518,9 +3518,6 @@ button.account-danger-card {
 .chat-sheet.is-settings-confirm {
   gap: 18px;
 }
-.chat-sheet.is-settings-confirm .chat-sheet-handle {
-  margin-bottom: 0;
-}
 .settings-sheet-copy {
   display: flex;
   flex-direction: column;

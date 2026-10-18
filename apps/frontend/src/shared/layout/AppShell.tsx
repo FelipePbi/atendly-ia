@@ -498,7 +498,6 @@ function AppShellChrome({
         onClose={closeMore}
         open={moreOpen}
         title={bottomNavFitsAll(bottomTabCount) ? "Conta" : "Mais"}
-        variant="modal"
       >
         <MoreMenu
           conversationsBadge={conversationsBadge}

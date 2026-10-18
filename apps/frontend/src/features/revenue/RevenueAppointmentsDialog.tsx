@@ -10,7 +10,6 @@ import {
   type RevenueReport,
 } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
-import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Dialog } from "@/shared/ui/Dialog";
@@ -42,7 +41,6 @@ export function RevenueAppointmentsDialog({
   onClose: () => void;
   report: Pick<RevenueReport, "period" | "start" | "end" | "today">;
 }) {
-  const wide = useWideLayout();
   const [state, setState] = useState<{
     key: string;
     list: RevenueAppointmentList | null;
@@ -84,7 +82,6 @@ export function RevenueAppointmentsDialog({
       onClose={onClose}
       open={kind !== null}
       title={kind ? TITLES[kind] : ""}
-      variant={wide ? "drawer" : "sheet"}
     >
       <div aria-busy={loading || undefined} className="revenue-list">
         {loading ? (

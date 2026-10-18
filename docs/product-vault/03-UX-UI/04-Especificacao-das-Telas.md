@@ -365,7 +365,7 @@ Também, quando houver dado:
 - **Dia da semana mais forte** (no Mês e no Ano): "Sábado: 34% do faturado, R$ 1.200,00", com as barras de segunda a domingo;
 - **Faltas e cancelamentos**: quantas e quanto deixou de entrar, pelo valor do acordo. Cada número maior que zero é clicável ("Ver quais") e abre a lista do período (D-179).
 
-**Lista dos atendimentos** (D-179), num painel lateral a partir de 1024 px e numa folha de baixo no celular, com o período no topo:
+**Lista dos atendimentos** (D-179), num diálogo centrado em qualquer largura ([[../../migration/DECISIONS#D-204|D-204]]), com o período no topo:
 
 - cancelamentos e faltas: o resumo de quem fez ("5 por você · 3 pela IA"), e uma linha por atendimento, do mais recente para o mais antigo, com dia e hora, cliente, serviços, o valor do acordo, quem cancelou ou registrou a falta ("Cancelado pela IA", "Cancelado por você", "Cancelado automaticamente", "Veio cancelado da importação"; sem registro, "Sem registro de quem fez"), "Marcado pela IA" quando foi a IA que marcou, e o motivo escrito entre aspas;
 - sem valor: o motivo ("Serviço sob consulta", "Preço “a partir de”", "Serviço sem preço", "Atendimento avulso") e "Registrar valor";

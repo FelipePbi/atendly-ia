@@ -175,7 +175,7 @@ describe("linguagem de movimento (avenly-motion.css)", () => {
       /html\.vt-step-next::view-transition-new\(agenda-calendar-days\)/,
     );
     expect(motionCss).toMatch(
-      /::view-transition-old\(sheet\) \{\s*animation: motion-sheet-out/,
+      /::view-transition-old\(sheet\) \{\s*animation: motion-dialog-out/,
     );
   });
 

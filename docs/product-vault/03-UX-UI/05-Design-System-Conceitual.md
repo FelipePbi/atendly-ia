@@ -114,7 +114,7 @@ Decidida na Agenda em 2026-10-12 ([[../../migration/DECISIONS#D-168|D-168]]) e v
 | Hover, foco, cor de texto, fundo de linha; **toda saída** | 160 ms | saída suave | — |
 | Componente que entra: lista, skeleton → conteúdo, aviso | 200 ms | saída suave | 8 px de subida + fade |
 | Troca de contexto: aba, dia/semana/mês, painel, tela | 240 ms (sai em 160) | saída suave | 16 px na direção do gesto, ou 8 px de subida sem direção |
-| Bottom sheet / diálogo | entra em 320 / 220 ms, sai em 160 | saída suave | 32 px de baixo / scale .96 |
+| Diálogo (todo modal, [[../../migration/DECISIONS#D-204\|D-204]]) | entra em 220 ms, sai em 160 | saída suave | scale .96 + fade |
 
 Curvas: **saída suave** `cubic-bezier(.2,.7,.2,1)` para tudo que entra, muda de cor ou se move; **entrada** `cubic-bezier(.4,0,1,1)` só para saídas, sempre mais curtas; linear apenas no shimmer do skeleton.
 
@@ -140,9 +140,7 @@ Primeiro carregamento (F5, URL digitada; D-168, revisão de 2026-10-12): o splas
 - Badge / Status
 - Alert / Banner
 - Toast
-- Modal de confirmação
-- Drawer
-- Bottom sheet para ações curtas
+- Diálogo centrado ([[../../migration/DECISIONS#D-204|D-204]]): todo modal — confirmação, ações curtas, escolha, lista, formulário curto — é um cartão flutuante no centro, com véu, também no celular (margem de 16–20 px dos lados, altura pela tela visível e rolagem por dentro). Não há folha presa embaixo nem gaveta lateral; formulário complexo continua em tela própria.
 - List row
 - Empty state
 - Skeleton

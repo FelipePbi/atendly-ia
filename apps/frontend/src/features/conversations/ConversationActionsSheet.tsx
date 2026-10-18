@@ -14,6 +14,7 @@ import { createPortal } from "react-dom";
 import type { SessionCategory } from "@/data";
 import { type SheetClose, SheetCloseContext } from "@/shared/motion/sheetClose";
 import { runViewTransition } from "@/shared/motion/viewTransition";
+import { cycleFocus, FOCUSABLE_SELECTOR } from "@/shared/ui/focusCycle";
 
 export type CategoryWriteScope = "CONVERSATION" | "CONTACT";
 
@@ -30,9 +31,6 @@ type ConversationActionsSheetProps = {
   open: boolean;
   person: string;
 };
-
-const focusable =
-  'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function RowIcon({
   children,
@@ -59,8 +57,8 @@ function RowIcon({
 }
 
 /**
- * O menu "Mais ações" do chat, como o quadro K6: folha embaixo no celular,
- * folha centrada de 768 px em diante. Só existe montado enquanto aberto, então
+ * O menu "Mais ações" do chat, como o quadro K6, num diálogo centrado em
+ * qualquer largura (D-204). Só existe montado enquanto aberto, então
  * a escolha de "Marcar como pessoal" nasce sempre em "Só esta conversa" e
  * nada é gravado antes do botão.
  */
@@ -70,9 +68,10 @@ export function ConversationActionsSheet(props: ConversationActionsSheetProps) {
 }
 
 /**
- * A casca das folhas do chat (K5 e K6): folha embaixo no celular, diálogo
- * centrado de 768 px em diante. Prende o foco, fecha com Escape e devolve o
- * foco a quem a abriu.
+ * A casca das folhas do app (K5, K6 e as da Agenda, do Início e das
+ * Configurações): um cartão flutuante centrado sobre o véu em qualquer
+ * largura, também no celular (D-204), sem a alça de folha. Prende o foco,
+ * fecha com Escape ou com um toque no véu e devolve o foco a quem a abriu.
  */
 export function ChatSheetShell({
   children,
@@ -125,7 +124,9 @@ export function ChatSheetShell({
     const initialTarget = initialFocusSelectorRef.current
       ? panel?.querySelector<HTMLElement>(initialFocusSelectorRef.current)
       : null;
-    (initialTarget ?? panel?.querySelector<HTMLElement>(focusable))?.focus();
+    (
+      initialTarget ?? panel?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+    )?.focus();
     document.body.classList.add("has-overlay");
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -133,16 +134,7 @@ export function ChatSheetShell({
         return;
       }
       if (event.key !== "Tab" || !panel) return;
-      const items = Array.from(panel.querySelectorAll<HTMLElement>(focusable));
-      const first = items[0];
-      const last = items.at(-1);
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last?.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first?.focus();
-      }
+      cycleFocus(panel, event);
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => {
@@ -180,7 +172,6 @@ export function ChatSheetShell({
               {title}
             </h2>
           )}
-          <div aria-hidden="true" className="chat-sheet-handle" />
           {children}
         </section>
       </div>

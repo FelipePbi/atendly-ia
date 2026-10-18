@@ -39,7 +39,6 @@
   --motion-shift-xs: 4px;
   --motion-shift-sm: 8px;
   --motion-shift-md: 16px;
-  --motion-shift-lg: 32px;
   --motion-scale-press: 0.98;
   --motion-scale-dialog: 0.96;
 }
@@ -119,16 +118,6 @@
   to {
     opacity: 0;
     transform: translateX(var(--motion-shift-md));
-  }
-}
-@keyframes motion-sheet-out {
-  from {
-    opacity: 1;
-    transform: none;
-  }
-  to {
-    opacity: 0;
-    transform: translateY(var(--motion-shift-lg));
   }
 }
 @keyframes motion-dialog-out {
@@ -401,10 +390,10 @@ html.vt-section #main-content *:not(.shell-status-banner, .shell-sandbox-chip) {
   }
 }
 
-/* Folha modal (ChatSheetShell): entra pelos keyframes `at-sheet`/`at-dialog`
-   de sempre; sai em 160 ms pela View Transition que `ChatSheetShell` dispara
-   ao fechar — 32 px para baixo no celular, scale .96 de 768 px em diante — e
-   o escurecido some junto. */
+/* Folha modal (ChatSheetShell), centrada em qualquer largura (D-204): entra
+   pelo keyframe `at-dialog`; sai em 160 ms pela View Transition que
+   `ChatSheetShell` dispara ao fechar — fade com scale .96 — e o escurecido
+   some junto. */
 .chat-sheet-wrap {
   view-transition-name: sheet-backdrop;
 }
@@ -424,7 +413,7 @@ html.vt-section #main-content *:not(.shell-status-banner, .shell-sandbox-chip) {
   mix-blend-mode: normal;
 }
 ::view-transition-old(sheet) {
-  animation: motion-sheet-out var(--at-duration-fast) var(--at-ease-exit) both;
+  animation: motion-dialog-out var(--at-duration-fast) var(--at-ease-exit) both;
   mix-blend-mode: normal;
 }
 /* A folha que já está na tela quando outra transição roda fica parada. */
@@ -432,12 +421,6 @@ html.vt-section #main-content *:not(.shell-status-banner, .shell-sandbox-chip) {
 ::view-transition-new(sheet) {
   animation: none;
   mix-blend-mode: normal;
-}
-@media (min-width: 768px) {
-  ::view-transition-old(sheet) {
-    animation: motion-dialog-out var(--at-duration-fast) var(--at-ease-exit)
-      both;
-  }
 }
 
 /* Passo de mês no mini calendário (A3) e, na fase 2, dia/semana/mês da

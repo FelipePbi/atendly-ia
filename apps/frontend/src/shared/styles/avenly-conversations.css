@@ -2085,16 +2085,6 @@
     opacity: 1;
   }
 }
-@keyframes at-sheet {
-  from {
-    opacity: 0;
-    transform: translateY(32px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
 @keyframes at-dialog {
   from {
     opacity: 0;
@@ -2115,47 +2105,47 @@
     transform: none;
   }
 }
+/* Cartão flutuante centrado em qualquer largura (D-204): no celular, 16 px
+   de margem dos lados e de cima/baixo, altura pela tela visível (`dvh`, sem
+   a barra do navegador) e rolagem por dentro: o campo focado rola para a
+   vista dentro do cartão. Era folha presa embaixo, com alça, até 767 px. */
 .chat-sheet-wrap {
   position: fixed;
   z-index: var(--at-z-dialog);
   inset: 0;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   background: rgb(var(--at-shadow-rgb) / 0.38);
   animation: at-fade 0.2s ease-out both;
 }
 .chat-sheet {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: relative;
   box-sizing: border-box;
-  max-height: calc(100dvh - 24px);
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 10px 20px max(46px, calc(12px + env(safe-area-inset-bottom, 0px)));
+  padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  border-radius: 24px 24px 0 0;
+  border-radius: 20px;
   background: var(--at-color-surface);
-  box-shadow: 0 -12px 40px rgb(var(--at-shadow-rgb) / 0.18);
+  box-shadow: 0 24px 64px rgb(var(--at-shadow-rgb) / 0.28);
   color: var(--at-color-ink);
   line-height: normal;
-  animation: at-sheet 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: at-dialog 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 .chat-sheet * {
   box-sizing: content-box;
 }
-.chat-sheet-handle {
-  width: 40px;
-  height: 4px;
-  margin-bottom: 8px;
-  flex: none;
-  align-self: center;
-  border-radius: 2px;
-  background: var(--at-color-border-strong);
+/* Cartão mais baixo que o conteúdo (celular deitado, 560 px): rola por
+   dentro em vez de espremer os filhos — um botão de altura fixa encolhia até
+   a altura do texto. */
+.chat-sheet > * {
+  flex-shrink: 0;
 }
 .chat-sheet-row {
   display: flex;
@@ -2316,24 +2306,9 @@
   font-size: 14px;
 }
 @media (min-width: 768px) {
-  .chat-sheet-wrap {
-    align-items: center;
-  }
   .chat-sheet {
-    position: relative;
-    left: auto;
-    right: auto;
-    bottom: auto;
-    width: 480px;
-    max-width: calc(100vw - 32px);
     max-height: calc(100dvh - 80px);
     padding: 22px 24px 24px;
-    border-radius: 20px;
-    box-shadow: 0 24px 64px rgb(var(--at-shadow-rgb) / 0.28);
-    animation: at-dialog 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-  }
-  .chat-sheet-handle {
-    display: none;
   }
 }
 @media (min-width: 1024px) {
@@ -2354,14 +2329,8 @@
 .chat-sheet.is-customer {
   gap: 18px;
 }
-.chat-sheet.is-customer .chat-sheet-handle {
-  margin-bottom: 0;
-}
 .chat-sheet.is-pause {
   gap: 18px;
-}
-.chat-sheet.is-pause .chat-sheet-handle {
-  margin-bottom: 0;
 }
 .pause-sheet-head {
   display: flex;

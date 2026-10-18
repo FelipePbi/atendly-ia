@@ -334,7 +334,7 @@ describe("Clientes — scroll infinito", () => {
 
     await user.click(screen.getByRole("button", { name: /Ordenar por/ }));
     const dialog = screen.getByRole("dialog", { name: "Ordenar clientes" });
-    expect(dialog.closest(".bottom-sheet-wrap")).toBeNull();
+    expect(dialog).toHaveClass("modal");
     await user.click(within(dialog).getByRole("radio", { name: /^Nome/ }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 

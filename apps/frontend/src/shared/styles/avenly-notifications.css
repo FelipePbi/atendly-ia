@@ -338,19 +338,24 @@
 }
 
 /*
- * Gaveta (a partir de 1024 px): a mesma lista, sem a preferência. O cabeçalho
- * do `Dialog` vira a barra do quadro (fechar, título, "Marcar lidas") e só a
- * lista rola.
+ * Central sobre a tela (a partir de 1024 px): a mesma lista, sem a
+ * preferência, num diálogo centrado (D-204; era gaveta na lateral). O
+ * cabeçalho do `Dialog` vira a barra do quadro (fechar, título, "Marcar
+ * lidas") e só a lista rola, dentro da altura do cartão.
  */
-.drawer:has(.notifications-drawer-body) {
+.modal:has(.notifications-drawer-body) {
   position: relative;
-  padding: 0;
+  box-sizing: border-box;
+  width: min(100%, 440px);
+  max-height: min(720px, calc(100dvh - 40px));
+  padding: 0 0 12px;
+  display: flex;
+  flex-direction: column;
   gap: 0;
   overflow: hidden;
   background: var(--at-color-canvas);
-  box-shadow: -16px 0 48px rgb(var(--at-shadow-rgb) / 0.18);
 }
-.drawer:has(.notifications-drawer-body) .modal-header {
+.modal:has(.notifications-drawer-body) .modal-header {
   height: 64px;
   margin: 0;
   padding: 24px 28px 0;
@@ -358,10 +363,10 @@
   align-items: center;
   justify-content: center;
 }
-.drawer:has(.notifications-drawer-body) .modal-header > div {
+.modal:has(.notifications-drawer-body) .modal-header > div {
   margin-right: 40px;
 }
-.drawer:has(.notifications-drawer-body) .modal-header h2 {
+.modal:has(.notifications-drawer-body) .modal-header h2 {
   margin: 0;
   font-family: var(--font-body);
   font-size: 16px;
@@ -369,7 +374,7 @@
   line-height: 1.3;
   white-space: nowrap;
 }
-.drawer:has(.notifications-drawer-body) .icon-btn {
+.modal:has(.notifications-drawer-body) .icon-btn {
   position: absolute;
   top: 24px;
   left: 28px;
@@ -379,7 +384,7 @@
   border-radius: 50%;
   background: transparent;
 }
-.drawer:has(.notifications-drawer-body) .icon-btn:hover {
+.modal:has(.notifications-drawer-body) .icon-btn:hover {
   background: var(--at-color-surface-active);
 }
 .notifications-drawer-body {

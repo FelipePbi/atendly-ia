@@ -301,12 +301,7 @@ export function ActivityScreen({ timeZone }: { timeZone: string }) {
         )}
         <ActivityList filtered={filtered} pages={pages} timeZone={timeZone} />
       </div>
-      <Dialog
-        onClose={closeMenu}
-        open={menuOpen}
-        title="Filtros"
-        variant="modal"
-      >
+      <Dialog onClose={closeMenu} open={menuOpen} title="Filtros">
         {menuOpen && (
           <ActivityFiltersForm
             filters={filters}

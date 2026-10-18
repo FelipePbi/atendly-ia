@@ -246,12 +246,7 @@ export function AccountSettings() {
           />
         </div>
       </div>
-      <Dialog
-        onClose={closeSheet}
-        open={sheet === "name"}
-        title="Nome"
-        variant="sheet"
-      >
+      <Dialog onClose={closeSheet} open={sheet === "name"} title="Nome">
         <form
           className="settings-form-grid"
           onSubmit={(event) => void saveName(event)}
@@ -279,12 +274,7 @@ export function AccountSettings() {
           />
         </form>
       </Dialog>
-      <Dialog
-        onClose={closeSheet}
-        open={sheet === "password"}
-        title="Senha"
-        variant="sheet"
-      >
+      <Dialog onClose={closeSheet} open={sheet === "password"} title="Senha">
         <form
           className="settings-form-grid"
           onSubmit={(event) => void changePassword(event)}

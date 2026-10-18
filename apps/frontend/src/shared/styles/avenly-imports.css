@@ -1213,27 +1213,31 @@
   background: var(--at-color-border);
 }
 
-/* A folha da confirmação (2.I9): o `Dialog` `sheet`, escopado pela confirmação. */
+/* A confirmação (2.I9): o `Dialog`, centrado em qualquer largura (D-204),
+   escopado pela confirmação. No celular era folha presa embaixo. */
 .overlay:has(.imports-confirm) {
+  padding: 16px;
   background: rgb(var(--at-shadow-rgb) / 0.38);
 }
-.bottom-sheet:has(.imports-confirm) {
-  max-width: none;
-  padding: 10px 20px 46px;
+.modal:has(.imports-confirm) {
+  box-sizing: border-box;
+  width: 460px;
+  max-width: 100%;
+  max-height: calc(100dvh - 32px);
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  border-radius: 24px 24px 0 0;
+  border-radius: 20px;
   background: var(--at-color-surface);
-  box-shadow: 0 -12px 40px rgb(var(--at-shadow-rgb) / 0.18);
+  box-shadow: 0 24px 64px rgb(var(--at-shadow-rgb) / 0.28);
 }
-.bottom-sheet:has(.imports-confirm) .sheet-handle {
-  margin: 0 auto 18px;
-  background: var(--at-color-border-strong);
+.modal:has(.imports-confirm) > * {
+  flex-shrink: 0;
 }
-.bottom-sheet:has(.imports-confirm) .modal-header {
+.modal:has(.imports-confirm) .modal-header {
   margin: 0 0 10px;
 }
-.bottom-sheet:has(.imports-confirm) .modal-header h2 {
+.modal:has(.imports-confirm) .modal-header h2 {
   margin: 0;
   font-family: var(--font-display, Literata, Georgia, serif);
   font-size: 24px;
@@ -1245,7 +1249,7 @@
  * O quadro não desenha o X da folha: o "Fechar" do `Dialog` fica fora da vista
  * e só aparece quando o teclado chega nele (o foco entra por ele ao abrir).
  */
-.bottom-sheet:has(.imports-confirm) .modal-header .icon-btn:not(:focus-visible) {
+.modal:has(.imports-confirm) .modal-header .icon-btn:not(:focus-visible) {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1299,8 +1303,8 @@
   .overlay:has(.imports-confirm) {
     animation: at-fade 0.2s ease-out both;
   }
-  .bottom-sheet:has(.imports-confirm) {
-    animation: at-sheet 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  .modal:has(.imports-confirm) {
+    animation: at-dialog 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
 }
 @media (min-width: 768px) {
@@ -1308,26 +1312,11 @@
     padding-bottom: 32px;
   }
   .overlay:has(.imports-confirm) {
-    align-items: center;
-    padding: 0;
+    padding: 20px;
   }
-  .bottom-sheet:has(.imports-confirm) {
-    width: 460px;
-    max-width: calc(100% - 40px);
-    max-height: calc(100% - 80px);
+  .modal:has(.imports-confirm) {
+    max-height: calc(100dvh - 80px);
     padding: 22px 24px 24px;
-    border-radius: 20px;
-    box-shadow: 0 24px 64px rgb(var(--at-shadow-rgb) / 0.28);
-    box-sizing: border-box;
-    overflow: hidden;
-  }
-  .bottom-sheet:has(.imports-confirm) .sheet-handle {
-    display: none;
-  }
-}
-@media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
-  .bottom-sheet:has(.imports-confirm) {
-    animation: at-dialog 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
 }
 

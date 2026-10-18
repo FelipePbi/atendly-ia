@@ -207,12 +207,9 @@
 .chat-sheet.is-agenda-new {
   gap: 14px;
 }
-.chat-sheet.is-agenda-new .chat-sheet-handle {
-  margin-bottom: 0;
-}
 /* Ações do bloqueio ou do compromisso pessoal na mesma casca de folha
-   (pedido de 2026-10-12): folha embaixo no celular, diálogo de 768 px em
-   diante, em vez do painel embutido abaixo da grade. */
+   (pedido de 2026-10-12): diálogo centrado em qualquer largura (D-204), em
+   vez do painel embutido abaixo da grade. */
 .chat-sheet.is-agenda-occurrence {
   gap: 12px;
 }
@@ -376,10 +373,6 @@
 /* Mini-calendário de navegação (quadro A3), na mesma casca. */
 .chat-sheet.is-agenda-calendar {
   gap: 16px;
-}
-.chat-sheet.is-agenda-calendar .chat-sheet-handle,
-.chat-sheet.is-agenda-days .chat-sheet-handle {
-  margin-bottom: 0;
 }
 .agenda-calendar-head {
   display: flex;
@@ -3225,9 +3218,6 @@ button.agenda-new-hint:focus-visible {
 .chat-sheet.is-agenda-repeat {
   gap: 14px;
 }
-.chat-sheet.is-agenda-repeat .chat-sheet-handle {
-  margin-bottom: 0;
-}
 .agenda-repeat-head {
   display: flex;
   flex-direction: column;
@@ -3423,9 +3413,6 @@ button.agenda-new-hint:focus-visible {
  * dos 5 mais usados, busca por nome quando são muitos. */
 .chat-sheet.is-agenda-services {
   gap: 12px;
-}
-.chat-sheet.is-agenda-services .chat-sheet-handle {
-  margin-bottom: 0;
 }
 .agenda-services-head {
   display: flex;
@@ -4174,12 +4161,14 @@ button.agenda-new-hint:focus-visible {
   border-radius: 16px;
   background: var(--at-color-surface);
 }
+/* Diálogo centrado em qualquer largura (D-204), com 16 px de margem no
+   celular; era folha presa embaixo até 767 px. */
 .agenda-cancel-layer {
   position: fixed;
   inset: 0;
   z-index: var(--at-z-dialog, 500);
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
 }
 .agenda-cancel-scrim {
@@ -4190,27 +4179,22 @@ button.agenda-new-hint:focus-visible {
 }
 .agenda-cancel-sheet {
   position: relative;
-  width: 100%;
-  max-height: 100%;
-  padding: 10px 20px 46px;
+  box-sizing: border-box;
+  width: 480px;
+  max-width: calc(100% - 32px);
+  max-height: calc(100% - 32px);
+  padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 18px;
   overflow-y: auto;
-  border-radius: 24px 24px 0 0;
+  overscroll-behavior: contain;
+  border-radius: 20px;
   background: var(--at-color-surface);
-  box-shadow: 0 -12px 40px rgb(var(--at-shadow-rgb) / 0.18);
+  box-shadow: 0 24px 64px rgb(var(--at-shadow-rgb) / 0.28);
   color: var(--at-color-ink);
   outline: none;
-  animation: sheet 0.32s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.agenda-cancel-handle {
-  width: 40px;
-  height: 4px;
-  flex: none;
-  align-self: center;
-  border-radius: 2px;
-  background: var(--at-color-border-strong);
+  animation: rise 0.24s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .agenda-cancel-head {
   display: flex;
@@ -4378,20 +4362,10 @@ button.agenda-new-hint:focus-visible {
   outline-offset: 2px;
 }
 @media (min-width: 768px) {
-  .agenda-cancel-layer {
-    align-items: center;
-  }
   .agenda-cancel-sheet {
-    width: 480px;
     max-width: calc(100% - 40px);
     max-height: calc(100% - 80px);
     padding: 22px 24px 24px;
-    border-radius: 20px;
-    box-shadow: 0 24px 64px rgb(var(--at-shadow-rgb) / 0.28);
-    animation: rise 0.24s cubic-bezier(0.2, 0.7, 0.2, 1);
-  }
-  .agenda-cancel-handle {
-    display: none;
   }
 }
 @media (min-width: 1024px), (min-width: 768px) and (orientation: landscape) {

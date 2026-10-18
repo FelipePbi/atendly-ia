@@ -6,7 +6,7 @@ import {
 import { weekdayLabels } from "./shared/labels";
 
 /**
- * Exemplos da tela "Antecedência e intervalos" (D-187): frases concretas do
+ * Exemplos da tela "Antecedência e intervalos" (D-192): frases concretas do
  * que cada valor escolhido significa, calculadas com a hora de agora no fuso
  * do negócio, e a simulação "Na prática", que junta as quatro escolhas com os
  * dias e horários de atendimento. Tudo usa o valor escolhido na tela, antes de

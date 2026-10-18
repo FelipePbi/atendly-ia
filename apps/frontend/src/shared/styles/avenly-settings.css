@@ -1536,7 +1536,7 @@ button.business-row:last-child {
   flex-direction: column;
   gap: 22px;
 }
-/* D-187: cada contexto num cartão com título, e cada grupo com descrição e
+/* D-192: cada contexto num cartão com título, e cada grupo com descrição e
    um exemplo concreto que muda com a escolha. */
 .rules-intro {
   margin: 0;

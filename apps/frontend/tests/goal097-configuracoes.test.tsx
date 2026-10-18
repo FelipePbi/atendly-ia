@@ -18,7 +18,7 @@
  * 3. AG3 (`/configuracoes/agenda/regras`): os grupos segmentados com o valor
  *    lido, a opção extra para valor fora da lista (inclusive antecedência 0),
  *    um único "Salvar" com um único PATCH de quatro campos mais `timezone` e
- *    `rules` lidos, erro sem perder a edição e, desde D-187, os três
+ *    `rules` lidos, erro sem perder a edição e, desde D-192, os três
  *    contextos em cartões, o exemplo concreto de cada grupo e o bloco "Na
  *    prática" (que junta as quatro escolhas com os dias e horários de
  *    atendimento) com relógio fixo, reagindo à tela antes de salvar.
@@ -891,7 +891,7 @@ const FRIDAY_08_00 = new Date("2026-10-02T11:00:00.000Z");
 const SAO_PAULO = "America/Sao_Paulo";
 const RULES = availabilityFixture().rules;
 
-describe("D-187: exemplo de cada grupo (função, relógio fixo)", () => {
+describe("D-192: exemplo de cada grupo (função, relógio fixo)", () => {
   test("antecedência: a partir de quando, com a hora de agora", async () => {
     const { leadExample } = await loadOfferPreview();
     const at = (minLeadMinutes: number) =>
@@ -990,7 +990,7 @@ describe("D-187: exemplo de cada grupo (função, relógio fixo)", () => {
   });
 });
 
-describe("D-187: Na prática junta as quatro escolhas (função, relógio fixo)", () => {
+describe("D-192: Na prática junta as quatro escolhas (função, relógio fixo)", () => {
   async function simulate(
     overrides: Partial<{
       granularityMinutes: number;
@@ -1092,7 +1092,7 @@ describe("D-187: Na prática junta as quatro escolhas (função, relógio fixo)"
   });
 });
 
-describe("D-187: a tela em três contextos, com exemplos que mudam antes de salvar", () => {
+describe("D-192: a tela em três contextos, com exemplos que mudam antes de salvar", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(FRIDAY_13_45);

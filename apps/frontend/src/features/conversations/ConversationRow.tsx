@@ -19,9 +19,9 @@ import {
 /**
  * Uma linha da conversa, a do quadro de Conversas do protótipo: nome, última
  * mensagem, horário e, quando há o que dizer, o estado. Ao lado do chat
- * (Goal114) a linha da conversa aberta vem marcada com `aria-current`. Não há
- * contador de não lidas: o contrato devolve `unreadCount` zero fixo e a tela
- * não afirma o que nenhuma camada calcula.
+ * (Goal114) a linha da conversa aberta vem marcada com `aria-current`. Com
+ * mensagem do cliente ainda não vista (`unreadCount`, D-195), a linha ganha o
+ * ponto de "não lida" do protótipo, sem número.
  */
 export function ConversationRow({
   conversation,
@@ -175,6 +175,12 @@ function InboxRow({
           </span>
         )}
       </span>
+      {/* A conversa aberta ao lado já está sendo vista. */}
+      {conversation.unreadCount > 0 && !selected && (
+        <span className="conversation-row-unread">
+          <span className="sr-only">Mensagem nova</span>
+        </span>
+      )}
     </Link>
   );
 }

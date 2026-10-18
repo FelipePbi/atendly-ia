@@ -35,6 +35,11 @@ const querySchema = z.object({
   customerId: z.string().trim().min(1).max(128).optional(),
 });
 const messageSchema = z.object({ text: z.string().trim().min(1).max(4_000) });
+// D-195: ate onde a tela mostrou (instante da mensagem mais nova). Corpo
+// vazio vale "agora".
+const markReadSchema = z
+  .object({ readThrough: z.string().datetime({ offset: true }).optional() })
+  .default({});
 const categorySchema = z.object({
   category: z.enum(["COMMERCIAL", "UNCLASSIFIED", "PERSONAL"]).nullable(),
   // Goal115: ausente vale `CONTACT`, decidido pela IA; so repassado se vier.
@@ -73,6 +78,34 @@ export async function registerV1ConversationRoutes(
       return dataResponse(
         request,
         await ai.listConversations(internalContext(request), query),
+      );
+    },
+  );
+
+  /**
+   * Conversas nao lidas (D-195): o contador da navegacao e o aviso de mensagem
+   * nova leem daqui, por polling. Rota estatica, preferida a `:id`.
+   */
+  app.get(
+    "/v1/conversations/unread-summary",
+    { preHandler: requireTenantContext },
+    async (request) =>
+      dataResponse(request, await ai.unreadSummary(internalContext(request))),
+  );
+
+  /**
+   * A profissional viu a conversa (D-195). Mutacao por cookie: CSRF e origem
+   * ja sao exigidos por `requireTenantContext`.
+   */
+  app.post(
+    "/v1/conversations/:id/read",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      const body = parseBody(markReadSchema, request.body ?? undefined);
+      return dataResponse(
+        request,
+        await ai.markRead(internalContext(request), id, body),
       );
     },
   );

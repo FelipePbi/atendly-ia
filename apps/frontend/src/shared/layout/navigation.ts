@@ -271,3 +271,14 @@ export function notificationsBadgeLabel(unreadCount: number): string | null {
     return `${NOTIFICATIONS_BADGE_CAP}+`;
   return String(unreadCount);
 }
+
+/**
+ * O que o leitor de tela ouve junto do contador de "Conversas" (D-195): o
+ * número sozinho, colado no nome do destino, não diz do que é.
+ */
+export function unreadConversationsLabel(count: number): string | null {
+  if (count <= 0) return null;
+  return count === 1
+    ? "1 conversa com mensagem nova"
+    : `${count} conversas com mensagem nova`;
+}

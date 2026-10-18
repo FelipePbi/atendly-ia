@@ -364,6 +364,15 @@
   gap: 12px;
   line-height: normal;
 }
+/* Ponto de "não lida" (D-195), o do quadro C2 do protótipo. */
+.conversation-row-unread {
+  width: 8px;
+  height: 8px;
+  margin-top: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--at-color-primary);
+}
 .conversation-row.is-inbox + .conversation-row.is-inbox {
   border-top: 1px solid var(--at-color-border);
 }

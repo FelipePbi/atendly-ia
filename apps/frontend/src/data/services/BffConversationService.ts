@@ -5,6 +5,7 @@ import {
   type Conversation,
   type ConversationEvent,
   type ConversationSuggestions,
+  type ConversationUnreadSummary,
   type IgnoredContact,
   type IgnoredContactList,
   type Message,
@@ -50,6 +51,36 @@ export class BffConversationService {
         status: query.status,
       },
       schema: routeSchema<Conversation[]>("GET", "/v1/conversations"),
+      signal,
+    });
+  }
+
+  /**
+   * Conversas não lidas (D-195): quantas conversas do atendimento têm mensagem
+   * do cliente ainda não vista e a última não lida das mais recentes. É o que
+   * o contador da navegação e o aviso de mensagem nova leem.
+   */
+  unreadSummary(signal?: AbortSignal) {
+    return this.http.request({
+      path: "/v1/conversations/unread-summary",
+      schema: routeSchema<ConversationUnreadSummary>(
+        "GET",
+        "/v1/conversations/unread-summary",
+      ),
+      signal,
+    });
+  }
+
+  /**
+   * A profissional viu a conversa até `readThrough` (instante da mensagem
+   * mais nova na tela). Sem ele, vale agora.
+   */
+  markRead(id: string, readThrough?: string, signal?: AbortSignal) {
+    return this.http.request({
+      body: readThrough ? { readThrough } : {},
+      method: "POST",
+      path: `/v1/conversations/${encodeURIComponent(id)}/read`,
+      schema: routeSchema<Conversation>("POST", "/v1/conversations/:id/read"),
       signal,
     });
   }

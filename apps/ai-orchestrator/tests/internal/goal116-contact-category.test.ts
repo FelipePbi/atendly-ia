@@ -81,6 +81,8 @@ function fakePrisma(rows: Row[]) {
   return {
     // Registro de atividade (D-176): gravado, não conferido aqui.
     activityLog: { create: async () => ({}) },
+    // Nao lidas (D-195): o dobro nao tem mensagens, entao nada a contar.
+    $queryRaw: async () => [],
     conversation: {
       findFirst: async ({ where }: { where: Record<string, unknown> }) => {
         const found = rows.find(

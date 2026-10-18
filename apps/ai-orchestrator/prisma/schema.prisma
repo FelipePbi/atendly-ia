@@ -235,6 +235,13 @@ model Conversation {
   /// ausencia de mensagem.
   contentExpiredThrough DateTime?
 
+  /// Ate quando a profissional ja viu a conversa no app (D-195). Mensagem do
+  /// cliente depois disto e "nao lida", a nao ser que a profissional tenha
+  /// respondido depois dela (pelo app ou pelo proprio WhatsApp). Nulo: nunca
+  /// aberta, entao toda mensagem do cliente conta. Gravada so por SQL cru, para
+  /// nao mexer em `updatedAt`, que ordena a lista.
+  ownerReadAt DateTime?
+
   channel  ChannelConnection     @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
   contact  Contact?              @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: SetNull, map: "Conversation_contact_fkey")
   messages Message[]

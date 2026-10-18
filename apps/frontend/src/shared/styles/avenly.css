@@ -1629,6 +1629,177 @@ p {
   }
 }
 
+/* Coluna dos avisos flutuantes da casca (D-195): o aviso de mensagem nova em
+   cima e a pilha de toasts embaixo, na mesma coluna, então um nunca cobre o
+   outro. No celular e no tablet o aviso ocupa a largura (centro, como o do
+   WhatsApp); com a sidebar, a coluna vai para o canto superior direito. */
+.shell-float-layer {
+  position: fixed;
+  z-index: var(--at-z-toast);
+  top: calc(12px + env(safe-area-inset-top) + var(--shell-status-h, 0px));
+  right: 12px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+}
+.shell-float-layer > .toast-stack {
+  position: static;
+  align-self: stretch;
+}
+.message-alerts {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.message-alerts:empty {
+  display: none;
+}
+.message-alert {
+  min-height: 64px;
+  padding: 6px 6px 6px 0;
+  border: 1px solid color-mix(in oklch, var(--fg) 10%, transparent);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  color: var(--fg);
+  background: var(--surface);
+  box-shadow: 0 10px 28px rgb(var(--at-shadow-rgb) / 0.16);
+  pointer-events: auto;
+  animation: message-alert-in var(--at-duration-base) var(--ease) both;
+}
+.message-alert.is-leaving {
+  animation: message-alert-out 180ms var(--ease) both;
+}
+.message-alert-link {
+  min-width: 0;
+  min-height: 52px;
+  padding: 4px 8px 4px 12px;
+  border-radius: 12px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: inherit;
+  text-decoration: none;
+}
+.message-alert-link:hover {
+  background: var(--surface-secondary);
+}
+.message-alert-avatar {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--at-color-primary-ink);
+  background: var(--accent-soft);
+  font-size: 15px;
+  font-weight: 600;
+}
+.message-alert-avatar .icon {
+  width: 20px;
+  height: 20px;
+}
+.message-alert-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.message-alert-eyebrow {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+.message-alert-name,
+.message-alert-preview {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.message-alert-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+.message-alert-preview {
+  color: var(--muted);
+  font-size: 14px;
+}
+.message-alert-close {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+  background: transparent;
+}
+.message-alert-close:hover {
+  color: var(--fg);
+  background: var(--surface-secondary);
+}
+.message-alert-close .icon {
+  width: 16px;
+  height: 16px;
+}
+@keyframes message-alert-in {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+}
+@keyframes message-alert-out {
+  to {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+@media (min-width: 1100px) {
+  .shell-float-layer {
+    top: calc(28px + var(--shell-status-h, 0px));
+    right: 32px;
+    left: auto;
+    width: 360px;
+    align-items: stretch;
+  }
+  .message-alerts {
+    max-width: none;
+  }
+}
+
+/* Contador de não lidas de "Conversas" na barra inferior (D-195), como no
+   quadro de Conversas do protótipo: âmbar, no canto do ícone. */
+.bottom-nav-item {
+  position: relative;
+}
+.bottom-nav-badge {
+  position: absolute;
+  top: 3px;
+  left: calc(50% + 4px);
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  box-sizing: content-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--surface);
+  background: var(--at-color-warning-strong);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 @media (forced-colors: active) {
   :focus-visible {
     outline: 3px solid CanvasText;

@@ -834,6 +834,29 @@ export const conversationSchema = z.object({
   contentExpiredThrough: isoDateTimeSchema.nullish().optional(),
 });
 
+// --- Conversas nao lidas (D-195) ---------------------------------------------
+// Resumo que a navegacao le: quantas conversas do atendimento tem mensagem do
+// cliente que a profissional ainda nao viu, e a ultima nao lida de cada uma
+// das mais recentes (para o aviso de mensagem nova). Contato em `Ignorar IA` e
+// conversa `Pessoal` ficam de fora. Espelha
+// `GET /v1/conversations/unread-summary` em `apps/bff/PUBLIC_API_V1.md`.
+export const unreadMessagePreviewSchema = z.object({
+  conversationId: z.string().min(1),
+  messageId: z.string().min(1),
+  customerName: z.string().nullable(),
+  externalContactId: z.string(),
+  customerId: z.string().nullable(),
+  kind: messageKindSchema,
+  // Primeira linha com texto, ate 140 caracteres; vazia em midia sem legenda.
+  preview: z.string(),
+  createdAt: isoDateTimeSchema,
+});
+
+export const conversationUnreadSummarySchema = z.object({
+  unreadConversations: z.number().int().nonnegative(),
+  recent: z.array(unreadMessagePreviewSchema),
+});
+
 // --- Eventos de agenda que a IA fez na conversa (Goal070) -------------------
 // Deriva só do ledger `AiToolCall` de `create_appointment`, nunca do texto do
 // modelo (D-073). Espelha `ConversationEvent` de
@@ -1591,6 +1614,10 @@ export type AppearancePreference = z.infer<typeof appearancePreferenceSchema>;
 export type CalendarSource = z.infer<typeof calendarSourceSchema>;
 export type CalendarState = z.infer<typeof calendarStateSchema>;
 export type Conversation = z.infer<typeof conversationSchema>;
+export type UnreadMessagePreview = z.infer<typeof unreadMessagePreviewSchema>;
+export type ConversationUnreadSummary = z.infer<
+  typeof conversationUnreadSummarySchema
+>;
 export type SessionCategory = z.infer<typeof sessionCategorySchema>;
 export type Customer = z.infer<typeof customerSchema>;
 export type CustomerDetail = z.infer<typeof customerDetailSchema>;

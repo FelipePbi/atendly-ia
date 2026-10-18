@@ -50,6 +50,11 @@ import { PlatformWhatsAppSender } from "../channel/platform/PlatformWhatsAppSend
 import { deriveConversationEvents } from "../conversations/conversation-events.js";
 import { countInboundMessagesByWeekHour } from "../conversations/inbound-hours.js";
 import {
+  countUnreadMessages,
+  markConversationRead,
+  unreadSummary,
+} from "../conversations/unread.js";
+import {
   type ConversationAwaitingHuman,
   listConversationsAwaitingHuman,
 } from "../handoff/HandoffService.js";
@@ -154,6 +159,12 @@ const conversationQuerySchema = z.object({
   // Conversas de uma pessoa do Scheduling (Goal075), pelo perfil do cliente.
   customerId: z.string().trim().min(1).max(128).optional(),
 });
+
+// D-195: ate onde a tela mostrou (o instante da mensagem mais nova). Ausente,
+// vale agora.
+const markReadSchema = z
+  .object({ readThrough: z.string().datetime({ offset: true }).optional() })
+  .default({});
 
 const awaitingHumanQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
@@ -415,6 +426,16 @@ export async function registerInternalRoutes(
     );
   const contentPurge = new ContentPurgeService(prisma);
   const tenantPurge = new TenantPurgeService(prisma);
+  /** DTO de uma conversa com as nao lidas dela (D-195). */
+  const conversationView = async (
+    tenantId: string,
+    conversation: ConversationDtoInput & { id: string },
+  ) => {
+    const unread = await countUnreadMessages(prisma, tenantId, [
+      conversation.id,
+    ]);
+    return conversationDto(conversation, unread.get(conversation.id) ?? 0);
+  };
   const customerMemoryService = new CustomerMemoryService(prisma);
   const customerMemory = options.customerMemory ?? customerMemoryService;
   const customerSummary =
@@ -668,11 +689,29 @@ export async function registerInternalRoutes(
       orderBy: { updatedAt: "desc" },
       take: query.limit,
     });
+    const unread = await countUnreadMessages(
+      prisma,
+      tenantId,
+      conversations.map((conversation) => conversation.id),
+    );
 
     return internalData(
       request,
-      conversations.map((conversation) => conversationDto(conversation)),
+      conversations.map((conversation) =>
+        conversationDto(conversation, unread.get(conversation.id) ?? 0),
+      ),
     );
+  });
+
+  /**
+   * Resumo das nao lidas para a navegacao (D-195): quantas conversas do
+   * atendimento tem mensagem do cliente que a profissional ainda nao viu, e a
+   * ultima de cada uma das mais recentes, para o aviso de mensagem nova. Rota
+   * estatica: o router a prefere a `:id`.
+   */
+  app.get("/internal/conversations/unread-summary", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    return internalData(request, await unreadSummary(prisma, tenantId));
   });
 
   app.get("/internal/conversations/:id", async (request) => {
@@ -680,7 +719,35 @@ export async function registerInternalRoutes(
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
     return internalData(
       request,
-      conversationDto(await requireConversation(prisma, tenantId, id)),
+      await conversationView(
+        tenantId,
+        await requireConversation(prisma, tenantId, id),
+      ),
+    );
+  });
+
+  /**
+   * A profissional viu a conversa no app (D-195). Avanca a marca de leitura
+   * ate `readThrough`, sem mexer em `updatedAt` nem registrar atividade: ler
+   * nao muda a conversa.
+   */
+  app.post("/internal/conversations/:id/read", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const { id } = parseOrThrow(conversationParamsSchema, request.params);
+    const body = parseOrThrow(markReadSchema, request.body ?? undefined);
+    await requireConversation(prisma, tenantId, id);
+    await markConversationRead(
+      prisma,
+      tenantId,
+      id,
+      body.readThrough ? new Date(body.readThrough) : undefined,
+    );
+    return internalData(
+      request,
+      await conversationView(
+        tenantId,
+        await requireConversation(prisma, tenantId, id),
+      ),
     );
   });
 
@@ -1008,7 +1075,10 @@ export async function registerInternalRoutes(
     });
     return internalData(
       request,
-      conversationDto(await requireConversation(prisma, tenantId, id)),
+      await conversationView(
+        tenantId,
+        await requireConversation(prisma, tenantId, id),
+      ),
     );
   });
 
@@ -1047,7 +1117,10 @@ export async function registerInternalRoutes(
     await sessions.releaseToAi({ tenantId, conversationId: id, actor: userId });
     return internalData(
       request,
-      conversationDto(await requireConversation(prisma, tenantId, id)),
+      await conversationView(
+        tenantId,
+        await requireConversation(prisma, tenantId, id),
+      ),
     );
   });
 
@@ -1078,7 +1151,8 @@ export async function registerInternalRoutes(
       ...(body.scope ? { scope: body.scope } : {}),
       actor: userId,
     });
-    const categorized = conversationDto(
+    const categorized = await conversationView(
+      tenantId,
       await requireConversation(prisma, tenantId, id),
     );
     if (categorized.category !== categoryBefore) {
@@ -1133,7 +1207,10 @@ export async function registerInternalRoutes(
     );
     return internalData(
       request,
-      conversationDto(await requireConversation(prisma, tenantId, id)),
+      await conversationView(
+        tenantId,
+        await requireConversation(prisma, tenantId, id),
+      ),
     );
   });
 
@@ -1229,7 +1306,10 @@ export async function registerInternalRoutes(
     }
     return internalData(
       request,
-      conversationDto(await requireConversation(prisma, tenantId, id)),
+      await conversationView(
+        tenantId,
+        await requireConversation(prisma, tenantId, id),
+      ),
     );
   });
 
@@ -1977,7 +2057,10 @@ interface ConversationDtoInput {
  * migracao) responde com o padrao seguro — `Nao classificadas`, automatica,
  * nao ignorada — em vez de omitir o campo e obrigar o consumidor a adivinhar.
  */
-function conversationDto(conversation: ConversationDtoInput) {
+function conversationDto(
+  conversation: ConversationDtoInput,
+  unreadCount = 0,
+) {
   const session = conversation.sessions?.[0];
   const humanHandling = session?.humanHandling ?? conversation.humanHandoff;
   return {
@@ -1990,7 +2073,10 @@ function conversationDto(conversation: ConversationDtoInput) {
     lastMessage: conversation.messages[0]
       ? messageDto(conversation.messages[0])
       : null,
-    unreadCount: 0,
+    // D-195: mensagens do cliente que a profissional ainda nao viu. Calculado
+    // nas leituras e acoes da conversa; o painel (`/internal/dashboard`) nao
+    // le e segue com zero.
+    unreadCount,
     updatedAt: conversation.updatedAt.toISOString(),
     // Goal023/WU-02: ate quando o conteudo desta conversa ja foi purgado.
     // Aditivo e nulo enquanto nada expirou — a tela le isto em vez de inferir

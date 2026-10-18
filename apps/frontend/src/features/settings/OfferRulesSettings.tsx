@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 
 import type { AvailabilitySettingsInput, SettingsState } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
@@ -17,7 +17,13 @@ import {
   MAX_LEAD_DAYS_OPTIONS,
   MIN_LEAD_OPTIONS,
 } from "./agendaSummaries";
-import { offerPreview } from "./offerPreview";
+import {
+  changePolicyExample,
+  horizonExample,
+  leadExample,
+  offerSimulation,
+  stepExample,
+} from "./offerPreview";
 import { SettingsPage } from "./shared/SettingsPage";
 
 type Option = { value: number; label: string };
@@ -32,7 +38,23 @@ function withCustomOption(
     : [...options, { value, label: formatLabel(value) }];
 }
 
+/**
+ * Texto que muda com a escolha. O contêiner fica fixo (é ele a região
+ * `aria-live`) e só o conteúdo troca, com fade de opacidade depois da primeira
+ * edição — também com movimento reduzido (D-173).
+ */
+function LiveText({ animate, text }: { animate: boolean; text: string }) {
+  return (
+    <span className={animate ? "rules-swap" : undefined} key={text}>
+      {text}
+    </span>
+  );
+}
+
 function ChoiceGroup({
+  animate,
+  description,
+  example,
   formatLabel,
   label,
   list = false,
@@ -40,6 +62,9 @@ function ChoiceGroup({
   options,
   value,
 }: {
+  animate: boolean;
+  description: string;
+  example: string;
   formatLabel: (value: number) => string;
   label: string;
   list?: boolean;
@@ -49,12 +74,20 @@ function ChoiceGroup({
 }) {
   const name = useId();
   const labelId = `${name}-label`;
+  const descriptionId = `${name}-description`;
+  const exampleId = `${name}-example`;
   return (
     <div className="rules-field">
-      <span className="rules-label" id={labelId}>
-        {label}
-      </span>
+      <div className="rules-field-head">
+        <span className="rules-label" id={labelId}>
+          {label}
+        </span>
+        <span className="rules-description" id={descriptionId}>
+          {description}
+        </span>
+      </div>
       <div
+        aria-describedby={`${descriptionId} ${exampleId}`}
         aria-labelledby={labelId}
         className={`rules-options${list ? " is-list" : ""}`}
         role="radiogroup"
@@ -80,46 +113,91 @@ function ChoiceGroup({
           );
         })}
       </div>
+      <p aria-live="polite" className="rules-hint" id={exampleId}>
+        <span className="rules-hint-tag">Exemplo</span>{" "}
+        <LiveText animate={animate} text={example} />
+      </p>
     </div>
   );
 }
 
-function PracticalExample({
-  granularityMinutes,
-  minLeadMinutes,
-  now,
-  timeZone,
+function RulesSection({
+  children,
+  icon,
+  title,
 }: {
-  granularityMinutes: number;
-  minLeadMinutes: number;
-  now: Date;
-  timeZone: string;
+  children: ReactNode;
+  icon: "calendar" | "clock" | "refresh";
+  title: string;
 }) {
-  const preview = offerPreview({
-    granularityMinutes,
-    minLeadMinutes,
-    now,
-    timeZone,
-  });
+  const titleId = useId();
+  return (
+    <section aria-labelledby={titleId} className="rules-section">
+      <h2 className="rules-section-title" id={titleId}>
+        <Icon name={icon} />
+        {title}
+      </h2>
+      <div className="rules-card">{children}</div>
+    </section>
+  );
+}
+
+function PracticalExample({
+  animate,
+  simulation,
+}: {
+  animate: boolean;
+  simulation: ReturnType<typeof offerSimulation>;
+}) {
+  const times = [...simulation.struck, ...simulation.pills].join(" ");
   return (
     <section aria-label="Na prática" className="rules-example">
       <span className="rules-example-title">
-        Na prática · agora são {preview.nowLabel}
+        <Icon name="spark" />
+        Na prática · agora são {simulation.nowLabel}
       </span>
-      <div className="rules-example-times">
-        {preview.struck.map((time) => (
-          <s className="rules-example-struck" key={time}>
-            {time}
-          </s>
+      {simulation.day ? (
+        <>
+          <p className="rules-example-lead">
+            Se alguém pedir um horário agora, a IA oferece:
+          </p>
+          <div
+            className={`rules-example-offer${animate ? " rules-swap" : ""}`}
+            key={`${simulation.day} ${times}`}
+          >
+            <span className="rules-example-day">{simulation.day}</span>
+            <div className="rules-example-times">
+              {simulation.struck.map((time) => (
+                <s className="rules-example-struck" key={time}>
+                  {time}
+                </s>
+              ))}
+              {simulation.pills.map((time) => (
+                <span className="rules-example-pill" key={time}>
+                  {time}
+                </span>
+              ))}
+              <span aria-hidden="true" className="rules-example-more">
+                …
+              </span>
+            </div>
+          </div>
+        </>
+      ) : (
+        <p className="rules-example-empty">{simulation.empty}</p>
+      )}
+      <ul className="rules-example-facts">
+        {simulation.facts.map((fact) => (
+          <li key={fact}>
+            <Icon name="check" />
+            <LiveText animate={animate} text={fact} />
+          </li>
         ))}
-        {preview.pills.map((time) => (
-          <span className="rules-example-pill" key={time}>
-            {time}
-          </span>
-        ))}
-        <span className="rules-example-more">…</span>
-      </div>
-      <span className="rules-example-legend">{preview.legend}</span>
+      </ul>
+      <span className="rules-example-legend">
+        A IA mostra até três opções por vez e pula os horários que já estão
+        ocupados ou bloqueados na Agenda.
+      </span>
     </section>
   );
 }
@@ -146,12 +224,21 @@ export function OfferRulesSettings({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [edited, setEdited] = useState(false);
   const [now] = useState(() => new Date());
 
   const timeZone =
     availability?.timezone ??
     settings.business?.timezone ??
     "America/Sao_Paulo";
+  const rules = availability?.rules ?? [];
+
+  function edit(setter: (value: number) => void) {
+    return (value: number) => {
+      setEdited(true);
+      setter(value);
+    };
+  }
 
   async function save() {
     setBusy(true);
@@ -193,47 +280,84 @@ export function OfferRulesSettings({
     >
       <div className="rules-screen">
         <div className="rules-fields">
-          <ChoiceGroup
-            formatLabel={formatMinLeadLabel}
-            label="Com quanta antecedência a IA pode marcar"
-            options={MIN_LEAD_OPTIONS}
-            value={minLeadMinutes}
-            onChange={setMinLeadMinutes}
-          />
-          <ChoiceGroup
-            formatLabel={formatMaxLeadDaysLabel}
-            label="Até quando no futuro"
-            options={MAX_LEAD_DAYS_OPTIONS}
-            value={maxLeadDays}
-            onChange={setMaxLeadDays}
-          />
-          <ChoiceGroup
-            formatLabel={formatGranularityLabel}
-            label="Intervalo entre horários oferecidos"
-            options={GRANULARITY_OPTIONS}
-            value={granularityMinutes}
-            onChange={setGranularityMinutes}
-          />
-          <PracticalExample
-            granularityMinutes={granularityMinutes}
-            minLeadMinutes={minLeadMinutes}
-            now={now}
-            timeZone={timeZone}
-          />
-          <div className="rules-policy">
+          <p className="rules-intro">
+            Regras que a IA segue ao marcar pelo WhatsApp. Os exemplos usam a
+            data e a hora de agora e mudam conforme você escolhe.
+          </p>
+          <RulesSection icon="calendar" title="Quando a IA pode marcar">
             <ChoiceGroup
+              animate={edited}
+              description="O tempo mínimo entre agora e o horário que a IA oferece."
+              example={leadExample({ minLeadMinutes, now, timeZone })}
+              formatLabel={formatMinLeadLabel}
+              label="Com quanta antecedência a IA pode marcar"
+              options={MIN_LEAD_OPTIONS}
+              value={minLeadMinutes}
+              onChange={edit(setMinLeadMinutes)}
+            />
+            <ChoiceGroup
+              animate={edited}
+              description="O dia mais distante, contando de hoje, em que a IA ainda marca."
+              example={horizonExample({ maxLeadDays, now, timeZone })}
+              formatLabel={formatMaxLeadDaysLabel}
+              label="Até quantos dias à frente"
+              options={MAX_LEAD_DAYS_OPTIONS}
+              value={maxLeadDays}
+              onChange={edit(setMaxLeadDays)}
+            />
+          </RulesSection>
+          <RulesSection icon="clock" title="Horários que a IA oferece">
+            <ChoiceGroup
+              animate={edited}
+              description="De quanto em quanto tempo começam os horários, a partir do início do seu expediente."
+              example={stepExample({ granularityMinutes, rules })}
+              formatLabel={formatGranularityLabel}
+              label="Intervalo entre horários oferecidos"
+              options={GRANULARITY_OPTIONS}
+              value={granularityMinutes}
+              onChange={edit(setGranularityMinutes)}
+            />
+          </RulesSection>
+          <RulesSection
+            icon="refresh"
+            title="Cancelamento e remarcação pelo cliente"
+          >
+            <ChoiceGroup
+              animate={edited}
+              description="Até quanto tempo antes do horário o cliente pode cancelar ou remarcar falando com a IA."
+              example={changePolicyExample({
+                minNoticeMinutes: customerChangeMinNoticeMinutes,
+                now,
+                timeZone,
+              })}
               formatLabel={formatCustomerChangePolicyLabel}
               label="Cancelar ou remarcar pelo WhatsApp"
               list
               options={CUSTOMER_CHANGE_POLICY_OPTIONS}
               value={customerChangeMinNoticeMinutes}
-              onChange={setCustomerChangeMinNoticeMinutes}
+              onChange={edit(setCustomerChangeMinNoticeMinutes)}
             />
-            <span className="rules-help">
-              Com restrição, fora do prazo a IA explica a regra e oferece falar
-              com você. Pela Agenda, você sempre pode cancelar ou remarcar.
-            </span>
-          </div>
+            <p className="rules-help">
+              <Icon name="info" />
+              <span>
+                Com restrição, fora do prazo a IA explica a regra e oferece
+                falar com você. Pela Agenda, você sempre pode cancelar ou
+                remarcar.
+              </span>
+            </p>
+          </RulesSection>
+          <PracticalExample
+            animate={edited}
+            simulation={offerSimulation({
+              granularityMinutes,
+              maxLeadDays,
+              minLeadMinutes,
+              minNoticeMinutes: customerChangeMinNoticeMinutes,
+              now,
+              rules,
+              timeZone,
+            })}
+          />
         </div>
         <div className="rules-save">
           <p

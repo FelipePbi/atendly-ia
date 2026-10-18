@@ -18,8 +18,10 @@
  * 3. AG3 (`/configuracoes/agenda/regras`): os grupos segmentados com o valor
  *    lido, a opção extra para valor fora da lista (inclusive antecedência 0),
  *    um único "Salvar" com um único PATCH de quatro campos mais `timezone` e
- *    `rules` lidos, erro sem perder a edição e o bloco "Na prática" com relógio
- *    fixo, reagindo à tela antes de salvar.
+ *    `rules` lidos, erro sem perder a edição e, desde D-187, os três
+ *    contextos em cartões, o exemplo concreto de cada grupo e o bloco "Na
+ *    prática" (que junta as quatro escolhas com os dias e horários de
+ *    atendimento) com relógio fixo, reagindo à tela antes de salvar.
  * 4. `/configuracoes/agenda/lembretes`: a seção de lembretes como tela
  *    empurrada, com voltar para `/configuracoes/agenda`.
  * 5. Casca: uma chamada de `useShellConfig` por árvore nas quatro rotas, nas
@@ -49,6 +51,8 @@ import { SettingsScreen } from "@/features/settings/SettingsScreen";
 import type * as ShellConfigModule from "@/shared/layout/ShellConfig";
 import type { ShellConfig } from "@/shared/layout/ShellConfig";
 import { SystemStatusProvider } from "@/shared/runtime/systemStatus";
+
+import { expectNoA11yViolations } from "./support/a11y";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
@@ -744,7 +748,7 @@ function ruleGroup(name: string): HTMLElement {
 }
 
 const LEAD_GROUP = "Com quanta antecedência a IA pode marcar";
-const FUTURE_GROUP = "Até quando no futuro";
+const FUTURE_GROUP = "Até quantos dias à frente";
 const STEP_GROUP = "Intervalo entre horários oferecidos";
 const POLICY_GROUP = "Cancelar ou remarcar pelo WhatsApp";
 
@@ -877,78 +881,225 @@ describe("Goal097 prova 3: AG3 — /configuracoes/agenda/regras", () => {
   });
 });
 
-// 13:45 em America/Sao_Paulo (UTC-3), com a Agenda no fuso do negócio.
-const NOW_13_45 = new Date("2026-10-03T16:45:00.000Z");
+// Relógio fixo em America/Sao_Paulo (UTC-3), com a Agenda no fuso do negócio.
+// Sexta, 02/10/2026, 13:45: dia útil, com expediente das 09:00 às 18:00.
+const FRIDAY_13_45 = new Date("2026-10-02T16:45:00.000Z");
+// Sábado, 03/10/2026, 13:45: o sábado fecha às 14:00 e o domingo não abre.
+const SATURDAY_13_45 = new Date("2026-10-03T16:45:00.000Z");
+// Sexta, 02/10/2026, 08:00.
+const FRIDAY_08_00 = new Date("2026-10-02T11:00:00.000Z");
 const SAO_PAULO = "America/Sao_Paulo";
+const RULES = availabilityFixture().rules;
 
-describe("Goal097 prova 3: Na prática (função, relógio fixo)", () => {
-  test("13:45, 2 h de antecedência e passo de 30 min", async () => {
-    const { offerPreview } = await loadOfferPreview();
+describe("D-187: exemplo de cada grupo (função, relógio fixo)", () => {
+  test("antecedência: a partir de quando, com a hora de agora", async () => {
+    const { leadExample } = await loadOfferPreview();
+    const at = (minLeadMinutes: number) =>
+      leadExample({ minLeadMinutes, now: FRIDAY_13_45, timeZone: SAO_PAULO });
 
+    expect(at(240)).toBe(
+      "Agora são 13:45, então a IA só oferece horários a partir das 17:45.",
+    );
+    expect(at(1_440)).toBe(
+      "Agora são 13:45, então a IA só oferece horários a partir de amanhã às 13:45.",
+    );
+    expect(at(720)).toBe(
+      "Agora são 13:45, então a IA só oferece horários a partir de amanhã à 01:45.",
+    );
+    expect(at(0)).toBe(
+      "Agora são 13:45, então a IA pode oferecer qualquer horário livre a partir de agora.",
+    );
     expect(
-      offerPreview({
-        granularityMinutes: 30,
-        minLeadMinutes: 120,
-        now: NOW_13_45,
-        timeZone: SAO_PAULO,
+      leadExample({
+        minLeadMinutes: 60,
+        now: FRIDAY_13_45,
+        timeZone: "America/Manaus",
       }),
-    ).toEqual({
-      legend:
-        "Só a partir de 15:45, em passos de 30 min. A IA mostra até três opções por vez.",
+    ).toBe(
+      "Agora são 12:45, então a IA só oferece horários a partir das 13:45.",
+    );
+  });
+
+  test("até quando: o último dia em que a IA marca, por extenso", async () => {
+    const { horizonExample } = await loadOfferPreview();
+    const at = (maxLeadDays: number, now = FRIDAY_13_45) =>
+      horizonExample({ maxLeadDays, now, timeZone: SAO_PAULO });
+
+    expect(at(30)).toBe(
+      "Hoje é 2 de outubro, então a IA não marca nada depois de 1º de novembro.",
+    );
+    expect(at(90)).toBe(
+      "Hoje é 2 de outubro, então a IA não marca nada depois de 31 de dezembro.",
+    );
+    expect(at(90, SATURDAY_13_45)).toBe(
+      "Hoje é 3 de outubro, então a IA não marca nada depois de 1º de janeiro de 2027.",
+    );
+  });
+
+  test("intervalo: os três primeiros horários a partir do expediente ativo mais cedo", async () => {
+    const { stepExample } = await loadOfferPreview();
+
+    expect(stepExample({ granularityMinutes: 30, rules: RULES })).toBe(
+      "Com 30 min, a IA oferece 09:00, 09:30, 10:00 e assim por diante.",
+    );
+    expect(stepExample({ granularityMinutes: 60, rules: RULES })).toBe(
+      "Com 1 h, a IA oferece 09:00, 10:00, 11:00 e assim por diante.",
+    );
+    // O domingo inativo da fixture começa às 08:00 e não conta; um ativo às 08:30 conta.
+    expect(
+      stepExample({
+        granularityMinutes: 15,
+        rules: [
+          ...RULES,
+          {
+            active: true,
+            dayOfWeek: 0,
+            endTime: "12:00",
+            id: "extra",
+            startTime: "08:30",
+          },
+        ],
+      }),
+    ).toBe("Com 15 min, a IA oferece 08:30, 08:45, 09:00 e assim por diante.");
+    expect(stepExample({ granularityMinutes: 30, rules: [] })).toBe(
+      "Com 30 min, a IA oferece 09:00, 09:30, 10:00 e assim por diante.",
+    );
+  });
+
+  test("cancelamento: até quando quem tem horário às 10:00 pode mudar, com o prazo ainda à frente", async () => {
+    const { changePolicyExample } = await loadOfferPreview();
+    const at = (minNoticeMinutes: number, now = FRIDAY_13_45) =>
+      changePolicyExample({ minNoticeMinutes, now, timeZone: SAO_PAULO });
+
+    expect(at(1_440, FRIDAY_08_00)).toBe(
+      "Quem tem horário amanhã às 10:00 só consegue cancelar ou remarcar pelo WhatsApp até hoje às 10:00.",
+    );
+    expect(at(720)).toBe(
+      "Quem tem horário amanhã às 10:00 só consegue cancelar ou remarcar pelo WhatsApp até hoje às 22:00.",
+    );
+    // Às 13:45 o prazo de amanhã às 10:00 já passou: o exemplo vai um dia adiante.
+    expect(at(1_440)).toBe(
+      "Quem tem horário domingo, 04/10 às 10:00 só consegue cancelar ou remarcar pelo WhatsApp até amanhã às 10:00.",
+    );
+    expect(at(2_880)).toBe(
+      "Quem tem horário segunda, 05/10 às 10:00 só consegue cancelar ou remarcar pelo WhatsApp até amanhã às 10:00.",
+    );
+    expect(at(0)).toBe(
+      "Quem tem horário marcado pode cancelar ou remarcar pelo WhatsApp a qualquer momento antes dele.",
+    );
+  });
+});
+
+describe("D-187: Na prática junta as quatro escolhas (função, relógio fixo)", () => {
+  async function simulate(
+    overrides: Partial<{
+      granularityMinutes: number;
+      maxLeadDays: number;
+      minLeadMinutes: number;
+      minNoticeMinutes: number;
+      now: Date;
+      rules: typeof RULES;
+      timeZone: string;
+    }> = {},
+  ) {
+    const { offerSimulation } = await loadOfferPreview();
+    return offerSimulation({
+      granularityMinutes: 30,
+      maxLeadDays: 60,
+      minLeadMinutes: 120,
+      minNoticeMinutes: 720,
+      now: FRIDAY_13_45,
+      rules: RULES,
+      timeZone: SAO_PAULO,
+      ...overrides,
+    });
+  }
+
+  test("sexta 13:45, 2 h e 30 min: riscados, três opções hoje e uma frase por regra", async () => {
+    expect(await simulate()).toEqual({
+      day: "Hoje",
+      empty: null,
+      facts: [
+        "Nada antes de hoje às 15:45 (2 horas de antecedência).",
+        "Nada depois de 1º de dezembro (60 dias à frente).",
+        "De 30 em 30 min, dentro dos seus dias e horários de atendimento.",
+        // O prazo de 12 h antes das 16:00 já passou às 13:45.
+        "Quem marcar hoje às 16:00 já não pode cancelar nem remarcar pelo WhatsApp, porque faltam menos de 12 h: a IA explica a regra e oferece falar com você.",
+      ],
       nowLabel: "13:45",
       pills: ["16:00", "16:30", "17:00"],
       struck: ["14:00", "15:30"],
     });
   });
 
-  test("antecedência de 1 dia move o bloco para o dia seguinte", async () => {
-    const { offerPreview } = await loadOfferPreview();
-
-    const preview = offerPreview({
-      granularityMinutes: 30,
-      minLeadMinutes: 1_440,
-      now: NOW_13_45,
-      timeZone: SAO_PAULO,
-    });
-    expect(preview.legend).toBe(
-      "Só a partir de amanhã às 13:45, em passos de 30 min. A IA mostra até três opções por vez.",
+  test("o intervalo muda os passos e o fuso muda o relógio", async () => {
+    const hourly = await simulate({ granularityMinutes: 60 });
+    expect(hourly.pills).toEqual(["16:00", "17:00"]);
+    expect(hourly.struck).toEqual(["14:00", "15:00"]);
+    expect(hourly.facts[2]).toBe(
+      "De hora em hora, dentro dos seus dias e horários de atendimento.",
     );
-    expect(preview.pills).toEqual(["14:00", "14:30", "15:00"]);
-    expect(preview.struck).toEqual(["13:30"]);
+    expect((await simulate({ timeZone: "America/Manaus" })).nowLabel).toBe(
+      "12:45",
+    );
   });
 
-  test("o intervalo muda os passos e o fuso muda o relógio", async () => {
-    const { offerPreview } = await loadOfferPreview();
-
-    expect(
-      offerPreview({
-        granularityMinutes: 60,
-        minLeadMinutes: 120,
-        now: NOW_13_45,
-        timeZone: SAO_PAULO,
-      }),
-    ).toMatchObject({
-      pills: ["16:00", "17:00", "18:00"],
-      struck: ["14:00", "15:00"],
+  test("respeita os dias e horários: no sábado depois do expediente, a primeira opção é segunda", async () => {
+    const simulation = await simulate({
+      minNoticeMinutes: 1_440,
+      now: SATURDAY_13_45,
     });
-    expect(
-      offerPreview({
-        granularityMinutes: 30,
-        minLeadMinutes: 120,
-        now: NOW_13_45,
-        timeZone: "America/Manaus",
-      }).nowLabel,
-    ).toBe("12:45");
+    expect(simulation.day).toBe("Segunda, 05/10");
+    expect(simulation.pills).toEqual(["09:00", "09:30", "10:00"]);
+    expect(simulation.struck).toEqual([]);
+    expect(simulation.facts[3]).toBe(
+      "Quem marcar segunda, 05/10 às 09:00 pode cancelar ou remarcar pelo WhatsApp até amanhã às 09:00.",
+    );
+  });
+
+  test("antecedência de 1 dia leva as opções para amanhã e risca o que fica antes", async () => {
+    const simulation = await simulate({
+      granularityMinutes: 15,
+      minLeadMinutes: 1_440,
+      minNoticeMinutes: 0,
+    });
+    expect(simulation.day).toBe("Amanhã");
+    expect(simulation.pills).toEqual(["13:45"]);
+    expect(simulation.struck).toEqual(["09:00", "13:30"]);
+    expect(simulation.facts[0]).toBe(
+      "Nada antes de amanhã às 13:45 (1 dia de antecedência).",
+    );
+    expect(simulation.facts[3]).toBe(
+      "Quem marcar amanhã às 13:45 pode cancelar ou remarcar pelo WhatsApp a qualquer momento antes do horário.",
+    );
+  });
+
+  test("sem horário possível, diz o porquê em vez de inventar opção", async () => {
+    const closed = await simulate({
+      rules: RULES.map((rule) => ({ ...rule, active: false })),
+    });
+    expect(closed).toMatchObject({ day: null, pills: [], struck: [] });
+    expect(closed.empty).toBe(
+      "Nenhum dia de atendimento está ativo, então a IA não tem horário para oferecer. Ajuste em Dias e horários.",
+    );
+    expect(closed.facts).toHaveLength(3);
+
+    const tooShort = await simulate({ maxLeadDays: 1, now: SATURDAY_13_45 });
+    expect(tooShort.pills).toEqual([]);
+    expect(tooShort.empty).toBe(
+      "No limite de 1 dia, não sobra horário de atendimento depois da antecedência mínima, então a IA não teria o que oferecer.",
+    );
   });
 });
 
-describe("Goal097 prova 3: Na prática (na tela, antes de salvar)", () => {
+describe("D-187: a tela em três contextos, com exemplos que mudam antes de salvar", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(NOW_13_45);
+    vi.setSystemTime(FRIDAY_13_45);
     settingsGet.mockResolvedValue(
       settingsFixture({
         availability: availabilityFixture({
+          customerChangeMinNoticeMinutes: 0,
           granularityMinutes: 30,
           minLeadMinutes: 120,
           timezone: SAO_PAULO,
@@ -961,48 +1112,159 @@ describe("Goal097 prova 3: Na prática (na tela, antes de salvar)", () => {
     return screen.getByRole("region", { name: "Na prática" });
   }
 
-  test("mostra o exemplo com horários riscados, opções oferecidas e a legenda", async () => {
+  function pills(): string[] {
+    return Array.from(example().querySelectorAll(".rules-example-pill")).map(
+      (time) => time.textContent ?? "",
+    );
+  }
+
+  function struck(): string[] {
+    return Array.from(example().querySelectorAll("s")).map(
+      (time) => time.textContent ?? "",
+    );
+  }
+
+  function facts(): string[] {
+    return within(example())
+      .getAllByRole("listitem")
+      .map((item) => item.textContent ?? "");
+  }
+
+  test("cada grupo fica no cartão do seu contexto, com descrição e exemplo", async () => {
+    const { container } = await renderRoute(
+      "calendar-rules",
+      NARROW,
+      LEAD_GROUP,
+    );
+
+    const sections: Array<[string, string[]]> = [
+      ["Quando a IA pode marcar", [LEAD_GROUP, FUTURE_GROUP]],
+      ["Horários que a IA oferece", [STEP_GROUP]],
+      ["Cancelamento e remarcação pelo cliente", [POLICY_GROUP]],
+    ];
+    for (const [title, groups] of sections) {
+      expect(
+        screen.getByRole("heading", { level: 2, name: title }),
+      ).toBeVisible();
+      const section = screen.getByRole("region", { name: title });
+      expect(
+        within(section)
+          .getAllByRole("radiogroup")
+          .map((group) =>
+            document.getElementById(
+              group.getAttribute("aria-labelledby") ?? "",
+            )?.textContent,
+          ),
+      ).toEqual(groups);
+    }
+
+    expect(ruleGroup(LEAD_GROUP)).toHaveAccessibleDescription(
+      "O tempo mínimo entre agora e o horário que a IA oferece. Exemplo Agora são 13:45, então a IA só oferece horários a partir das 15:45.",
+    );
+    expect(ruleGroup(FUTURE_GROUP)).toHaveAccessibleDescription(
+      /Hoje é 2 de outubro, então a IA não marca nada depois de 1º de dezembro\.$/,
+    );
+    expect(ruleGroup(STEP_GROUP)).toHaveAccessibleDescription(
+      /Com 30 min, a IA oferece 09:00, 09:30, 10:00 e assim por diante\.$/,
+    );
+    expect(ruleGroup(POLICY_GROUP)).toHaveAccessibleDescription(
+      /Quem tem horário marcado pode cancelar ou remarcar pelo WhatsApp a qualquer momento antes dele\.$/,
+    );
+    await expectNoA11yViolations(container);
+  });
+
+  test("o bloco Na prática mostra riscados, opções e uma frase por regra", async () => {
     await renderRoute("calendar-rules", NARROW, LEAD_GROUP);
 
     const block = example();
     expect(block).toHaveTextContent("Na prática · agora são 13:45");
-    expect(
-      Array.from(block.querySelectorAll("s")).map((time) => time.textContent),
-    ).toEqual(["14:00", "15:30"]);
-    expect(
-      Array.from(block.querySelectorAll(".rules-example-pill")).map(
-        (time) => time.textContent,
-      ),
-    ).toEqual(["16:00", "16:30", "17:00"]);
     expect(block).toHaveTextContent(
-      "Só a partir de 15:45, em passos de 30 min.",
+      "Se alguém pedir um horário agora, a IA oferece:",
     );
+    expect(block.querySelector(".rules-example-day")).toHaveTextContent(
+      "Hoje",
+    );
+    expect(struck()).toEqual(["14:00", "15:30"]);
+    expect(pills()).toEqual(["16:00", "16:30", "17:00"]);
+    expect(facts()).toEqual([
+      "Nada antes de hoje às 15:45 (2 horas de antecedência).",
+      "Nada depois de 1º de dezembro (60 dias à frente).",
+      "De 30 em 30 min, dentro dos seus dias e horários de atendimento.",
+      "Quem marcar hoje às 16:00 pode cancelar ou remarcar pelo WhatsApp a qualquer momento antes do horário.",
+    ]);
   });
 
-  test("trocar a antecedência e o intervalo na tela muda o bloco sem salvar", async () => {
+  test("trocar as escolhas muda os exemplos e o bloco sem salvar", async () => {
     const user = userEvent.setup();
     await renderRoute("calendar-rules", NARROW, LEAD_GROUP);
 
+    // 4 h: o limite (17:45) passa do último horário de hoje (17:30).
+    await user.click(
+      within(ruleGroup(LEAD_GROUP)).getByRole("radio", { name: "4 h" }),
+    );
+    expect(ruleGroup(LEAD_GROUP)).toHaveAccessibleDescription(
+      /a partir das 17:45\.$/,
+    );
+    expect(example().querySelector(".rules-example-day")).toHaveTextContent(
+      "Amanhã",
+    );
+    expect(pills()).toEqual(["09:00", "09:30", "10:00"]);
+    expect(facts()[0]).toBe(
+      "Nada antes de hoje às 17:45 (4 horas de antecedência).",
+    );
+
+    // 15 min: cabe um horário hoje às 17:45.
     await user.click(
       within(ruleGroup(STEP_GROUP)).getByRole("radio", { name: "15 min" }),
     );
-    expect(example()).toHaveTextContent("em passos de 15 min");
-    expect(
-      Array.from(example().querySelectorAll(".rules-example-pill")).map(
-        (time) => time.textContent,
-      ),
-    ).toEqual(["15:45", "16:00", "16:15"]);
+    expect(ruleGroup(STEP_GROUP)).toHaveAccessibleDescription(
+      /Com 15 min, a IA oferece 09:00, 09:15, 09:30 e assim por diante\.$/,
+    );
+    expect(example().querySelector(".rules-example-day")).toHaveTextContent(
+      "Hoje",
+    );
+    expect(struck()).toEqual(["14:00", "17:30"]);
+    expect(pills()).toEqual(["17:45"]);
 
     await user.click(
-      within(ruleGroup(LEAD_GROUP)).getByRole("radio", { name: "1 dia" }),
+      within(ruleGroup(FUTURE_GROUP)).getByRole("radio", { name: "90 dias" }),
     );
-    expect(example()).toHaveTextContent("Só a partir de amanhã às 13:45");
-    expect(
-      Array.from(example().querySelectorAll(".rules-example-pill")).map(
-        (time) => time.textContent,
-      ),
-    ).toEqual(["13:45", "14:00", "14:15"]);
+    expect(ruleGroup(FUTURE_GROUP)).toHaveAccessibleDescription(
+      /depois de 31 de dezembro\.$/,
+    );
+    expect(facts()[1]).toBe(
+      "Nada depois de 31 de dezembro (90 dias à frente).",
+    );
+
+    await user.click(
+      within(ruleGroup(POLICY_GROUP)).getByRole("radio", {
+        name: "Até 12 h antes",
+      }),
+    );
+    expect(ruleGroup(POLICY_GROUP)).toHaveAccessibleDescription(
+      /Quem tem horário amanhã às 10:00 só consegue cancelar ou remarcar pelo WhatsApp até hoje às 22:00\.$/,
+    );
+    expect(facts()[3]).toBe(
+      "Quem marcar hoje às 17:45 já não pode cancelar nem remarcar pelo WhatsApp, porque faltam menos de 12 h: a IA explica a regra e oferece falar com você.",
+    );
     expect(updateAvailability).not.toHaveBeenCalled();
+  });
+
+  test("sem dia de atendimento ativo, o bloco explica em vez de mostrar horário", async () => {
+    settingsGet.mockResolvedValue(
+      settingsFixture({
+        availability: availabilityFixture({
+          rules: [],
+          timezone: SAO_PAULO,
+        }),
+      }),
+    );
+    await renderRoute("calendar-rules", NARROW, LEAD_GROUP);
+
+    expect(example()).toHaveTextContent(
+      "Nenhum dia de atendimento está ativo, então a IA não tem horário para oferecer.",
+    );
+    expect(pills()).toEqual([]);
   });
 });
 

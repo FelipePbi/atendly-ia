@@ -12,6 +12,7 @@ import { resolveChannelConversation } from "../channel/conversation-resolution.j
 import type { WhatsAppProvider } from "../channel/ports/WhatsAppProvider.js";
 import { classifySendFailure } from "../outbox/outbox-policy.js";
 import { OutboxStore } from "../outbox/OutboxStore.js";
+import { type SandboxGate, tenantSandboxGate } from "../sandbox/SandboxGate.js";
 import type {
   ClaimedNotificationIntent,
   NotificationIntentReason,
@@ -66,6 +67,8 @@ export type NotificationProviderFactory = (input: {
   credential: string;
   externalInstanceId: string;
   logger: DiagnosticLogger;
+  /** Modo sandbox do negocio (D-199); o provedor o consulta antes de enviar. */
+  sandbox: SandboxGate;
 }) => WhatsAppProvider;
 
 const defaultProviderFactory: NotificationProviderFactory = (input) =>
@@ -73,6 +76,7 @@ const defaultProviderFactory: NotificationProviderFactory = (input) =>
     input.logger,
     input.credential,
     input.externalInstanceId,
+    input.sandbox,
   );
 
 /** O que a entrega precisa do dono da agenda. Deliberadamente estreito. */
@@ -314,6 +318,13 @@ export class NotificationDeliveryService {
         credential: channel.credential,
         externalInstanceId: channel.externalInstanceId,
         logger: this.logger,
+        // Lembrete e aviso de alteracao passam pelo sandbox do negocio
+        // (D-199): suprimido, o desfecho e `SENT` como o de um envio real.
+        sandbox: tenantSandboxGate({
+          prisma: this.prisma,
+          tenantId: intent.tenantId,
+          logger: this.logger,
+        }),
       });
       const sent = await provider.sendText({
         to: externalContactId,

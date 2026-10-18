@@ -2,6 +2,8 @@ import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import type {
   AgendaInitialView,
   AgendaViewPreference,
+  AiSandboxSettings,
+  AiSandboxSettingsInput,
   AiTone,
   AppearancePreference,
   AvailabilitySettings,
@@ -174,6 +176,29 @@ export class BffSettingsService {
       schema: routeSchema<AppearancePreference>(
         "PATCH",
         "/v1/settings/appearance",
+      ),
+      signal,
+    });
+  }
+
+  /** Modo sandbox da IA (D-199). */
+  getAiSandbox(signal?: AbortSignal) {
+    return this.http.request({
+      path: "/v1/settings/ai/sandbox",
+      schema: routeSchema<AiSandboxSettings>("GET", "/v1/settings/ai/sandbox"),
+      signal,
+    });
+  }
+
+  /** Campo ausente preserva o gravado; a lista, quando vem, substitui. */
+  updateAiSandbox(input: AiSandboxSettingsInput, signal?: AbortSignal) {
+    return this.http.request({
+      body: input,
+      method: "PATCH",
+      path: "/v1/settings/ai/sandbox",
+      schema: routeSchema<AiSandboxSettings>(
+        "PATCH",
+        "/v1/settings/ai/sandbox",
       ),
       signal,
     });

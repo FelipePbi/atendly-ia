@@ -287,6 +287,30 @@ export const appearancePreferenceSchema = z.object({
   mode: appearanceModeSchema,
 });
 
+// Modo sandbox da IA (D-199): ligado, as mensagens para o WhatsApp de quem
+// nao esta nas excecoes sao gravadas como enviadas e nao saem. Espelha
+// `GET/PATCH /v1/settings/ai/sandbox`. Os telefones saem canonicos (55 + DDD
+// + numero, so digitos); a entrada aceita mascara e e normalizada no
+// servidor. `updatedAt` nulo: nunca gravado.
+export const AI_SANDBOX_MAX_EXCEPTION_PHONES = 20;
+export const aiSandboxSettingsSchema = z.object({
+  enabled: z.boolean(),
+  exceptionPhones: z
+    .array(z.string().regex(/^55\d{10,11}$/u))
+    .max(AI_SANDBOX_MAX_EXCEPTION_PHONES),
+  updatedAt: z.string().nullable(),
+});
+// Ausente preserva o gravado; a lista, quando vem, substitui a anterior.
+export const aiSandboxSettingsInputSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    exceptionPhones: z
+      .array(z.string().trim().min(8).max(32))
+      .max(AI_SANDBOX_MAX_EXCEPTION_PHONES)
+      .optional(),
+  })
+  .strict();
+
 export const retentionDaysSchema = z.union([
   z.literal(30),
   z.literal(90),
@@ -1381,6 +1405,9 @@ export const systemStatusSchema = z.object({
     effectiveEnabled: z.boolean().nullable(),
     state: aiStateValueSchema,
     reconciled: aiReconciledValueSchema,
+    // Modo sandbox (D-199), para o aviso da casca. `null`: a IA nao respondeu
+    // e nao da para afirmar; ausente numa resposta antiga vale desligado.
+    sandboxEnabled: z.boolean().nullable().optional(),
   }),
   accountDeletion: accountDeletionStateSchema,
   degraded: z.boolean(),
@@ -1611,6 +1638,8 @@ export type AgendaViewPreference = z.infer<typeof agendaViewPreferenceSchema>;
 export type AppearanceAccent = z.infer<typeof appearanceAccentSchema>;
 export type AppearanceMode = z.infer<typeof appearanceModeSchema>;
 export type AppearancePreference = z.infer<typeof appearancePreferenceSchema>;
+export type AiSandboxSettings = z.infer<typeof aiSandboxSettingsSchema>;
+export type AiSandboxSettingsInput = z.infer<typeof aiSandboxSettingsInputSchema>;
 export type CalendarSource = z.infer<typeof calendarSourceSchema>;
 export type CalendarState = z.infer<typeof calendarStateSchema>;
 export type Conversation = z.infer<typeof conversationSchema>;

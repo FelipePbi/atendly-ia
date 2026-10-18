@@ -6647,6 +6647,53 @@ button.ignored-row:focus-visible,
     font-weight: 500;
   }
 }
+/* Modo sandbox (D-199): lembrete pequeno no topo do conteúdo, enquanto
+   estiver ligado. Discreto de propósito — não é erro, é um estado escolhido —
+   mas sempre visível e sem "ocultar". Leva às Configurações › IA. */
+.shell-sandbox-chip {
+  width: fit-content;
+  max-width: calc(100% - 40px);
+  min-height: 32px;
+  margin: 12px 20px 0;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--at-color-warning-border-soft);
+  border-radius: 999px;
+  background: var(--at-color-warning-tint);
+  color: var(--at-color-warning-ink);
+  font-size: 13px;
+  line-height: 18px;
+  text-decoration: none;
+}
+.shell-sandbox-chip strong {
+  font-weight: 700;
+}
+.shell-sandbox-chip > .icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.shell-sandbox-chip:hover {
+  background: var(--at-color-warning-hover);
+}
+.shell-sandbox-chip:focus-visible {
+  outline: 2px solid var(--at-color-primary);
+  outline-offset: 2px;
+}
+.shell-status-layer > .shell-sandbox-chip + .shell-status-banner {
+  margin-top: 8px;
+}
+@media (max-width: 767px) {
+  .shell-sandbox-chip {
+    max-width: calc(100% - 24px);
+    margin: 10px 12px 0;
+    font-size: 12px;
+    line-height: 16px;
+  }
+}
 .operational-strip {
   margin-bottom: 24px;
   padding: 14px 16px;

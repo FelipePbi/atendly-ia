@@ -191,11 +191,15 @@ function AppShellChrome({
     !whatsappInBand &&
     !whatsappBannerHidden;
   const showAiBanner = !deletionDueAt && aiUnavailable && !aiBannerHidden;
+  // Modo sandbox (D-199): lembrete discreto e sem "ocultar" enquanto estiver
+  // ligado, para ninguém esquecer que as mensagens não estão saindo. Só com
+  // leitura confirmada: `null` (IA sem resposta) não afirma nada.
+  const sandboxOn = status.ai?.sandboxEnabled === true;
   const statusLayerRef = useRef<HTMLDivElement>(null);
   useShellStatusHeight(
     frameRef,
     statusLayerRef,
-    Boolean(deletionDueAt || showWhatsappBanner || showAiBanner),
+    Boolean(deletionDueAt || showWhatsappBanner || showAiBanner || sandboxOn),
   );
   // O aviso ocultado sai da árvore: o foco não pode ficar num botão que sumiu.
   const hideBanner = (hide: () => void) => () => {
@@ -387,8 +391,20 @@ function AppShellChrome({
               flutuando por cima (2026-10-12), tapavam botões do topo das
               telas (bug de 2026-10-16). A altura da camada vai para
               `--shell-status-h`, que as telas de altura cheia descontam. */}
-          {(deletionDueAt || showWhatsappBanner || showAiBanner) && (
+          {(deletionDueAt || showWhatsappBanner || showAiBanner || sandboxOn) && (
             <div className="shell-status-layer" ref={statusLayerRef}>
+              {sandboxOn && (
+                <Link
+                  className="shell-sandbox-chip"
+                  href="/configuracoes/ia#modo-sandbox"
+                >
+                  <Icon name="shield" />
+                  <span>
+                    <strong>Modo sandbox:</strong> mensagens não saem para
+                    clientes
+                  </span>
+                </Link>
+              )}
               {deletionDueAt && (
                 <PersistentStatusBanner
                   text={accountDeletionBannerCopy(

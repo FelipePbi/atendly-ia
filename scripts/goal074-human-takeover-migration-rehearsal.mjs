@@ -123,6 +123,16 @@ const CONVERSATION_OWNER_READ_MIGRATION_SQL = path.join(
   "migration.sql",
 );
 
+const AI_SANDBOX_MIGRATION_SQL = path.join(
+  repositoryRoot,
+  "apps",
+  "ai-orchestrator",
+  "prisma",
+  "migrations",
+  "20261018150000_ai_sandbox_mode",
+  "migration.sql",
+);
+
 function refuse(message) {
   console.error(`goal074:human-takeover-migration-rehearsal REFUSED — ${message}`);
   process.exit(2);
@@ -675,6 +685,55 @@ async function alignAiDurabilityTargetWithConversationOwnerRead(target) {
   }
 }
 
+/**
+ * Leva o banco de durabilidade da IA as colunas do modo sandbox em
+ * `AiTenantConfig` (D-199). O envio le o estado do sandbox a cada saida e,
+ * sem as colunas, fecha na falha: a suite de persistencia veria saidas
+ * `FAILED` em vez de `SENT`. O DDL usa `ADD COLUMN IF NOT EXISTS`, entao
+ * reaplicar sobre banco ja alinhado nao muda nada.
+ */
+async function alignAiDurabilityTargetWithAiSandbox(target) {
+  const database = decodeURIComponent(
+    target.maintenance.pathname.replace(/^\//u, ""),
+  );
+  const durability = new URL(target.maintenance.href);
+  durability.pathname = `/${database}_goal004`;
+
+  const client = new Client({ connectionString: durability.href });
+  try {
+    await client.connect();
+  } catch {
+    console.log(
+      "durability target not provisioned yet — skipping the AiTenantConfig sandbox columns",
+    );
+    return;
+  }
+  try {
+    const configTable = await client.query(
+      `SELECT to_regclass('"AiTenantConfig"') AS present`,
+    );
+    if (!configTable.rows[0].present) {
+      console.log(
+        "durability target has no AiTenantConfig table yet — skipping the sandbox columns",
+      );
+      return;
+    }
+    const applied = await applyMigrationFile(client, AI_SANDBOX_MIGRATION_SQL);
+    if (applied !== true) {
+      console.error(
+        `goal074:human-takeover-migration-rehearsal FAILED — durability target columns failed applying ${AI_SANDBOX_MIGRATION_SQL}: ${applied}`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    console.log(
+      `durability target aligned with the AiTenantConfig sandbox columns: ${database}_goal004`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
 export async function main() {
   const target = rehearsalTarget(process.env);
 
@@ -686,6 +745,7 @@ export async function main() {
   await alignAiDurabilityTargetWithAiReplySplit(target);
   await alignAiDurabilityTargetWithActivityLog(target);
   await alignAiDurabilityTargetWithConversationOwnerRead(target);
+  await alignAiDurabilityTargetWithAiSandbox(target);
 
   if (process.exitCode) {
     console.error(

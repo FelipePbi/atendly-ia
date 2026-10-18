@@ -2480,6 +2480,188 @@ button.business-row:last-child {
     transition: none;
   }
 }
+/* Modo sandbox (D-199): cartão como o do estado da IA, com o interruptor
+   do lado e, ligado, a lista de números que recebem de verdade. Ligado, a
+   borda ganha o tom de atenção, o mesmo do aviso da casca. */
+.ai-sandbox,
+.ai-sandbox-skeleton {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--at-color-border);
+  border-radius: 16px;
+  background: var(--at-color-surface);
+}
+.ai-sandbox.is-on {
+  border-color: var(--at-color-warning-border);
+}
+.ai-sandbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.ai-sandbox-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ai-sandbox-title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: normal;
+  line-height: normal;
+}
+.ai-sandbox-subtitle {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: normal;
+  line-height: normal;
+}
+.ai-sandbox-help,
+.ai-sandbox-empty {
+  margin: 0;
+  color: var(--at-color-ink-soft);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.ai-sandbox-switch {
+  position: relative;
+  width: 46px;
+  height: 28px;
+  margin-top: 2px;
+  padding: 0;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  background: var(--at-color-border-strong);
+  cursor: pointer;
+  transition: background-color 0.2s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.ai-sandbox-switch[aria-checked="true"] {
+  background: var(--at-color-warning-deep);
+}
+.ai-sandbox-switch:focus-visible {
+  outline: 2px solid var(--at-color-primary);
+  outline-offset: 3px;
+}
+.ai-sandbox-switch:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.ai-sandbox-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--at-color-surface);
+  box-shadow: 0 1px 2px rgb(var(--at-shadow-rgb) / 0.2);
+  transition: transform 0.2s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.ai-sandbox-switch[aria-checked="true"] .ai-sandbox-knob {
+  transform: translateX(18px);
+}
+.ai-sandbox-exceptions {
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--at-color-border);
+}
+.ai-sandbox-list {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+}
+.ai-sandbox-item {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--at-color-border);
+}
+.ai-sandbox-item:last-child {
+  border-bottom: 0;
+}
+.ai-sandbox-phone {
+  min-width: 0;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.ai-sandbox-remove {
+  min-height: 36px;
+  padding: 0 8px;
+  margin-right: -8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--at-color-danger-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ai-sandbox-remove:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ai-sandbox-remove:focus-visible {
+  outline: 2px solid var(--at-color-primary);
+  outline-offset: 2px;
+}
+.ai-sandbox-remove:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.ai-sandbox-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ai-sandbox-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.ai-sandbox-add {
+  display: flex;
+  gap: 8px;
+}
+.ai-sandbox-add .input {
+  min-width: 0;
+  flex: 1;
+  box-sizing: border-box;
+}
+.ai-sandbox-add .btn {
+  flex: none;
+  min-height: 48px;
+}
+.ai-sandbox-error {
+  margin: 0;
+  color: var(--at-color-danger-ink);
+  font-size: 13px;
+}
+.ai-sandbox-retry {
+  align-self: flex-start;
+}
+/* Movimento reduzido (D-173): o interruptor troca de lugar e de cor sem
+   deslizar. */
+@media (prefers-reduced-motion: reduce) {
+  .ai-sandbox-switch,
+  .ai-sandbox-knob {
+    transition: none;
+  }
+}
 /* Goal104 (R1): Conversas com prazos segmentados e um único Salvar */
 .retention-fields {
   gap: 22px;

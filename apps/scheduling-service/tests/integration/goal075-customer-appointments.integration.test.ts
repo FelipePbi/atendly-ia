@@ -297,10 +297,18 @@ describeWithDatabase(
       expect(stats.firstAppointmentDate).toBe("2026-01-01");
       // O próximo é o confirmado no fuso do negócio; o último é a falta
       // (2026-01-31T12:00Z, 09:00 local), e o cancelado posterior não conta.
+      // O próximo leva o detalhe do perfil (2026-10-16); sem item, o total
+      // não é inferido.
       expect(response.json().data.nextAppointment).toEqual({
         date: farSlot.date,
         startTime: "15:30",
         status: "CONFIRMED",
+        serviceNames: [],
+        title: "Corte",
+        durationMinutes: 30,
+        totalPrice: null,
+        totalPriceType: "NONE",
+        source: "USER",
       });
       expect(response.json().data.lastAppointment).toEqual({
         date: "2026-01-31",

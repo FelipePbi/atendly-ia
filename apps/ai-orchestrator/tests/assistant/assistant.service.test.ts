@@ -6283,13 +6283,13 @@ describe("Goal046 / WU-04 — o conjunto de categorias de recusa é conferido co
 });
 
 describe("Goal046 / WU-04 — a árvore real produz os números desta rodada, e as invariantes de reconhecimento não são vácuas", () => {
-  it("1 superfície, 4 ligações resolvidas, 12 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — os mesmos números da baseline do Goal045, exceto o de arquivos varridos pela resolução de instanciação e o de rotas: com o modelo AgendaViewPreference do Goal073 gerado em apps/bff/src/generated/prisma, o modelo HumanTakeover do Goal074 gerado em apps/ai-orchestrator/src/generated/prisma modules/prompts/service-instructions.ts do Goal078, lib/calendar-source.ts do Goal109, lib/whatsapp-contacts.ts do BFF, o registro de atividade (D-176: modules/activity/ e o modelo ActivityLog gerado nas duas árvores, clients/activity-source.ts do BFF) modules/whatsapp/contact-photo.ts do BFF, o faturamento (D-177: modules/revenue/routes.ts do BFF) e o que a IA fez no faturamento (D-178: modules/conversations/inbound-hours.ts da IA e modules/revenue/missed-messages.ts do BFF), elas somam hoje 225 arquivos .ts (126 em apps/ai-orchestrator/src, com modules/outbox/ai-reply-dispatch.ts do despacho em partes de 2026-10-11, 99 em apps/bff/src), a 11ª rota é o GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) e a 12ª é o POST /user/avatar da foto de perfil da cliente (2026-10-15) — o número computado pelo AST (225) prevalece sobre qualquer contagem anterior capturada antes desse arquivo existir na árvore", () => {
+  it("1 superfície, 4 ligações resolvidas, 12 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — os mesmos números da baseline do Goal045, exceto o de arquivos varridos pela resolução de instanciação e o de rotas: com o modelo AgendaViewPreference do Goal073 gerado em apps/bff/src/generated/prisma, o modelo HumanTakeover do Goal074 gerado em apps/ai-orchestrator/src/generated/prisma modules/prompts/service-instructions.ts do Goal078, lib/calendar-source.ts do Goal109, lib/whatsapp-contacts.ts do BFF, o registro de atividade (D-176: modules/activity/ e o modelo ActivityLog gerado nas duas árvores, clients/activity-source.ts do BFF) modules/whatsapp/contact-photo.ts do BFF, o faturamento (D-177: modules/revenue/routes.ts do BFF) o que a IA fez no faturamento (D-178: modules/conversations/inbound-hours.ts da IA e modules/revenue/missed-messages.ts do BFF) e o modelo AppearancePreference da aparência por conta (D-181) gerado em apps/bff/src/generated/prisma, elas somam hoje 226 arquivos .ts (126 em apps/ai-orchestrator/src, com modules/outbox/ai-reply-dispatch.ts do despacho em partes de 2026-10-11, 100 em apps/bff/src), a 11ª rota é o GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) e a 12ª é o POST /user/avatar da foto de perfil da cliente (2026-10-15) — o número computado pelo AST (226) prevalece sobre qualquer contagem anterior capturada antes desse arquivo existir na árvore", () => {
     const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
 
     expect(internalClientSurfaces).toHaveLength(1);
     expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
-    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(225);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(226);
     expect(requests).toHaveLength(12);
     expect(nonGoBoundInstantiations).toHaveLength(2);
     expect(nonTransportMemberCalls).toHaveLength(0);
@@ -11967,13 +11967,13 @@ describe("Goal047 / WU-04 (§5) — as categorias de recusa deste caminho existe
 });
 
 describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta rodada, e as 50 ocorrências de this.http. são classificadas sem recusa alguma", () => {
-  it("1 superfície, 4 ligações, 225 arquivos varridos, 12 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal, exceto o de arquivos varridos, pelo modelo AgendaViewPreference do Goal073, pelo modelo HumanTakeover do Goal074, por modules/prompts/service-instructions.ts do Goal078, por lib/calendar-source.ts do Goal109, por lib/whatsapp-contacts.ts do BFF, por modules/outbox/ai-reply-dispatch.ts (2026-10-11), pelo registro de atividade (D-176), por modules/whatsapp/contact-photo.ts do BFF (2026-10-15), pelo faturamento (D-177) e pelo que a IA fez no faturamento (D-178), e o de rotas, pelo GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) e pelo POST /user/avatar da foto de perfil da cliente (2026-10-15)", () => {
+  it("1 superfície, 4 ligações, 226 arquivos varridos, 12 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal, exceto o de arquivos varridos, pelo modelo AgendaViewPreference do Goal073, pelo modelo HumanTakeover do Goal074, por modules/prompts/service-instructions.ts do Goal078, por lib/calendar-source.ts do Goal109, por lib/whatsapp-contacts.ts do BFF, por modules/outbox/ai-reply-dispatch.ts (2026-10-11), pelo registro de atividade (D-176), por modules/whatsapp/contact-photo.ts do BFF (2026-10-15), pelo faturamento (D-177), pelo que a IA fez no faturamento (D-178) e pelo modelo AppearancePreference (D-181), e o de rotas, pelo GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) e pelo POST /user/avatar da foto de perfil da cliente (2026-10-15)", () => {
     const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
 
     expect(internalClientSurfaces).toHaveLength(1);
     expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
-    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(225);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(226);
     expect(requests).toHaveLength(12);
     expect(nonGoBoundInstantiations).toHaveLength(2);
     expect(nonTransportMemberCalls).toHaveLength(0);

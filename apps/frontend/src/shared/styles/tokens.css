@@ -133,13 +133,27 @@
   --at-color-violet: #8e5a86;
   --at-color-coral: #b8674a;
   --at-color-coral-ink: #8a3a2a;
-  /* Faturamento na Home (Home-Faturamento.dc.html): vinho do que já entrou,
-   * rosado do que está a entrar, papel rosado do painel e a queda. */
-  --at-color-revenue: #9a4559;
-  --at-color-revenue-soft: #e9cfd5;
-  --at-color-revenue-panel: #fbf5f6;
-  --at-color-revenue-panel-border: #ebd9dd;
-  --at-color-decline-ink: #8a3b2e;
+  /* Faturamento na Home (Home-Faturamento.dc.html, D-201): tons da cor de
+   * destaque, para acompanhar o tema escolhido e o escuro. O que já entrou é
+   * a própria cor; o que está a entrar, o papel do painel e a borda dele são
+   * ela misturada à superfície. A queda usa a tinta de perigo. */
+  --at-color-revenue: var(--at-color-primary);
+  --at-color-revenue-soft: color-mix(
+    in srgb,
+    var(--at-color-primary) 24%,
+    var(--at-color-surface)
+  );
+  --at-color-revenue-panel: color-mix(
+    in srgb,
+    var(--at-color-primary) 4%,
+    var(--at-color-surface)
+  );
+  --at-color-revenue-panel-border: color-mix(
+    in srgb,
+    var(--at-color-primary) 18%,
+    var(--at-color-surface)
+  );
+  --at-color-decline-ink: var(--at-color-danger-ink);
 
   /* Mistura: `color-mix(..., var(--at-mix-light) N%)` clareia no tema claro e
    * aproxima da superfície no escuro; `--at-mix-dark` faz o inverso. */

@@ -8168,7 +8168,7 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 4. "Em confirmação" (hold de 5 minutos) não entra na Home: o painel não tem a fonte dele, e o protótipo o tirava da conta de qualquer jeito.
 5. "Faturamento" na sidebar continua depois de Serviços (D-177), não depois de Agenda como no quadro.
 
-**Consequências:** as cores do faturamento viram tokens (`--at-color-revenue*`, `--at-color-decline-ink`), com valor no escuro. O Início lê `GET /v1/revenue` três vezes (dia, semana, mês), com as mesmas chaves de memória do Faturamento. Celular, tablet e desktop seguem 768 e 1100 px (onde a sidebar aparece).
+**Consequências:** as cores do faturamento viram tokens (`--at-color-revenue*`, `--at-color-decline-ink`) que saem da cor de destaque escolhida em Aparência e da superfície, então acompanham os seis temas e o escuro. O vinho do quadro é o tema "Rosé"; o faturamento não tem cor própria (ajuste de 2026-10-18, a pedido do usuário: a primeira versão fixava o vinho em todo tema). O Início lê `GET /v1/revenue` três vezes (dia, semana, mês), com as mesmas chaves de memória do Faturamento. Celular, tablet e desktop seguem 768 e 1100 px (onde a sidebar aparece).
 
 **Revisar se:** o produto ganhar meta mensal guardada, ou se a Home precisar mostrar holds em confirmação.
 

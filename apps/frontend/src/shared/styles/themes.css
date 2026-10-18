@@ -149,11 +149,6 @@ html[data-theme="dark"] {
   --at-color-violet: #c99bc1;
   --at-color-coral: #e39a7f;
   --at-color-coral-ink: #f0b39e;
-  --at-color-revenue: #d98a9c;
-  --at-color-revenue-soft: #5a3540;
-  --at-color-revenue-panel: #231c1e;
-  --at-color-revenue-panel-border: #3d2b31;
-  --at-color-decline-ink: #f0a090;
 
   --at-mix-light: var(--at-color-surface);
   --at-mix-dark: white;

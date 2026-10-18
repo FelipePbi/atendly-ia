@@ -209,7 +209,7 @@ export function mapEvolutionInbound(
   const mediaType = stringValue(info.MediaType);
   const infoType = stringValue(info.Type);
   const fromMe = booleanValue(info.IsFromMe);
-  const kind = resolveKind(infoType, mediaType);
+  const kind = resolveKind(infoType, mediaType, message);
   const text = extractText(message);
   const media = extractMediaMetadata(message, kind);
   const customerJid = resolveContactJid(info, chatId, fromMe);
@@ -306,16 +306,35 @@ export function inspectEvolutionInboundPayload(
   };
 }
 
+/**
+ * `MediaType` do whatsmeow que nomeia um tipo do produto com outro nome:
+ * mensagem de voz chega como `ptt` e vídeo em loop como `gif` (validação em
+ * produção de 2026-10-18: o áudio de voz virava `unknown` e nunca era
+ * transcrito nem exibido).
+ */
+const mediaTypeAliases: Record<string, ChannelMessageKind> = {
+  audio: "audio",
+  ptt: "audio",
+  image: "image",
+  document: "document",
+  video: "video",
+  gif: "video",
+  sticker: "sticker",
+};
+
 function resolveKind(
   infoType: string | undefined,
   mediaType: string | undefined,
+  message: Record<string, unknown>,
 ): ChannelMessageKind {
   const normalizedMediaType = mediaType?.toLowerCase();
-  if (normalizedMediaType === "audio") return "audio";
-  if (normalizedMediaType === "image") return "image";
-  if (normalizedMediaType === "document") return "document";
-  if (normalizedMediaType === "video") return "video";
-  if (normalizedMediaType === "sticker") return "sticker";
+  if (normalizedMediaType && Object.hasOwn(mediaTypeAliases, normalizedMediaType))
+    return mediaTypeAliases[normalizedMediaType];
+
+  // `MediaType` desconhecido: o proto diz qual mídia veio.
+  for (const [kind, key] of Object.entries(mediaMessageKeyByKind)) {
+    if (isRecord(message[key])) return kind as ChannelMessageKind;
+  }
 
   const normalizedInfoType = infoType?.toLowerCase();
   if (

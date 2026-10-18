@@ -45,6 +45,9 @@ describe("EvolutionInboundMapper", () => {
     ["document", "document"],
     ["video", "video"],
     ["sticker", "sticker"],
+    // Validacao em producao de 2026-10-18: mensagem de voz chega como `ptt`.
+    ["ptt", "audio"],
+    ["gif", "video"],
   ] as const)("classifies media type %s as %s", (mediaType, kind) => {
     const message = mapEvolutionInbound({
       event: "Message",
@@ -64,6 +67,33 @@ describe("EvolutionInboundMapper", () => {
     });
 
     expect(message?.kind).toBe(kind);
+  });
+
+  it("classifies an unknown media type by the media proto it carries", () => {
+    const message = mapEvolutionInbound({
+      event: "Message",
+      instanceId: "instance-1",
+      data: {
+        Info: {
+          Chat: "5511999999999@s.whatsapp.net",
+          Sender: "5511999999999@s.whatsapp.net",
+          IsFromMe: false,
+          IsGroup: false,
+          ID: "message-voice-1",
+          Type: "media",
+          MediaType: "voice-note-from-a-future-version",
+        },
+        Message: {
+          audioMessage: { PTT: true, mimetype: "audio/ogg; codecs=opus", seconds: 4 },
+        },
+      },
+    });
+
+    expect(message?.kind).toBe("audio");
+    expect(message?.media).toMatchObject({
+      mimetype: "audio/ogg; codecs=opus",
+      durationSeconds: 4,
+    });
   });
 
   it("extracts media metadata from the proto sub-object and the merged Go fields", () => {

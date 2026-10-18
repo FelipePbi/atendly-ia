@@ -44,11 +44,36 @@ describe("bytes da midia no payload do provedor", () => {
     // O download precisa da chave do proto, nunca dos bytes: mandar o base64
     // de volta ao Go so inflaria o corpo de uma requisicao que existe
     // justamente porque os bytes nao estao aqui.
-    expect(proto).toMatchObject({
+    expect(proto).toEqual({
       audioMessage: { mimetype: "audio/ogg", mediaKey: "chave" },
-      mediaUrl: "http://minio/audio.ogg",
     });
     expect(proto).not.toHaveProperty("base64");
+  });
+
+  it("manda ao Go so a sub-mensagem de midia, sem campo redigido", () => {
+    // Validacao em producao de 2026-10-18: `messageSecret` redigido como
+    // "[REDACTED]" num campo `bytes` fazia o Go recusar o corpo inteiro com
+    // `illegal base64 data at input byte 0`.
+    const proto = readMediaProto(
+      payload({
+        stickerMessage: {
+          mimetype: "image/webp",
+          mediaKey: "Y2hhdmU=",
+          directPath: "/v/t62/sticker",
+          contextInfo: { mediaDomainInfo: { e2EeMediaKey: "Y2hhdmU=" } },
+        },
+        messageContextInfo: { messageSecret: "[REDACTED]" },
+      }),
+    );
+
+    expect(proto).toEqual({
+      stickerMessage: {
+        mimetype: "image/webp",
+        mediaKey: "Y2hhdmU=",
+        directPath: "/v/t62/sticker",
+      },
+    });
+    expect(JSON.stringify(proto)).not.toContain("[REDACTED]");
   });
 
   it("nao devolve proto para payload sem chave de midia", () => {

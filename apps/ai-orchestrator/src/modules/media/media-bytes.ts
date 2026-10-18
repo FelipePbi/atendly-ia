@@ -33,20 +33,25 @@ export function readInlineMediaBase64(raw: unknown): string | undefined {
  * Proto da mídia guardado no payload, no formato que `POST
  * /message/downloadmedia` aceita (`{ message: waE2E.Message }`).
  *
- * O `base64` sai daqui: quando o download sob demanda é necessário ele não
- * existe, e mandá-lo de volta ao Go só inflaria o corpo. Os campos que o Go
- * mescla (`mediaUrl`, `mimetype`, ...) ficam: o decode do lado do Go ignora
- * chave desconhecida, e removê-los seletivamente é palpite sobre o proto.
+ * Só a sub-mensagem de mídia vai ao Go, sem `contextInfo`: o download usa
+ * apenas chave, caminho e hashes dela. O resto do payload guardado não volta,
+ * porque a sanitização troca campos `bytes` como
+ * `messageContextInfo.messageSecret` por `"[REDACTED]"`, e o Go decodifica o
+ * proto com `encoding/json`, que recusa o corpo inteiro com `illegal base64
+ * data at input byte 0` (validação em produção de 2026-10-18).
  */
 export function readMediaProto(
   raw: unknown,
 ): Record<string, unknown> | undefined {
   const message = readProviderMessage(raw);
   if (!message) return undefined;
-  const hasMedia = mediaProtoKeys.some((key) => isRecord(message[key]));
-  if (!hasMedia) return undefined;
-  const { base64: _base64, ...rest } = message;
-  return rest;
+  const key = mediaProtoKeys.find((candidate) => isRecord(message[candidate]));
+  if (!key) return undefined;
+  const { contextInfo: _contextInfo, ...media } = message[key] as Record<
+    string,
+    unknown
+  >;
+  return { [key]: media };
 }
 
 /**

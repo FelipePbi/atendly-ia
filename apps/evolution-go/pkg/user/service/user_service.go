@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	instance_model "github.com/EvolutionAPI/evolution-go/pkg/instance/model"
@@ -336,14 +337,19 @@ func (u *userService) GetAvatar(data *GetAvatarStruct, instance *instance_model.
 		return nil, errors.New("invalid phone number")
 	}
 
-	u.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Requesting avatar for JID: %s, Preview: %v", instance.Id, jid, data.Preview)
-
-	var pic *types.ProfilePictureInfo
-
 	// 🔒 FIX: Adicionar timeout ao contexto para evitar que a requisição trave indefinidamente
 	// Usar timeout maior que o padrão do sendIQ (75s) para dar tempo suficiente
 	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Second)
 	defer cancel()
+
+	// Consulta pelo JID que ParseJID monta (`+55...@s.whatsapp.net`) fica sem
+	// resposta até o timeout de 75s; a mesma consulta pelo LID volta em
+	// ~300 ms (validação em produção de 2026-10-18).
+	jid = u.avatarTarget(ctx, client, jid, instance.Id)
+
+	u.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Requesting avatar for JID: %s, Preview: %v", instance.Id, jid, data.Preview)
+
+	var pic *types.ProfilePictureInfo
 
 	u.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Starting GetProfilePictureInfo request...", instance.Id)
 	pic, err = client.GetProfilePictureInfo(ctx, jid, &whatsmeow.GetProfilePictureParams{
@@ -361,6 +367,34 @@ func (u *userService) GetAvatar(data *GetAvatarStruct, instance *instance_model.
 	u.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Got avatar %s", instance.Id, pic.URL)
 
 	return pic, nil
+}
+
+// avatarTarget troca o JID de telefone pelo LID do contato: primeiro pelo
+// mapeamento já guardado e, sem ele, por uma consulta IsOnWhatsApp, que
+// devolve o LID e responde rápido. `utils.ParseJID` monta o usuário com `+`
+// (`+5511...@s.whatsapp.net`), e o WhatsApp não responde consulta para esse
+// JID: sem LID, segue ao menos com o JID de telefone só em dígitos.
+func (u *userService) avatarTarget(ctx context.Context, client *whatsmeow.Client, jid types.JID, instanceId string) types.JID {
+	if jid.Server != types.DefaultUserServer {
+		return jid
+	}
+	pn := types.NewJID(strings.TrimPrefix(jid.User, "+"), types.DefaultUserServer)
+	if client.Store != nil && client.Store.LIDs != nil {
+		if lid, err := client.Store.LIDs.GetLIDForPN(ctx, pn); err == nil && !lid.IsEmpty() {
+			return lid
+		}
+	}
+	resp, err := client.IsOnWhatsApp(ctx, []string{"+" + pn.User})
+	if err != nil {
+		u.loggerWrapper.GetLogger(instanceId).LogWarn("[%s] LID lookup for avatar failed: %v", instanceId, err)
+		return pn
+	}
+	for _, item := range resp {
+		if item.IsIn && item.LID != nil && !item.LID.IsEmpty() {
+			return *item.LID
+		}
+	}
+	return pn
 }
 
 func (u *userService) GetContacts(instance *instance_model.Instance) ([]ContactInfo, error) {

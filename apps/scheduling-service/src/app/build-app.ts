@@ -9,6 +9,7 @@ import {
 } from "../infrastructure/database/prisma.js";
 import { AutoCompleteLoop } from "../modules/appointments/auto-complete-loop.js";
 import { registerCalendarRoutes } from "../modules/calendar/routes.js";
+import { registerCustomerReturnRoutes } from "../modules/customer-return/routes.js";
 import { registerManagementRoutes } from "../modules/internal-api/routes.js";
 import {
   ImportBackgroundWork,
@@ -88,6 +89,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await registerHealthRoute(app);
   await registerCalendarRoutes(app);
   await registerManagementRoutes(app, getPrisma(), { importWork });
+  await registerCustomerReturnRoutes(app, getPrisma());
 
   // Conclusao automatica (Goal008, D-008): loop no proprio processo, sem
   // fila nem servico novo. Desligavel por variavel para operacao e para a

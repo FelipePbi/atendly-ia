@@ -33,6 +33,11 @@ export const TENANT_PURGE_TABLES = [
   "AppointmentHold",
   // Sem relacao com nenhuma outra tabela desta lista.
   "CalendarMutationIdempotency",
+  // Retorno de clientes (D-202): o alvo e filho de Customer e da rodada
+  // (CASCADE), e sai antes dos dois.
+  "ReturnCampaignTarget",
+  "ReturnCampaign",
+  "ReturnSettings",
   // Filhos de Customer (CASCADE).
   "CustomerNote",
   "CustomerTag",
@@ -101,7 +106,7 @@ export interface TenantPurgeResult {
 interface TableMeta {
   sql: Prisma.Sql;
   /**
-   * `CalendarSettings` e `ReminderSettings` nao tem coluna `id`: a chave
+   * `CalendarSettings`, `ReminderSettings` e `ReturnSettings` nao tem coluna `id`: a chave
    * primaria e o proprio tenantId. `ReminderRule` nao tem `id` nem
    * `tenantId` sozinho como chave: a chave primaria composta e
    * `(tenantId, slot)`, entao `slot` e o que identifica a linha dentro do
@@ -127,6 +132,12 @@ const TABLE_META: Record<TenantPurgeTable, TableMeta> = {
     sql: Prisma.sql`"CalendarMutationIdempotency"`,
     idColumn: "id",
   },
+  ReturnCampaignTarget: {
+    sql: Prisma.sql`"ReturnCampaignTarget"`,
+    idColumn: "id",
+  },
+  ReturnCampaign: { sql: Prisma.sql`"ReturnCampaign"`, idColumn: "id" },
+  ReturnSettings: { sql: Prisma.sql`"ReturnSettings"`, idColumn: "tenantId" },
   CustomerNote: { sql: Prisma.sql`"CustomerNote"`, idColumn: "id" },
   CustomerTag: { sql: Prisma.sql`"CustomerTag"`, idColumn: "id" },
   CustomerRelation: { sql: Prisma.sql`"CustomerRelation"`, idColumn: "id" },

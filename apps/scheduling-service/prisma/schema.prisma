@@ -366,10 +366,19 @@ model Customer {
   /// Clientes e vai para "Inativos". Agenda, conversa, IA e historico seguem
   /// reconhecendo a pessoa; nulo e ativo.
   deactivatedAt   DateTime?
+  /// Bloqueio de mensagens de retorno (D-202). `returnBlockedAt` preenchido e
+  /// `returnBlockedUntil` nulo e bloqueio permanente (a cliente pediu para
+  /// parar); com `returnBlockedUntil`, vale ate la (recusa: 90 dias). Nulo e
+  /// livre. So a profissional desfaz o permanente, no perfil.
+  returnBlockedAt    DateTime?
+  returnBlockedUntil DateTime?
+  /// `DECLINED`, `STOPPED` ou `OWNER` (constraint SQL `Customer_returnBlockReason_check`).
+  returnBlockReason  String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   appointments   Appointment[]
+  returnTargets  ReturnCampaignTarget[]
   notes          CustomerNote[]
   tags           CustomerTag[]
   /// Relacoes em que esta pessoa e a atendida (tem um responsavel).
@@ -1359,4 +1368,164 @@ model ActivityLog {
   details     Json?
 
   @@index([tenantId, occurredAt(sort: Desc), sequence(sort: Desc)])
+}
+
+/// Rotina de retorno (D-202): `RENEWAL` chama quem esta no prazo de refazer um
+/// servico; `WINBACK` (Resgate) chama quem nao vem ha N dias ou mais.
+enum ReturnCampaignKind {
+  RENEWAL
+  WINBACK
+}
+
+/// Estado da rodada. `DONE` quando nao sobra ninguem na fila; o lembrete unico
+/// dos que nao responderam continua saindo de rodada `DONE`, nunca de
+/// `PAUSED` nem `CANCELLED`.
+enum ReturnCampaignState {
+  ACTIVE
+  PAUSED
+  DONE
+  CANCELLED
+}
+
+/// Estado de uma cliente na rodada.
+///
+/// - `QUEUED`: aprovada, esperando a vez no ritmo;
+/// - `CLAIMED`: reivindicada pela IA sob lease (volta para `QUEUED` quando o
+///   lease vence);
+/// - `SENT`: mensagem entregue ao transporte;
+/// - `REPLIED`: a cliente respondeu depois do envio;
+/// - `BOOKED`: a cliente marcou depois do envio (agendamento ligado);
+/// - `DECLINED`: a cliente recusou ou pediu para parar;
+/// - `SKIPPED`: saiu sem mensagem, sempre com motivo;
+/// - `FAILED`: a saida falhou ou nao da para afirmar que saiu.
+enum ReturnTargetState {
+  QUEUED
+  CLAIMED
+  SENT
+  REPLIED
+  BOOKED
+  DECLINED
+  SKIPPED
+  FAILED
+}
+
+/// Configuracao do retorno do negocio (D-202). Sem linha, valem os padroes do
+/// produto (`RETURN_SETTINGS_DEFAULTS`), nunca uma linha fabricada pela leitura.
+/// Os limites sao do esquema (constraint SQL `ReturnSettings_bounds_check`).
+model ReturnSettings {
+  tenantId           String   @id
+  /// Mensagens por dia, de 1 a 30.
+  dailyLimit         Int      @default(10)
+  /// Dias da janela de envio (0 = domingo .. 6 = sabado).
+  windowDays         Int[]    @default([1, 2, 3, 4, 5, 6])
+  /// Inicio e fim da janela em minutos do dia, no fuso do negocio.
+  windowStartMinutes Int      @default(540)
+  windowEndMinutes   Int      @default(1140)
+  /// A Renovacao sai ate N dias antes da data esperada de volta (1 a 5).
+  leadDays           Int      @default(2)
+  /// O Resgate chama quem nao vem ha N dias ou mais (14 a 365).
+  winbackDays        Int      @default(60)
+  /// Incentivo do Resgate, texto livre da profissional. Nulo e sem incentivo.
+  winbackIncentive   String?
+  /// Texto-base de cada rotina, com `{nome}`, `{servico}`, `{quando}`,
+  /// `{horarios}` e `{incentivo}`. Nulo e o padrao pelo estilo da IA.
+  renewalMessage     String?
+  winbackMessage     String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @default(now()) @updatedAt
+}
+
+/// Rodada de envios aprovada pela profissional (D-202). Guarda as regras de
+/// ritmo do momento da aprovacao: mudar a configuracao depois nao reescreve
+/// rodada que ja esta correndo.
+model ReturnCampaign {
+  id                 String              @id @default(cuid())
+  tenantId           String
+  kind               ReturnCampaignKind
+  state              ReturnCampaignState @default(ACTIVE)
+  dailyLimit         Int
+  windowDays         Int[]
+  windowStartMinutes Int
+  windowEndMinutes   Int
+  leadDays           Int
+  /// So no Resgate.
+  incentive          String?
+  /// Texto-base aprovado (ou nulo, o padrao pelo estilo).
+  messageTemplate    String?
+  /// Semana da Renovacao (segunda) ou corte do Resgate (dias), para a tela.
+  weekStart          DateTime?           @db.Date
+  winbackDays        Int?
+  createdBy          String
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @default(now()) @updatedAt
+  pausedAt           DateTime?
+  cancelledAt        DateTime?
+  completedAt        DateTime?
+  /// Ritmo: o proximo envio deste negocio nao sai antes disto (intervalo
+  /// sorteado entre 3 e 10 minutos depois de cada envio). TIMESTAMPTZ porque
+  /// e comparado com `now()` do banco.
+  nextSendNotBefore  DateTime?           @db.Timestamptz(3)
+
+  targets ReturnCampaignTarget[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, state, createdAt])
+  @@index([state])
+}
+
+/// Uma cliente dentro de uma rodada (D-202).
+model ReturnCampaignTarget {
+  id                    String            @id @default(cuid())
+  tenantId              String
+  campaignId            String
+  customerId            String
+  state                 ReturnTargetState @default(QUEUED)
+  /// Motivo de `SKIPPED`, `FAILED` e `DECLINED`, vocabulario fechado.
+  reason                String?
+  /// Servico que motivou a chamada (Renovacao) ou o mais feito (Resgate).
+  serviceId             String?
+  serviceName           String?
+  /// Data esperada de volta e de onde veio o prazo (`SERVICE` ou `AVERAGE`).
+  expectedDate          DateTime?         @db.Date
+  intervalDays          Int?
+  intervalSource        String?
+  lastVisitDate         DateTime?         @db.Date
+  /// Ultimo dia em que a mensagem ainda pode sair; nulo sem prazo.
+  sendBy                DateTime?         @db.Date
+  /// Dia previsto pela simulacao do ritmo na aprovacao (so para a tela).
+  plannedDate           DateTime?         @db.Date
+  /// Ordem de envio dentro do negocio: quem vence antes recebe antes.
+  position              Int               @default(0)
+  attemptCount          Int               @default(0)
+  /// Lease da reivindicacao, pelo relogio do banco. `leaseKind` diz se e o
+  /// primeiro envio (`INITIAL`) ou o lembrete unico (`FOLLOW_UP`).
+  leaseToken            String?
+  leaseKind             String?
+  leaseExpiresAt        DateTime?         @db.Timestamptz(3)
+  outboundCorrelationId String?
+  /// Horarios oferecidos na mensagem: `[{ date, time }]` locais.
+  offeredSlots          Json?
+  /// Texto que saiu, para a profissional acompanhar a rodada.
+  messageBody           String?
+  sentAt                DateTime?         @db.Timestamptz(3)
+  repliedAt             DateTime?         @db.Timestamptz(3)
+  bookedAt              DateTime?         @db.Timestamptz(3)
+  appointmentId         String?
+  declinedAt            DateTime?         @db.Timestamptz(3)
+  /// Lembrete unico depois de 3 dias sem resposta: `SENT`, `SKIPPED` ou
+  /// `FAILED`; nulo enquanto nao saiu nem foi descartado.
+  followUpState         String?
+  followUpSentAt        DateTime?         @db.Timestamptz(3)
+  settledAt             DateTime?         @db.Timestamptz(3)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @default(now()) @updatedAt
+
+  campaign ReturnCampaign @relation(fields: [tenantId, campaignId], references: [tenantId, id], onDelete: Cascade, map: "ReturnCampaignTarget_campaign_fkey")
+  customer Customer       @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade, map: "ReturnCampaignTarget_customer_fkey")
+
+  @@unique([tenantId, id])
+  @@unique([campaignId, customerId])
+  @@index([tenantId, state])
+  @@index([tenantId, customerId, sentAt])
+  @@index([state, leaseExpiresAt])
 }

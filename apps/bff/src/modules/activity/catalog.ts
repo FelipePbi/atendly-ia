@@ -22,6 +22,7 @@ export const ACTIVITY_ACTIONS_BY_KIND: Record<ActivityKind, readonly string[]> =
     "import.started",
     "import.completed",
     "import.source_connected",
+    "customer_return.campaign_approved",
   ],
   CHANGED: [
     "appointment.rescheduled",
@@ -66,6 +67,13 @@ export const ACTIVITY_ACTIONS_BY_KIND: Record<ActivityKind, readonly string[]> =
     "conversation.contact_ignored",
     "conversation.contact_unignored",
     "conversation.resolved",
+    "settings.customer_return_updated",
+    "customer_return.campaign_paused",
+    "customer_return.campaign_resumed",
+    "customer.return_messages_blocked",
+    "customer.return_messages_allowed",
+    "customer.return_declined",
+    "customer.return_stopped",
   ],
   REMOVED: [
     "appointment.cancelled",
@@ -85,6 +93,8 @@ export const ACTIVITY_ACTIONS_BY_KIND: Record<ActivityKind, readonly string[]> =
     "import.source_disconnected",
     "settings.whatsapp_disconnected",
     "account.deletion_requested",
+    "customer_return.campaign_cancelled",
+    "customer_return.target_skipped",
   ],
 };
 

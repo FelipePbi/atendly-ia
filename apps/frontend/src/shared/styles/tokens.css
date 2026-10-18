@@ -155,6 +155,30 @@
   --at-swatch-amber-deep: #ab6045;
   --at-swatch-emerald-deep: #6e7b37;
   --at-swatch-violet-deep: #7c6da1;
+  /* Seletor de cor personalizada do serviço (2026-10-18): régua de matiz,
+     anel do botão "+" e os véus branco e preto do campo de tom. São a
+     própria escala de cor, iguais em todo tema. */
+  --at-picker-hue: linear-gradient(
+    to right,
+    #ff0000 0%,
+    #ffff00 17%,
+    #00ff00 33%,
+    #00ffff 50%,
+    #0000ff 67%,
+    #ff00ff 83%,
+    #ff0000 100%
+  );
+  --at-picker-ring: conic-gradient(
+    #ff0000,
+    #ffff00,
+    #00ff00,
+    #00ffff,
+    #0000ff,
+    #ff00ff,
+    #ff0000
+  );
+  --at-picker-tint: linear-gradient(to right, #ffffff, rgba(255, 255, 255, 0));
+  --at-picker-shade: linear-gradient(to top, #000000, rgba(0, 0, 0, 0));
 
   /* Tipografia — Literata (display) + Hanken Grotesk (corpo); fallback declarado, sem terceiros em runtime */
   --at-font-display: "Literata", Georgia, serif;

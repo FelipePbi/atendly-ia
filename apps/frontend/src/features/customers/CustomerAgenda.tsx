@@ -18,6 +18,7 @@ import {
 } from "@/features/agenda/occupancy";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { swatchProps } from "@/shared/serviceColor";
 import { Skeleton, StatePanel } from "@/shared/ui/States";
 
 type CustomerAgendaProps = {
@@ -216,7 +217,7 @@ function AgendaRow({
         {stripe.map((color, index) => (
           <span
             className="customer-appt-stripe-part"
-            data-color={cancelled ? undefined : (color ?? undefined)}
+            {...swatchProps(cancelled ? null : color)}
             key={index}
           />
         ))}

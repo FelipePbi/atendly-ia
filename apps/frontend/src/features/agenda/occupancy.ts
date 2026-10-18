@@ -3,7 +3,6 @@ import {
   type AvailabilityException,
   BffHttpError,
   isActiveAppointmentStatus,
-  type ServiceColorToken,
   type ServiceList,
   type TimeBlock,
   type TimeBlockKind,
@@ -14,6 +13,7 @@ import {
 } from "@/data/http/schedulingRefusal";
 import type { IconName } from "@/shared/icons/Icon";
 import { displayPhone } from "@/shared/phone";
+import { type ServiceColor, serviceColorOf } from "@/shared/serviceColor";
 
 export const MINUTES_PER_DAY = 24 * 60;
 
@@ -214,15 +214,19 @@ export function appointmentHasStarted(
   return appointmentStartInstant(appointment).getTime() <= now.getTime();
 }
 
-export type ServiceColorMap = ReadonlyMap<string, ServiceColorToken>;
+export type ServiceColorMap = ReadonlyMap<string, ServiceColor>;
 
-/** Serviço sem cor no catálogo não entra no mapa: o traço fica neutro. */
+/**
+ * Serviço sem cor no catálogo não entra no mapa: o traço fica neutro. A cor
+ * personalizada (hex) vence o token (serviceColor.ts).
+ */
 export function serviceColorMap(
   services: ServiceList["items"] | null | undefined,
 ): ServiceColorMap {
-  const colors = new Map<string, ServiceColorToken>();
+  const colors = new Map<string, ServiceColor>();
   for (const service of services ?? []) {
-    if (service.colorToken) colors.set(service.id, service.colorToken);
+    const color = serviceColorOf(service);
+    if (color) colors.set(service.id, color);
   }
   return colors;
 }
@@ -231,7 +235,7 @@ export function serviceColorMap(
 export function appointmentServiceColors(
   appointment: Appointment,
   colors: ServiceColorMap,
-): Array<ServiceColorToken | null> {
+): Array<ServiceColor | null> {
   return appointment.services.map(
     (service) => colors.get(service.serviceId) ?? null,
   );
@@ -558,7 +562,7 @@ export function outsideHoursRanges(
 }
 
 export interface ServiceLegendItem {
-  color: ServiceColorToken | null;
+  color: ServiceColor | null;
   key: string;
   name: string;
 }

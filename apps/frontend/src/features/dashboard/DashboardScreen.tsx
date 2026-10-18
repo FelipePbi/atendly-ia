@@ -51,6 +51,7 @@ import {
   useSystemStatus,
   type UseSystemStatusResult,
 } from "@/shared/runtime/systemStatus";
+import { swatchProps } from "@/shared/serviceColor";
 import { BrandLoader } from "@/shared/ui/Brand";
 import { StatePanel } from "@/shared/ui/States";
 
@@ -587,7 +588,7 @@ function AgendaToday({
               {(colors.length > 0 ? colors : [null]).map((color, part) => (
                 <span
                   className="agenda-bar-part"
-                  data-color={color ?? undefined}
+                  {...swatchProps(color)}
                   key={part}
                 />
               ))}

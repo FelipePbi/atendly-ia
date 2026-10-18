@@ -14,6 +14,7 @@ import { Icon } from "@/shared/icons/Icon";
 import { PushedBar } from "@/shared/layout/PushedBar";
 import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { swatchProps } from "@/shared/serviceColor";
 import { ContactPhoto, customerPhotoUrl } from "@/shared/ui/ContactPhoto";
 import { DatePicker } from "@/shared/ui/pickers/DatePicker";
 import { TimeField } from "@/shared/ui/pickers/PickerFields";
@@ -420,7 +421,7 @@ export function RescheduleFlow({
                           <span
                             aria-hidden="true"
                             className="agenda-appt-service-dot"
-                            data-color={colors[0] ?? undefined}
+                            {...swatchProps(colors[0])}
                           />
                           {customerLabel(appointment)} ·{" "}
                           {serviceNames(appointment)}

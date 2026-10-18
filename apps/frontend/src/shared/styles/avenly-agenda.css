@@ -1108,6 +1108,9 @@ button.week-bar:focus-visible,
   .week-bar-stripe b[data-color="VIOLET"] {
     --swatch: var(--at-swatch-violet-deep);
   }
+  .week-bar-stripe b[data-color="CUSTOM"] {
+    --swatch: var(--swatch-custom-card);
+  }
   /* Abaixo de 20px de largura cabe uma letra e as reticências, o que não
    * identifica ninguém; abaixo de 14px de altura a linha (10px + 2px de
    * respiro) seria cortada. Nos dois casos o cartão fica só com a cor. */

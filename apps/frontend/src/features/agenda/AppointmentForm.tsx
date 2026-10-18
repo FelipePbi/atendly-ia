@@ -18,6 +18,7 @@ import {
 import { Icon } from "@/shared/icons/Icon";
 import { prefersReducedMotion } from "@/shared/motion/reducedMotion";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { swatchProps } from "@/shared/serviceColor";
 import { Button } from "@/shared/ui/Button";
 import { DatePicker } from "@/shared/ui/pickers/DatePicker";
 import {
@@ -826,7 +827,7 @@ export function AppointmentForm({
                               <span
                                 aria-hidden="true"
                                 className="agenda-appt-service-dot"
-                                data-color={colors.get(item.id) ?? undefined}
+                                {...swatchProps(colors.get(item.id))}
                               />
                               {item.name}
                               <span className="sr-only"> · </span>
@@ -953,11 +954,10 @@ export function AppointmentForm({
                       <span
                         aria-hidden="true"
                         className="agenda-appt-service-dot"
-                        data-color={
-                          (selectedServices[0] &&
-                            colors.get(selectedServices[0].id)) ??
-                          undefined
-                        }
+                        {...swatchProps(
+                          selectedServices[0] &&
+                            colors.get(selectedServices[0].id),
+                        )}
                       />
                       {whoLabel}
                     </span>

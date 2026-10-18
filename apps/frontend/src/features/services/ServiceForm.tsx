@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   type FormEvent,
   type ReactNode,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -18,8 +19,16 @@ import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { runViewTransition } from "@/shared/motion/viewTransition";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import {
+  type HexColor,
+  isHexColor,
+  type ServiceColor,
+  serviceColorOf,
+  swatchProps,
+} from "@/shared/serviceColor";
 import { CurrencyInput } from "@/shared/ui/CurrencyInput";
 
+import { ServiceColorPicker } from "./ServiceColorPicker";
 import {
   formatServiceDuration,
   formatServicePreview,
@@ -178,7 +187,11 @@ export function ServiceForm({
   const [priceType, setPriceType] = useState<Service["priceType"]>("FIXED");
   const [priceCents, setPriceCents] = useState<number | null>(null);
   const [priceError, setPriceError] = useState<string | null>(null);
-  const [colorToken, setColorToken] = useState<ServiceColorToken | "">("");
+  const [color, setColor] = useState<ServiceColor | "">("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // Estável: o Dialog refaz o foco quando `onClose` muda, e uma função nova a
+  // cada render tirava o foco do campo do código da cor a cada tecla.
+  const closePicker = useCallback(() => setPickerOpen(false), []);
   const [colorError, setColorError] = useState<string | null>(null);
   const [essentialsOpen, setEssentialsOpen] = useState(ESSENTIALS_OPEN_ON_EDIT);
   const [recurrenceValue, setRecurrenceValue] = useState("");
@@ -248,7 +261,7 @@ export function ServiceForm({
           setPriceCents(
             found.price === null ? null : Math.round(found.price * 100),
           );
-          setColorToken(found.colorToken ?? "");
+          setColor(serviceColorOf(found) ?? "");
           setDescription(found.description ?? "");
           setRecurrenceValue(
             found.recurrenceIntervalDays === null
@@ -284,11 +297,11 @@ export function ServiceForm({
     }
     // Decisão de 2026-10-12: a cor é obrigatória na criação manual e não
     // pode ser removida na edição. Sem pré-seleção: a pessoa escolhe.
-    if (colorToken === "") {
+    if (color === "") {
       setColorError(COLOR_REQUIRED_MESSAGE);
       setOpenOptions((current) => new Set(current).add("color"));
     }
-    if (missingPrice || colorToken === "") return;
+    if (missingPrice || color === "") return;
     setBusy(true);
     setMessage(null);
     try {
@@ -305,7 +318,7 @@ export function ServiceForm({
             : true,
         bufferAfterMinutes: buffersAfter === "" ? 0 : Number(buffersAfter),
         bufferBeforeMinutes: buffersBefore === "" ? 0 : Number(buffersBefore),
-        colorToken,
+        ...(isHexColor(color) ? { colorHex: color } : { colorToken: color }),
         description: trimmedDescription === "" ? null : trimmedDescription,
         durationMinutes: duration === "" ? null : Number(duration),
         name: formText(data, "name"),
@@ -388,9 +401,10 @@ export function ServiceForm({
     bufferBeforeMinutes === 0 && bufferAfterMinutes === 0
       ? "Nenhum"
       : `Antes ${bufferBeforeMinutes} · Depois ${bufferAfterMinutes}`;
-  const colorLabel =
-    colorTokenOptions.find((option) => option.value === colorToken)?.label ??
-    "Escolha uma cor";
+  const colorLabel = isHexColor(color)
+    ? "Personalizada"
+    : (colorTokenOptions.find((option) => option.value === color)?.label ??
+      "Escolha uma cor");
   const descriptionText = description.trim() || "Opcional";
   const instructionText = aiInstructionValue.trim() ? "Definidas" : "Nenhuma";
 
@@ -496,10 +510,8 @@ export function ServiceForm({
       swatch={
         <span
           aria-hidden="true"
-          className={
-            colorToken ? "service-color-dot" : "service-color-dot is-none"
-          }
-          data-color={colorToken || undefined}
+          className={color ? "service-color-dot" : "service-color-dot is-none"}
+          {...swatchProps(color || null)}
         />
       }
       title="Cor na agenda"
@@ -517,12 +529,12 @@ export function ServiceForm({
         {colorTokenOptions.map((option) => (
           <label className="service-color-choice" key={option.value}>
             <input
-              checked={colorToken === option.value}
+              checked={color === option.value}
               name="service-color"
               type="radio"
               value={option.value}
               onChange={() => {
-                setColorToken(option.value);
+                setColor(option.value);
                 setColorError(null);
               }}
             />
@@ -531,7 +543,7 @@ export function ServiceForm({
               className="service-color-circle"
               data-color={option.value}
             >
-              {colorToken === option.value && (
+              {color === option.value && (
                 <svg
                   aria-hidden="true"
                   fill="none"
@@ -550,6 +562,47 @@ export function ServiceForm({
             <span className="sr-only">{option.label}</span>
           </label>
         ))}
+        {isHexColor(color) && (
+          <label className="service-color-choice">
+            <input
+              checked
+              name="service-color"
+              type="radio"
+              value={color}
+              onChange={() => setColorError(null)}
+            />
+            <span
+              aria-hidden="true"
+              className="service-color-circle"
+              {...swatchProps(color)}
+            >
+              <svg
+                aria-hidden="true"
+                fill="none"
+                height="16"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="3"
+                viewBox="0 0 24 24"
+                width="16"
+              >
+                <path d="M5 12.5l4.5 4.5L19 7.5" />
+              </svg>
+            </span>
+            <span className="sr-only">Cor personalizada</span>
+          </label>
+        )}
+        <button
+          aria-label="Escolher outra cor"
+          className="service-color-more"
+          type="button"
+          onClick={() => setPickerOpen(true)}
+        >
+          <span>
+            <Icon name="plus" />
+          </span>
+        </button>
       </div>
       {colorError ? (
         <span
@@ -560,7 +613,10 @@ export function ServiceForm({
           {colorError}
         </span>
       ) : (
-        <span className="service-option-help">Escolha uma das seis cores.</span>
+        <span className="service-option-help">
+          Seis cores sugeridas ou toque em <strong>+</strong> para escolher
+          qualquer outra no seletor de cores.
+        </span>
       )}
       <div className="service-agenda-preview">
         <span className="service-agenda-preview-label">Assim na agenda</span>
@@ -569,7 +625,7 @@ export function ServiceForm({
           <span
             aria-hidden="true"
             className="service-agenda-preview-bar"
-            data-color={colorToken || undefined}
+            {...swatchProps(color || null)}
           />
           <span className="service-agenda-preview-body">
             <span className="service-agenda-preview-name">Cliente</span>
@@ -577,6 +633,20 @@ export function ServiceForm({
           </span>
         </div>
       </div>
+      {pickerOpen && (
+        <ServiceColorPicker
+          initial={isHexColor(color) ? color : null}
+          open
+          serviceName={name.trim()}
+          summary={summary}
+          onClose={closePicker}
+          onPick={(picked: HexColor) => {
+            setColor(picked);
+            setColorError(null);
+            setPickerOpen(false);
+          }}
+        />
+      )}
     </OptionRow>
   );
 

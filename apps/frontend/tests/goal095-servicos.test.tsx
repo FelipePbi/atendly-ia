@@ -685,7 +685,12 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     });
     expect(within(group).getByRole("radio", { name: "Rosa-antigo" })).toBeChecked();
     expect(group).toHaveAttribute("aria-required", "true");
-    expect(screen.getByText("Escolha uma das seis cores.")).toBeVisible();
+    expect(
+      screen.getByText(/Seis cores sugeridas ou toque em/),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Escolher outra cor" }),
+    ).toBeVisible();
   });
 
   test.each([
@@ -721,6 +726,61 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
       );
     },
   );
+
+  // Cor personalizada (2026-10-18, quadro "Serviço · cor personalizada").
+  test("o + abre o seletor, o hex digitado vira a cor do serviço e sai como colorHex", async () => {
+    const user = userEvent.setup();
+    const { container } = await renderEditForm(edited());
+    await user.click(optionRow("Cor na agenda"));
+    await user.click(screen.getByRole("button", { name: "Escolher outra cor" }));
+
+    const picker = screen.getByRole("dialog", {
+      name: "Outra cor para Corte feminino",
+    });
+    const hex = within(picker).getByRole("textbox", { name: /Código da cor/ });
+    await user.clear(hex);
+    await user.type(hex, "7a9e7e");
+    expect(within(picker).getByRole("spinbutton", { name: "R" })).toHaveValue(122);
+    expect(within(picker).getByRole("spinbutton", { name: "G" })).toHaveValue(158);
+    expect(within(picker).getByRole("spinbutton", { name: "B" })).toHaveValue(126);
+    await user.click(within(picker).getByRole("button", { name: "Usar esta cor" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Cor personalizada" })).toBeChecked();
+    expect(within(optionRow("Cor na agenda")).getByText("Personalizada")).toBeVisible();
+    const bar = container.querySelector(".service-agenda-preview-bar");
+    expect(bar).toHaveAttribute("data-color", "CUSTOM");
+    expect((bar as HTMLElement).style.getPropertyValue("--swatch-custom")).toBe(
+      "#7a9e7e",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    await waitFor(() =>
+      expect(serviceCatalogUpdate).toHaveBeenCalledWith(
+        "s1",
+        expect.objectContaining({ colorHex: "#7a9e7e" }),
+      ),
+    );
+    expect(serviceCatalogUpdate.mock.calls[0][1]).not.toHaveProperty("colorToken");
+  });
+
+  test("serviço com cor personalizada abre com ela marcada; voltar a uma sugerida manda o token", async () => {
+    const user = userEvent.setup();
+    await renderEditForm({ ...edited(), colorToken: null, colorHex: "#123abc" });
+    await user.click(optionRow("Cor na agenda"));
+
+    expect(screen.getByRole("radio", { name: "Cor personalizada" })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: "Oliva" }));
+    expect(screen.queryByRole("radio", { name: "Cor personalizada" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    await waitFor(() =>
+      expect(serviceCatalogUpdate).toHaveBeenCalledWith(
+        "s1",
+        expect.objectContaining({ colorToken: "EMERALD" }),
+      ),
+    );
+  });
 
   test("intervalo, instruções e recorrência abertos escondem o valor da linha por CSS", async () => {
     const css = readLightStylesheet(

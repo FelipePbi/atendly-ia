@@ -1,4 +1,5 @@
 import { type ServiceColorToken } from "@/data";
+import { cardSwatch, isHexColor, type ServiceColor } from "@/shared/serviceColor";
 
 /**
  * Rótulo visual do cartão da Semana no celular (pedido de 2026-10-12): o nome
@@ -135,14 +136,16 @@ export function readableInk(backgrounds: readonly string[]): string {
  * cima para baixo). Passado, o traço é esmaecido sobre o fundo da grade.
  */
 export function weekBarLabelBackgrounds(
-  tokens: ReadonlyArray<ServiceColorToken | null>,
+  tokens: ReadonlyArray<ServiceColor | null>,
   isPast: boolean,
   theme: WeekBarTheme = "light",
 ): string[] {
   const first = tokens[0];
   const dark = theme === "dark";
   const swatch = first
-    ? CARD_SWATCH_HEX[first]
+    ? isHexColor(first)
+      ? cardSwatch(first)
+      : CARD_SWATCH_HEX[first]
     : dark
       ? DARK_NEUTRAL_SWATCH_HEX
       : NEUTRAL_SWATCH_HEX;
@@ -154,7 +157,7 @@ export function weekBarLabelBackgrounds(
 
 /** Cor do nome no cartão da Semana no celular. */
 export function weekBarLabelInk(
-  tokens: ReadonlyArray<ServiceColorToken | null>,
+  tokens: ReadonlyArray<ServiceColor | null>,
   isPast: boolean,
   theme: WeekBarTheme = "light",
 ): string {

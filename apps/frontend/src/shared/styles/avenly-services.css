@@ -17,6 +17,11 @@
 [data-color="SLATE"] {
   --swatch: var(--at-swatch-slate);
 }
+/* Cor personalizada (2026-10-18): o hex vem do serviço, já com o traço
+   escurecido se for claro demais (`swatchProps`, serviceColor.ts). */
+[data-color="CUSTOM"] {
+  --swatch: var(--swatch-custom);
+}
 
 .service-duration-control {
   display: flex;
@@ -386,14 +391,18 @@
    (65 px; 81 px a partir de 768 px), para a área dos itens rolar sozinha. O
    respiro no fim deixa a última linha acima do "+". */
 .service-list-screen:not(.has-state) {
-  height: calc(100dvh - var(--shell-status-h, 0px) - 65px - env(safe-area-inset-bottom));
+  height: calc(
+    100dvh - var(--shell-status-h, 0px) - 65px - env(safe-area-inset-bottom)
+  );
 }
 .service-list-screen .service-panel-scroll {
   padding-bottom: 88px;
 }
 @media (min-width: 768px) {
   .service-list-screen:not(.has-state) {
-    height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
+    height: calc(
+      100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom)
+    );
   }
 }
 @media (min-width: 1100px) {
@@ -468,7 +477,9 @@
 }
 @media (min-width: 1024px) and (max-width: 1099px) {
   .list-detail:has(> .list-detail-list > .service-panel) .list-detail-empty {
-    min-height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
+    min-height: calc(
+      100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom)
+    );
   }
 }
 .service-row.is-open {
@@ -1050,6 +1061,212 @@
   font-size: 13px;
 }
 
+/* "+" das cores sugeridas: abre o seletor de cor personalizada (2026-10-18). */
+.service-color-more {
+  width: 40px;
+  height: 40px;
+  padding: 3px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--at-picker-ring);
+  display: inline-flex;
+  cursor: pointer;
+}
+.service-color-more > span {
+  flex: 1;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.service-color-more .icon {
+  width: 18px;
+  height: 18px;
+}
+.service-color-more:focus-visible {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 6px;
+}
+
+/* Seletor de cor personalizada (quadro "Serviço · cor personalizada") */
+.service-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.service-picker-field {
+  position: relative;
+  height: 130px;
+  border-radius: 12px;
+  background-image: var(--at-picker-shade), var(--at-picker-tint);
+  cursor: crosshair;
+  touch-action: none;
+}
+.service-picker-field:focus-visible {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 3px;
+}
+.service-picker-thumb {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  box-sizing: border-box;
+  box-shadow: 0 0 0 1px var(--border-strong);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.service-picker-hue {
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+.service-picker-hue::-webkit-slider-runnable-track {
+  height: 14px;
+  border-radius: 7px;
+  background: var(--at-picker-hue);
+}
+.service-picker-hue::-moz-range-track {
+  height: 14px;
+  border-radius: 7px;
+  background: var(--at-picker-hue);
+}
+.service-picker-hue::-webkit-slider-thumb {
+  width: 24px;
+  height: 24px;
+  margin-top: -5px;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  background: var(--picker-thumb, var(--fg));
+  box-shadow: 0 0 0 1px var(--border-strong);
+  -webkit-appearance: none;
+}
+.service-picker-hue::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  background: var(--picker-thumb, var(--fg));
+}
+.service-picker-hue:focus-visible {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 3px;
+}
+.service-picker-codes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 52px);
+  gap: 8px;
+  align-items: end;
+}
+.service-picker-hex,
+.service-picker-channel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.service-picker-code-label {
+  color: var(--fg-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+.service-picker-channel .service-picker-code-label {
+  text-align: center;
+}
+.service-picker-hex-input,
+.service-picker-channel input {
+  height: 48px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-sizing: border-box;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-size: 16px;
+}
+.service-picker-hex-input {
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.service-picker-hex-input:focus-within,
+.service-picker-channel input:focus-visible {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 1px;
+}
+.service-picker-hex-input input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: 0.04em;
+  outline: none;
+}
+.service-picker-hex-dot {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 50%;
+}
+.service-picker-channel input {
+  width: 100%;
+  padding: 0;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+.service-picker-channel input::-webkit-inner-spin-button,
+.service-picker-channel input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+.service-picker-marks {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.service-picker-mark {
+  height: 8px;
+  border-radius: 2px;
+  background: var(--swatch);
+}
+.service-picker-mark.is-month {
+  width: 8px;
+}
+.service-picker-mark.is-week {
+  width: 26px;
+}
+.service-picker-note {
+  margin: 0;
+  color: var(--fg-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.service-picker-use {
+  width: 100%;
+}
+.service-picker-back {
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .service-buffers {
   display: flex;
   gap: 10px;
@@ -1178,8 +1395,11 @@
     padding-bottom: 24px;
   }
 }
-/* Criar: campos à esquerda e Mais opções à direita (S3, a partir de 768 px). */
-@media (min-width: 768px) {
+/* Criar: campos à esquerda e Mais opções à direita (S3, a partir de 768 px).
+   De 1100 a 1279 px a sidebar e a lista dividem a tela com o editor, que fica
+   estreito demais para duas colunas: lá os campos e as opções empilham, como
+   no celular (pedido de 2026-10-18, D-184). */
+@media (min-width: 768px) and (max-width: 1099.98px), (min-width: 1280px) {
   .service-form-body > .service-form-split {
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
@@ -1223,7 +1443,9 @@
 
 /* Vazio da lista de Serviços (S2, Goal122) */
 .service-panel.has-state {
-  min-height: calc(100dvh - var(--shell-status-h, 0px) - 65px - env(safe-area-inset-bottom));
+  min-height: calc(
+    100dvh - var(--shell-status-h, 0px) - 65px - env(safe-area-inset-bottom)
+  );
   display: flex;
   flex-direction: column;
   padding-bottom: 0;
@@ -1343,7 +1565,9 @@
 }
 @media (min-width: 768px) {
   .service-panel.has-state {
-    min-height: calc(100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom));
+    min-height: calc(
+      100dvh - var(--shell-status-h, 0px) - 81px - env(safe-area-inset-bottom)
+    );
   }
   .service-state {
     padding-bottom: 28px;

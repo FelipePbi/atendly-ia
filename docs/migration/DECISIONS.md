@@ -7942,3 +7942,18 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Decisão:** as duas colunas dependem da largura do painel do Resumo (container query em `.resume-panel`, a partir de 680 px), não da janela. Abaixo disso as seções ficam uma abaixo da outra, como no celular.
 
 **Consequências:** o mesmo perfil pode ter uma ou duas colunas na mesma janela, conforme a lista está ou não ao lado.
+
+## D-184 — Cor personalizada do serviço e editor de serviço no tablet com sidebar
+
+**Status:** ACCEPTED em 2026-10-18, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Implementa o quadro "Serviço · cor personalizada" (Agenda, S1b) e revê a decisão de 2026-10-12 ("nunca cor livre").
+
+**Contexto:** o protótipo prevê, além das seis cores sugeridas, um "+" que abre um seletor (campo de tom, régua de matiz, código hex com R/G/B e a prévia "Assim na agenda"). O app só tinha as seis cores. No tablet deitado com sidebar, o novo serviço ainda abria em duas colunas num editor estreito, cortando os valores de "Mais opções".
+
+**Decisão:**
+
+1. O serviço tem uma cor só: um dos seis tokens (`colorToken`) ou uma cor personalizada `#rrggbb` (`colorHex`, coluna nova no Scheduling com CHECK de formato e de exclusividade). Gravar uma apaga a outra; a cor continua obrigatória na criação manual e não pode ser removida.
+2. "Cor na agenda" mostra as seis sugeridas, a personalizada (quando houver) e o "+". O seletor abre como folha e devolve o hex exato; a prévia mostra o traço do Dia e o risco do Mês e a barra da Semana.
+3. Toda tela que pinta a cor do serviço passa por `swatchProps` (`shared/serviceColor.ts`): token continua em `data-color`; hex vira `data-color="CUSTOM"` com o traço em variável. Cor clara demais escurece só o necessário para 2,2:1 sobre o fundo; no cartão da Semana no celular, para o nome branco passar de 4,5:1.
+4. Novo serviço em duas colunas de 768 a 1099 px e a partir de 1280 px; de 1100 a 1279 px (sidebar e lista ao lado) os campos e as opções empilham.
+
+**Consequências:** a cor personalizada é igual em todos os temas, como a paleta (D-181). A ai-orchestrator não usa a cor e não muda.

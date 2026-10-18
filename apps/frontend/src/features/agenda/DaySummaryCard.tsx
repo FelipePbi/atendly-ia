@@ -1,6 +1,7 @@
 "use client";
 
 import { Icon } from "@/shared/icons/Icon";
+import { type ServiceColor, swatchProps } from "@/shared/serviceColor";
 
 import {
   type AgendaEntry,
@@ -13,7 +14,7 @@ import {
 } from "./occupancy";
 
 interface ServiceCount {
-  color: string | null;
+  color: ServiceColor | null;
   count: number;
   name: string;
 }
@@ -99,7 +100,7 @@ export function DaySummaryCard({
             <span
               aria-hidden="true"
               className="agenda-summary-dot"
-              data-color={service.color ?? undefined}
+              {...swatchProps(service.color)}
             />
             {service.name}
             {service.count > 1 ? ` ×${service.count}` : ""}

@@ -22,6 +22,7 @@ import { ListDetailEmpty, ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { serviceColorOf, swatchProps } from "@/shared/serviceColor";
 
 import { ServiceEmptyState } from "./ServiceEmptyState";
 import { formatServiceLine } from "./serviceFormatting";
@@ -465,7 +466,7 @@ function ServiceGroup({
               <span
                 aria-hidden="true"
                 className="service-row-accent"
-                data-color={service.colorToken ?? undefined}
+                {...swatchProps(serviceColorOf(service))}
               />
               {editable && (
                 <Link

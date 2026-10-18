@@ -3,6 +3,8 @@
 import clsx from "clsx";
 import { type CSSProperties, useEffect, useState } from "react";
 
+import { swatchProps } from "@/shared/serviceColor";
+
 import { DaySummaryCard } from "./DaySummaryCard";
 import {
   addDays,
@@ -119,7 +121,7 @@ function Stripe({
     return (
       <i aria-hidden="true" className="month-stripe">
         {(tokens.length > 0 ? tokens : [null]).map((token, index) => (
-          <b data-color={token ?? undefined} key={`${token}-${index}`} />
+          <b {...swatchProps(token)} key={`${token}-${index}`} />
         ))}
       </i>
     );
@@ -151,7 +153,7 @@ function Line({
       {appointment && (
         <i aria-hidden="true" className="month-line-bar">
           {(tokens.length > 0 ? tokens : [null]).map((token, index) => (
-            <b data-color={token ?? undefined} key={`${token}-${index}`} />
+            <b {...swatchProps(token)} key={`${token}-${index}`} />
           ))}
         </i>
       )}

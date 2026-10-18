@@ -6,6 +6,7 @@ import type { Service } from "@/data";
 import { ChatSheetShell } from "@/features/conversations/ConversationActionsSheet";
 import { Icon } from "@/shared/icons/Icon";
 import { useSheetClose } from "@/shared/motion/sheetClose";
+import { type ServiceColor, swatchProps } from "@/shared/serviceColor";
 
 import { durationLabel, normalize } from "./NewAppointmentFields";
 import type { ServiceColorMap } from "./occupancy";
@@ -104,7 +105,7 @@ function ServiceOption({
   onChoose,
   service,
 }: {
-  color: string | undefined;
+  color: ServiceColor | undefined;
   onChoose: (service: Service) => void;
   service: Service;
 }) {
@@ -122,7 +123,7 @@ function ServiceOption({
       <span
         aria-hidden="true"
         className="agenda-appt-service-dot"
-        data-color={color}
+        {...swatchProps(color)}
       />
       <span className="agenda-services-name">{service.name}</span>
       <span className="sr-only"> · </span>

@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import { type Appointment, type TimeBlock } from "@/data";
+import { swatchProps } from "@/shared/serviceColor";
 
 import { agendaDayHref, appointmentHref } from "./agendaLinks";
 import {
@@ -528,7 +529,7 @@ function AppointmentContent({
         {parts.map((color, index) => (
           <span
             className="agenda-day-stripe-part"
-            data-color={color ?? undefined}
+            {...swatchProps(color)}
             key={index}
           />
         ))}

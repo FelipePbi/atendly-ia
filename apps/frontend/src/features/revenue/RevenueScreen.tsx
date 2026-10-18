@@ -16,6 +16,7 @@ import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { recall, remember } from "@/shared/runtime/sessionMemory";
 import { useOptionalSystemStatus } from "@/shared/runtime/systemStatus";
+import { serviceColorOf, swatchProps } from "@/shared/serviceColor";
 import { BrandLoader } from "@/shared/ui/Brand";
 import { StatePanel } from "@/shared/ui/States";
 
@@ -452,9 +453,10 @@ function ServicesCard({ report }: { report: RevenueReport }) {
                 .map((service) => (
                   <span
                     className="revenue-mix-part"
-                    data-color={service.colorToken ?? undefined}
+                    {...swatchProps(serviceColorOf(service), {
+                      flexGrow: service.amount,
+                    })}
                     key={service.serviceId ?? "outros"}
-                    style={{ flexGrow: service.amount }}
                   />
                 ))}
             </div>
@@ -463,7 +465,7 @@ function ServicesCard({ report }: { report: RevenueReport }) {
             {services.map((service, index) => (
               <li
                 className="revenue-service"
-                data-color={service.colorToken ?? undefined}
+                {...swatchProps(serviceColorOf(service))}
                 key={service.serviceId ?? "outros"}
               >
                 <span aria-hidden="true" className="revenue-service-dot" />

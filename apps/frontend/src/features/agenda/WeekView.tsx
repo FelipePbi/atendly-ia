@@ -5,6 +5,7 @@ import Link from "next/link";
 import { type CSSProperties, useEffect, useState } from "react";
 
 import { type TimeBlock } from "@/data";
+import { swatchProps } from "@/shared/serviceColor";
 import { useResolvedTheme } from "@/shared/theme/AppearanceProvider";
 
 import { agendaDayHref, appointmentHref } from "./agendaLinks";
@@ -283,7 +284,7 @@ export function WeekView({
                 <span
                   aria-hidden="true"
                   className="week-map-dot"
-                  data-color={item.color ?? undefined}
+                  {...swatchProps(item.color)}
                 />
                 {item.name}
               </li>
@@ -367,7 +368,7 @@ function WeekEntryBar({
             className={clsx("week-bar-stripe", tokens.length > 1 && "is-split")}
           >
             {(tokens.length > 0 ? tokens : [null]).map((token, index) => (
-              <b data-color={token ?? undefined} key={`${token}-${index}`} />
+              <b {...swatchProps(token)} key={`${token}-${index}`} />
             ))}
           </i>
           <span className="week-bar-text">

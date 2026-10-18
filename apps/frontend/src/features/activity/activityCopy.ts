@@ -109,6 +109,7 @@ const FIELD_LABELS: Record<string, string> = {
   price: "Preço",
   description: "Descrição",
   colorToken: "Cor",
+  colorHex: "Cor",
   bufferBeforeMinutes: "Intervalo antes",
   bufferAfterMinutes: "Intervalo depois",
   recurrenceIntervalDays: "Retorno sugerido",
@@ -220,7 +221,7 @@ export interface ChangeLine {
 export function changeLines(entry: ActivityEntry): ChangeLine[] {
   if (entry.action === "appointment.rescheduled") return [];
   return entry.changes
-    .filter((change) => change.field !== "colorToken" || entry.changes.length === 1)
+    .filter((change) => !["colorToken", "colorHex"].includes(change.field) || entry.changes.length === 1)
     .filter(
       (change) =>
         !(

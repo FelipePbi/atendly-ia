@@ -9,7 +9,16 @@ import { notifyServicesChanged } from "./serviceChanges";
 export type ServiceColorToken =
   "ROSE" | "AMBER" | "EMERALD" | "SKY" | "VIOLET" | "SLATE";
 
-export interface ServiceInput {
+/**
+ * Cor do serviço: uma das seis sugeridas ou uma personalizada `#rrggbb`
+ * (2026-10-18), nunca as duas. Obrigatória na criação manual (decisão de
+ * 2026-10-12); na edição pode ser trocada, nunca removida.
+ */
+export type ServiceColorInput =
+  | { colorToken: ServiceColorToken; colorHex?: never }
+  | { colorHex: string; colorToken?: never };
+
+export type ServiceInput = ServiceColorInput & {
   active?: boolean;
   // Ausente vira pendencia de revisao (Goal007); nunca zero/duracao inventada.
   durationMinutes?: number | null;
@@ -17,15 +26,13 @@ export interface ServiceInput {
   price?: number | null;
   priceType: "FIXED" | "STARTING_AT" | "ON_REQUEST" | "NOT_INFORMED";
   description?: string | null;
-  // Obrigatória na criação manual (decisão de 2026-10-12); na edição pode ser
-  // trocada, nunca removida.
-  colorToken: ServiceColorToken;
   bufferBeforeMinutes?: number | null;
   bufferAfterMinutes?: number | null;
   recurrenceIntervalDays?: number | null;
-}
+};
 
-export type UpdateServiceInput = Partial<ServiceInput>;
+export type UpdateServiceInput = Partial<Omit<ServiceInput, keyof ServiceColorInput>> &
+  (ServiceColorInput | { colorToken?: never; colorHex?: never });
 
 /** Mutação que muda o que a lista de Serviços mostra avisa quem a mantém. */
 function changed<T>(value: T): T {

@@ -16,6 +16,7 @@ import { SkeletonSettle } from "@/shared/motion/SkeletonSettle";
 import { runViewTransition } from "@/shared/motion/viewTransition";
 import { displayPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { swatchProps } from "@/shared/serviceColor";
 import { ContactPhoto, customerPhotoUrl } from "@/shared/ui/ContactPhoto";
 import { Skeleton, StatePanel } from "@/shared/ui/States";
 
@@ -665,7 +666,7 @@ function AppointmentServices({
               <span
                 aria-hidden="true"
                 className="agenda-appt-service-dot"
-                data-color={colors[index] ?? undefined}
+                {...swatchProps(colors[index])}
               />
               {service.name}
             </span>

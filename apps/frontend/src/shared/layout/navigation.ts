@@ -13,6 +13,8 @@ export type PlatformSection =
   | "ia"
   | "importacao"
   | "inicio"
+  /** Tela "Mais" do celular e do tablet (D-186). */
+  | "mais"
   | "negocio"
   | "notificacoes"
   | "servicos"

@@ -32,6 +32,7 @@ import { ReminderSettingsSection } from "@/features/reminders/ReminderSettingsSe
 import { AccountSettings } from "@/features/settings/AccountSettings";
 import { ToneChoice } from "@/features/settings/shared/fields";
 import { AppShell } from "@/shared/layout/AppShell";
+import { MoreMenu } from "@/shared/layout/MoreMenu";
 import type * as systemStatusModule from "@/shared/runtime/systemStatus";
 
 const knowledgeGetOtherInfo = vi.fn();
@@ -273,16 +274,15 @@ describe("Conta mostra e edita o nome (Goal067)", () => {
 });
 
 describe("'Mais' tem Disponibilidade e Conversas, sem 'Ajuda' em menu nenhum (Goal067)", () => {
-  test("o diálogo 'Mais' lista Disponibilidade e Conversas, sem 'Ajuda'", async () => {
-    const user = userEvent.setup();
-    render(
-      <AppShell active="inicio" title="Início">
-        <p>Conteúdo</p>
-      </AppShell>,
+  test("a tela 'Mais' (D-186) lista Disponibilidade e Conversas, sem 'Ajuda'", () => {
+    const { container } = render(
+      <MoreMenu
+        isCurrent={() => false}
+        notificationsBadge={null}
+        onLogout={() => undefined}
+      />,
     );
-
-    await user.click(await screen.findByRole("button", { name: "Mais" }));
-    const dialog = await screen.findByRole("dialog", { name: "Mais" });
+    const dialog = container.querySelector(".more-sheet") as HTMLElement;
     expect(
       within(dialog).getByRole("link", { name: /Disponibilidade/ }),
     ).toHaveAttribute("href", "/configuracoes/disponibilidade");

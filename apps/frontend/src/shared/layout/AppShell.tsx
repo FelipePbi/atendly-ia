@@ -7,7 +7,6 @@ import {
   type ReactNode,
   type RefObject,
   useEffect,
-  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -37,14 +36,12 @@ import {
   useSystemStatus,
 } from "@/shared/runtime/systemStatus";
 import { Brand } from "@/shared/ui/Brand";
-import { Dialog } from "@/shared/ui/Dialog";
 import { ToastHost } from "@/shared/ui/ToastHost";
 
 import {
   isDestinationActive,
   isMobileTab,
   isMoreActive,
-  MORE_DESTINATIONS,
   NOTIFICATIONS_DESTINATION,
   notificationsBadgeLabel,
   SETTINGS_DESTINATION,
@@ -101,8 +98,6 @@ function AppShellChrome({
   const router = useRouter();
   const pathname = usePathname();
   useSectionTransitions(pathname, router);
-  const isCurrent = (href: string) =>
-    pathname === href || pathname.startsWith(`${href}/`);
   const { session, setUnauthenticated } = useProductRuntime();
   const status = useSystemStatus();
   const notificationsDrawer = useNotificationsDrawer();
@@ -119,7 +114,6 @@ function AppShellChrome({
     document.addEventListener("pointerdown", closeOutside);
     return () => document.removeEventListener("pointerdown", closeOutside);
   }, [accountOpen]);
-  const [moreOpen, setMoreOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const firstRender = useRef(true);
@@ -410,83 +404,20 @@ function AppShellChrome({
                 <span>{item.label}</span>
               </Link>
             ))}
-            <button
+            <Link
+              aria-current={isMoreActive(active) ? "page" : undefined}
               className={clsx(
                 "bottom-nav-item",
                 isMoreActive(active) && "is-active",
               )}
-              type="button"
-              onClick={() => setMoreOpen(true)}
-              aria-haspopup="dialog"
-              aria-expanded={moreOpen}
-              aria-current={isMoreActive(active) ? "page" : undefined}
+              href="/mais"
             >
               <Icon name="nav-more" />
               <span>Mais</span>
-            </button>
+            </Link>
           </nav>
         )}
       </div>
-      <Dialog
-        open={moreOpen}
-        onClose={() => setMoreOpen(false)}
-        title="Mais"
-        eyebrow="Navegação"
-        variant="sheet"
-      >
-        {/* Folha "Mais" do celular (pedido de 2026-10-16): sem o cartão
-            interno. Atalhos em destaque no topo, configurações numa lista
-            com ícone e seta, e a conta com o "Sair" no fim — cada linha com
-            alvo de toque de 48 px e a página aberta marcada. */}
-        <div className="more-sheet">
-          <div className="more-tiles">
-            {MORE_DESTINATIONS.filter((item) =>
-              MORE_SHORTCUTS.has(item.section),
-            ).map((item) => (
-              <Link
-                aria-current={isCurrent(item.href) ? "page" : undefined}
-                className="more-tile"
-                href={item.href}
-                key={item.section}
-              >
-                <span aria-hidden="true" className="more-icon">
-                  <Icon name={item.icon} />
-                </span>
-                <span className="more-tile-label">{item.label}</span>
-                {item.section === "notificacoes" && notificationsBadge && (
-                  <span className="badge-count">{notificationsBadge}</span>
-                )}
-              </Link>
-            ))}
-          </div>
-          <MoreGroup
-            items={MORE_DESTINATIONS.filter(
-              (item) =>
-                !MORE_SHORTCUTS.has(item.section) && item.section !== "conta",
-            )}
-            isCurrent={isCurrent}
-            title="Configurações"
-          />
-          <MoreGroup
-            items={MORE_DESTINATIONS.filter((item) => item.section === "conta")}
-            isCurrent={isCurrent}
-            title="Sua conta"
-          >
-            <li>
-              <button
-                className="more-row is-danger"
-                type="button"
-                onClick={() => void logout()}
-              >
-                <span aria-hidden="true" className="more-icon">
-                  <Icon name="logout" />
-                </span>
-                <span className="more-row-label">Sair</span>
-              </button>
-            </li>
-          </MoreGroup>
-        </div>
-      </Dialog>
     </>
   );
 }
@@ -540,46 +471,7 @@ function useSectionTransitions(
 }
 
 /** Os atalhos em destaque no topo da folha "Mais" do celular. */
-const MORE_SHORTCUTS = new Set(["notificacoes", "servicos", "faturamento"]);
 
-function MoreGroup({
-  children,
-  isCurrent,
-  items,
-  title,
-}: {
-  children?: ReactNode;
-  isCurrent: (href: string) => boolean;
-  items: typeof MORE_DESTINATIONS;
-  title: string;
-}) {
-  const headingId = useId();
-  return (
-    <section aria-labelledby={headingId} className="more-group">
-      <h3 className="more-group-title" id={headingId}>
-        {title}
-      </h3>
-      <ul className="more-list">
-        {items.map((item) => (
-          <li key={item.section}>
-            <Link
-              aria-current={isCurrent(item.href) ? "page" : undefined}
-              className="more-row"
-              href={item.href}
-            >
-              <span aria-hidden="true" className="more-icon">
-                <Icon name={item.icon} />
-              </span>
-              <span className="more-row-label">{item.label}</span>
-              <Icon name="chevron-right" />
-            </Link>
-          </li>
-        ))}
-        {children}
-      </ul>
-    </section>
-  );
-}
 
 /**
  * A frase do aviso de exclusão, separada porque o singular importa: "1 dia" e

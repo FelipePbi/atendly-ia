@@ -18,12 +18,19 @@
  *   sidebar.
  */
 
-import { render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { SystemStatus } from "@/data";
 import { AppShell } from "@/shared/layout/AppShell";
+import { MoreScreen } from "@/shared/layout/MoreScreen";
+import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
 import { expectNoA11yViolations } from "./support/a11y";
 
@@ -79,6 +86,17 @@ function renderShell() {
   );
 }
 
+/** A tela "Mais" (D-186), dentro da casca como na rota `/mais`. */
+function renderMoreScreen() {
+  return render(
+    <ShellConfigProvider>
+      <AppShell active="mais" title="Mais">
+        <MoreScreen />
+      </AppShell>
+    </ShellConfigProvider>,
+  );
+}
+
 beforeEach(() => {
   statusGet.mockReset();
   notificationsSummary.mockReset();
@@ -92,27 +110,35 @@ beforeEach(() => {
 });
 
 describe("entrada de Notificações", () => {
-  test("existe fora do 'Mais' e some do rótulo quando 'Mais' abre com uma segunda entrada", async () => {
+  test("existe fora do 'Mais' e também dentro da tela 'Mais'", async () => {
     renderShell();
 
     const link = await screen.findByRole("link", { name: /^Notificações/ });
     expect(link).toHaveAttribute("href", "/notificacoes");
+    // "Mais" é um link para a tela própria (D-186), não um diálogo.
+    expect(screen.getByRole("link", { name: "Mais" })).toHaveAttribute(
+      "href",
+      "/mais",
+    );
+    cleanup();
 
-    const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Mais" }));
-
-    // Com o diálogo aberto, a lista de "Mais" também lista Notificações:
-    // duas entradas no total, uma no chrome e outra dentro do diálogo.
-    expect(screen.getAllByRole("link", { name: /^Notificações/ })).toHaveLength(
-      2,
+    renderMoreScreen();
+    // Na tela "Mais", Notificações aparece no chrome e entre os atalhos.
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("link", { name: /^Notificações/ }),
+      ).toHaveLength(2),
     );
   });
 
-  test("a folha 'Mais' (2026-10-16): atalhos no topo, grupos com título, sem cartão interno, 'Sair' no fim", async () => {
-    renderShell();
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Mais" }));
-    const sheet = screen.getByRole("dialog", { name: "Mais" });
+  test("a tela 'Mais' (D-186): voltar, atalhos no topo, grupos com título, 'Sair' no fim", async () => {
+    renderMoreScreen();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Mais" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Voltar" })).toBeVisible();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const sheet = document.querySelector(".more-page") as HTMLElement;
 
     // Sem o cartão interno de antes.
     expect(sheet.querySelector(".list")).toBeNull();
@@ -142,7 +168,7 @@ describe("entrada de Notificações", () => {
 
     const bottomNav = screen
       .getAllByRole("navigation", { name: "Navegação principal" })
-      .find((nav) => within(nav).queryByRole("button", { name: "Mais" }));
+      .find((nav) => within(nav).queryByRole("link", { name: "Mais" }));
     expect(bottomNav).toBeDefined();
     expect(
       within(bottomNav as HTMLElement).queryByRole("link", {

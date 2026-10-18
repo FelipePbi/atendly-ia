@@ -7288,7 +7288,7 @@
       "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
       "label": "Configurações · Conta",
       "route": "/configuracoes/conta",
-      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação. \"Excluir conta\" é a última linha da lista, logo depois de \"Sobre\", e não o cartão rosado no pé do quadro (divergência declarada, D-193). Todo o resto da tela deve bater com o quadro."
     },
     {
       "code": "C2",

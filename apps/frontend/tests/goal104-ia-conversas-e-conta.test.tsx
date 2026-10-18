@@ -23,7 +23,9 @@
  *    com os pedidos e as mensagens de hoje, "Sair" de Segurança só depois da
  *    confirmação, links de "Sobre", os quatro estados da exclusão e nenhum
  *    "Sair da conta". Desde o Goal124 a linha "Excluir conta" é um link para
- *    `/configuracoes/conta/excluir`, que tem a suíte própria do C2.
+ *    `/configuracoes/conta/excluir`, que tem a suíte própria do C2. Desde a
+ *    D-193 ela é a última linha da tela, uma linha como as outras, e não o
+ *    cartão de perigo no pé.
  * 5. Casca: uma chamada de `useShellConfig` por árvore renderizada nas quatro
  *    rotas, nas duas faixas, e a rota nova marcando "Negócio" na lista.
  *
@@ -1136,6 +1138,17 @@ describe("Goal104 prova 4: Conta em /configuracoes/conta", () => {
     expect(link).toHaveAttribute("href", "/configuracoes/conta/excluir");
     expect(screen.queryByRole("dialog", { name: "Excluir sua conta?" })).toBeNull();
     expect(requestDeletion).not.toHaveBeenCalled();
+  });
+
+  test("D-193: 'Excluir conta' é a última linha da tela, linha comum e não cartão", async () => {
+    const { container } = await renderRoute("account", NARROW, "Seus dados");
+
+    const link = await screen.findByRole("link", { name: /^Excluir conta/ });
+    expect(link).toHaveClass("business-row");
+    expect(container.querySelector(".account-danger-card")).toBeNull();
+    const rows = container.querySelectorAll(".account-screen .business-row");
+    expect(rows[rows.length - 1]).toBe(link);
+    expect(group("Sobre").contains(link)).toBe(false);
   });
 
   test("exclusão pedida na rota própria: a senha digitada vai uma vez e a tela volta à Conta", async () => {

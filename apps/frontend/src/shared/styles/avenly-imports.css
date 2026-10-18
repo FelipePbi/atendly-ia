@@ -1221,8 +1221,7 @@
 }
 .modal:has(.imports-confirm) {
   box-sizing: border-box;
-  width: 460px;
-  max-width: 100%;
+  width: min(100%, 460px);
   max-height: calc(100dvh - 32px);
   padding: 20px;
   display: flex;

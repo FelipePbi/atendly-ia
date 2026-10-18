@@ -167,6 +167,7 @@ describe("Dialog: sempre o modal centrado (D-204)", () => {
       "avenly-imports.css",
       "avenly-motion.css",
       "avenly-notifications.css",
+      "avenly-services.css",
       "avenly-settings.css",
     ]) {
       const css = styles(file);
@@ -174,10 +175,13 @@ describe("Dialog: sempre o modal centrado (D-204)", () => {
         /\.bottom-sheet|\.sheet-handle|\.drawer-wrap|\.drawer[\s:{,]|chat-sheet-handle|agenda-cancel-handle|@keyframes (sheet|drawer-in|at-sheet|motion-sheet-out) /,
       );
     }
-    // A confirmação da importação e a central de notificações passaram a
-    // escopar o `.modal`.
+    // A confirmação da importação, as folhas do serviço (S5 e S6) e a central
+    // de notificações passaram a escopar o `.modal`.
     expect(styles("avenly-imports.css")).toMatch(
       /\n\.modal:has\(\.imports-confirm\) \{/,
+    );
+    expect(styles("avenly-services.css")).toMatch(
+      /\n\.modal:has\(\.service-sheet\) \{/,
     );
     expect(styles("avenly-notifications.css")).toMatch(
       /\n\.modal:has\(\.notifications-drawer-body\) \{/,

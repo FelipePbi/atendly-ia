@@ -69,7 +69,6 @@ export function ServicePriceSheet({
       onClose={onClose}
       open
       title={serviceName ? `Como cobrar ${serviceName}?` : "Como cobrar?"}
-      variant="sheet"
     >
       <div
         className="service-sheet service-price-sheet"

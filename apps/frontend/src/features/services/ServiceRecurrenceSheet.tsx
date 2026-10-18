@@ -93,7 +93,7 @@ export function ServiceRecurrenceSheet({
   }
 
   return (
-    <Dialog onClose={onClose} open title="Recorrência" variant="sheet">
+    <Dialog onClose={onClose} open title="Recorrência">
       <div
         className="service-sheet service-recurrence"
         // O formulário atrás marca "alterações não salvas" a cada mudança; o

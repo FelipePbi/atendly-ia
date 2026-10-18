@@ -1065,11 +1065,14 @@ button.week-bar:focus-visible,
 }
 /* Nome da cliente no cartão da Semana, só no celular (pedido de 2026-10-12).
  * No tablet e no desktop o cartão já mostra nome e serviço (.week-bar-text).
- * A cor vem de weekBarLabelInk (branco ou preto pela luminância do traço). */
+ * A cor vem de weekBarLabelInk (branco ou preto pela luminância do traço).
+ * Desde 2026-10-18 o cartão claro com o traço à esquerda vale a partir de
+ * 600 px: o tablet em pé (menos de 768 px) também o usa, e o cartão pintado
+ * por inteiro fica só no celular, onde a coluna não cabe nome e serviço. */
 .week-bar-label {
   display: none;
 }
-@media (max-width: 767px) {
+@media (max-width: 599.98px) {
   a.week-bar {
     container-type: size;
   }
@@ -1128,7 +1131,7 @@ button.week-bar:focus-visible,
     opacity: 0.4;
   }
 }
-@media (min-width: 768px) {
+@media (min-width: 600px) {
   .week-bar {
     padding: 0 6px 0 10px;
     display: flex;

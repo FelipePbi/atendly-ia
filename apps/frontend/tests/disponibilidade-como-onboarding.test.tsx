@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * D-187: Configurações > Disponibilidade usa as peças do onboarding (quadros
+ * D-196: Configurações > Disponibilidade usa as peças do onboarding (quadros
  * 2.5 a 2.7): pílulas dos dias com o resumo, o horário de sempre em dois
  * cartões com a régua de 24 h, "Personalizar dias diferentes" abrindo
  * "Horários por dia" na própria página e "Copiar … para outros dias". A grade

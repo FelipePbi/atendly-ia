@@ -5,7 +5,7 @@ import { TimeField } from "@/shared/ui/pickers/PickerFields";
 /**
  * Peças do horário semanal compartilhadas pelo onboarding (etapas "Dias de
  * atendimento" e "Horários", quadros 2.5 a 2.7) e por Configurações >
- * Disponibilidade (D-187): as pílulas dos dias, o resumo, os cartões de hora
+ * Disponibilidade (D-196): as pílulas dos dias, o resumo, os cartões de hora
  * com a régua de 24 h e as linhas de "Horários por dia".
  */
 

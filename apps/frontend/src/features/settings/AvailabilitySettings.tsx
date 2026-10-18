@@ -29,7 +29,7 @@ type AvailabilityRule = NonNullable<
 
 type Pattern = HoursInterval[];
 
-/** O horário da semana como o onboarding o mostra (D-187): os dias marcados,
+/** O horário da semana como o onboarding o mostra (D-196): os dias marcados,
  * o horário de sempre (`base`) e os dias com horário próprio (`own`). Um dia
  * marcado sem entrada em `own` segue o horário de sempre. */
 type Week = {

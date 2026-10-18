@@ -465,7 +465,7 @@ describe("ShellConfigProvider + Disponibilidade não excede a profundidade de at
       await user.click(monday);
     }
 
-    // D-187: com um horário só na semana, ele é o horário de sempre.
+    // D-196: com um horário só na semana, ele é o horário de sempre.
     const startField = screen.getByLabelText("Começa");
     await user.clear(startField);
     await user.type(startField, "08:00");

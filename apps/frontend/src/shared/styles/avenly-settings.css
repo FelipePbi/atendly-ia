@@ -618,7 +618,7 @@
   background: var(--surface);
 }
 
-/* Disponibilidade (D-187): o horário da semana com as peças do onboarding
+/* Disponibilidade (D-196): o horário da semana com as peças do onboarding
    (quadros 2.5 a 2.7, src/features/availability/WeeklyHours.tsx) direto no
    fundo da página, sem o cartão de painel, numa coluna de leitura. */
 .availability-screen {

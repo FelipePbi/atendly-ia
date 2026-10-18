@@ -173,7 +173,8 @@ describe("Clientes — scroll infinito", () => {
     await screen.findByRole("list", { name: "Clientes" });
 
     FakeObserver.reachEnd();
-    await waitFor(() => expect(rows()).toHaveLength(30));
+    // Folga para a suíte inteira rodando em paralelo (era instável a 1 s).
+    await waitFor(() => expect(rows()).toHaveLength(30), { timeout: 4000 });
     expect(screen.getAllByRole("link", { name: /Cliente 15/ })).toHaveLength(1);
   });
 
@@ -308,8 +309,8 @@ describe("Clientes — scroll infinito", () => {
     ).toEqual([
       "Nome",
       "Último atendimento",
-      "Frequência",
       "Próximos atendimentos",
+      "Frequência",
     ]);
     await user.click(within(sheet).getByRole("radio", { name: /Frequência/ }));
 

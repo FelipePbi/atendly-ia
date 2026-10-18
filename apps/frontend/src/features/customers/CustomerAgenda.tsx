@@ -17,9 +17,12 @@ import {
   serviceColorMap,
 } from "@/features/agenda/occupancy";
 import { Icon } from "@/shared/icons/Icon";
+import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { recall, remember } from "@/shared/runtime/sessionMemory";
 import { swatchProps } from "@/shared/serviceColor";
-import { Skeleton, StatePanel } from "@/shared/ui/States";
+import { BrandLoader } from "@/shared/ui/Brand";
+import { StatePanel } from "@/shared/ui/States";
 
 type CustomerAgendaProps = {
   customerId: string;
@@ -27,12 +30,67 @@ type CustomerAgendaProps = {
 };
 
 /**
+ * Atendimentos já lidos de cada cliente, na memória da aba (D-167,
+ * 2026-10-18). O perfil pede a leitura assim que abre
+ * (`prefetchCustomerAgenda`), então a aba Atendimentos entra pronta, sem
+ * esqueleto; ao abrir, ela mostra o que já tem e relê por baixo se a leitura
+ * tiver mais de 30 s.
+ */
+type AgendaMemory = { data: Appointment[]; at: number };
+const pendingAgenda = new Map<string, Promise<Appointment[]>>();
+
+/** Leitura mais nova que isso não é refeita ao abrir a aba. */
+const FRESH_MS = 30_000;
+
+function agendaKey(customerId: string, timezone: string) {
+  return `customer-agenda:${customerId}:${todayIso(timezone)}`;
+}
+
+function rememberedAgenda(customerId: string, timezone: string) {
+  return recall<AgendaMemory>(agendaKey(customerId, timezone));
+}
+
+function loadAgenda(customerId: string, timezone: string) {
+  const key = agendaKey(customerId, timezone);
+  const running = pendingAgenda.get(key);
+  if (running) return running;
+  const memory = recall<AgendaMemory>(key);
+  if (memory && Date.now() - memory.at < FRESH_MS)
+    return Promise.resolve(memory.data);
+  const today = todayIso(timezone);
+  const pending = getProductServices()
+    .calendar.listAppointments({
+      customerId,
+      endDate: addDays(today, 365),
+      startDate: addDays(today, -365),
+    })
+    .then((appointments) => {
+      remember(key, { data: appointments, at: Date.now() });
+      return appointments;
+    })
+    .finally(() => pendingAgenda.delete(key));
+  pendingAgenda.set(key, pending);
+  return pending;
+}
+
+/** Lê os atendimentos antes de a aba abrir; falha aqui fica para a aba. */
+export function prefetchCustomerAgenda(customerId: string, timezone: string) {
+  try {
+    void loadAgenda(customerId, timezone).catch(() => undefined);
+  } catch {
+    // Sem agenda disponível agora: a aba tenta de novo ao abrir.
+  }
+}
+
+/**
  * Busca sempre por `customerId`, nunca por telefone: número compartilhado
  * não pode misturar atendimentos de pessoas diferentes, e cliente sem
  * telefone precisa ver a própria agenda normalmente.
  */
 export function CustomerAgenda({ customerId, timezone }: CustomerAgendaProps) {
-  const [appointments, setAppointments] = useState<Appointment[] | null>(null);
+  const [appointments, setAppointments] = useState<Appointment[] | null>(
+    () => rememberedAgenda(customerId, timezone)?.data ?? null,
+  );
   const [serviceColors, setServiceColors] = useState<ServiceColorMap>(
     () => new Map(),
   );
@@ -40,17 +98,15 @@ export function CustomerAgenda({ customerId, timezone }: CustomerAgendaProps) {
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
-    const controller = new AbortController();
-    const today = todayIso(timezone);
-    const range = {
-      endDate: addDays(today, 365),
-      startDate: addDays(today, -365),
-    };
-    getProductServices()
-      .calendar.listAppointments({ customerId, ...range }, controller.signal)
-      .then(setAppointments)
+    let active = true;
+    // O que já foi lido aparece na hora (estado inicial); a leitura nova —
+    // ou a que o perfil já pediu — troca em silêncio quando chegar.
+    loadAgenda(customerId, timezone)
+      .then((result) => {
+        if (active) setAppointments(result);
+      })
       .catch((caught: unknown) => {
-        if (!controller.signal.aborted)
+        if (active)
           setError(
             requestError(
               caught,
@@ -58,8 +114,11 @@ export function CustomerAgenda({ customerId, timezone }: CustomerAgendaProps) {
             ),
           );
       });
-    return () => controller.abort();
+    return () => {
+      active = false;
+    };
   }, [customerId, timezone, reload]);
+  const showLoader = useDeferredLoading(!appointments && !error);
 
   // A cor do traço vem do catálogo; sem leitura, o traço fica neutro e a
   // lista continua (mesma regra da Agenda).
@@ -91,7 +150,19 @@ export function CustomerAgenda({ customerId, timezone }: CustomerAgendaProps) {
   }
 
   if (!appointments) {
-    return <AgendaLoading />;
+    // Sem esqueleto (2026-10-18): a área fica quieta e, se a leitura passar
+    // de ~150 ms, o "A" da marca aparece no lugar.
+    return (
+      <div aria-busy="true" className="customer-appts-pending">
+        {showLoader ? (
+          <BrandLoader inline label="Carregando atendimentos" />
+        ) : (
+          <p className="sr-only" role="status">
+            Carregando atendimentos
+          </p>
+        )}
+      </div>
+    );
   }
 
   const today = todayIso(timezone);
@@ -267,28 +338,6 @@ function rowDetail(appointment: Appointment) {
     .join(" · ");
 }
 
-function AgendaLoading() {
-  return (
-    <div
-      role="status"
-      aria-busy="true"
-      aria-label="Carregando agenda"
-      className="directory-loading-shell"
-    >
-      {[0, 1, 2].map((item) => (
-        <div className="directory-loading-row" key={item}>
-          <Skeleton className="directory-loading-avatar" />
-          <span className="directory-loading-copy">
-            <Skeleton className="skeleton-title" />
-            <Skeleton className="skeleton-line" />
-          </span>
-          <Skeleton className="skeleton-line" />
-          <Skeleton className="skeleton-line" />
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function requestError(error: unknown, fallback: string): string {
   if (!(error instanceof BffHttpError)) return fallback;

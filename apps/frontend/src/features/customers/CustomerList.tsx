@@ -87,14 +87,14 @@ export const CUSTOMER_SORT_OPTIONS: ReadonlyArray<{
     description: "Quem veio mais recentemente primeiro",
   },
   {
-    value: "frequency",
-    label: "Frequência",
-    description: "Quem mais concluiu atendimentos primeiro",
-  },
-  {
     value: "next",
     label: "Próximos atendimentos",
     description: "Quem você atende primeiro, a partir de agora",
+  },
+  {
+    value: "frequency",
+    label: "Frequência",
+    description: "Quem mais concluiu atendimentos primeiro",
   },
 ];
 

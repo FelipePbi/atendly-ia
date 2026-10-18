@@ -33,7 +33,7 @@ import { Field } from "@/shared/ui/Field";
 import { StatePanel } from "@/shared/ui/States";
 import { showToast } from "@/shared/ui/toastBus";
 
-import { CustomerAgenda } from "./CustomerAgenda";
+import { CustomerAgenda, prefetchCustomerAgenda } from "./CustomerAgenda";
 import { CustomerListPanel } from "./CustomerList";
 import { CustomerMemory } from "./CustomerMemory";
 import { CustomerNotes } from "./CustomerNotes";
@@ -251,10 +251,25 @@ export function CustomerProfile({
     drafts.forEach((form) => form.requestSubmit());
   }
 
+  // A aba Atendimentos entra pronta: a leitura começa assim que o perfil
+  // abre, não quando a aba é tocada (2026-10-18).
+  const profileId = customer?.id;
+  const profileTimezone = calendar?.timezone ?? "America/Sao_Paulo";
+  useEffect(() => {
+    if (profileId) prefetchCustomerAgenda(profileId, profileTimezone);
+  }, [profileId, profileTimezone]);
+
   function selectTab(next: ProfileTab) {
-    setTab(next);
-    setEnterId(null);
-    setSavedNotice(false);
+    // Troca de aba com fade (2026-10-18): o conteúdo anterior sai e o novo
+    // entra, com o topo do perfil parado.
+    void runViewTransition(
+      () => {
+        setTab(next);
+        setEnterId(null);
+        setSavedNotice(false);
+      },
+      { fadeOnReducedMotion: true, types: ["customer-tab"] },
+    );
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     url.searchParams.set("aba", next);

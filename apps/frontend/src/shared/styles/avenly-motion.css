@@ -224,6 +224,36 @@ html.vt-customer-swap::view-transition-new(customer-panel) {
   animation: motion-fade-in var(--at-duration-moderate) var(--at-ease-standard)
     both;
 }
+/* Abas do perfil (Resumo, Atendimentos, Notas), 2026-10-18: o topo fica
+   parado e só o conteúdo da aba troca, com o anterior saindo em fade e o
+   novo entrando em fade — também com movimento reduzido (D-173). */
+.customer-profile > [role="tabpanel"] {
+  view-transition-name: customer-tab-panel;
+}
+::view-transition-group(customer-tab-panel) {
+  animation: none;
+}
+::view-transition-image-pair(customer-tab-panel) {
+  isolation: auto;
+}
+::view-transition-old(customer-tab-panel),
+::view-transition-new(customer-tab-panel) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html.vt-customer-tab::view-transition-old(customer-tab-panel) {
+  animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both;
+}
+html.vt-customer-tab::view-transition-new(customer-tab-panel) {
+  animation: motion-fade-in var(--at-duration-moderate) var(--at-ease-standard)
+    both;
+}
+.customer-appts-pending {
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+}
+
 /* Tela empurrada no celular, sem View Transitions: entra da direita. */
 .motion-enter-forward {
   animation: motion-slide-in-from-right var(--at-duration-moderate)
@@ -805,8 +835,16 @@ html.is-view-transition .motion-enter-back {
   html.vt-appointment-swap::view-transition-old(appointment-panel),
   html.vt-appointment-swap::view-transition-old(agenda-panel),
   html.vt-settings-swap::view-transition-old(settings-panel),
+  html.vt-customer-tab::view-transition-old(customer-tab-panel),
   html.vt-section::view-transition-old(app-main) {
     display: block !important;
+  }
+  html.vt-customer-tab::view-transition-old(customer-tab-panel) {
+    animation: motion-fade-out var(--at-duration-fast) var(--at-ease-exit) both !important;
+  }
+  html.vt-customer-tab::view-transition-new(customer-tab-panel) {
+    animation: motion-fade-in var(--at-duration-moderate)
+      var(--at-ease-standard) both !important;
   }
   /* Troca de seção com movimento reduzido: só o fade, sem subir. */
   html.vt-section::view-transition-old(app-main) {

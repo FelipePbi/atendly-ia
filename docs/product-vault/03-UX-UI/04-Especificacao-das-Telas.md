@@ -201,7 +201,14 @@ Cada linha:
 - última mensagem;
 - horário;
 - estado IA/humano;
-- destaque de handoff.
+- destaque de handoff;
+- ponto de "não lida" quando há mensagem do cliente que a profissional ainda não viu (D-195).
+
+Mensagens novas (D-195):
+
+- o item "Conversas" da sidebar e da barra inferior mostra quantas conversas têm mensagem do cliente ainda não vista (some no zero, "9+" acima de nove); abrir a conversa ou responder a ela (pelo app ou pelo WhatsApp) conta como visto; resposta da IA não;
+- em qualquer tela que não seja a própria conversa, uma mensagem nova desce do topo como aviso, no jeito do WhatsApp: nome (ou telefone) e a primeira linha; tocar abre a conversa; some sozinho em cerca de 5 s ou pelo botão de fechar;
+- contato em "Ignorar IA" e conversa Pessoal não entram no contador nem no aviso.
 
 Com o chat ao lado (desktop):
 

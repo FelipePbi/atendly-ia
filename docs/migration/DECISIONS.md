@@ -8034,3 +8034,26 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 4. A nota do fim da importação no onboarding diz "Configurações › Importação" a partir de 768 px, onde Configurações já está na barra.
 
 **Consequências:** um destino novo da barra entra em `BOTTOM_NAV_DESTINATIONS` na posição da sua prioridade, e os degraus do CSS, de `BOTTOM_NAV_TIERS` e de `bottomNavItemsAt` (gate G-1) mudam juntos. Com a sidebar nada muda.
+
+## D-195 — Conversas não lidas: contador na navegação e aviso de mensagem nova
+
+**Status:** ACCEPTED em 2026-10-18, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Regra em `docs/product-vault/03-UX-UI/04-Especificacao-das-Telas.md` (Conversas › Lista). Contrato em `apps/bff/PUBLIC_API_V1.md` ("Conversas não lidas").
+
+**Contexto:** o contrato de conversa tinha `unreadCount`, mas a IA devolvia zero fixo e a tela não mostrava nada. A profissional que estava na Agenda ou em Clientes só descobria mensagem nova abrindo Conversas. O usuário pediu o contador no item "Conversas" (como o de Notificações) e um aviso no topo, no jeito do WhatsApp, quando chega mensagem de cliente.
+
+**Decisão:**
+
+1. Lida é por conversa: `Conversation.ownerReadAt` (coluna anulável nova na IA, migration `20261018120000_conversation_owner_read`). Mensagem do cliente é não lida quando chegou depois dessa marca e a profissional não respondeu depois dela — resposta pelo app ou pelo próprio WhatsApp (`OUTBOUND`/`OWNER`) prova que ela viu. Resposta da IA não conta. A migration marca como lidas as conversas que já existiam, para o contador não amanhecer com o histórico inteiro; conversa criada depois nasce nula e conta tudo.
+2. A marca é gravada por SQL cru, sem tocar em `updatedAt` (que ordena a lista) e sem registro de atividade. Só avança, e nunca além de agora.
+3. Abrir a conversa marca como vista até a mensagem mais nova que a tela mostrou (`POST /v1/conversations/:id/read` com `readThrough`), só com a aba visível. Quem chegou depois da última atualização da tela continua não lido.
+4. `GET /v1/conversations/unread-summary` devolve o número de conversas com não lidas e a última não lida de cada uma das 5 mais recentes. Contato em `Ignorar IA` e conversa cuja sessão vigente é Pessoal ficam fora do resumo (contador e aviso); a linha da lista continua com o próprio ponto de "não lida".
+5. Sem tempo real: a casca consulta o resumo a cada 15 s (mais curto que os 45 s de `/v1/status`, porque o aviso só vale enquanto a mensagem é nova), não consulta com a aba escondida e relê na volta, no foco e logo depois de marcar uma conversa como vista. O aviso nasce da comparação com a leitura anterior; a primeira leitura é a base e não avisa nada.
+6. Contador: no item "Conversas" da sidebar (`.badge-count`, igual ao de Notificações) e da barra inferior dinâmica do D-194 (âmbar no canto do ícone, como no quadro de Conversas do protótipo), e no modal "Mais" quando Conversas não couber na barra; some no zero e na falha da leitura, "9+" acima de nove; o leitor de tela ouve "N conversas com mensagem nova".
+7. Aviso: desce do topo com nome (ou telefone), "Nova mensagem" e a primeira linha (ou o tipo da mídia sem legenda); tocar abre a conversa; some em 5 s, com a contagem pausada sob o ponteiro ou o foco, e tem botão de fechar. Um aviso por conversa (a mensagem mais nova substitui), no máximo três empilhados. Nunca aparece para a conversa aberta. Avisos e toasts ficam numa coluna só (`.shell-float-layer`): o aviso em cima, os toasts embaixo, sem sobrepor; no celular e no tablet ao centro, com a sidebar no canto superior direito. Com movimento reduzido, só fade de opacidade (exceção como a D-173).
+8. A linha da lista ganha o ponto de "não lida" do protótipo (quadro C2), sem número; a conversa aberta ao lado não mostra o ponto.
+
+**Alternativas:** canal em tempo real (WebSocket/SSE) — rejeitado: o app não tem nenhum, e 15 s bastam para o aviso; marcar como lida ao ler as mensagens (`GET`) — rejeitado: leitura com efeito colateral e a aba escondida marcaria sozinha; contar mensagens em vez de conversas no contador — rejeitado: o número de conversas é o que pede ação.
+
+**Consequências:** o painel do Início (`conversationsNeedingAttention`) segue com `unreadCount` zero, porque não calcula. Notificação do sistema (push, som, título da aba) fica fora desta decisão. Migration nova da IA entra no ensaio `goal074-human-takeover-migration-rehearsal.mjs` (banco de durabilidade).
+
+**Revisar se:** o produto ganhar tempo real, notificação push ou várias pessoas atendendo o mesmo número (a marca de leitura é uma só por conversa).

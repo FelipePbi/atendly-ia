@@ -1,6 +1,6 @@
 # Retorno de clientes: Renovação e Resgate
 
-**Status:** especificação, 2026-10-18. Ainda não implementada.
+**Status:** implementada em 2026-10-18 ([[../../migration/DECISIONS#D-202|D-202]]): Renovação, Resgate, ritmo, horários de costume, a IA conduzindo a resposta e os números da rodada. Onde fica: "Chamar clientes de volta" na lista de Clientes (`/clientes/retorno`), "Retorno de clientes" em Configurações e "Mensagens de retorno" no Resumo do perfil. Ainda não: a linha do Retorno no bloco "O que a IA fez" do Faturamento, a marca "veio pelo Resgate" no próprio atendimento, os horários de costume em toda oferta da IA (hoje só na conversa do convite) e a menção na Política de Privacidade.
 
 ## Objetivo
 
@@ -29,7 +29,7 @@ Nos dois casos a profissional escolhe para quem a mensagem vai e aprova. A parti
   - O prazo de volta é o `recurrenceIntervalDays` do serviço, a "Recorrência" que o editor de serviço já tem.
   - Sem prazo no serviço, vale a média da cliente (`averageIntervalDays`), se ela tiver pelo menos dois atendimentos concluídos.
   - Sem nenhum dos dois, a cliente não entra.
-- A data esperada cai **nesta semana**, de segunda a domingo, contada a partir de hoje. A tela também deixa escolher "próxima semana".
+- A data esperada cai **nesta semana**, de segunda a domingo, contada a partir de hoje. A tela também deixa escolher "próxima semana". Quem venceu de segunda até ontem aparece como "venceu há N dias".
 - A cliente **não tem nenhum agendamento futuro** (confirmado ou aguardando).
 
 ### Quem nunca entra
@@ -62,7 +62,7 @@ Uma rodada é uma fila com regras de ritmo:
 | Prazo da cliente | até **2 dias antes** da data esperada de volta | sim, de 1 a 5 dias |
 
 - **Ordem:** quem vence antes recebe antes.
-- **Não cabe no prazo:** se a cliente não couber até 2 dias antes da data dela (por exemplo, vence na segunda e a rodada só chega nela na segunda), a tela avisa já na aprovação ("3 clientes não cabem no limite de 10 por dia antes da data delas") e oferece aumentar o limite do dia ou deixar essas de fora. Ninguém recebe no próprio dia do vencimento nem depois dele, a não ser que a data já tenha passado quando a rodada foi aprovada.
+- **Não cabe no prazo:** se a cliente não couber até 2 dias antes da data dela (por exemplo, vence na segunda e a rodada só chega nela na segunda), a tela avisa já na aprovação ("3 clientes não cabem no limite de 10 por dia antes da data delas") e oferece aumentar o limite do dia ou deixar essas de fora. Ninguém recebe no próprio dia do vencimento nem depois dele, a não ser que a data já tenha passado (ou seja hoje) quando a rodada foi aprovada. Aprovada depois do prazo de 2 dias, vale o último dia antes da data.
 - **Antes de cada envio** as regras são conferidas de novo. Se a cliente marcou nesse meio-tempo, foi desativada ou pediu para não receber, ela sai da rodada sem mensagem.
 - A profissional acompanha a rodada (enviadas, na fila, respondidas, agendadas) e pode pausar ou cancelar o que falta.
 
@@ -148,7 +148,7 @@ Onde isso aparece:
 - **Número não oficial.** O número do negócio está conectado pela Evolution, não pela API oficial do WhatsApp, e mensagem ativa em volume é a principal causa de banimento. Por isso:
   - limite diário baixo, com teto de 30;
   - intervalo sorteado entre mensagens;
-  - envio só para clientes que já conversaram com o número;
+  - envio só para quem já foi atendida pelo negócio (o histórico de conversa da Avenly começa na conexão do WhatsApp, então "já conversou" não dá para provar; D-202);
   - mensagens personalizadas, nunca um texto idêntico em massa.
 - **LGPD.** O envio se apoia no interesse legítimo de quem já é cliente, com saída fácil: o pedido de parar é respeitado na hora e registrado. A Política de Privacidade deve citar mensagens de retorno.
 - **Nada sai sem aprovação.** A rodada é aprovada pela profissional, e cada envio confere as regras de novo antes de sair.

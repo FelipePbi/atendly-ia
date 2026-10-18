@@ -264,7 +264,19 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 - criar cliente;
 - carregamento sob demanda: cerca de 15 por vez, mais ao chegar perto do fim da lista; a busca e o total no cabeçalho valem para todos os clientes, não só os já carregados;
 - título, total, "+" e busca ficam fixos; só os itens rolam;
-- abrir ou trocar de cliente não recarrega a lista: ela mantém o que já carregou, a busca e a rolagem, e só atualiza quando o cadastro muda.
+- abrir ou trocar de cliente não recarrega a lista: ela mantém o que já carregou, a busca e a rolagem, e só atualiza quando o cadastro muda;
+- na aba Ativos, a linha "Chamar clientes de volta" leva ao Retorno de clientes.
+
+### Retorno de clientes
+
+`/clientes/retorno` ([[../02-Fluxos/06-Retorno-de-Clientes|fluxo]], [[../../migration/DECISIONS#D-202|D-202]]), tela empurrada de Clientes (ao lado da lista a partir de 1024 px):
+
+- abas **Renovação** (Esta semana · Próxima semana) e **Resgate** (30, 45, 60, 90 ou 120 dias, começando pelo da configuração, com o incentivo e "Editar");
+- a lista chega toda marcada; cada linha tem caixa de marcar, nome, "Manutenção 5D vence em 5 dias" (ou "venceu há 2 dias"; no Resgate "Última vez há 3 meses · mais feito: …"), último atendimento e de onde veio o prazo ("a cada 15 dias, pelo serviço" ou "pela média dela") e o costume ("costuma vir sex ou sáb, das 16h às 19h"); "Marcar todas"/"Desmarcar todas"; abaixo, quem ficou de fora e por quê;
+- "Assim chega para …": a mensagem da primeira marcada, com o estilo da IA; na Renovação os dois horários são exemplo (saem da agenda no envio, e a nota diz isso); "Editar mensagem" abre o texto-base num modal; o ritmo ("Saem até 10 por dia, seg a sáb, das 9h às 19h") com "Ajustar";
+- **Aprovar N clientes** (fixo no rodapé no celular). Quem não cabe até a própria data abre um modal com "Aumentar para N por dia", "Deixar essa(s) de fora" e "Voltar"; aprovado, toast "Rodada aprovada: N mensagens saem aos poucos.";
+- **Rodadas**: um cartão por rodada com a situação, enviadas, na fila, responderam, agendaram e o faturado de quem voltou; "Ver clientes e opções" abre um modal com cada cliente e a situação dela ("Na fila, previsto para 20/10", "Agendou", "Pediu para parar", "Não enviada: marcou antes da mensagem"), "Tirar da rodada", "Pausar envios"/"Retomar envios" e "Cancelar o que falta" (com confirmação);
+- carregando: o "A" animado só depois de ~150 ms; erro com "Tentar novamente"; vazio: "Ninguém vence nesta semana sem horário marcado." / "Ninguém está há tanto tempo sem vir.".
 
 ### Perfil
 
@@ -278,7 +290,8 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 - responsável principal: no menu ⋯ do perfil, numa janela; confirmado, aparece no cartão do topo; proposto, um aviso no Resumo leva à janela;
 - trocar de cliente com a lista ao lado: crossfade, sem esqueleto.
 - cabeçalho igual em Resumo, Atendimentos e Notas (nome, telefone, desde quando, tags, responsável confirmado, "Conversa" e "Agendar"): trocar de aba só troca o conteúdo abaixo;
-- "Conversa" fica sempre ao lado de "Agendar" e leva direto ao chat da pessoa (ou do responsável, se ela não tem telefone próprio); sem conversa ainda, aparece desabilitado.
+- "Conversa" fica sempre ao lado de "Agendar" e leva direto ao chat da pessoa (ou do responsável, se ela não tem telefone próprio); sem conversa ainda, aparece desabilitado;
+- **Mensagens de retorno** no Resumo (D-202): se ela recebe convites e, quando não, por quê (recusou, até quando; pediu para parar; você bloqueou), a data do último convite e a ação "Voltar a enviar" ou "Não enviar mensagens de retorno", com toast.
 
 ## Serviços
 
@@ -416,6 +429,10 @@ A partir de 1024 px, a lista de Configurações fica ao lado da seção aberta, 
 Antes de concluir primeira migração: fluxo de importação.
 
 Depois: histórico somente leitura.
+
+### Retorno de clientes
+
+Linha "Retorno de clientes" no grupo "Atendimento" (`/configuracoes/retorno`, D-202): mensagens por dia (1 a 30, com o porquê do limite baixo), dias e horário de envio, quantos dias antes da data a Renovação sai (1 a 5), quantos dias sem vir contam para o Resgate (30, 45, 60, 90, 120 ou outro), o incentivo do Resgate e os textos-base de cada rotina (modal com os campos e "Restaurar padrão"). "Salvar" confirma com toast. Vale para as próximas rodadas.
 
 ### Conversas / Retenção
 

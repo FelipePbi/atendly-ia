@@ -1129,7 +1129,7 @@ Regra do valor: atendimento `COMPLETED` vale o valor final registrado; sem ele, 
 | `period`, `start`, `end`, `today`, `timezone` | período pedido (`end` inclusivo) e o hoje do negócio |
 | `billed` | `{ amount, count, unvaluedCount, averageTicket }`; `averageTicket` é `amount ÷ (count − unvaluedCount)`, `null` sem atendimento com valor |
 | `expected` | `{ amount, count, unvaluedCount }` |
-| `previous` | `{ start, end, amount, count, partial }`: período anterior de mesmo tamanho; com o pedido ainda correndo, `partial` e o mesmo trecho (1 a 16 de setembro contra 1 a 16 de outubro) |
+| `previous` | `{ start, end, amount, count, partial }`: período anterior de mesmo tamanho; com o pedido ainda correndo, `partial` e o mesmo trecho até a mesma hora de agora (1 a 16 de setembro até 15:00 contra 1 a 16 de outubro até 15:00; hoje contra ontem a esta hora). O fim do trecho de hoje é `window.to` |
 | `lost` | `{ cancelledCount, cancelledAmount, noShowCount, noShowAmount }` |
 | `services` | `[{ serviceId, name, colorToken, colorHex, amount, count, share }]` do maior para o menor; `serviceId` nulo é "Outros atendimentos" (avulso); valor final de vários serviços é dividido na proporção dos preços fixos |
 | `customers` | até cinco `[{ customerId, name, amount, count }]`, só com valor |

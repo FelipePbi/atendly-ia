@@ -81,6 +81,7 @@ function namesLabel(names: readonly string[], total: number): string | null {
 export function aiValueView(
   report: RevenueReport,
   aiOff: boolean,
+  money: (amount: number) => string = formatMoney,
 ): AiValueView {
   const { ai } = report;
   const phrase = periodPhrase(report);
@@ -109,7 +110,7 @@ export function aiValueView(
 
   let headline: string;
   if (ai.billed.amount > 0) {
-    headline = `A IA marcou ${formatMoney(ai.billed.amount)} dos seus ${formatMoney(report.billed.amount)} ${phrase}`;
+    headline = `A IA marcou ${money(ai.billed.amount)} dos seus ${money(report.billed.amount)} ${phrase}`;
   } else if (ai.billed.count > 0) {
     headline = `A IA marcou ${countLabel(ai.billed.count, "atendimento concluído", "atendimentos concluídos")} ${phrase}`;
   } else if (ai.expected.count > 0) {
@@ -120,13 +121,13 @@ export function aiValueView(
 
   const expected =
     ai.expected.count > 0 && ai.billed.count > 0
-      ? `+ ${ai.expected.amount > 0 ? `${formatMoney(ai.expected.amount)} em ` : ""}${countLabel(
+      ? `+ ${ai.expected.amount > 0 ? `${money(ai.expected.amount)} em ` : ""}${countLabel(
           ai.expected.count,
           "atendimento que ela já marcou",
           "atendimentos que ela já marcou",
         )} pela frente`
       : ai.expected.count > 0 && ai.expected.amount > 0
-        ? `${formatMoney(ai.expected.amount)} previstos`
+        ? `${money(ai.expected.amount)} previstos`
         : null;
 
   const highlights: AiHighlight[] = [];
@@ -134,7 +135,7 @@ export function aiValueView(
     const names = namesLabel(ai.newCustomers.names, ai.newCustomers.count);
     const spent =
       ai.newCustomers.amount > 0
-        ? `Já gastaram ${formatMoney(ai.newCustomers.amount)}`
+        ? `Já gastaram ${money(ai.newCustomers.amount)}`
         : null;
     highlights.push({
       key: "new-customers",
@@ -156,7 +157,7 @@ export function aiValueView(
           : "atendimentos marcados fora do seu horário",
       detail:
         ai.afterHours.amount > 0
-          ? `${formatMoney(ai.afterHours.amount)} marcados à noite, no fim de semana ou em dia fechado`
+          ? `${money(ai.afterHours.amount)} marcados à noite, no fim de semana ou em dia fechado`
           : "À noite, no fim de semana ou em dia fechado",
     });
   }
@@ -170,7 +171,7 @@ export function aiValueView(
           : "atendimentos remarcados pela IA",
       detail:
         ai.rescheduled.amount > 0
-          ? `${formatMoney(ai.rescheduled.amount)} que continuaram na sua agenda`
+          ? `${money(ai.rescheduled.amount)} que continuaram na sua agenda`
           : "Continuaram na sua agenda",
     });
   }
@@ -181,7 +182,7 @@ export function aiValueView(
           ai.acquired.customers,
           "cliente novo",
           "clientes novos",
-        )}${ai.acquired.amount > 0 ? `, que já faturaram ${formatMoney(ai.acquired.amount)}` : ""}.`
+        )}${ai.acquired.amount > 0 ? `, que já faturaram ${money(ai.acquired.amount)}` : ""}.`
       : null;
 
   return {
@@ -192,22 +193,4 @@ export function aiValueView(
     highlights,
     since,
   };
-}
-
-/** Linha do Início: "Neste mês a IA trouxe R$ 400 · 5 clientes novos". */
-export function homeAiLine(report: RevenueReport): string | null {
-  const { ai } = report;
-  const newcomers =
-    ai.newCustomers.count > 0
-      ? countLabel(ai.newCustomers.count, "cliente novo", "clientes novos")
-      : null;
-  const phrase = capitalize(periodPhrase(report));
-  if (ai.billed.amount > 0) {
-    const line = `${phrase} a IA trouxe ${formatMoney(ai.billed.amount)}`;
-    return newcomers ? `${line} · ${newcomers}` : line;
-  }
-  if (newcomers) {
-    return `${phrase}, ${newcomers} ${ai.newCustomers.count === 1 ? "chegou" : "chegaram"} pela IA`;
-  }
-  return null;
 }

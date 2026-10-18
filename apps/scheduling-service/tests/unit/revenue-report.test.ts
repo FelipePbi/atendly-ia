@@ -296,6 +296,54 @@ describe("revenue report: períodos e comparação", () => {
     });
   });
 
+  it("hoje compara com ontem até a mesma hora, não com ontem inteiro", () => {
+    // Agora é sexta 16/10, 15:00: o atendimento das 16:00 de ontem ainda não
+    // tinha acontecido a esta hora.
+    const result = report(
+      [
+        row({ startAt: at("2026-10-15", "10:00") }),
+        row({ startAt: at("2026-10-15", "15:00") }),
+        row({ startAt: at("2026-10-15", "16:00") }),
+      ],
+      "day",
+    );
+    expect(result.previous).toMatchObject({
+      start: "2026-10-15",
+      end: "2026-10-15",
+      amount: 150,
+      count: 1,
+      partial: true,
+    });
+  });
+
+  it("a semana corrente compara com a anterior até o mesmo dia e hora", () => {
+    const result = report(
+      [
+        row({ startAt: at("2026-10-05", "18:00") }),
+        row({ startAt: at("2026-10-09", "14:30") }),
+        row({ startAt: at("2026-10-09", "15:30") }),
+        row({ startAt: at("2026-10-10", "09:00") }),
+      ],
+      "week",
+    );
+    expect(result.previous).toMatchObject({
+      start: "2026-10-05",
+      end: "2026-10-09",
+      amount: 300,
+      count: 2,
+      partial: true,
+    });
+  });
+
+  it("período fechado conta o dia anterior inteiro", () => {
+    const result = report(
+      [row({ startAt: at("2026-10-13", "18:00") })],
+      "day",
+      "2026-10-14",
+    );
+    expect(result.previous).toMatchObject({ amount: 150, partial: false });
+  });
+
   it("o dia do atendimento é o do fuso do negócio", () => {
     // 23:30 de 31/10 em São Paulo já é 01/11 em UTC.
     const result = report([row({ startAt: at("2026-10-31", "23:30") })]);

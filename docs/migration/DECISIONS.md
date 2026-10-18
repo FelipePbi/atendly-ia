@@ -8153,3 +8153,21 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Consequências:** registros novos de cor e de sandbox mudam de forma (`color`, `exceptionPhones`); a tela lê as duas formas. A leitura da IA faz até duas consultas a mais por página quando há conversa ou contato só com número. O inventário de emissores de texto da IA (`tests/assistant/assistant.service.test.ts`) teve uma linha deslocada.
 
 **Revisar se:** o produto ganhar mais de uma pessoa por negócio (o registro passa a precisar dizer quem), ou a tela passar a mostrar o histórico completo de uma entidade.
+
+## D-201 — Início "Faturamento que vale a tela": painel do dia e agenda que fatura, sem meta nem projeção, comparando a esta hora
+
+**Status:** ACCEPTED em 2026-10-18, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Quadro `Home-Faturamento.dc.html` do Claude Design (celular 402, tablet 1024 e desktop 1366, direções 1a e 1b). Substitui o cartão de Faturamento do Início (D-180) e o cartão curto "Neste mês a IA trouxe…" do Início (D-178); o bloco "O que a IA fez por você" do Faturamento não muda.
+
+**Contexto:** o protótipo põe o dinheiro por trás de cada número da Home em duas direções e pede meta mensal com anel, projeção do mês e comparação com "ontem a esta hora". O app não guarda meta; projeção é valor estimado, e o Faturamento só mostra o que a agenda prova; e `GET /v1/revenue` comparava por dia inteiro (hoje contra ontem inteiro).
+
+**Decisão:**
+
+1. As duas direções entram, com o seletor ao lado do sino: **Painel do dia** (1b) é o padrão e **Agenda que fatura** (1a) a alternativa; a escolha fica lembrada na aba e a troca reproduz a coreografia de abertura (entrada em cascata, barras crescendo, número grande contando até o valor em 0,9 s após 0,25 s). A coreografia roda na primeira leitura da visita e a cada troca; a leitura lembrada aparece parada (D-167), e o movimento reduzido desliga tudo.
+2. **Sem meta mensal e sem projeção.** O mês mostra o faturado e "R$ X a entrar até o fim do mês · faltam N dias" (confirmados pela frente, o `expected` do mês). Meta fica para uma decisão de backend própria.
+3. **Comparação a esta hora.** Com o período correndo, o Scheduling corta o período anterior na mesma hora de agora: hoje às 13:40 contra ontem até 13:40, a semana até quinta 13:40 contra a anterior até quinta 13:40, o mês até dia 16 às 15:00 contra o anterior até dia 16 às 15:00. O contrato não muda; a tela Faturamento passa a dizer "…, até as 15:00".
+4. "Em confirmação" (hold de 5 minutos) não entra na Home: o painel não tem a fonte dele, e o protótipo o tirava da conta de qualquer jeito.
+5. "Faturamento" na sidebar continua depois de Serviços (D-177), não depois de Agenda como no quadro.
+
+**Consequências:** as cores do faturamento viram tokens (`--at-color-revenue*`, `--at-color-decline-ink`), com valor no escuro. O Início lê `GET /v1/revenue` três vezes (dia, semana, mês), com as mesmas chaves de memória do Faturamento. Celular, tablet e desktop seguem 768 e 1100 px (onde a sidebar aparece).
+
+**Revisar se:** o produto ganhar meta mensal guardada, ou se a Home precisar mostrar holds em confirmação.

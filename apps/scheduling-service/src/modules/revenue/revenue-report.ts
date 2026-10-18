@@ -267,6 +267,22 @@ export function previousRevenueRange(
   return { start, end: end > start ? end : addDays(start, 1), partial: true };
 }
 
+/**
+ * Com o período correndo, o último dia do trecho comparável para na mesma
+ * hora de agora: hoje às 13:40 compara com ontem até 13:40, e a semana até
+ * quinta 13:40 com a anterior até quinta 13:40 — nunca com o dia inteiro.
+ * Devolve o dia que leva o corte, ou nenhum.
+ */
+export function sameMomentCutDay(
+  period: RevenuePeriod,
+  previous: RevenueRange & { partial: boolean },
+  today: string,
+): string | null {
+  if (!previous.partial) return null;
+  const lastDay = addDays(previous.end, -1);
+  return shiftByPeriod(today, period, -1) === lastDay ? lastDay : null;
+}
+
 // --- Valor ------------------------------------------------------------------
 
 function toCents(value: unknown): number | null {
@@ -415,7 +431,7 @@ export function buildRevenueReport(
   aiContext: RevenueAiContext = EMPTY_AI_CONTEXT,
 ): RevenueReport {
   const { period, timeZone, now } = input;
-  const today = instantToLocalDateTime(now, timeZone).date;
+  const { date: today, time: nowTime } = instantToLocalDateTime(now, timeZone);
   const range = revenuePeriodRange(period, input.date);
   const acquired = aiAcquiredCustomerIds(aiContext);
   // Clientes cujo primeiro agendamento a IA marcou dentro do período.
@@ -439,8 +455,9 @@ export function buildRevenueReport(
     rescheduledAmount: 0,
   };
   const previous = previousRevenueRange(period, range, today);
+  const previousCutDay = sameMomentCutDay(period, previous, today);
 
-  const billed = { amount: 0, count: 0, unvaluedCount: 0, valuedCount: 0 };
+  const billed ={ amount: 0, count: 0, unvaluedCount: 0, valuedCount: 0 };
   const expected = { amount: 0, count: 0, unvaluedCount: 0 };
   const previousTotals = { amount: 0, count: 0 };
   const lost = {
@@ -478,9 +495,13 @@ export function buildRevenueReport(
   );
 
   for (const row of rows) {
-    const date = instantToLocalDateTime(row.startAt, timeZone).date;
+    const local = instantToLocalDateTime(row.startAt, timeZone);
+    const date = local.date;
     const inPeriod = date >= range.start && date < range.end;
-    const inPrevious = date >= previous.start && date < previous.end;
+    const inPrevious =
+      date >= previous.start &&
+      date < previous.end &&
+      !(date === previousCutDay && local.time >= nowTime);
 
     if (row.status === "COMPLETED") {
       const value = appointmentValueCents(row);

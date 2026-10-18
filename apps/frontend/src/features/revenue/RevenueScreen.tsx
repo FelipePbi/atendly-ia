@@ -30,6 +30,7 @@ import {
   chartBars,
   comparison,
   countLabel,
+  cutTime,
   formatMoney,
   isCurrentPeriod,
   PERIOD_OPTIONS,
@@ -343,7 +344,8 @@ function SummaryCard({
       {change.kind === "change" && report.previous.partial && (
         <p className="revenue-note">
           Comparando {rangeLabel(report.start, report.today)} com{" "}
-          {rangeLabel(report.previous.start, report.previous.end)}.
+          {rangeLabel(report.previous.start, report.previous.end)}, até as{" "}
+          {cutTime(report)}.
         </p>
       )}
       <dl className="revenue-stats">

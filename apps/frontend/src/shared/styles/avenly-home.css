@@ -1,0 +1,859 @@
+/* ==========================================================================
+   Início · Faturamento que vale a tela (Home-Faturamento.dc.html, 2026-10-18)
+   Duas direções, trocadas pelo seletor ao lado do sino: 1b "Painel do dia"
+   (padrão) e 1a "Agenda que fatura". Valores portados do markup dos quadros
+   celular (402), tablet (1024) e desktop (1366). A coreografia de entrada
+   (`hm-reveal`, `hm-grow-x/y`, `hm-fade`) só roda com `.is-entering`: na
+   primeira leitura da visita e a cada troca de direção.
+   ========================================================================== */
+
+@keyframes hm-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes hm-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes hm-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes hm-grow-y {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.hm-page.is-entering .hm-reveal {
+  animation: hm-reveal 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) var(--hm-delay, 0s)
+    both;
+}
+.hm-page.is-entering .hm-fade {
+  animation: hm-fade 0.6s ease 0.42s both;
+}
+.hm-page.is-entering .hm-grow-x {
+  transform-origin: left;
+  animation: hm-grow-x 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) 0.35s both;
+}
+.hm-page.is-entering .hm-grow-y {
+  transform-origin: bottom;
+  animation: hm-grow-y 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) var(--hm-delay, 0s)
+    both;
+}
+
+/* --- Cabeçalho ------------------------------------------------------------ */
+
+.hm-page > .dashboard-header {
+  margin-bottom: 0;
+  gap: 12px;
+}
+.hm-header-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hm-switch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.hm-switch-option {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--at-color-ink-muted);
+  cursor: pointer;
+  transition:
+    color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1),
+    background-color 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.hm-switch-option:hover {
+  color: var(--at-color-ink);
+  background: var(--at-color-surface-hover);
+}
+.hm-switch-option:active,
+.hm-switch-option.is-active {
+  color: var(--at-color-ink);
+  background: var(--at-color-surface-active);
+}
+.hm-switch-option.is-active {
+  cursor: default;
+}
+.hm-switch-option:focus-visible,
+.hm-seg-option:focus-visible,
+.hm-month-row:focus-visible,
+.hm-more:focus-visible,
+.today-row.is-summary:focus-visible {
+  outline: 2px solid var(--at-color-primary);
+  outline-offset: 2px;
+}
+
+/* --- Pilha da página ------------------------------------------------------ */
+
+.hm-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: 20px;
+}
+.hm-page.is-agenda.is-phone .hm-stack {
+  gap: 14px;
+  padding-top: 14px;
+}
+.hm-page.is-tablet .hm-stack {
+  gap: 16px;
+  padding-top: 16px;
+}
+.hm-page.is-agenda.is-tablet .hm-stack {
+  gap: 18px;
+  padding-top: 18px;
+}
+.hm-page.is-desktop .hm-stack {
+  gap: 18px;
+  padding-top: 18px;
+}
+.hm-page.is-agenda.is-desktop .hm-stack {
+  padding-top: 22px;
+}
+.hm-stack > .operational-strip,
+.hm-stack > .attention-card,
+.hm-stack > .checklist-card {
+  margin-bottom: 0;
+}
+.hm-page.is-agenda .hm-stack > .operational-strip,
+.hm-page.is-tablet .hm-stack > .operational-strip {
+  padding: 12px 16px;
+}
+/* No desktop a IA ativa já vive na sidebar; a faixa só volta com um aviso. */
+.hm-page.is-desktop .hm-stack > .operational-strip.is-active {
+  display: none;
+}
+/* No tablet, "IA ativa" e o resumo dividem a mesma linha. */
+.hm-page.is-tablet .operational-strip.is-active .operational-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 10px;
+}
+.hm-page.is-tablet .operational-strip.is-active .operational-copy > span {
+  margin-top: 0;
+}
+.hm-page.is-tablet .operational-strip.is-active .operational-copy > p {
+  flex-basis: 100%;
+}
+
+.hm-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 0 40px;
+  align-content: start;
+  align-items: start;
+}
+.hm-page.is-agenda .hm-split {
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+.hm-page.is-desktop .hm-split {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+.hm-aside {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.hm-page.is-desktop .hm-aside {
+  gap: 22px;
+}
+@media (max-width: 1023px) {
+  .hm-page.is-tablet .hm-split {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    column-gap: 28px;
+  }
+}
+
+/* --- Agenda --------------------------------------------------------------- */
+
+.hm-page .today-card.card {
+  grid-area: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.hm-page .today-card > .dashboard-card-head {
+  margin-bottom: 0;
+  line-height: normal;
+  align-items: baseline;
+}
+.hm-page .today-card > .dashboard-card-head h2 {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.hm-page .today-title {
+  gap: 4px;
+}
+.hm-page .today-row {
+  padding: 10px 0;
+}
+.hm-page.is-painel.is-tablet .today-row {
+  padding: 7px 0;
+}
+.hm-page.is-painel.is-desktop .today-row {
+  padding: 6px 0;
+}
+.hm-page.is-agenda.is-phone .today-row {
+  padding: 8px 0;
+}
+.hm-page.is-agenda.is-tablet .today-row {
+  padding: 9px 0;
+}
+.hm-page .agenda-stack > .today-row:last-child {
+  border-bottom: 0;
+}
+.hm-page .agenda-row-body.has-price {
+  align-items: center;
+}
+.today-row.is-done {
+  color: var(--at-color-ink-muted);
+}
+.today-row.is-done .agenda-copy span {
+  color: inherit;
+}
+.hm-spark {
+  flex: none;
+  display: inline-block;
+  vertical-align: -1px;
+  fill: var(--at-color-primary);
+}
+.agenda-copy .hm-spark {
+  margin-left: 1px;
+}
+.agenda-money {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.agenda-amount {
+  color: var(--at-color-ink);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.agenda-status.is-completed svg {
+  flex: none;
+}
+.today-row.is-summary {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.today-row.is-summary:hover {
+  color: var(--at-color-ink-soft);
+}
+.agenda-bar.is-neutral {
+  background: var(--at-color-border-strong);
+}
+.agenda-summary-end {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.agenda-summary-chevron {
+  transition: transform 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.today-row.is-summary.is-open .agenda-summary-chevron {
+  transform: rotate(180deg);
+}
+
+/* --- Dinheiro: linhas, barra e variação ----------------------------------- */
+
+.hm-money {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.hm-money-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--at-color-ink-soft);
+  font-size: 13px;
+}
+.hm-money-line b,
+.hm-meter-caption b,
+.hm-hero-caption b,
+.hm-head-value b,
+.hm-ai-line b,
+.hm-block-lines b,
+.hm-zone-foot b,
+.hm-month-line b,
+.hm-month-row-sub b {
+  color: var(--at-color-ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.hm-money-legend {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.hm-money-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.hm-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--at-color-revenue);
+}
+.hm-dot.is-expected {
+  background: var(--at-color-revenue-soft);
+}
+.hm-meter {
+  height: 6px;
+  border-radius: 3px;
+  display: flex;
+  overflow: hidden;
+  background: var(--at-color-revenue-soft);
+}
+.hm-meter > span {
+  background: var(--at-color-revenue);
+}
+.hm-change {
+  font-weight: 600;
+}
+.hm-change.is-small {
+  flex: none;
+  font-size: 12px;
+}
+.hm-change.is-up {
+  color: var(--at-color-success-ink);
+}
+.hm-change.is-down {
+  color: var(--at-color-decline-ink);
+}
+.hm-change.is-same {
+  color: var(--at-color-ink-muted);
+}
+
+/* --- Semana em colunas ---------------------------------------------------- */
+
+.hm-week {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hm-week-bars {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  align-items: end;
+  border-bottom: 1px solid var(--border);
+}
+.hm-panel .hm-week-bars {
+  border-bottom-color: var(--at-color-revenue-soft);
+}
+.hm-week-day {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.hm-week-value {
+  color: var(--at-color-ink-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.hm-week-day.is-today .hm-week-value {
+  color: var(--at-color-ink);
+  font-weight: 600;
+}
+.hm-week-value.is-empty {
+  color: var(--at-color-ink-ghost);
+}
+.hm-week-track {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.hm-week-fill {
+  border-radius: 3px 3px 0 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.hm-week-expected {
+  flex: none;
+  background: var(--at-color-revenue-soft);
+}
+.hm-week-billed {
+  flex: 1;
+  background: var(--at-color-revenue);
+}
+.hm-week-labels {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  color: var(--at-color-ink-muted);
+  font-size: 11px;
+  text-align: center;
+}
+.hm-week-labels .is-today {
+  color: var(--at-color-primary);
+  font-weight: 700;
+}
+.hm-week-labels .is-empty {
+  color: var(--at-color-ink-ghost);
+}
+.hm-ai-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--at-color-ink-soft);
+  font-size: 13px;
+}
+.hm-nowrap {
+  white-space: nowrap;
+}
+
+/* --- Blocos da coluna (1a) ------------------------------------------------- */
+
+.hm-block {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hm-block.is-month {
+  gap: 8px;
+}
+.hm-zone-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.hm-eyebrow {
+  margin: 0;
+  color: var(--at-color-ink-muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: normal;
+  text-transform: uppercase;
+}
+.hm-head-value {
+  color: var(--at-color-ink-soft);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.hm-block-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--at-color-ink-soft);
+  font-size: 13px;
+}
+.hm-block-lines .hm-nowrap {
+  white-space: normal;
+}
+.hm-month-line {
+  color: var(--at-color-ink-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* --- Painel do dia (1b) ---------------------------------------------------- */
+
+.hm-panel {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--at-color-revenue-panel-border);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--at-color-revenue-panel);
+}
+.hm-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.hm-panel-head h2 {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: normal;
+}
+.hm-seg {
+  display: flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--at-color-surface-active);
+}
+.hm-seg-option {
+  min-height: 28px;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--at-color-ink-soft);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: normal;
+  cursor: pointer;
+}
+.hm-seg-option:hover {
+  color: var(--at-color-ink);
+}
+.hm-seg-option.is-active {
+  background: var(--at-color-surface);
+  color: var(--at-color-ink);
+  box-shadow: 0 1px 2px rgb(var(--at-shadow-rgb) / 0.08);
+  cursor: default;
+}
+.hm-period {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.hm-hero-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.hm-hero-copy,
+.hm-hero-block {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hm-hero {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.hm-hero.is-wide {
+  font-size: 30px;
+}
+.hm-hero-caption {
+  color: var(--at-color-ink-soft);
+  font-size: 13px;
+}
+.hm-hero-change {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  text-align: right;
+}
+.hm-hero-change .hm-change {
+  font-size: 14px;
+}
+.hm-hero-change-sub {
+  color: var(--at-color-ink-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.hm-meter-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.hm-meter-caption {
+  color: var(--at-color-ink-muted);
+  font-size: 12px;
+  text-align: right;
+}
+.hm-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+.hm-facts.is-three {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.hm-fact {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hm-fact dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--at-color-ink-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.hm-fact dd {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.hm-facts.is-three .hm-fact dd {
+  font-size: 16px;
+}
+.hm-fact dd.is-muted {
+  color: var(--at-color-ink-muted);
+}
+.hm-facts .hm-fact dd.hm-fact-caption {
+  color: var(--at-color-ink-soft);
+  font-size: 12px;
+  font-weight: 400;
+}
+.hm-month-row {
+  padding-top: 14px;
+  border-top: 1px solid var(--at-color-revenue-panel-border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: inherit;
+  text-decoration: none;
+}
+.hm-month-row:hover {
+  color: inherit;
+  text-decoration: none;
+}
+.hm-month-row > svg {
+  flex: none;
+  color: var(--at-color-ink-muted);
+}
+.hm-month-row-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.hm-month-row-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.hm-month-row-sub {
+  color: var(--at-color-ink-soft);
+  font-size: 12px;
+}
+
+/* Tablet e desktop: três zonas lado a lado. */
+.hm-panel.is-wide {
+  padding: 16px 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 280px;
+  gap: 0;
+}
+.hm-panel.is-wide.is-desktop {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 300px;
+}
+.hm-zone {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hm-zone.is-day {
+  padding-right: 28px;
+}
+.hm-zone.is-week {
+  padding: 0 28px;
+  border-left: 1px solid var(--at-color-revenue-panel-border);
+}
+.hm-zone.is-month {
+  padding-left: 28px;
+  border-left: 1px solid var(--at-color-revenue-panel-border);
+}
+.hm-panel.is-desktop .hm-zone.is-day {
+  padding-right: 32px;
+}
+.hm-panel.is-desktop .hm-zone.is-week {
+  padding: 0 32px;
+}
+.hm-panel.is-desktop .hm-zone.is-month {
+  padding-left: 32px;
+}
+.hm-zone-note {
+  color: var(--at-color-ink-muted);
+  font-size: 12px;
+  text-align: right;
+}
+.hm-zone-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--at-color-ink-soft);
+  font-size: 13px;
+}
+.hm-month-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hm-month-amount {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.hm-month-caption {
+  color: var(--at-color-ink-soft);
+  font-size: 12px;
+}
+.hm-more {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--at-color-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.hm-zone .hm-more {
+  margin-top: auto;
+}
+.hm-more:hover {
+  color: var(--at-color-primary-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* Entre 768 e 1023 px o mês desce para baixo do dia e da semana. */
+@media (max-width: 1023px) {
+  .hm-panel.is-wide.is-tablet {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .hm-panel.is-tablet .hm-zone.is-week {
+    padding-right: 0;
+  }
+  .hm-panel.is-tablet .hm-zone.is-month {
+    grid-column: 1 / -1;
+    margin-top: 14px;
+    padding: 14px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--at-color-revenue-panel-border);
+  }
+}
+
+/* --- O que a IA fez por você --------------------------------------------- */
+
+.hm-proof {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hm-proof.has-headline {
+  gap: 12px;
+}
+.hm-proof-headline {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-wrap: pretty;
+}
+.hm-proof-amount {
+  color: var(--at-color-revenue);
+}
+.hm-proof-item {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 0 10px;
+  align-items: baseline;
+}
+.hm-proof-value {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.hm-proof-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.hm-proof-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.hm-proof-detail,
+.hm-proof-since {
+  color: var(--at-color-ink-muted);
+  font-size: 12px;
+}
+.hm-proof-since {
+  line-height: 1.45;
+}
+.hm-proof:not(.has-headline) .hm-more {
+  margin-top: 4px;
+}

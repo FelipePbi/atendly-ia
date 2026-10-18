@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 /**
  * Goal074/WU-04 §7.5 — a Home vira uma faixa de estado só, na ordem
- * estado → Precisa da sua atenção → Hoje (com o marcador "agora") →
- * Esta semana. Saem StatusStrip, Próximo atendimento, "O que a Avenly fez
+ * estado → Precisa da sua atenção → Hoje (com o marcador "agora"). Desde
+ * 2026-10-18 a semana e o mês vivem no faturamento da Home
+ * (`inicio-faturamento.test.tsx`). Saem StatusStrip, Próximo atendimento, "O que a Avenly fez
  * hoje", receita e Ações rápidas; entra o sino, com link para /notificacoes e
  * ponto só com notificações não lidas.
  *
@@ -14,8 +15,6 @@
  * - nenhuma copy proibida aparece ("fonte oficial", "persistência",
  *   "O que a Avenly fez hoje", "Status honesto") e nenhuma data ISO
  *   (AAAA-MM-DD) aparece na tela;
- * - "Esta semana" mostra os três números reais e cai para "—" quando a fonte
- *   que os produz falhou;
  * - o sino tem nome acessível, aponta para /notificacoes e só mostra o ponto
  *   quando há notificação não lida;
  * - o invólucro `.dashboard-page` continua presente.
@@ -27,12 +26,18 @@
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { Appointment, CalendarState, Dashboard, SystemStatus } from "@/data";
+import type {
+  Appointment,
+  CalendarState,
+  Dashboard,
+  SystemStatus,
+} from "@/data";
 import { ProductDashboardScreen } from "@/features/dashboard/DashboardScreen";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 import { SystemStatusProvider } from "@/shared/runtime/systemStatus";
 
 import { expectNoA11yViolations } from "./support/a11y";
+import { clearViewport, stubViewport } from "./support/viewport";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/inicio",
@@ -153,7 +158,9 @@ function dashboardFixture(overrides: Partial<Dashboard> = {}): Dashboard {
   };
 }
 
-function systemStatusFixture(overrides: Partial<SystemStatus> = {}): SystemStatus {
+function systemStatusFixture(
+  overrides: Partial<SystemStatus> = {},
+): SystemStatus {
   return {
     accountDeletion: { status: "NONE", dueAt: null },
     ai: {
@@ -172,7 +179,8 @@ function systemStatusFixture(overrides: Partial<SystemStatus> = {}): SystemStatu
   };
 }
 
-const FORBIDDEN = /fonte oficial|persistência|O que a Avenly fez hoje|Status honesto/i;
+const FORBIDDEN =
+  /fonte oficial|persistência|O que a Avenly fez hoje|Status honesto/i;
 const ISO_DATE = /\b\d{4}-\d{2}-\d{2}\b/;
 
 async function renderHome() {
@@ -188,6 +196,8 @@ async function renderHome() {
 }
 
 beforeEach(() => {
+  // A agenda inteira de "Hoje" mora no desktop do painel do dia (1b).
+  stubViewport(1366);
   dashboardGet.mockReset();
   statusGet.mockReset();
   notificationsSummary.mockReset();
@@ -198,8 +208,12 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  clearViewport();
+});
+
 describe("Goal074/WU-04: Home conforme o protótipo", () => {
-  test("sem pendência, a ordem das seções é Hoje → Esta semana, sem copy proibida, sem data ISO", async () => {
+  test("sem pendência e sem faturamento lido, a única seção é Hoje, sem copy proibida, sem data ISO", async () => {
     dashboardGet.mockResolvedValue(dashboardFixture());
     statusGet.mockResolvedValue(systemStatusFixture());
 
@@ -210,7 +224,7 @@ describe("Goal074/WU-04: Home conforme o protótipo", () => {
     const headings = screen
       .getAllByRole("heading", { level: 2 })
       .map((heading) => heading.textContent);
-    expect(headings).toEqual(["Hoje", "Esta semana"]);
+    expect(headings).toEqual(["Hoje"]);
     expect(screen.queryByText("Precisa da sua atenção")).toBeNull();
 
     expect(screen.queryByRole("alert")).toBeNull();
@@ -293,41 +307,6 @@ describe("Goal074/WU-04: Home conforme o protótipo", () => {
     expect(
       screen.getByRole("link", { name: "Reconectar WhatsApp" }),
     ).toHaveAttribute("href", "/configuracoes/whatsapp");
-  });
-
-  test("Esta semana mostra os três números quando as fontes respondem", async () => {
-    dashboardGet.mockResolvedValue(dashboardFixture());
-    statusGet.mockResolvedValue(systemStatusFixture());
-
-    await renderHome();
-
-    const week = screen
-      .getByRole("heading", { level: 2, name: "Esta semana" })
-      .closest("article") as HTMLElement;
-    const values = within(week)
-      .getAllByText(/^(\d+|-)$/)
-      .map((node) => node.textContent);
-    expect(values).toEqual(["12", "8", "2"]);
-  });
-
-  test("Esta semana cai para - quando a fonte falhou", async () => {
-    dashboardGet.mockResolvedValue(
-      dashboardFixture({
-        ai: { code: "DEPENDENCY_UNAVAILABLE", data: null, status: "error" },
-        scheduling: { code: "DEPENDENCY_UNAVAILABLE", data: null, status: "error" },
-      }),
-    );
-    statusGet.mockResolvedValue(systemStatusFixture());
-
-    await renderHome();
-
-    const week = screen
-      .getByRole("heading", { level: 2, name: "Esta semana" })
-      .closest("article") as HTMLElement;
-    const values = within(week)
-      .getAllByText(/^(\d+|-)$/)
-      .map((node) => node.textContent);
-    expect(values).toEqual(["-", "-", "-"]);
   });
 
   test("sino: nome acessível, link para /notificacoes, sem ponto quando não há não lidas", async () => {
@@ -449,7 +428,9 @@ describe("Goal074/WU-04: 'Hoje' vazio e marcador 'agora'", () => {
 
     const { container } = await renderHome();
 
-    const names = within(container.querySelector(".agenda-stack") as HTMLElement)
+    const names = within(
+      container.querySelector(".agenda-stack") as HTMLElement,
+    )
       .getAllByText(/^(Ana Paula|Bia Ramos|Caio Souza|agora)$/)
       .map((node) => node.textContent);
     expect(names).toEqual(["Ana Paula", "agora", "Bia Ramos", "Caio Souza"]);
@@ -501,7 +482,9 @@ describe("Goal074/WU-04: 'Hoje' vazio e marcador 'agora'", () => {
 
     const { container } = await renderHome();
 
-    const names = within(container.querySelector(".agenda-stack") as HTMLElement)
+    const names = within(
+      container.querySelector(".agenda-stack") as HTMLElement,
+    )
       .getAllByText(/^(Ana Paula|Bia Ramos|agora)$/)
       .map((node) => node.textContent);
     expect(names).toEqual(["Ana Paula", "agora", "Bia Ramos"]);
@@ -569,45 +552,63 @@ describe("Goal074: faixa de estado quando a IA não está ativa", () => {
   }
 
   test("PENDING com checklist incompleto: 'IA em ativação', aponta para os passos visíveis", async () => {
-    dashboardGet.mockResolvedValue(dashboardWithCapabilities(incompleteCapabilities()));
+    dashboardGet.mockResolvedValue(
+      dashboardWithCapabilities(incompleteCapabilities()),
+    );
     statusGet.mockResolvedValue(systemStatusFixture(aiState("PENDING")));
 
     const { container } = await renderHome();
 
     const band = await expectSingleBand(container, "IA em ativação");
     expect(
-      within(band).getByText("Conclua os passos abaixo para a IA responder no WhatsApp."),
+      within(band).getByText(
+        "Conclua os passos abaixo para a IA responder no WhatsApp.",
+      ),
     ).toBeVisible();
-    expect(screen.getByRole("heading", { level: 2, name: "Ative sua IA" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Ative sua IA" }),
+    ).toBeVisible();
   });
 
   test("PENDING com checklist completo: checklist oculto e a faixa não fala em passos abaixo", async () => {
-    dashboardGet.mockResolvedValue(dashboardWithCapabilities(calendarCapabilitiesFixture()));
+    dashboardGet.mockResolvedValue(
+      dashboardWithCapabilities(calendarCapabilitiesFixture()),
+    );
     statusGet.mockResolvedValue(systemStatusFixture(aiState("PENDING")));
 
     const { container } = await renderHome();
 
     const band = await expectSingleBand(container, "IA em ativação");
-    expect(screen.queryByRole("heading", { level: 2, name: "Ative sua IA" })).toBeNull();
+    expect(
+      screen.queryByRole("heading", { level: 2, name: "Ative sua IA" }),
+    ).toBeNull();
     expect(band.textContent ?? "").not.toMatch(/passos abaixo/);
     expect(
-      within(band).getByText("Os passos estão concluídos; falta a IA confirmar a ativação."),
+      within(band).getByText(
+        "Os passos estão concluídos; falta a IA confirmar a ativação.",
+      ),
     ).toBeVisible();
   });
 
   test("OFF com checklist incompleto: 'IA inativa', com o checklist visível", async () => {
-    dashboardGet.mockResolvedValue(dashboardWithCapabilities(incompleteCapabilities()));
+    dashboardGet.mockResolvedValue(
+      dashboardWithCapabilities(incompleteCapabilities()),
+    );
     statusGet.mockResolvedValue(systemStatusFixture(aiState("OFF")));
 
     const { container } = await renderHome();
 
     await expectSingleBand(container, "IA inativa");
     expect(screen.queryByText("IA pausada")).toBeNull();
-    expect(screen.getByRole("heading", { level: 2, name: "Ative sua IA" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Ative sua IA" }),
+    ).toBeVisible();
   });
 
   test("UNKNOWN: 'IA não confirmada'", async () => {
-    dashboardGet.mockResolvedValue(dashboardWithCapabilities(incompleteCapabilities()));
+    dashboardGet.mockResolvedValue(
+      dashboardWithCapabilities(incompleteCapabilities()),
+    );
     statusGet.mockResolvedValue(systemStatusFixture(aiState("UNKNOWN")));
 
     const { container } = await renderHome();

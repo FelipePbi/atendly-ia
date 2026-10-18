@@ -44,6 +44,12 @@ Direção atual: na tela Faturamento, atendimento concluído sem valor final con
 
 Direção atual: Faturamento existe como item próprio do menu. Não é módulo financeiro: soma atendimentos, sem despesa, cobrança, pagamento ou caixa.
 
+## Cartão de Faturamento e cartão curto da IA no Início
+
+**Substituídos em 2026-10-18 (D-201).**
+
+Direção atual: o Início mostra o faturamento em duas direções trocadas por um seletor ao lado do sino — "Painel do dia" (padrão) e "Agenda que fatura" —, com o bloco "O que a IA fez por você" da semana no tablet e no desktop. O cartão com abas Hoje/Semana e a linha "Neste mês a IA trouxe…" saíram. Meta mensal e projeção do protótipo ficaram de fora: não há meta guardada e projeção é valor estimado.
+
 ## Reimportação
 
 **Removida do MVP e da experiência definida.**

@@ -2,7 +2,15 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { type RefObject, useEffect, useId, useRef, useState } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import {
   type AiTone,
@@ -36,8 +44,6 @@ import {
   useNotificationsDrawer,
   useNotificationsDrawerViewport,
 } from "@/features/notifications/NotificationsDrawer";
-import { HomeAiValue } from "@/features/revenue/HomeAiValue";
-import { HomeRevenueCard } from "@/features/revenue/HomeRevenueCard";
 import { Icon, type IconName } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
@@ -54,6 +60,25 @@ import {
 import { swatchProps } from "@/shared/serviceColor";
 import { BrandLoader } from "@/shared/ui/Brand";
 import { StatePanel } from "@/shared/ui/States";
+
+import {
+  appointmentAmount,
+  firstNames,
+  homeMoney,
+  isCompleted,
+} from "./homeMoney";
+import {
+  AgendaMoneyLine,
+  AiProof,
+  type HomeViewport,
+  MonthBlock,
+  PanelPhone,
+  PanelWide,
+  reveal,
+  Spark,
+  useHomeRevenue,
+  WeekBlock,
+} from "./HomeRevenue";
 
 /** A última leitura do Início na aba (D-167): voltar à Home mostra na hora. */
 const DASHBOARD_MEMORY_KEY = "dashboard:home";
@@ -409,10 +434,13 @@ type BandControls = {
 
 function OperationalBand({
   controls,
+  extra,
   pauseRef,
   state,
 }: {
   controls: BandControls;
+  /** No tablet, " · 2 aguardam você" na mesma linha da IA ativa. */
+  extra?: string | null;
   pauseRef: RefObject<HTMLButtonElement | null>;
   state: OperationalState;
 }) {
@@ -473,7 +501,10 @@ function OperationalBand({
       )}
       <div className="operational-copy">
         <strong>{state.title}</strong>
-        <span>{state.description}</span>
+        <span>
+          {state.description}
+          {extra}
+        </span>
         {state.control && controls.readFailed && (
           <p className="operational-note" role="status">
             Não foi possível ler as configurações da IA agora.
@@ -529,7 +560,7 @@ function AgendaStatus({ status }: { status: string }) {
   if (status.toUpperCase() === "COMPLETED") {
     return (
       <span className="agenda-status is-completed">
-        <Icon name="check" />
+        <CheckMark />
         {label}
       </span>
     );
@@ -548,22 +579,175 @@ function AgendaStatus({ status }: { status: string }) {
   );
 }
 
+function CheckMark() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="12"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="3"
+      viewBox="0 0 24 24"
+      width="12"
+    >
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
+  );
+}
+
+function AgendaRow({
+  appointment,
+  delay,
+  price,
+  serviceColors,
+}: {
+  appointment: Appointment;
+  delay: number;
+  price: boolean;
+  serviceColors: ServiceColorMap;
+}) {
+  const colors = appointmentServiceColors(appointment, serviceColors);
+  const amount = price ? appointmentAmount(appointment) : null;
+  return (
+    <Link
+      className={clsx(
+        "today-row hm-reveal",
+        isCompleted(appointment) && "is-done",
+      )}
+      href={`/agenda/agendamento?id=${encodeURIComponent(appointment.id)}`}
+      style={reveal(delay)}
+    >
+      <strong className="agenda-time">{appointment.startTime}</strong>
+      <span className="agenda-bar" aria-hidden="true">
+        {(colors.length > 0 ? colors : [null]).map((color, part) => (
+          <span
+            className="agenda-bar-part"
+            {...swatchProps(color)}
+            key={part}
+          />
+        ))}
+      </span>
+      <div className={clsx("agenda-row-body", price && "has-price")}>
+        <div className="agenda-copy">
+          <strong>{appointment.customer?.name ?? "Cliente"}</strong>
+          <span>
+            {appointment.services.length > 0
+              ? appointment.services.map((service) => service.name).join(" + ")
+              : (appointment.title ?? "Atendimento")}
+            {" · "}
+            {durationLabel(appointment.durationMinutes)}
+            {appointment.source === "AI" && (
+              <>
+                {" "}
+                <Spark />
+                <span className="sr-only">(marcado pela IA)</span>
+              </>
+            )}
+          </span>
+        </div>
+        {price ? (
+          <div className="agenda-money">
+            {amount !== null && (
+              <span className="agenda-amount">{homeMoney(amount)}</span>
+            )}
+            <AgendaStatus status={appointment.status} />
+          </div>
+        ) : (
+          <AgendaStatus status={appointment.status} />
+        )}
+      </div>
+    </Link>
+  );
+}
+
+/**
+ * Concluídos recolhidos numa linha só (1a, celular): sobra espaço para o que
+ * vem. Tocar abre os atendimentos de novo.
+ */
+function CompletedSummary({
+  appointments,
+  expanded,
+  onToggle,
+}: {
+  appointments: Appointment[];
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const total = appointments.reduce(
+    (sum, appointment) => sum + (appointmentAmount(appointment) ?? 0),
+    0,
+  );
+  const first = appointments[0];
+  const last = appointments.at(-1);
+  if (!first || !last) return null;
+  return (
+    <button
+      aria-expanded={expanded}
+      className={clsx("today-row is-done is-summary", expanded && "is-open")}
+      onClick={onToggle}
+      type="button"
+    >
+      <strong className="agenda-time">{first.startTime}</strong>
+      <span className="agenda-bar is-neutral" aria-hidden="true" />
+      <span className="agenda-row-body has-price">
+        <span className="agenda-copy">
+          <strong>
+            {appointments.length} concluídos até {last.endTime}
+          </strong>
+          <span>{firstNames(appointments)}</span>
+        </span>
+        <span className="agenda-summary-end">
+          <span className="agenda-money">
+            <span className="agenda-amount">{homeMoney(total)}</span>
+            <span className="agenda-status is-completed">
+              <CheckMark />
+              Faturado
+            </span>
+          </span>
+          <svg
+            aria-hidden="true"
+            className="agenda-summary-chevron"
+            fill="none"
+            height="16"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+            viewBox="0 0 24 24"
+            width="16"
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </span>
+      </span>
+    </button>
+  );
+}
+
 /**
  * Marca o atendimento em curso (startTime <= agora < endTime) ou, na
  * ausência de um em curso, o próximo a começar (Goal074 §7.5).
  */
 function AgendaToday({
   appointments,
+  collapseDone,
   nowLabel,
+  price,
   serviceColors,
   showNowMarker,
 }: {
   appointments: Appointment[];
+  /** 1a no celular: dois ou mais concluídos antes de "agora" viram uma linha. */
+  collapseDone: boolean;
   nowLabel: string;
+  price: boolean;
   /** Cor de cada serviço lida de `GET /v1/services` (D-108 (f)); sem cor, traço neutro. */
   serviceColors: ServiceColorMap;
   showNowMarker: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const markerIndex = appointments.findIndex(
     (appointment) => appointment.endTime > nowLabel,
   );
@@ -572,58 +756,40 @@ function AgendaToday({
     : markerIndex === -1
       ? appointments.length
       : markerIndex;
+  const before = insertAt === -1 ? 0 : insertAt;
+  const done = appointments
+    .slice(0, before)
+    .filter((appointment) => isCompleted(appointment));
+  const collapsed = collapseDone && done.length >= 2;
+  const marker = (
+    <div className="agenda-now-marker hm-fade" key="agora">
+      agora
+    </div>
+  );
 
   return (
     <div className="agenda-stack">
-      {appointments.flatMap((appointment, index) => {
-        const colors = appointmentServiceColors(appointment, serviceColors);
-        const row = (
-          <Link
-            className="today-row"
-            href={`/agenda/agendamento?id=${encodeURIComponent(appointment.id)}`}
-            key={appointment.id}
-          >
-            <strong className="agenda-time">{appointment.startTime}</strong>
-            <span className="agenda-bar" aria-hidden="true">
-              {(colors.length > 0 ? colors : [null]).map((color, part) => (
-                <span
-                  className="agenda-bar-part"
-                  {...swatchProps(color)}
-                  key={part}
-                />
-              ))}
-            </span>
-            <div className="agenda-row-body">
-              <div className="agenda-copy">
-                <strong>{appointment.customer?.name ?? "Cliente"}</strong>
-                <span>
-                  {appointment.services.length > 0
-                    ? appointment.services
-                        .map((service) => service.name)
-                        .join(" + ")
-                    : (appointment.title ?? "Atendimento")}
-                  {" · "}
-                  {durationLabel(appointment.durationMinutes)}
-                </span>
-              </div>
-              <AgendaStatus status={appointment.status} />
-            </div>
-          </Link>
-        );
-        return index === insertAt
-          ? [
-              <div className="agenda-now-marker" key="agora">
-                agora
-              </div>,
-              row,
-            ]
-          : [row];
-      })}
-      {showNowMarker && insertAt === appointments.length && (
-        <div className="agenda-now-marker" key="agora">
-          agora
-        </div>
+      {collapsed && (
+        <CompletedSummary
+          appointments={done}
+          expanded={expanded}
+          onToggle={() => setExpanded((value) => !value)}
+        />
       )}
+      {appointments.flatMap((appointment, index) => {
+        if (collapsed && !expanded && done.includes(appointment)) return [];
+        const row = (
+          <AgendaRow
+            appointment={appointment}
+            delay={0.18 + Math.max(0, index - (appointments.length - 7)) * 0.04}
+            key={appointment.id}
+            price={price}
+            serviceColors={serviceColors}
+          />
+        );
+        return index === insertAt ? [marker, row] : [row];
+      })}
+      {insertAt === appointments.length && marker}
     </div>
   );
 }
@@ -868,15 +1034,6 @@ function RealDashboard({
   const whatsappIssue = whatsappBannerIssue(status.whatsappView);
   const timezone = dashboard.platform.timezone;
   const todayAppointments = scheduling?.todayAppointments ?? [];
-  const weekAppointments = calendarUnavailable
-    ? null
-    : (scheduling?.appointmentsThisWeek ?? 0);
-  const weekAiAppointments = aiUnavailable
-    ? null
-    : (ai?.aiAppointmentsThisWeek ?? 0);
-  const weekHandoffs = aiUnavailable
-    ? null
-    : (ai?.conversationsTakenOverThisWeek ?? 0);
   const checklistItems = buildChecklistItems({
     capabilities: scheduling?.calendar.capabilities ?? null,
     whatsappActive: status.whatsappView === "active",
@@ -916,6 +1073,23 @@ function RealDashboard({
   const [pauseError, setPauseError] = useState<string | null>(null);
   const pauseRef = useRef<HTMLButtonElement>(null);
   const pauseWasOpen = useRef(false);
+  const viewport = useHomeViewport();
+  const revenue = useHomeRevenue(dashboard);
+  const [variant, setVariant] = useState<HomeVariant>(
+    () => recall<HomeVariant>(VARIANT_MEMORY_KEY) ?? "painel",
+  );
+  // A coreografia de entrada roda na primeira leitura da visita e a cada
+  // troca de direção; a leitura lembrada aparece parada (D-167).
+  const [animate, setAnimate] = useState(arriving);
+  const [entry, setEntry] = useState(0);
+
+  function chooseVariant(next: HomeVariant) {
+    if (next === variant) return;
+    remember(VARIANT_MEMORY_KEY, next);
+    setVariant(next);
+    setAnimate(true);
+    setEntry((value) => value + 1);
+  }
 
   /**
    * O estilo (`tone`) e a hora da pausa vêm de `GET /v1/settings`, lido de novo
@@ -1057,32 +1231,214 @@ function RealDashboard({
     setPauseOpen(false);
   }
 
+  const conversationsToday = ai?.automatedConversationsToday ?? 0;
+  const waitingCount = ai?.conversationsNeedingAttentionCount ?? 0;
+  const conversationsLine = ai
+    ? `${conversationsToday} ${conversationsToday === 1 ? "conversa hoje" : "conversas hoje"}${
+        waitingCount > 0
+          ? `, ${waitingCount} ${waitingCount === 1 ? "aguarda" : "aguardam"} você`
+          : ""
+      }`
+    : null;
+  const bandExtra =
+    operationalState.tone === "ok" && waitingCount > 0
+      ? ` · ${waitingCount} ${waitingCount === 1 ? "aguarda" : "aguardam"} você`
+      : null;
+  const painel = variant === "painel";
+  const upcoming = remainingAppointments.filter(
+    (appointment) => !isCompleted(appointment),
+  );
+
+  /** O bloco "Hoje"/"Próximos": cabeçalho, estado da agenda e a lista. */
+  function agendaSection({
+    collapseDone,
+    full,
+    price,
+  }: {
+    collapseDone: boolean;
+    full: boolean;
+    price: boolean;
+  }) {
+    const list = full ? listedAppointments : upcoming;
+    const count = full
+      ? todayCount
+      : upcoming.length > 0
+        ? `· ${upcoming.length} ${upcoming.length === 1 ? "atendimento" : "atendimentos"}`
+        : null;
+    return (
+      <article
+        className="card dashboard-card today-card hm-reveal"
+        id="agenda-today"
+        style={reveal(0.14)}
+      >
+        <header className="dashboard-card-head today-head">
+          <div className="today-title">
+            <h2>{full ? "Hoje" : "Próximos"}</h2>
+            {(calendarUnavailable || count) && (
+              <span
+                className={clsx(
+                  "today-count",
+                  calendarUnavailable && "is-danger",
+                )}
+              >
+                {calendarUnavailable ? "· Indisponível" : count}
+              </span>
+            )}
+          </div>
+          <Link className="dashboard-link" href="/agenda">
+            Ver agenda
+          </Link>
+        </header>
+        {price && revenue.day && !calendarUnavailable && (
+          <AgendaMoneyLine layout={viewport} report={revenue.day} />
+        )}
+        {calendarUnavailable ? (
+          <div className="error-state" style={{ padding: "24px 16px" }}>
+            <span className="state-icon">
+              <Icon name="refresh" />
+            </span>
+            <h3>Consulta indisponível</h3>
+            <p>Horários antigos não serão apresentados como atuais.</p>
+            <button
+              className="btn btn-secondary"
+              onClick={onRetry}
+              type="button"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        ) : list.length === 0 ? (
+          <div className="today-empty">
+            <div aria-hidden="true" className="today-empty-art">
+              <span className="today-empty-line" />
+              <span className="today-empty-line" />
+              <span className="today-empty-slot" />
+              <span className="today-empty-line" />
+              <span className="today-empty-line" />
+            </div>
+            <h3 className="today-empty-title">
+              {todayAppointments.length === 0
+                ? "Nenhum atendimento hoje."
+                : "Nenhum atendimento restante hoje."}
+            </h3>
+            <Link className="today-empty-action" href="/agenda/novo">
+              Criar agendamento
+            </Link>
+          </div>
+        ) : (
+          <AgendaToday
+            appointments={list}
+            collapseDone={collapseDone}
+            nowLabel={nowLabel}
+            price={price}
+            serviceColors={serviceColors}
+            showNowMarker={full && !hasPendencies}
+          />
+        )}
+      </article>
+    );
+  }
+
+  const proof = revenue.week ? (
+    <AiProof
+      aiOff={status.aiView === "off"}
+      headline={painel}
+      more={!painel}
+      report={revenue.week}
+      since={viewport === "desktop"}
+    />
+  ) : null;
+
+  let layout: ReactNode;
+  if (painel && viewport === "phone") {
+    layout = (
+      <>
+        <PanelPhone animate={animate} reports={revenue} />
+        {agendaSection({ collapseDone: false, full: false, price: false })}
+      </>
+    );
+  } else if (painel) {
+    layout = (
+      <>
+        <PanelWide
+          animate={animate}
+          layout={viewport === "desktop" ? "desktop" : "tablet"}
+          reports={revenue}
+        />
+        <div className="hm-split">
+          {agendaSection({
+            collapseDone: false,
+            full: viewport === "desktop",
+            price: false,
+          })}
+          {proof}
+        </div>
+      </>
+    );
+  } else if (viewport === "phone") {
+    layout = (
+      <>
+        {agendaSection({ collapseDone: true, full: true, price: true })}
+        {revenue.week && <WeekBlock layout="phone" report={revenue.week} />}
+        {revenue.month && <MonthBlock report={revenue.month} />}
+      </>
+    );
+  } else {
+    layout = (
+      <div className="hm-split">
+        {agendaSection({ collapseDone: false, full: true, price: true })}
+        <div className="hm-aside">
+          {revenue.week && (
+            <WeekBlock layout={viewport} report={revenue.week} />
+          )}
+          {revenue.month && <MonthBlock report={revenue.month} />}
+          {proof}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={clsx("dashboard-page", arriving && "is-arriving")}>
-      <header className="dashboard-header">
+    <div
+      className={clsx(
+        "dashboard-page hm-page",
+        `is-${variant}`,
+        `is-${viewport}`,
+        animate && "is-entering",
+      )}
+      key={`${variant}-${entry}`}
+    >
+      <header className="dashboard-header hm-reveal" style={reveal(0)}>
         <div>
           <h1>{greeting}</h1>
-          <p className="dashboard-date">{today}</p>
+          <p className="dashboard-date">
+            {today}
+            {viewport === "desktop" &&
+              conversationsLine &&
+              ` · ${conversationsLine}`}
+          </p>
         </div>
-        <HomeBell unreadCount={unreadCount} />
+        <div className="hm-header-actions">
+          <VariantSwitch onChange={chooseVariant} value={variant} />
+          <HomeBell unreadCount={unreadCount} />
+        </div>
       </header>
 
-      <OperationalBand
-        controls={{
-          busy: aiBusy,
-          onPause: () => setPauseOpen(true),
-          onResume: () => void resume(),
-          readFailed: settings.phase === "error",
-          ready: settings.phase === "ready",
-          resumeFailure,
-        }}
-        pauseRef={pauseRef}
-        state={operationalState}
-      />
+      <div className="hm-stack">
+        <OperationalBand
+          controls={{
+            busy: aiBusy,
+            onPause: () => setPauseOpen(true),
+            onResume: () => void resume(),
+            readFailed: settings.phase === "error",
+            ready: settings.phase === "ready",
+            resumeFailure,
+          }}
+          extra={viewport === "tablet" ? bandExtra : null}
+          pauseRef={pauseRef}
+          state={operationalState}
+        />
 
-      <HomeAiValue />
-
-      <div className="dashboard-body">
         {hasPendencies && (
           <section
             aria-labelledby="attention-heading"
@@ -1109,99 +1465,7 @@ function RealDashboard({
 
         {checklistVisible && <PostOnboardingChecklist items={checklistItems} />}
 
-        <article id="agenda-today" className="card dashboard-card today-card">
-          <header className="dashboard-card-head today-head">
-            <div className="today-title">
-              <h2>Hoje</h2>
-              {(calendarUnavailable || todayCount) && (
-                <span
-                  className={clsx(
-                    "today-count",
-                    calendarUnavailable && "is-danger",
-                  )}
-                >
-                  {calendarUnavailable ? "· Indisponível" : todayCount}
-                </span>
-              )}
-            </div>
-            <Link className="dashboard-link" href="/agenda">
-              Ver agenda
-            </Link>
-          </header>
-          {calendarUnavailable ? (
-            <div className="error-state" style={{ padding: "24px 16px" }}>
-              <span className="state-icon">
-                <Icon name="refresh" />
-              </span>
-              <h3>Consulta indisponível</h3>
-              <p>Horários antigos não serão apresentados como atuais.</p>
-              <button
-                className="btn btn-secondary"
-                onClick={onRetry}
-                type="button"
-              >
-                Tentar novamente
-              </button>
-            </div>
-          ) : listedAppointments.length === 0 ? (
-            <div className="today-empty">
-              <div aria-hidden="true" className="today-empty-art">
-                <span className="today-empty-line" />
-                <span className="today-empty-line" />
-                <span className="today-empty-slot" />
-                <span className="today-empty-line" />
-                <span className="today-empty-line" />
-              </div>
-              <h3 className="today-empty-title">
-                {todayAppointments.length === 0
-                  ? "Nenhum atendimento hoje."
-                  : "Nenhum atendimento restante hoje."}
-              </h3>
-              <Link className="today-empty-action" href="/agenda/novo">
-                Criar agendamento
-              </Link>
-            </div>
-          ) : (
-            <AgendaToday
-              appointments={listedAppointments}
-              nowLabel={nowLabel}
-              serviceColors={serviceColors}
-              showNowMarker={!hasPendencies}
-            />
-          )}
-        </article>
-
-        <HomeRevenueCard />
-
-        {/* Os quadros H2 e H4 não têm "Esta semana": com pendências ou com o
-            checklist, a coluna termina neles. H1, H3 e H5 mantêm o bloco. */}
-        {!hasPendencies && !checklistVisible && (
-          <article className="card dashboard-card week-card">
-            <header className="dashboard-card-head week-head">
-              <h2>Esta semana</h2>
-            </header>
-            <div className="week-stats">
-              <div className="week-stat">
-                <span className="week-stat-value">
-                  {weekAppointments ?? "-"}
-                </span>
-                <span className="week-stat-label">agendamentos</span>
-              </div>
-              <div className="week-stat">
-                <span className="week-stat-value">
-                  {weekAiAppointments ?? "-"}
-                </span>
-                <span className="week-stat-label">marcados pela IA</span>
-              </div>
-              <div className="week-stat">
-                <span className="week-stat-value">{weekHandoffs ?? "-"}</span>
-                <span className="week-stat-label">
-                  conversas que você assumiu
-                </span>
-              </div>
-            </div>
-          </article>
-        )}
+        {layout}
       </div>
 
       {pauseOpen && (
@@ -1213,6 +1477,111 @@ function RealDashboard({
         />
       )}
     </div>
+  );
+}
+
+type HomeVariant = "painel" | "agenda";
+
+const VARIANT_MEMORY_KEY = "home:variant";
+
+/**
+ * Seletor discreto ao lado do sino: o faturamento num painel (1b, padrão) ou
+ * dentro da agenda (1a).
+ */
+function VariantSwitch({
+  onChange,
+  value,
+}: {
+  onChange: (value: HomeVariant) => void;
+  value: HomeVariant;
+}) {
+  return (
+    <div aria-label="Como ver o faturamento" className="hm-switch" role="group">
+      <button
+        aria-label="Faturamento em painel"
+        aria-pressed={value === "painel"}
+        className={clsx("hm-switch-option", value === "painel" && "is-active")}
+        onClick={() => onChange("painel")}
+        title="Faturamento em painel"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.75"
+          viewBox="0 0 24 24"
+          width="18"
+        >
+          <rect height="16" rx="2.5" width="18" x="3" y="4" />
+          <path d="M8 16v-4M12 16V9M16 16v-2" />
+        </svg>
+      </button>
+      <button
+        aria-label="Faturamento na agenda"
+        aria-pressed={value === "agenda"}
+        className={clsx("hm-switch-option", value === "agenda" && "is-active")}
+        onClick={() => onChange("agenda")}
+        title="Faturamento na agenda"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.75"
+          viewBox="0 0 24 24"
+          width="18"
+        >
+          <path d="M9 6h11M9 12h11M9 18h11" />
+          <path d="M4 6h.01M4 12h.01M4 18h.01" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+const PHONE_QUERY = "(max-width: 767px)";
+const DESKTOP_QUERY = "(min-width: 1100px)";
+
+function readViewport(): HomeViewport {
+  if (
+    typeof window === "undefined" ||
+    typeof window.matchMedia !== "function"
+  ) {
+    return "phone";
+  }
+  if (window.matchMedia(DESKTOP_QUERY).matches) return "desktop";
+  if (window.matchMedia(PHONE_QUERY).matches) return "phone";
+  return "tablet";
+}
+
+/**
+ * Celular abaixo de 768 px, tablet até a sidebar aparecer (1100 px), desktop
+ * daí em diante — as três telas do protótipo.
+ */
+function useHomeViewport(): HomeViewport {
+  return useSyncExternalStore(
+    (notify) => {
+      if (typeof window.matchMedia !== "function") return () => undefined;
+      const queries = [PHONE_QUERY, DESKTOP_QUERY].map((query) =>
+        window.matchMedia(query),
+      );
+      for (const query of queries) query.addEventListener("change", notify);
+      return () => {
+        for (const query of queries) {
+          query.removeEventListener("change", notify);
+        }
+      };
+    },
+    readViewport,
+    () => "phone",
   );
 }
 

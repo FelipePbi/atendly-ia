@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * O que a IA fez por você (D-178), no Faturamento e no Início.
+ * O que a IA fez por você (D-178), no Faturamento.
  *
  * Prova, pelo que a profissional lê:
  * - quanto do faturado veio da IA, com a parte em porcentagem;
@@ -9,31 +9,21 @@
  * - "desde que você começou", quando a IA já trouxe clientes;
  * - com a IA desligada e sem nada dela no período, o convite com as mensagens
  *   que chegaram fora do horário — e nenhum convite com o status incerto;
- * - a barra do gráfico com a parte da IA e a legenda;
- * - o cartão do Início, que só aparece quando a IA trouxe algo no mês.
+ * - a barra do gráfico com a parte da IA e a legenda.
+ *
+ * No Início, o mesmo bloco da semana é provado em `inicio-faturamento.test.tsx`.
  */
 
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test } from "vitest";
 
 import type { RevenueReport } from "@/data";
+import { aiValueView, periodPhrase } from "@/features/revenue/aiValue";
 import { AiValueCard } from "@/features/revenue/AiValueCard";
-import {
-  aiValueView,
-  homeAiLine,
-  periodPhrase,
-} from "@/features/revenue/aiValue";
-import { HomeAiValue } from "@/features/revenue/HomeAiValue";
 import { RevenueChart } from "@/features/revenue/RevenueChart";
 import { chartBars } from "@/features/revenue/revenueFormat";
 
 import { expectNoA11yViolations } from "./support/a11y";
-
-const revenueGet = vi.fn();
-
-vi.mock("@/shared/runtime/ProductRuntime", () => ({
-  getProductServices: () => ({ revenue: { get: revenueGet } }),
-}));
 
 const NO_AI: RevenueReport["ai"] = {
   billed: { amount: 0, count: 0 },
@@ -117,20 +107,6 @@ describe("frases do que a IA fez", () => {
 
   test("sem nada da IA e com ela ligada, não diz nada", () => {
     expect(aiValueView(report(), false)).toEqual({ kind: "none" });
-  });
-
-  test("o Início só mostra a linha quando a IA trouxe algo no mês", () => {
-    expect(homeAiLine(report())).toBeNull();
-    expect(homeAiLine(WITH_AI)).toBe(
-      "Neste mês a IA trouxe R$ 400,00 · 5 clientes novos",
-    );
-    expect(
-      homeAiLine(
-        report({
-          ai: { ...NO_AI, newCustomers: { count: 1, amount: 0, names: [] } },
-        }),
-      ),
-    ).toBe("Neste mês, 1 cliente novo chegou pela IA");
   });
 });
 
@@ -301,28 +277,5 @@ describe("gráfico", () => {
         (label) => label.textContent,
       ),
     ).toEqual(["jan", "fev", "mar", "abr"]);
-  });
-});
-
-describe("cartão do Início", () => {
-  test("aparece com a linha do mês e leva ao Faturamento", async () => {
-    revenueGet.mockResolvedValue(WITH_AI);
-    render(<HomeAiValue />);
-    const link = await screen.findByRole("link", {
-      name: /Neste mês a IA trouxe R\$ 400,00 · 5 clientes novos/,
-    });
-    expect(link).toHaveAttribute("href", "/faturamento");
-    expect(revenueGet).toHaveBeenCalledWith(
-      { period: "month" },
-      expect.any(AbortSignal),
-    );
-  });
-
-  test("sem nada da IA no mês, não aparece", async () => {
-    revenueGet.mockResolvedValue(report());
-    const { container } = render(<HomeAiValue />);
-    await vi.waitFor(() => expect(revenueGet).toHaveBeenCalled());
-    await Promise.resolve();
-    expect(container).toBeEmptyDOMElement();
   });
 });

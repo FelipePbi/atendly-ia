@@ -84,12 +84,28 @@ Pode adicionar mais contexto e métricas simples.
 
 ### Faturamento no Início
 
-Uma seção "Faturamento" ([[../../migration/DECISIONS#D-180|D-180]]): no celular, logo depois da agenda de hoje; a partir de 768 px, na coluna da direita. Abas **Hoje** (padrão; a escolha fica lembrada na aba) e **Semana**:
+O Início mostra o dinheiro por trás de cada número, na mesma ordem de leitura (IA → hoje → semana → mês), em duas direções ([[../../migration/DECISIONS#D-201|D-201]], quadro `Home-Faturamento.dc.html`). Um seletor discreto ao lado do sino troca entre elas; a escolha fica lembrada na aba e a troca entra com a mesma coreografia de abertura do Início.
 
-- o total do período (faturado + previsto), "no total de hoje" / "no total da semana", com uma barra do que já foi faturado e do que ainda está previsto, e os dois valores separados;
-- "N de M atendimentos concluídos", ticket médio, a variação contra ontem ou a semana anterior — só quando já houve faturamento e há com o que comparar ("−100% que ontem" num dia que nem começou não informa nada) — e quanto a IA marcou no período;
-- na Semana, uma coluna por dia, de segunda a domingo, com o valor (faturado + previsto) em cima e "hoje" no dia corrente;
-- "Ver faturamento completo" leva ao Faturamento. A leitura é a mesma do Faturamento e fica lembrada na aba; trocar de aba mantém o período anterior na tela até o novo chegar; se a leitura falhar, a seção não aparece.
+**Painel do dia** (padrão):
+
+- logo abaixo da faixa da IA, um painel em papel rosado com o faturado de hoje em número grande, "N de M atendimentos", a variação contra **ontem a esta hora** e o total do dia se tudo confirmar, numa barra do que já entrou e do que ainda vem; abaixo, "A entrar" (confirmados pela frente), "Ticket médio" e "Pela IA" (marcado pela IA, faturado e a entrar, com a parte do dia);
+- no celular, **Hoje** e **Semana** alternam de verdade (a escolha fica lembrada); a semana mostra o faturado, a variação contra a semana passada até o mesmo dia e hora, uma coluna por dia (o faturado embaixo, o a entrar em cima, o valor escrito e "hoje" no dia corrente), "A entrar" e "Pela IA". O rodapé do painel é o mês, que abre o Faturamento;
+- no tablet e no desktop o painel abre em três zonas lado a lado — hoje, semana e mês — sem alternar nada; entre 768 e 1023 px o mês desce para baixo das outras duas;
+- abaixo do painel: no celular e no tablet, só os **Próximos** atendimentos; no desktop, a agenda de hoje inteira, com os concluídos rebaixados e o marcador "agora". No tablet e no desktop, ao lado, o bloco **O que a IA fez por você** da semana, com a manchete "A IA marcou R$ X dos seus R$ Y nesta semana." e os destaques de [[#Faturamento]]; no desktop também "Desde que você começou…".
+
+**Agenda que fatura**:
+
+- o dinheiro vira atributo do dia: o cabeçalho de "Hoje" ganha "R$ X faturado · R$ Y a entrar" com a variação e a barra do dia, e cada atendimento mostra o valor (o final registrado ou o preço fixo combinado; sem preço fixo, só o estado);
+- no celular, dois ou mais concluídos antes de "agora" se recolhem numa linha ("3 concluídos até 12:30", os nomes e o total faturado), que abre os atendimentos ao toque;
+- semana em colunas e o mês abaixo da agenda no celular; no tablet e no desktop, numa coluna à direita, com "O que a IA fez por você" sem manchete e "Ver faturamento completo".
+
+Regras das duas direções:
+
+- o mês mostra só o que já entrou e o que está confirmado pela frente ("R$ X a entrar até o fim do mês · faltam N dias"; no desktop do painel, também o dia da semana mais forte). **Sem meta mensal e sem projeção**: o app não guarda meta e projeção seria valor estimado;
+- a variação só aparece quando já houve faturamento e há com o que comparar;
+- no desktop, com a IA ativa, a faixa da IA sai do conteúdo (ela já vive na sidebar) e a saudação carrega "N conversas hoje, M aguardam você"; qualquer outro estado da faixa continua no conteúdo. No tablet, "M aguardam você" entra na linha da IA ativa;
+- "Precisa da sua atenção" e o checklist "Ative sua IA" continuam logo abaixo da faixa; com pendências, a agenda lista só o que ainda não começou;
+- a leitura é a mesma do Faturamento (hoje, semana e mês) e fica lembrada na aba; a que falhar tira da tela só o que dependia dela — a agenda continua.
 
 ### Carregamento
 
@@ -307,7 +323,7 @@ Período:
 Resumo:
 
 - **Faturado** em destaque, com a linha "Atendimentos concluídos, pelo preço combinado ou pelo valor final que você registrou.";
-- comparação com o período anterior de mesmo tamanho ("+12% que setembro", "−8% que ontem", "Igual a 2025"); com o período ainda correndo, compara o mesmo trecho e diz qual ("Comparando 1 a 16 de outubro com 1 a 16 de setembro."); sem faturamento no anterior, só "Setembro não teve faturamento para comparar";
+- comparação com o período anterior de mesmo tamanho ("+12% que setembro", "−8% que ontem", "Igual a 2025"); com o período ainda correndo, compara o mesmo trecho até a mesma hora de agora e diz qual ("Comparando 1 a 16 de outubro com 1 a 16 de setembro, até as 15:00."); sem faturamento no anterior, só "Setembro não teve faturamento para comparar";
 - atendimentos concluídos, ticket médio e **Previsto** (confirmados pela frente), separado do faturado;
 - "N atendimentos concluídos sem valor (sob consulta, “a partir de” ou sem preço). Registre o valor final no atendimento para ele entrar aqui.", só quando houver; o aviso inteiro é clicável ("Ver qual" / "Ver quais") e abre a lista desses atendimentos ([[../../migration/DECISIONS#D-179|D-179]]).
 
@@ -327,7 +343,7 @@ Gráficos:
 - no gráfico, a parte do faturado que a IA marcou fica na base de cada barra, em tom escuro, com a legenda "Marcado pela IA", e o leitor de tela diz o valor;
 - com a IA desligada (status confirmado) e nada dela no período, a faixa vira convite: "Neste mês, 18 mensagens de clientes chegaram fora do seu horário de atendimento." e "Ligar a IA"; uma hora só conta como fora do horário quando nenhum minuto dela está dentro do horário daquele dia. Com o status incerto ou sem mensagem fora do horário, a faixa não aparece.
 
-No **Início**, logo abaixo da faixa de estado, um cartão curto leva ao Faturamento: "Neste mês a IA trouxe R$ 400,00 · 5 clientes novos". Só aparece quando a IA trouxe algo no mês; se a leitura falhar, não aparece.
+No **Início**, o bloco da semana aparece no tablet e no desktop (ver [[#Faturamento no Início]]).
 
 Também, quando houver dado:
 

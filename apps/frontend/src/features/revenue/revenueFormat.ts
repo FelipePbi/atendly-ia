@@ -163,6 +163,21 @@ export function previousName(
   return String(parts(previous.start).year);
 }
 
+/**
+ * Com o período correndo, o anterior para na mesma hora de agora (o fim da
+ * janela do relatório): "15:00", no fuso do negócio.
+ */
+export function cutTime(
+  report: Pick<RevenueReport, "window" | "timezone">,
+): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    hourCycle: "h23",
+    minute: "2-digit",
+    timeZone: report.timezone,
+  }).format(new Date(report.window.to));
+}
+
 /** Período como intervalo legível: "1 a 16 de setembro". */
 export function rangeLabel(start: string, end: string): string {
   if (start === end) return dayMonth(start);

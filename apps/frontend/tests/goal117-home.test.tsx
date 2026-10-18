@@ -40,6 +40,7 @@ import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 import { SystemStatusProvider } from "@/shared/runtime/systemStatus";
 
 import { expectNoA11yViolations } from "./support/a11y";
+import { clearViewport, stubViewport } from "./support/viewport";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/inicio",
@@ -238,6 +239,8 @@ async function renderHome() {
 }
 
 beforeEach(() => {
+  // A agenda inteira de "Hoje" mora no desktop do painel do dia (1b).
+  stubViewport(1366);
   for (const fn of [
     dashboardGet,
     statusGet,
@@ -254,11 +257,16 @@ beforeEach(() => {
     unreadCount: 0,
   });
   settingsGet.mockResolvedValue(settingsFixture());
-  servicesList.mockResolvedValue({ editable: true, items: [], source: "AVENLY" });
+  servicesList.mockResolvedValue({
+    editable: true,
+    items: [],
+    source: "AVENLY",
+  });
   updateAi.mockResolvedValue({});
 });
 
 afterEach(() => {
+  clearViewport();
   vi.useRealTimers();
 });
 
@@ -304,12 +312,15 @@ describe("Goal117: pendências do H2", () => {
       "Marcos Vieira",
       "Design de sobrancelha",
     ]);
-    expect(block.textContent).toContain("Design de sobrancelha está sem duração");
-    expect(block.textContent).toContain("A IA não consegue marcar esse serviço");
-    expect(within(block).getByRole("link", { name: /Corrigir/ })).toHaveAttribute(
-      "href",
-      "/servicos/editar?id=s2",
+    expect(block.textContent).toContain(
+      "Design de sobrancelha está sem duração",
     );
+    expect(block.textContent).toContain(
+      "A IA não consegue marcar esse serviço",
+    );
+    expect(
+      within(block).getByRole("link", { name: /Corrigir/ }),
+    ).toHaveAttribute("href", "/servicos/editar?id=s2");
     expect(
       within(block).getByRole("link", { name: /Marcos Vieira/ }),
     ).toHaveAttribute("href", "/conversas/conv-b");
@@ -331,7 +342,11 @@ describe("Goal117: pendências do H2", () => {
           }),
         ],
         {},
-        [appointment("apt-ana", "Ana Paula", "14:00", "14:45", [["s-corte", "Corte feminino"]])],
+        [
+          appointment("apt-ana", "Ana Paula", "14:00", "14:45", [
+            ["s-corte", "Corte feminino"],
+          ]),
+        ],
       ),
     );
     statusFixtureFor(true);
@@ -356,9 +371,15 @@ describe("Goal117: pendências do H2", () => {
 describe("Goal117: Hoje com e sem pendências", () => {
   // 16:45 UTC = 13:45 em America/Sao_Paulo (UTC-3, sem DST): o relógio do H2.
   const agenda = () => [
-    appointment("apt-bia", "Bia Castro", "10:00", "10:40", [["s-escova", "Escova"]]),
-    appointment("apt-caio", "Caio Souza", "13:30", "14:15", [["s-corte", "Corte feminino"]]),
-    appointment("apt-ana", "Ana Paula", "14:00", "14:45", [["s-corte", "Corte feminino"]]),
+    appointment("apt-bia", "Bia Castro", "10:00", "10:40", [
+      ["s-escova", "Escova"],
+    ]),
+    appointment("apt-caio", "Caio Souza", "13:30", "14:15", [
+      ["s-corte", "Corte feminino"],
+    ]),
+    appointment("apt-ana", "Ana Paula", "14:00", "14:45", [
+      ["s-corte", "Corte feminino"],
+    ]),
     appointment("apt-juliana", "Juliana Mendes", "15:00", "16:10", [
       ["s-escova", "Escova"],
       ["s-hidratacao", "Hidratação"],
@@ -384,7 +405,10 @@ describe("Goal117: Hoje com e sem pendências", () => {
     statusFixtureFor(true);
 
     const { container } = await renderHome();
-    await screen.findByRole("heading", { level: 2, name: "Precisa da sua atenção" });
+    await screen.findByRole("heading", {
+      level: 2,
+      name: "Precisa da sua atenção",
+    });
 
     expect(screen.getByText("· 2 restantes")).toBeVisible();
     expect(names(container)).toEqual(["Ana Paula", "Juliana Mendes"]);
@@ -407,7 +431,10 @@ describe("Goal117: Hoje com e sem pendências", () => {
     expect(screen.getByText("· 4 atendimentos")).toBeVisible();
     expect(screen.queryByText(/restante/)).toBeNull();
     expect(
-      screen.queryByRole("heading", { level: 2, name: "Precisa da sua atenção" }),
+      screen.queryByRole("heading", {
+        level: 2,
+        name: "Precisa da sua atenção",
+      }),
     ).toBeNull();
     expect(names(container)).toEqual([
       "Bia Castro",
@@ -421,18 +448,22 @@ describe("Goal117: Hoje com e sem pendências", () => {
 
 describe("Goal117: o traço de cada atendimento tem a cor do serviço", () => {
   const agenda = () => [
-    appointment("apt-ana", "Ana Paula", "14:00", "14:45", [["s-corte", "Corte feminino"]]),
+    appointment("apt-ana", "Ana Paula", "14:00", "14:45", [
+      ["s-corte", "Corte feminino"],
+    ]),
     appointment("apt-juliana", "Juliana Mendes", "15:00", "16:10", [
       ["s-escova", "Escova"],
       ["s-hidratacao", "Hidratação"],
     ]),
-    appointment("apt-rita", "Rita Alves", "16:00", "16:30", [["s-sem-cor", "Manicure"]]),
+    appointment("apt-rita", "Rita Alves", "16:00", "16:30", [
+      ["s-sem-cor", "Manicure"],
+    ]),
   ];
 
   function bar(name: string) {
     const row = screen.getByRole("link", { name: new RegExp(name) });
-    return Array.from(row.querySelectorAll(".agenda-bar-part")).map(
-      (part) => part.getAttribute("data-color"),
+    return Array.from(row.querySelectorAll(".agenda-bar-part")).map((part) =>
+      part.getAttribute("data-color"),
     );
   }
 
@@ -473,54 +504,6 @@ describe("Goal117: o traço de cada atendimento tem a cor do serviço", () => {
   });
 });
 
-describe("Goal117: 'Esta semana' só fora dos quadros H2 e H4", () => {
-  const week = () =>
-    screen.queryByRole("heading", { level: 2, name: "Esta semana" });
-
-  test("com pendências (H2) o bloco sai", async () => {
-    dashboardGet.mockResolvedValue(
-      dashboardFixture([conversation({ customerName: "Fernanda Lima", id: "conv-a" })]),
-    );
-    statusFixtureFor(true);
-
-    await renderHome();
-    await screen.findByRole("heading", { level: 2, name: "Precisa da sua atenção" });
-
-    expect(week()).toBeNull();
-  });
-
-  test("com o checklist (H4) o bloco sai", async () => {
-    dashboardGet.mockResolvedValue(
-      dashboardFixture([], { activationTestCompleted: false }),
-    );
-    statusFixtureFor(false, false);
-
-    await renderHome();
-    await screen.findByText("Ative sua IA");
-
-    expect(week()).toBeNull();
-  });
-
-  test("com a IA ativa e sem pendências (H1) o bloco fica", async () => {
-    dashboardGet.mockResolvedValue(dashboardFixture());
-    statusFixtureFor(true);
-
-    await renderHome();
-
-    expect(await screen.findByRole("heading", { level: 2, name: "Esta semana" })).toBeVisible();
-  });
-
-  test("com a IA pausada (H5) o bloco fica", async () => {
-    dashboardGet.mockResolvedValue(dashboardFixture());
-    statusFixtureFor(false);
-
-    await renderHome();
-    await screen.findByRole("button", { name: "Reativar" });
-
-    expect(week()).toBeVisible();
-  });
-});
-
 describe("Goal117: IA pausada e Reativar (H5)", () => {
   test("mostra a hora da pausa de hoje e nada quando pausedAt é null", async () => {
     dashboardGet.mockResolvedValue(dashboardFixture());
@@ -529,7 +512,9 @@ describe("Goal117: IA pausada e Reativar (H5)", () => {
 
     const { unmount } = await renderHome();
     expect(await screen.findByText(/^Desde \d{2}:\d{2}\./)).toBeVisible();
-    expect(screen.getByText(/ninguém recebe resposta automática/)).toBeVisible();
+    expect(
+      screen.getByText(/ninguém recebe resposta automática/),
+    ).toBeVisible();
     unmount();
 
     settingsGet.mockResolvedValue(settingsFixture(null));
@@ -631,7 +616,9 @@ describe("Goal117: confirmação de pausa (H7)", () => {
     const pausar = await screen.findByRole("button", { name: "Pausar" });
     await waitFor(() => expect(pausar).toBeEnabled());
     await user.click(pausar);
-    const dialog = await screen.findByRole("dialog", { name: "Pausar sua IA?" });
+    const dialog = await screen.findByRole("dialog", {
+      name: "Pausar sua IA?",
+    });
     return { dialog, pausar, user };
   }
 
@@ -639,7 +626,9 @@ describe("Goal117: confirmação de pausa (H7)", () => {
     const { dialog } = await openPause();
 
     expect(dialog).toBeVisible();
-    expect(within(dialog).getByRole("button", { name: "Pausar IA" })).toBeVisible();
+    expect(
+      within(dialog).getByRole("button", { name: "Pausar IA" }),
+    ).toBeVisible();
     expect(updateAi).not.toHaveBeenCalled();
     await expectNoA11yViolations(dialog);
   });
@@ -706,7 +695,9 @@ describe("Goal117: checklist e faixa do H4", () => {
 
     expect(await screen.findByText("IA inativa")).toBeVisible();
     expect(
-      screen.getByText("Falta definir os horários de atendimento e fazer o teste"),
+      screen.getByText(
+        "Falta definir os horários de atendimento e fazer o teste",
+      ),
     ).toBeVisible();
     expect(screen.getByText("Ative sua IA")).toBeVisible();
     expect(screen.getByText("2 de 4 passos concluídos")).toBeVisible();
@@ -725,10 +716,9 @@ describe("Goal117: checklist e faixa do H4", () => {
     expect(screen.queryByRole("link", { name: "Fazer o teste" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Conectar" })).toBeNull();
     expect(screen.getByText("Nenhum atendimento hoje.")).toBeVisible();
-    expect(screen.getByRole("link", { name: "Criar agendamento" })).toHaveAttribute(
-      "href",
-      "/agenda/novo",
-    );
+    expect(
+      screen.getByRole("link", { name: "Criar agendamento" }),
+    ).toHaveAttribute("href", "/agenda/novo");
 
     await expectNoA11yViolations(container);
   });
@@ -800,7 +790,10 @@ describe("Goal117: checklist e faixa do H4", () => {
     const fixture = dashboardFixture([], { activationTestCompleted: false });
     dashboardGet.mockResolvedValue({
       ...fixture,
-      scheduling: { error: { code: "UNAVAILABLE", message: "fora" }, status: "error" },
+      scheduling: {
+        error: { code: "UNAVAILABLE", message: "fora" },
+        status: "error",
+      },
     });
     statusFixtureFor(false, false);
 
@@ -842,7 +835,7 @@ describe("Início sem esqueleto", () => {
     );
   }
 
-  test("leitura rápida: nem esqueleto nem carregando, e o painel entra com fade", async () => {
+  test("leitura rápida: nem esqueleto nem carregando, e o painel entra com a coreografia", async () => {
     statusFixtureFor(true);
     dashboardGet.mockResolvedValue(dashboardFixture());
     const { container } = render(home());
@@ -851,7 +844,7 @@ describe("Início sem esqueleto", () => {
     expect(screen.queryByText("Carregando dados do início")).toBeNull();
     await screen.findByRole("heading", { level: 1 });
     expect(container.querySelector(".dashboard-page")).toHaveClass(
-      "is-arriving",
+      "is-entering",
     );
     expect(screen.queryByText("Carregando dados do início")).toBeNull();
   });
@@ -876,7 +869,7 @@ describe("Início sem esqueleto", () => {
     expect(screen.queryByText("Carregando dados do início")).toBeNull();
   });
 
-  test("voltar à Home mostra a última leitura na hora, sem fade, e revalida", async () => {
+  test("voltar à Home mostra a última leitura na hora, parada, e revalida", async () => {
     statusFixtureFor(true);
     dashboardGet.mockResolvedValue(dashboardFixture());
     const first = render(home());
@@ -890,7 +883,7 @@ describe("Início sem esqueleto", () => {
     // Na hora, sem esperar a rede.
     expect(screen.getByRole("heading", { level: 1 })).toBeVisible();
     expect(container.querySelector(".dashboard-page")).not.toHaveClass(
-      "is-arriving",
+      "is-entering",
     );
     expect(dashboardGet).toHaveBeenCalledTimes(2);
     read.resolve(dashboardFixture());

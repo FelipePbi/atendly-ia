@@ -358,7 +358,7 @@ const HUB_ROWS: Array<[string, string]> = [
   ["Serviços", "/servicos"],
   ["IA", "/configuracoes/ia"],
   ["WhatsApp", "/configuracoes/whatsapp"],
-  // Retorno de clientes (D-202).
+  // Retorno de clientes (D-206).
   ["Retorno de clientes", "/configuracoes/retorno"],
   ["Negócio", "/configuracoes/negocio"],
   ["Agenda", "/configuracoes/agenda"],

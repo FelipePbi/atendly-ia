@@ -1,4 +1,4 @@
--- Retorno de clientes: Renovacao e Resgate (2026-10-18, D-202).
+-- Retorno de clientes: Renovacao e Resgate (2026-10-18, D-206).
 --
 -- ADITIVA: tres tipos, tres tabelas novas e tres colunas nulas em "Customer".
 -- Nenhuma linha existente muda. Sem linha em "ReturnSettings" valem os

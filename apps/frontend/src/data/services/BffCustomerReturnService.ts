@@ -13,7 +13,7 @@ import type {
 } from "../mappers/publicApiSchemas";
 
 /**
- * Retorno de clientes: Renovação e Resgate (D-202). A lista vem pronta do
+ * Retorno de clientes: Renovação e Resgate (D-206). A lista vem pronta do
  * servidor, sem contato ignorado nem conversa pessoal; nada sai sem a
  * profissional aprovar a rodada.
  */

@@ -46,7 +46,7 @@ function habitOf(value: unknown): ReturnInvitationPromptItem["habit"] {
   };
 }
 
-/** Convite gravado -> secao do prompt (D-202). */
+/** Convite gravado -> secao do prompt (D-206). */
 export function returnInvitationPromptItem(
   row: ReturnInvitationRow,
 ): ReturnInvitationPromptItem {

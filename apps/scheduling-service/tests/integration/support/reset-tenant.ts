@@ -29,7 +29,7 @@ export async function resetTenant(
   await prisma.appointmentSeries.deleteMany({ where: { tenantId } });
   await prisma.appointmentHold.deleteMany({ where: { tenantId } });
   await prisma.calendarMutationIdempotency.deleteMany({ where: { tenantId } });
-  // D-202: o alvo e filho da rodada e da cliente; sai antes dos dois.
+  // D-206: o alvo e filho da rodada e da cliente; sai antes dos dois.
   await prisma.returnCampaignTarget.deleteMany({ where: { tenantId } });
   await prisma.returnCampaign.deleteMany({ where: { tenantId } });
   await prisma.returnSettings.deleteMany({ where: { tenantId } });

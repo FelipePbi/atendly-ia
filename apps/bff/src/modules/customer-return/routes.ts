@@ -24,7 +24,7 @@ import { requireTenantContext } from "../../lib/tenant-context.js";
 import { internalContext } from "../tenant/context.js";
 
 /**
- * Retorno de clientes: Renovação e Resgate (D-202).
+ * Retorno de clientes: Renovação e Resgate (D-206).
  *
  * O Scheduling decide quem entra, simula o ritmo e guarda as rodadas; a IA
  * diz quem é contato ignorado ou conversa pessoal, e essas pessoas saem da

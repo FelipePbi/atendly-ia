@@ -11,7 +11,7 @@ import {
 import type { ReturnFacts } from "../../src/modules/customer-return/return-types.js";
 
 /**
- * Texto da mensagem de retorno (D-202): por modelo, sem modelo de linguagem,
+ * Texto da mensagem de retorno (D-206): por modelo, sem modelo de linguagem,
  * com os fatos iguais nos três estilos. Datas de referência: 2026-10-19 é
  * segunda-feira.
  */

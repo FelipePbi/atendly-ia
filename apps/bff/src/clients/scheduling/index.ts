@@ -686,7 +686,7 @@ const aiCreatedAppointmentEventsPageSchema = z.object({
 const envelope = <T extends z.ZodType>(schema: T) =>
   z.object({ data: schema, requestId: z.string() });
 
-// --- Retorno de clientes (D-202) --------------------------------------------
+// --- Retorno de clientes (D-206) --------------------------------------------
 // Forma interna do Scheduling; o BFF a recorta para o contrato publico.
 const returnHabitInternalSchema = z.object({
   weekdays: z.array(z.number().int()),
@@ -1827,7 +1827,7 @@ export class SchedulingClient {
     );
   }
 
-  // --- Retorno de clientes (D-202) ----------------------------------------
+  // --- Retorno de clientes (D-206) ----------------------------------------
 
   async returnSettings(context: InternalRequestContext) {
     return this.get(

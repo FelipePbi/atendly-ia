@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Retorno de clientes (D-202, `06-Retorno-de-Clientes.md`): a lista chega
+ * Retorno de clientes (D-206, `06-Retorno-de-Clientes.md`): a lista chega
  * toda marcada, a profissional desmarca quem não quer, vê a mensagem que vai
  * sair e aprova; quem não cabe até a própria data é avisado antes, com a
  * escolha de aumentar o limite do dia ou deixar de fora. O perfil mostra o

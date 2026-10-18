@@ -34,7 +34,7 @@ const WEEKDAY_NAMES = [
 const LEAD_OPTIONS = [1, 2, 3, 4, 5];
 
 /**
- * Configuração do retorno de clientes (D-202): o ritmo das rodadas (quantas
+ * Configuração do retorno de clientes (D-206): o ritmo das rodadas (quantas
  * mensagens por dia, em que dias e horários), o prazo da Renovação, quantos
  * dias contam como "sumida" no Resgate, o incentivo e o texto-base de cada
  * rotina. Vale para as próximas rodadas: a que já está correndo guarda as

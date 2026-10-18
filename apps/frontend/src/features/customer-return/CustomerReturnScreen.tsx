@@ -40,7 +40,7 @@ import { ReturnMessageEditor } from "./ReturnMessageEditor";
 type Week = "this" | "next";
 
 /**
- * Retorno de clientes (D-202, `06-Retorno-de-Clientes.md`): a lista vem
+ * Retorno de clientes (D-206, `06-Retorno-de-Clientes.md`): a lista vem
  * pronta e toda marcada, a profissional desmarca quem não quer chamar, vê a
  * mensagem que vai sair e aprova. A aprovação vira uma rodada que sai aos
  * poucos, no ritmo da configuração; quem não cabe até a própria data é

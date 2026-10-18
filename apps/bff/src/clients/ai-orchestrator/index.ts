@@ -635,7 +635,7 @@ export class AiOrchestratorClient {
   }
 
   /**
-   * Quem a lista do retorno deixa de fora pelo lado da IA (D-202): contato
+   * Quem a lista do retorno deixa de fora pelo lado da IA (D-206): contato
    * ignorado e conversa pessoal, pelos telefones da lista.
    */
   async returnContactExclusions(

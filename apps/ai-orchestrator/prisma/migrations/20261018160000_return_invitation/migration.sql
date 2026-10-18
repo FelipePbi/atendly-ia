@@ -1,4 +1,4 @@
--- Convite de retorno enviado (2026-10-18, D-202).
+-- Convite de retorno enviado (2026-10-18, D-206).
 --
 -- ADITIVA: uma tabela nova, sem FK para tabela existente e sem backfill.
 -- Nenhuma coluna de modelo existente muda. `IF NOT EXISTS` deixa reaplicar

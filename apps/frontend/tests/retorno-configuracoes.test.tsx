@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Configuração do retorno de clientes (D-202): ritmo (mensagens por dia,
+ * Configuração do retorno de clientes (D-206): ritmo (mensagens por dia,
  * dias e horário), prazo da Renovação, dias do Resgate, incentivo e o
  * texto-base de cada rotina. Salvar confirma com toast; texto-base com campo
  * desconhecido é recusado antes de chegar ao servidor.

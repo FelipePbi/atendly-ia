@@ -251,7 +251,7 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
   { method: "GET", pathPattern: "/v1/calendar/imports/:sessionId/progress", schema: importProgressSchema },
   { method: "POST", pathPattern: "/v1/calendar/imports/:sessionId/complete", schema: importCompletionSchema },
 
-  // customer return (D-202)
+  // customer return (D-206)
   { method: "GET", pathPattern: "/v1/customer-return/settings", schema: returnSettingsSchema },
   { method: "PATCH", pathPattern: "/v1/customer-return/settings", schema: returnSettingsSchema },
   { method: "GET", pathPattern: "/v1/customer-return/candidates", schema: returnCandidateListSchema },

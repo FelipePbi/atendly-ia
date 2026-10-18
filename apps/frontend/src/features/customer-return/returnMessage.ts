@@ -16,7 +16,7 @@ export interface ReturnFacts {
 }
 
 /**
- * Texto da mensagem de retorno (D-202), montado por modelo — **sem modelo de
+ * Texto da mensagem de retorno (D-206), montado por modelo — **sem modelo de
  * linguagem**, pela mesma regra dos lembretes (Goal021): quem escreve data,
  * horario e beneficio e o dado, nunca uma geracao. O estilo do negocio muda
  * registro e emoji; as frases com fato sao as mesmas nos tres estilos.
@@ -229,7 +229,7 @@ export function returnFactualLines(facts: ReturnFacts): string[] {
   return lines;
 }
 
-/** Campos do texto-base editavel (D-202). */
+/** Campos do texto-base editavel (D-206). */
 export const RETURN_TEMPLATE_FIELDS = [
   "nome",
   "servico",
@@ -323,7 +323,7 @@ function composeFollowUp(facts: ReturnFacts, voice: ReturnVoice): string {
 }
 
 /**
- * Texto-base inicial do editor (D-202): o padrão de cada rotina escrito com
+ * Texto-base inicial do editor (D-206): o padrão de cada rotina escrito com
  * os campos no lugar dos dados. Gravado igual, continua valendo o padrão.
  */
 export function defaultReturnTemplate(

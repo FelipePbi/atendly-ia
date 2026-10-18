@@ -10,7 +10,7 @@ import type { SchedulingRequestContext } from "../scheduling-service/types.js";
 import type { ClaimedReturnTarget } from "./return-types.js";
 
 /**
- * Loop do retorno de clientes no proprio processo da IA (D-202), no desenho
+ * Loop do retorno de clientes no proprio processo da IA (D-206), no desenho
  * do loop de lembretes (Goal021): sem broker, sem cron, sem servico novo.
  *
  * Cada passada faz duas coisas, nesta ordem:

@@ -172,7 +172,7 @@ describe.skipIf(!connectionString)("tenant purge against PostgreSQL", () => {
     await prisma.customerNote.create({
       data: { tenantId, customerId: customer.id, body: "nota de teste" },
     });
-    // Retorno de clientes (D-202): configuracao, rodada e alvo.
+    // Retorno de clientes (D-206): configuracao, rodada e alvo.
     await prisma.returnSettings.create({ data: { tenantId } });
     const returnCampaign = await prisma.returnCampaign.create({
       data: {

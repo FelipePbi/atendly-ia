@@ -31,7 +31,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Ciclo de vida da conta (Goal025/WU-03) | `POST /v1/account/deletion`; `DELETE /v1/account/deletion` |
 | Perfil da conta (Goal067) | `PATCH /v1/account/profile` |
 | Registro de atividade (D-176) | `GET /v1/activity` |
-| Retorno de clientes (D-202) | `GET/PATCH /v1/customer-return/settings`; `GET /v1/customer-return/candidates`; `POST /v1/customer-return/plan`; `GET/POST /v1/customer-return/campaigns`; `GET /v1/customer-return/campaigns/:id`; `POST /v1/customer-return/campaigns/:id/:action` (`pause`, `resume`, `cancel`); `POST /v1/customer-return/campaigns/:id/targets/:targetId/skip`; `GET/PUT /v1/customers/:id/return-messages` |
+| Retorno de clientes (D-206) | `GET/PATCH /v1/customer-return/settings`; `GET /v1/customer-return/candidates`; `POST /v1/customer-return/plan`; `GET/POST /v1/customer-return/campaigns`; `GET /v1/customer-return/campaigns/:id`; `POST /v1/customer-return/campaigns/:id/:action` (`pause`, `resume`, `cancel`); `POST /v1/customer-return/campaigns/:id/targets/:targetId/skip`; `GET/PUT /v1/customers/:id/return-messages` |
 
 As rotas autenticadas resolvem o negócio a partir da sessão; `tenantId` enviado isoladamente pelo browser não concede autorização.
 
@@ -1110,7 +1110,7 @@ A cor do serviço é um campo só, `color`, com o token da paleta (`ROSE`…) ou
 
 Nenhum campo carrega senha, hash, token, credencial ou chave: o diff só percorre campos permitidos e qualquer chave com cara de segredo é descartada antes de gravar. A troca de senha e a conexão da Minha Agenda aparecem só como fato. A conclusão automática de atendimento (`SYSTEM`) e cada item importado (`INTEGRATION`) não viram atividade; a importação aparece como início e conclusão, com as contagens.
 
-## Retorno de clientes: Renovação e Resgate (D-202)
+## Retorno de clientes: Renovação e Resgate (D-206)
 
 Todas sob `requireTenantContext`; o negócio vem só da sessão. O Scheduling decide quem entra, simula o ritmo e guarda as rodadas (`/internal/customer-return/*`); a IA diz quem é contato ignorado ou conversa pessoal (`POST /internal/contacts/return-eligibility`, telefones no corpo, nunca na URL). Nenhuma mensagem sai sem rodada aprovada por pessoa: as rotas de escrita do Scheduling recusam a IA (`requireHumanCaller`), e a entrega pela IA confere de novo cada regra antes do envio. Fluxo e regras em `docs/product-vault/02-Fluxos/06-Retorno-de-Clientes.md`.
 

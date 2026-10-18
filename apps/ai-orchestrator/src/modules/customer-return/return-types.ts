@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Contrato da rodada de retorno com o dono da agenda (D-202), decodificado
+ * Contrato da rodada de retorno com o dono da agenda (D-206), decodificado
  * de forma estrita: fato que nao casa com o contrato e resposta invalida,
  * nunca uma mensagem montada com campo inventado.
  */

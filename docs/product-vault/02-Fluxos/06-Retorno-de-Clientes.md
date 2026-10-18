@@ -1,6 +1,6 @@
 # Retorno de clientes: Renovação e Resgate
 
-**Status:** implementada em 2026-10-18 ([[../../migration/DECISIONS#D-202|D-202]]): Renovação, Resgate, ritmo, horários de costume, a IA conduzindo a resposta e os números da rodada. Onde fica: "Chamar clientes de volta" na lista de Clientes (`/clientes/retorno`), "Retorno de clientes" em Configurações e "Mensagens de retorno" no Resumo do perfil. Ainda não: a linha do Retorno no bloco "O que a IA fez" do Faturamento, a marca "veio pelo Resgate" no próprio atendimento, os horários de costume em toda oferta da IA (hoje só na conversa do convite) e a menção na Política de Privacidade.
+**Status:** implementada em 2026-10-18 ([[../../migration/DECISIONS#D-206|D-206]]): Renovação, Resgate, ritmo, horários de costume, a IA conduzindo a resposta e os números da rodada. Onde fica: "Chamar clientes de volta" na lista de Clientes (`/clientes/retorno`), "Retorno de clientes" em Configurações e "Mensagens de retorno" no Resumo do perfil. Ainda não: a linha do Retorno no bloco "O que a IA fez" do Faturamento, a marca "veio pelo Resgate" no próprio atendimento, os horários de costume em toda oferta da IA (hoje só na conversa do convite) e a menção na Política de Privacidade.
 
 ## Objetivo
 
@@ -148,7 +148,7 @@ Onde isso aparece:
 - **Número não oficial.** O número do negócio está conectado pela Evolution, não pela API oficial do WhatsApp, e mensagem ativa em volume é a principal causa de banimento. Por isso:
   - limite diário baixo, com teto de 30;
   - intervalo sorteado entre mensagens;
-  - envio só para quem já foi atendida pelo negócio (o histórico de conversa da Avenly começa na conexão do WhatsApp, então "já conversou" não dá para provar; D-202);
+  - envio só para quem já foi atendida pelo negócio (o histórico de conversa da Avenly começa na conexão do WhatsApp, então "já conversou" não dá para provar; D-206);
   - mensagens personalizadas, nunca um texto idêntico em massa.
 - **LGPD.** O envio se apoia no interesse legítimo de quem já é cliente, com saída fácil: o pedido de parar é respeitado na hora e registrado. A Política de Privacidade deve citar mensagens de retorno.
 - **Nada sai sem aprovação.** A rodada é aprovada pela profissional, e cada envio confere as regras de novo antes de sair.

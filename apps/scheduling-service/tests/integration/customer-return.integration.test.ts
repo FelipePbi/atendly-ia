@@ -35,7 +35,7 @@ import { resetTenant } from "./support/reset-tenant.js";
 import { localDateAhead } from "./support/test-date.js";
 
 /**
- * Retorno de clientes (D-202) contra PostgreSQL real: a lista da semana, a
+ * Retorno de clientes (D-206) contra PostgreSQL real: a lista da semana, a
  * aprovação virando rodada, a reivindicação com ritmo e horários reais, a
  * revalidação antes do envio, o lembrete único, a resposta, o agendamento
  * ligado e o "pare" que só a profissional desfaz.

@@ -62,7 +62,7 @@ export interface BuildSystemPromptInput {
    */
   serviceInstructions?: ServiceInstructionPromptItem[];
   /**
-   * Convite de retorno enviado a esta cliente (D-202), quando ha um recente
+   * Convite de retorno enviado a esta cliente (D-206), quando ha um recente
    * e sem resposta de recusa. Ausente, o prompt nao ganha a secao.
    */
   returnInvitation?: ReturnInvitationPromptItem | null;
@@ -161,7 +161,7 @@ const MAIN_RULES = [
  * de agenda ganhou: perguntar qual horario quando a cliente nao escolheu
  * entre varios, e nunca dizer reservado/agendado antes de action=confirm.
  *
- * v12 (D-202): o template ganhou a secao do convite de retorno, entregue so
+ * v12 (D-206): o template ganhou a secao do convite de retorno, entregue so
  * na conversa com convite recente: rotina, servico, data esperada, horarios
  * oferecidos, horarios de costume, o incentivo prometido (nenhum outro) e o
  * registro de recusa ou pedido para parar por `answer_return_invitation`.

@@ -116,7 +116,7 @@ export async function buildApp() {
     app.log,
   );
 
-  // Retorno de clientes (D-202): terceiro loop, mesmo desenho. O dono da
+  // Retorno de clientes (D-206): terceiro loop, mesmo desenho. O dono da
   // agenda decide quem e quando; aqui so se entrega e liquida.
   const customerReturn = new ReturnDeliveryWorker(
     prisma,

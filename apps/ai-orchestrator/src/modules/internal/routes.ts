@@ -233,7 +233,7 @@ const ignoreContactByPhoneSchema = z.object({
 });
 
 // Goal139: leitura dos contatos ignorados do canal ativo.
-// Retorno de clientes (D-202): telefones da lista pre-selecionada.
+// Retorno de clientes (D-206): telefones da lista pre-selecionada.
 const returnEligibilityBodySchema = z.object({
   phones: z.array(z.string().trim().min(1).max(40)).max(1_000),
 });
@@ -1342,7 +1342,7 @@ export async function registerInternalRoutes(
     });
   });
 
-  // Quem a lista do retorno deixa de fora pelo lado da IA (D-202): contato
+  // Quem a lista do retorno deixa de fora pelo lado da IA (D-206): contato
   // ignorado e conversa pessoal. Leitura de conversas, mesmo escopo da lista
   // de ignorados acima.
   app.post("/internal/contacts/return-eligibility", async (request) => {
@@ -2468,7 +2468,7 @@ export function requiredScope(request: FastifyRequest): InternalScope {
   if (path === "/internal/contacts/ignore" && method === "PUT") {
     return "conversations:write";
   }
-  // Quem o retorno deixa de fora (D-202) e leitura de conversas, mesmo
+  // Quem o retorno deixa de fora (D-206) e leitura de conversas, mesmo
   // sendo POST: a lista de telefones vai no corpo, nunca na URL.
   if (path === "/internal/contacts/return-eligibility" && method === "POST") {
     return "conversations:read";

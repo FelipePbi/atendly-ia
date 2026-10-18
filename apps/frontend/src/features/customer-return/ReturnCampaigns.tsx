@@ -20,7 +20,7 @@ import {
 type CampaignAction = "pause" | "resume" | "cancel";
 
 /**
- * Rodadas aprovadas (D-202): enviadas, na fila, respondidas, agendadas e o
+ * Rodadas aprovadas (D-206): enviadas, na fila, respondidas, agendadas e o
  * faturamento do que já foi atendido. A profissional pausa, retoma, cancela
  * o que falta ou tira uma cliente da fila.
  */

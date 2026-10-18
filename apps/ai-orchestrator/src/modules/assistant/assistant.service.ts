@@ -1629,7 +1629,7 @@ export class AssistantService {
   }
 
   /**
-   * Convite de retorno recente desta conversa (D-202): o mais novo enviado
+   * Convite de retorno recente desta conversa (D-206): o mais novo enviado
    * nos ultimos 21 dias e ainda sem recusa nem pedido para parar. Falha da
    * leitura nao derruba o turno: o prompt segue sem a secao.
    */

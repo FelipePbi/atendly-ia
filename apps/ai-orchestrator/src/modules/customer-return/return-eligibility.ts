@@ -3,7 +3,7 @@ import { brazilianMobileVariants } from "../channel/conversation-resolution.js";
 import { returnDestinationDigits } from "./ReturnDeliveryService.js";
 
 /**
- * Quem nunca entra na lista do retorno pelo lado da IA (D-202): contato
+ * Quem nunca entra na lista do retorno pelo lado da IA (D-206): contato
  * ignorado e conversa marcada como pessoal. O BFF pergunta pelos telefones
  * da lista pre-selecionada e tira esses dela antes de mostrar.
  *

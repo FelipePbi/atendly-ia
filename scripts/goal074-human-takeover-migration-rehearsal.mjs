@@ -746,7 +746,7 @@ async function alignAiDurabilityTargetWithAiSandbox(target) {
 
 /**
  * Leva o banco de durabilidade da IA a tabela `ReturnInvitation` (retorno de
- * clientes, D-202). O turno da IA le o convite recente da conversa antes de
+ * clientes, D-206). O turno da IA le o convite recente da conversa antes de
  * montar o prompt; sem a tabela a leitura falha (e o turno segue sem a
  * secao), mas a suite de persistencia precisa ver o mesmo esquema da
  * producao. O DDL usa `IF NOT EXISTS`, entao reaplicar nao muda nada.

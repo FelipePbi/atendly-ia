@@ -269,7 +269,7 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 
 ### Retorno de clientes
 
-`/clientes/retorno` ([[../02-Fluxos/06-Retorno-de-Clientes|fluxo]], [[../../migration/DECISIONS#D-202|D-202]]), tela empurrada de Clientes (ao lado da lista a partir de 1024 px):
+`/clientes/retorno` ([[../02-Fluxos/06-Retorno-de-Clientes|fluxo]], [[../../migration/DECISIONS#D-206|D-206]]), tela empurrada de Clientes (ao lado da lista a partir de 1024 px):
 
 - abas **Renovação** (Esta semana · Próxima semana) e **Resgate** (30, 45, 60, 90 ou 120 dias, começando pelo da configuração, com o incentivo e "Editar");
 - a lista chega toda marcada; cada linha tem caixa de marcar, nome, "Manutenção 5D vence em 5 dias" (ou "venceu há 2 dias"; no Resgate "Última vez há 3 meses · mais feito: …"), último atendimento e de onde veio o prazo ("a cada 15 dias, pelo serviço" ou "pela média dela") e o costume ("costuma vir sex ou sáb, das 16h às 19h"); "Marcar todas"/"Desmarcar todas"; abaixo, quem ficou de fora e por quê;
@@ -291,7 +291,7 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 - trocar de cliente com a lista ao lado: crossfade, sem esqueleto.
 - cabeçalho igual em Resumo, Atendimentos e Notas (nome, telefone, desde quando, tags, responsável confirmado, "Conversa" e "Agendar"): trocar de aba só troca o conteúdo abaixo;
 - "Conversa" fica sempre ao lado de "Agendar" e leva direto ao chat da pessoa (ou do responsável, se ela não tem telefone próprio); sem conversa ainda, aparece desabilitado;
-- **Mensagens de retorno** no Resumo (D-202): se ela recebe convites e, quando não, por quê (recusou, até quando; pediu para parar; você bloqueou), a data do último convite e a ação "Voltar a enviar" ou "Não enviar mensagens de retorno", com toast.
+- **Mensagens de retorno** no Resumo (D-206): se ela recebe convites e, quando não, por quê (recusou, até quando; pediu para parar; você bloqueou), a data do último convite e a ação "Voltar a enviar" ou "Não enviar mensagens de retorno", com toast.
 
 ## Serviços
 
@@ -432,7 +432,7 @@ Depois: histórico somente leitura.
 
 ### Retorno de clientes
 
-Linha "Retorno de clientes" no grupo "Atendimento" (`/configuracoes/retorno`, D-202): mensagens por dia (1 a 30, com o porquê do limite baixo), dias e horário de envio, quantos dias antes da data a Renovação sai (1 a 5), quantos dias sem vir contam para o Resgate (30, 45, 60, 90, 120 ou outro), o incentivo do Resgate e os textos-base de cada rotina (modal com os campos e "Restaurar padrão"). "Salvar" confirma com toast. Vale para as próximas rodadas.
+Linha "Retorno de clientes" no grupo "Atendimento" (`/configuracoes/retorno`, D-206): mensagens por dia (1 a 30, com o porquê do limite baixo), dias e horário de envio, quantos dias antes da data a Renovação sai (1 a 5), quantos dias sem vir contam para o Resgate (30, 45, 60, 90, 120 ou outro), o incentivo do Resgate e os textos-base de cada rotina (modal com os campos e "Restaurar padrão"). "Salvar" confirma com toast. Vale para as próximas rodadas.
 
 ### Conversas / Retenção
 

@@ -1676,7 +1676,7 @@ export class AssistantToolRegistry {
   }
 
   /**
-   * Recusa ou pedido para parar (D-202). O convite e o desta conversa — a
+   * Recusa ou pedido para parar (D-206). O convite e o desta conversa — a
    * tool nao recebe cliente nem rodada do modelo — e o bloqueio e decidido no
    * dono da agenda. Repetir a mesma resposta nao muda nada.
    */

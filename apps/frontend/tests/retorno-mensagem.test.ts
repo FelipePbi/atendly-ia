@@ -1,5 +1,5 @@
 /**
- * Prévia da mensagem de retorno (D-202): cópia deliberada do compositor da
+ * Prévia da mensagem de retorno (D-206): cópia deliberada do compositor da
  * IA (`apps/ai-orchestrator/src/modules/customer-return/return-message.ts`).
  * Estas frases são as mesmas que o teste da IA afirma para os mesmos fatos;
  * se um lado mudar sem o outro, os dois testes deixam de concordar. Também

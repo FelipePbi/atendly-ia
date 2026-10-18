@@ -6,7 +6,7 @@ import {
 } from "../../shared/date-time/calendar-date-time.js";
 
 /**
- * Regras puras do retorno de clientes (D-202, `06-Retorno-de-Clientes.md`).
+ * Regras puras do retorno de clientes (D-206, `06-Retorno-de-Clientes.md`).
  *
  * Nada aqui le banco nem relogio: quem chama entrega o historico ja no fuso
  * do negocio (`YYYY-MM-DD` e `HH:MM`) e o "hoje" local. E isso que deixa cada

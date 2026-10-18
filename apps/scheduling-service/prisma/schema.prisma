@@ -366,7 +366,7 @@ model Customer {
   /// Clientes e vai para "Inativos". Agenda, conversa, IA e historico seguem
   /// reconhecendo a pessoa; nulo e ativo.
   deactivatedAt   DateTime?
-  /// Bloqueio de mensagens de retorno (D-202). `returnBlockedAt` preenchido e
+  /// Bloqueio de mensagens de retorno (D-206). `returnBlockedAt` preenchido e
   /// `returnBlockedUntil` nulo e bloqueio permanente (a cliente pediu para
   /// parar); com `returnBlockedUntil`, vale ate la (recusa: 90 dias). Nulo e
   /// livre. So a profissional desfaz o permanente, no perfil.
@@ -1370,7 +1370,7 @@ model ActivityLog {
   @@index([tenantId, occurredAt(sort: Desc), sequence(sort: Desc)])
 }
 
-/// Rotina de retorno (D-202): `RENEWAL` chama quem esta no prazo de refazer um
+/// Rotina de retorno (D-206): `RENEWAL` chama quem esta no prazo de refazer um
 /// servico; `WINBACK` (Resgate) chama quem nao vem ha N dias ou mais.
 enum ReturnCampaignKind {
   RENEWAL
@@ -1409,7 +1409,7 @@ enum ReturnTargetState {
   FAILED
 }
 
-/// Configuracao do retorno do negocio (D-202). Sem linha, valem os padroes do
+/// Configuracao do retorno do negocio (D-206). Sem linha, valem os padroes do
 /// produto (`RETURN_SETTINGS_DEFAULTS`), nunca uma linha fabricada pela leitura.
 /// Os limites sao do esquema (constraint SQL `ReturnSettings_bounds_check`).
 model ReturnSettings {
@@ -1435,7 +1435,7 @@ model ReturnSettings {
   updatedAt          DateTime @default(now()) @updatedAt
 }
 
-/// Rodada de envios aprovada pela profissional (D-202). Guarda as regras de
+/// Rodada de envios aprovada pela profissional (D-206). Guarda as regras de
 /// ritmo do momento da aprovacao: mudar a configuracao depois nao reescreve
 /// rodada que ja esta correndo.
 model ReturnCampaign {
@@ -1473,7 +1473,7 @@ model ReturnCampaign {
   @@index([state])
 }
 
-/// Uma cliente dentro de uma rodada (D-202).
+/// Uma cliente dentro de uma rodada (D-206).
 model ReturnCampaignTarget {
   id                    String            @id @default(cuid())
   tenantId              String

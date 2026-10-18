@@ -11,7 +11,7 @@ import {
 } from "@avenly-ia/public-api-contract";
 
 /**
- * D-202 — retorno de clientes no BFF. Sem PostgreSQL e sem sessão real: o
+ * D-206 — retorno de clientes no BFF. Sem PostgreSQL e sem sessão real: o
  * tenant é dublê de módulo, e o Scheduling e a IA são um `fetch` dublê (como
  * em `ai-sandbox-settings.test.ts`). Prova: as rotas estão no contrato; a
  * lista sai sem contato ignorado nem conversa pessoal, com as contagens e só
@@ -223,7 +223,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-describe("D-202: contrato do retorno de clientes", () => {
+describe("D-206: contrato do retorno de clientes", () => {
   it("as rotas estão no contrato com os schemas do retorno", () => {
     expect(
       findPublicApiRoute("GET", "/v1/customer-return/settings")?.schema,
@@ -254,7 +254,7 @@ describe("D-202: contrato do retorno de clientes", () => {
   });
 });
 
-describe("D-202: lista pré-selecionada", () => {
+describe("D-206: lista pré-selecionada", () => {
   it("tira contato ignorado e conversa pessoal, conta os dois e só devolve campos declarados", async () => {
     const response = await app.inject({
       method: "GET",
@@ -302,7 +302,7 @@ describe("D-202: lista pré-selecionada", () => {
   });
 });
 
-describe("D-202: aprovação e configuração", () => {
+describe("D-206: aprovação e configuração", () => {
   it("a rodada nunca leva quem a IA exclui", async () => {
     const response = await app.inject({
       method: "POST",

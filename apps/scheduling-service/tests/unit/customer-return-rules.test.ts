@@ -17,7 +17,7 @@ import {
 } from "../../src/modules/customer-return/return-rules.js";
 
 /**
- * Regras do retorno de clientes (D-202, `06-Retorno-de-Clientes.md`): prazo
+ * Regras do retorno de clientes (D-206, `06-Retorno-de-Clientes.md`): prazo
  * de volta pelo servico ou pela media, exclusoes, horarios de costume, ritmo
  * de N por dia e o prazo que nunca deixa a mensagem sair no dia da data.
  *

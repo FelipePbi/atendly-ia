@@ -36,7 +36,7 @@ import {
 } from "./return-rules.js";
 
 /**
- * Retorno de clientes do lado do dono da agenda (D-202).
+ * Retorno de clientes do lado do dono da agenda (D-206).
  *
  * O Scheduling decide **quem** entra, **quando** sai e **com que fatos**; a IA
  * reivindica, aplica as regras do contato (ignorado, conversa pessoal),

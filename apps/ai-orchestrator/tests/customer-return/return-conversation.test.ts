@@ -9,7 +9,7 @@ import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/busine
 import { AssistantToolRegistry } from "../../src/modules/tools/assistant-tools.js";
 
 /**
- * A conversa depois do convite de retorno (D-202): a IA sabe o que foi
+ * A conversa depois do convite de retorno (D-206): a IA sabe o que foi
  * oferecido (rotina, serviço, data, horários, costume da cliente e o
  * incentivo prometido — nenhum outro), registra recusa e pedido para parar
  * por uma tool que só alcança o convite desta conversa, e o BFF consegue

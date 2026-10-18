@@ -18,7 +18,7 @@ import { RETURN_DAILY_LIMIT_MAX } from "./return-rules.js";
 import { CustomerReturnService } from "./return-service.js";
 
 /**
- * Rotas internas do retorno de clientes (D-202).
+ * Rotas internas do retorno de clientes (D-206).
  *
  * Tres donos, como nos lembretes: o **BFF** (pessoa) le a lista, simula o
  * ritmo, aprova, pausa, cancela e configura; a **IA** reivindica, liquida e

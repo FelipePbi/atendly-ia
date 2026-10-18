@@ -33,7 +33,7 @@ export const TENANT_PURGE_TABLES = [
   "AppointmentHold",
   // Sem relacao com nenhuma outra tabela desta lista.
   "CalendarMutationIdempotency",
-  // Retorno de clientes (D-202): o alvo e filho de Customer e da rodada
+  // Retorno de clientes (D-206): o alvo e filho de Customer e da rodada
   // (CASCADE), e sai antes dos dois.
   "ReturnCampaignTarget",
   "ReturnCampaign",

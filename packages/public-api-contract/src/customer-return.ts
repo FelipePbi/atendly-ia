@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// --- Retorno de clientes: Renovação e Resgate (D-202) ------------------------
+// --- Retorno de clientes: Renovação e Resgate (D-206) ------------------------
 // Espelha `/v1/customer-return/*` e `/v1/customers/:id/return-messages` em
 // PUBLIC_API_V1.md. Só humano aprova, pausa, cancela e configura; a IA envia
 // no ritmo da rodada e conduz a conversa depois da resposta.

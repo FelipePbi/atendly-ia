@@ -29,7 +29,7 @@ import type {
 } from "./return-types.js";
 
 /**
- * Entrega de uma mensagem de retorno, do lado da IA (D-202).
+ * Entrega de uma mensagem de retorno, do lado da IA (D-206).
  *
  * O dono da agenda ja escolheu a cliente, conferiu as regras dela e mandou os
  * fatos (horarios livres, incentivo, texto-base). Aqui ficam as regras do

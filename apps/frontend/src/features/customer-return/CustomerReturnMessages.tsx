@@ -28,7 +28,7 @@ function statusCopy(status: CustomerReturnStatus): string {
 }
 
 /**
- * Mensagens de retorno no perfil (D-202): se a cliente recebe convites, por
+ * Mensagens de retorno no perfil (D-206): se a cliente recebe convites, por
  * que não, e a saída que só a profissional tem — liberar quem pediu para
  * parar, ou bloquear quem ela não quer chamar.
  */

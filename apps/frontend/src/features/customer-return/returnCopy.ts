@@ -7,7 +7,7 @@ import type {
 } from "@/data";
 
 /**
- * Frases da tela de Retorno de clientes (D-202): o que vence quando, há
+ * Frases da tela de Retorno de clientes (D-206): o que vence quando, há
  * quanto tempo ela não vem, os horários de costume e o andamento de cada
  * cliente na rodada — sempre em palavras, nunca o código do servidor.
  */

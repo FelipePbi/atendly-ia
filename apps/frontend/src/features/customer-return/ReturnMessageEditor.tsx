@@ -31,7 +31,7 @@ export function returnMessageIssueCopy(issue: ReturnMessageIssue): string {
 }
 
 /**
- * Texto-base da rotina (D-202), editado na própria tela do retorno e gravado
+ * Texto-base da rotina (D-206), editado na própria tela do retorno e gravado
  * na configuração do negócio: vale para as próximas rodadas daquela rotina.
  * No Resgate, o incentivo fica junto, porque é o que a mensagem promete.
  */

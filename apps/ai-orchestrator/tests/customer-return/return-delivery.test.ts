@@ -14,7 +14,7 @@ import type {
 import type { SessionSnapshot } from "../../src/modules/session/SessionService.js";
 
 /**
- * Entrega da mensagem de retorno (D-202) pelo mesmo caminho dos lembretes:
+ * Entrega da mensagem de retorno (D-206) pelo mesmo caminho dos lembretes:
  * IA e canal do negócio, contato ignorado e conversa pessoal, a lista de
  * validação local, o sandbox do negócio (D-199), o telefone da agenda com ou
  * sem o 9º dígito caindo na conversa que já existe, e a saída gravada antes

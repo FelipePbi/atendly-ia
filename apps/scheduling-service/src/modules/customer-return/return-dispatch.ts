@@ -37,7 +37,7 @@ import {
 } from "./return-service.js";
 
 /**
- * Reivindicacao e liquidacao dos envios de retorno (D-202), no padrao das
+ * Reivindicacao e liquidacao dos envios de retorno (D-206), no padrao das
  * intencoes de lembrete (Goal021): o dono escolhe **quem** e **quando**, com o
  * ritmo da rodada, e entrega os fatos prontos; a IA envia e liquida.
  *

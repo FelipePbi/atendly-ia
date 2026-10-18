@@ -313,7 +313,7 @@ export interface SchedulingGateway {
     context?: SchedulingRequestContext,
   ): Promise<SchedulingAppointment[]>;
   /**
-   * Recusa ou pedido para parar a mensagem de retorno (D-202). Opcional na
+   * Recusa ou pedido para parar a mensagem de retorno (D-206). Opcional na
    * porta: dubles anteriores nao o implementam, e sem ele a tool responde
    * que nao ha como registrar.
    */
@@ -854,7 +854,7 @@ export class SchedulingClient implements SchedulingGateway {
     return settled.intent;
   }
 
-  // --- Retorno de clientes (D-202) -----------------------------------------
+  // --- Retorno de clientes (D-206) -----------------------------------------
   // Mesmo desenho das intencoes de lembrete: a reivindicacao atravessa
   // negocios, a liquidacao e o relato de resposta voltam a ser por negocio.
 

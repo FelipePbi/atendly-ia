@@ -573,7 +573,7 @@ describe("o rodapé: avisos, erro e 'Continuar'", () => {
 });
 
 describe("a nota do rodapé mostra o caminho real de cada largura", () => {
-  test("onde a navegação tem a aba 'Mais' (abaixo de 1100 px), o caminho é Mais › Importação", async () => {
+  test("onde Configurações fica dentro do 'Mais' (abaixo de 768 px, D-192), o caminho é Mais › Importação", async () => {
     setViewportMatches(() => false);
     await renderDone();
     expect(
@@ -581,8 +581,8 @@ describe("a nota do rodapé mostra o caminho real de cada largura", () => {
     ).toBeVisible();
   });
 
-  test("onde a sidebar tem Configurações (de 1100 px em diante), o caminho é Configurações › Importação", async () => {
-    setViewportMatches((query) => query === "(min-width: 1100px)");
+  test("onde a barra ou a sidebar têm Configurações (de 768 px em diante, D-192), o caminho é Configurações › Importação", async () => {
+    setViewportMatches((query) => query === "(min-width: 768px)");
     await renderDone();
     expect(
       screen.getByText(

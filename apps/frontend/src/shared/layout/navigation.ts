@@ -91,9 +91,9 @@ export const SETTINGS_DESTINATION: NavDestination = {
 };
 
 /**
- * Os quatro destinos com aba própria no bottom nav mobile. O quinto lugar é
- * "Mais" (sintético, sem `section` fixa): abre a lista com o resto dos
- * destinos do produto, em vez de disputar espaço com uma aba própria.
+ * Os quatro destinos com aba própria no bottom nav do celular. O quinto lugar
+ * é "Mais" (sintético, sem `section` fixa): abre a lista com o resto dos
+ * destinos do produto. Em janelas maiores cabem mais abas (D-192).
  */
 export const MOBILE_TAB_SECTIONS: PlatformSection[] = [
   "inicio",
@@ -104,8 +104,8 @@ export const MOBILE_TAB_SECTIONS: PlatformSection[] = [
 
 /**
  * Notificações (Goal022/WU-08): entrada de chrome, não um sexto destino
- * primário — vive na sidebar (tablet/notebook/desktop) e dentro de "Mais" no
- * mobile, nunca como quinta aba do bottom nav.
+ * primário — vive na sidebar (a partir de 1100 px) e, abaixo disso, dentro
+ * de "Mais" no celular; na barra inferior só quando tudo cabe (D-192).
  */
 export const NOTIFICATIONS_DESTINATION: NavDestination = {
   href: "/notificacoes",
@@ -167,9 +167,82 @@ export function isMobileTab(section: PlatformSection): boolean {
   return MOBILE_TAB_SECTIONS.includes(section);
 }
 
-/** "Mais" fica marcado como ativo para qualquer destino fora das quatro abas. */
-export function isMoreActive(active: PlatformSection): boolean {
-  return !isMobileTab(active);
+/**
+ * Barra inferior (abaixo de 1100 px) dinâmica (D-192): os destinos em ordem
+ * de prioridade. Entram na barra, da esquerda para a direita, quantos couberem
+ * na largura da janela; o resto vai para o "Mais". As quatro primeiras são as
+ * abas do celular (`MOBILE_TAB_SECTIONS`).
+ */
+export const BOTTOM_NAV_DESTINATIONS: NavDestination[] = [
+  ...SIDEBAR_DESTINATIONS,
+  NOTIFICATIONS_DESTINATION,
+  SETTINGS_DESTINATION,
+];
+
+/**
+ * Quantos destinos de `BOTTOM_NAV_DESTINATIONS` a barra mostra a partir de
+ * cada largura de janela, com cada vaga de pelo menos ~85 px (rótulo inteiro,
+ * alvo de toque folgado). Os mesmos degraus estão em `avenly.css`
+ * (`data-bottom-from`), que decide o que aparece já na primeira pintura;
+ * `tests/bottom-nav-fit.test.ts` confere que os dois não divergem.
+ */
+export const BOTTOM_NAV_TIERS: ReadonlyArray<{
+  minWidth: number;
+  tabs: number;
+}> = [
+  { minWidth: 0, tabs: MOBILE_TAB_SECTIONS.length },
+  { minWidth: 600, tabs: 6 },
+  { minWidth: 768, tabs: BOTTOM_NAV_DESTINATIONS.length },
+];
+
+/** Quantos destinos cabem na barra numa janela de `width` px. */
+export function bottomNavTabCount(width: number): number {
+  let tabs = BOTTOM_NAV_TIERS[0]?.tabs ?? MOBILE_TAB_SECTIONS.length;
+  for (const tier of BOTTOM_NAV_TIERS) {
+    if (width >= tier.minWidth) tabs = tier.tabs;
+  }
+  return tabs;
+}
+
+/** A menor largura de janela em que o destino `section` entra na barra. */
+export function bottomNavMinWidth(section: PlatformSection): number {
+  const index = BOTTOM_NAV_DESTINATIONS.findIndex(
+    (item) => item.section === section,
+  );
+  const tier = BOTTOM_NAV_TIERS.find((candidate) => index < candidate.tabs);
+  return tier?.minWidth ?? Number.POSITIVE_INFINITY;
+}
+
+/** Os destinos que não couberam na barra: os atalhos do "Mais". */
+export function bottomNavOverflow(tabCount: number): NavDestination[] {
+  return BOTTOM_NAV_DESTINATIONS.slice(tabCount);
+}
+
+/** Tudo coube: no lugar do "Mais" a barra mostra "Conta" (conta e Sair). */
+export function bottomNavFitsAll(tabCount: number): boolean {
+  return tabCount >= BOTTOM_NAV_DESTINATIONS.length;
+}
+
+/**
+ * O destino da barra que representa a seção ativa: as telas de dentro de
+ * Configurações (Negócio, IA, Conta...) acendem "Configurações".
+ */
+export function bottomNavSectionOf(active: PlatformSection): PlatformSection {
+  return BOTTOM_NAV_DESTINATIONS.some((item) => item.section === active)
+    ? active
+    : SETTINGS_DESTINATION.section;
+}
+
+/**
+ * "Mais" fica marcado como ativo quando a seção ativa é um dos destinos que
+ * não couberam na barra. Sem `tabCount`, vale a barra do celular (4 abas).
+ */
+export function isMoreActive(
+  active: PlatformSection,
+  tabCount: number = MOBILE_TAB_SECTIONS.length,
+): boolean {
+  const section = bottomNavSectionOf(active);
+  return bottomNavOverflow(tabCount).some((item) => item.section === section);
 }
 
 export function isDestinationActive(
@@ -194,6 +267,7 @@ const NOTIFICATIONS_BADGE_CAP = 9;
  */
 export function notificationsBadgeLabel(unreadCount: number): string | null {
   if (unreadCount <= 0) return null;
-  if (unreadCount > NOTIFICATIONS_BADGE_CAP) return `${NOTIFICATIONS_BADGE_CAP}+`;
+  if (unreadCount > NOTIFICATIONS_BADGE_CAP)
+    return `${NOTIFICATIONS_BADGE_CAP}+`;
   return String(unreadCount);
 }

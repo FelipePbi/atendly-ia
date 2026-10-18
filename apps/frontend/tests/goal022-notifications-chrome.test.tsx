@@ -8,8 +8,9 @@
  * O que esta suíte prova, pelo que a usuária encontra:
  *
  * - a entrada de Notificações existe fora do "Mais" (chrome visível sem
- *   abrir o diálogo) e também aparece dentro de "Mais" quando aberto — nunca
- *   como sexta aba do bottom nav;
+ *   abrir o diálogo) e também aparece dentro de "Mais" quando aberto; no
+ *   celular ela não é aba da barra inferior — só entra na barra quando tudo
+ *   cabe (D-192), com o mesmo contador;
  * - o contador de não lidas vem de `notifications.summary` (mesmo tick de
  *   `GET /v1/status`) e tem teto de exibição ("9+" acima do teto);
  * - o banner aparece quando WhatsApp está desconectado ou a IA está
@@ -84,6 +85,12 @@ function renderShell() {
   );
 }
 
+/** O link de Notificações da sidebar (a barra inferior tem o seu, D-192). */
+async function findSidebarNotifications() {
+  const sidebar = document.querySelector("aside.sidebar") as HTMLElement;
+  return within(sidebar).findByRole("link", { name: /^Notificações/ });
+}
+
 
 beforeEach(() => {
   statusGet.mockReset();
@@ -101,19 +108,20 @@ describe("entrada de Notificações", () => {
   test("existe fora do 'Mais' e também dentro do modal 'Mais'", async () => {
     renderShell();
 
-    const link = await screen.findByRole("link", { name: /^Notificações/ });
+    const link = await findSidebarNotifications();
     expect(link).toHaveAttribute("href", "/notificacoes");
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Mais" }));
 
-    // Com o modal aberto, Notificações aparece no chrome e entre os atalhos.
-    expect(screen.getAllByRole("link", { name: /^Notificações/ })).toHaveLength(
-      2,
-    );
+    // Com o modal aberto, Notificações aparece entre os atalhos.
+    const dialog = screen.getByRole("dialog", { name: "Mais" });
+    expect(
+      within(dialog).getByRole("link", { name: /^Notificações/ }),
+    ).toHaveAttribute("href", "/notificacoes");
   });
 
-  test("o 'Mais' (2026-10-18): modal centralizado, só atalhos, Configurações numa entrada, conta e Sair", async () => {
+  test("o 'Mais' (D-186, D-192): modal centralizado, só os atalhos que não couberam, Configurações numa entrada, conta e Sair", async () => {
     renderShell();
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Mais" }));
@@ -124,10 +132,12 @@ describe("entrada de Notificações", () => {
     const tiles = [...dialog.querySelectorAll(".more-tile")].map(
       (tile) => tile.textContent,
     );
+    // No celular (sem `matchMedia`, vale a barra de 4 abas), os destinos que
+    // não couberam, na ordem de prioridade da barra (D-192).
     expect(tiles).toEqual([
-      expect.stringMatching(/^Notificações/),
       "Serviços",
       "Faturamento",
+      expect.stringMatching(/^Notificações/),
       "Configurações",
     ]);
     expect(
@@ -147,19 +157,26 @@ describe("entrada de Notificações", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  test("não vira uma quinta aba do bottom nav mobile", async () => {
+  test("na barra inferior, só entra quando tudo cabe (768 px, D-192), com o contador", async () => {
+    notificationsSummary.mockResolvedValue({
+      byLevel: { INFO: 1, ATTENTION: 0, CRITICAL: 0 },
+      unreadCount: 1,
+      openConditionsCount: 0,
+    });
     renderShell();
-    await screen.findByRole("link", { name: /^Notificações/ });
+    await findSidebarNotifications();
 
     const bottomNav = screen
       .getAllByRole("navigation", { name: "Navegação principal" })
       .find((nav) => within(nav).queryByRole("button", { name: "Mais" }));
     expect(bottomNav).toBeDefined();
-    expect(
-      within(bottomNav as HTMLElement).queryByRole("link", {
-        name: /^Notificações/,
-      }),
-    ).toBeNull();
+    // O CSS esconde o item abaixo de 768 px (`data-bottom-from`): no celular
+    // ele não é uma quinta aba, e sim um atalho do "Mais".
+    const item = within(bottomNav as HTMLElement).getByRole("link", {
+      name: /^Notificações/,
+    });
+    expect(item).toHaveAttribute("data-bottom-from", "768");
+    expect(await within(item).findByText("1")).toBeVisible();
   });
 });
 
@@ -167,7 +184,7 @@ describe("contador de não lidas", () => {
   test("some quando não há não lidas", async () => {
     renderShell();
 
-    const link = await screen.findByRole("link", { name: /^Notificações/ });
+    const link = await findSidebarNotifications();
     await waitFor(() => expect(notificationsSummary).toHaveBeenCalled());
     expect(within(link).queryByText(/\d/)).toBeNull();
   });
@@ -180,7 +197,7 @@ describe("contador de não lidas", () => {
     });
     renderShell();
 
-    const link = await screen.findByRole("link", { name: /^Notificações/ });
+    const link = await findSidebarNotifications();
     expect(await within(link).findByText("3")).toBeVisible();
   });
 
@@ -192,7 +209,7 @@ describe("contador de não lidas", () => {
     });
     renderShell();
 
-    const link = await screen.findByRole("link", { name: /^Notificações/ });
+    const link = await findSidebarNotifications();
     expect(await within(link).findByText("9+")).toBeVisible();
   });
 });

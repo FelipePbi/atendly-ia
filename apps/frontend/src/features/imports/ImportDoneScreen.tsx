@@ -12,11 +12,11 @@ import {
 import type { ImportHistory } from "./types";
 
 /**
- * A casca da plataforma troca a barra inferior ("Mais") pela sidebar
- * ("Configurações") a partir de 1100 px (`app-frame`, `avenly.css`): é a
- * largura em que o caminho até a importação muda.
+ * Abaixo de 768 px a barra inferior guarda Configurações dentro do "Mais"; de
+ * 768 px em diante Configurações está direto na barra (D-192) e, de 1100 px,
+ * na sidebar: é a largura em que o caminho até a importação muda.
  */
-const SIDEBAR_QUERY = "(min-width: 1100px)";
+const SIDEBAR_QUERY = "(min-width: 768px)";
 
 function subscribe(onChange: () => void): () => void {
   if (
@@ -41,8 +41,8 @@ function getSnapshot(): boolean {
 /**
  * Nota do rodapé da importação concluída no onboarding (2.I10): onde o
  * histórico fica depois, pelo caminho que a navegação desta largura mostra.
- * Onde a barra inferior tem "Mais", `/importacao` está dentro dele; onde a
- * sidebar tem "Configurações", a entrada fica em Configurações.
+ * Onde Configurações não coube na barra inferior, o caminho começa no "Mais";
+ * onde a barra ou a sidebar têm "Configurações", começa nela.
  */
 export function ImportDonePathNote() {
   const sidebar = useSyncExternalStore(subscribe, getSnapshot, () => false);

@@ -7984,3 +7984,18 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Decisão:** o botão "Mais" da barra inferior abre um modal no centro da tela com quatro atalhos — Notificações (com o contador), Serviços, Faturamento e Configurações — e, abaixo, "Sua conta" e "Sair". Tocar num atalho navega e fecha o modal. Com a sidebar nada muda.
 
 **Consequências:** telas novas fora da barra inferior entram como atalho; configuração nova entra na tela de Configurações, não no "Mais".
+
+## D-192 — Barra inferior dinâmica: mais destinos direto na barra enquanto houver largura
+
+**Status:** ACCEPTED em 2026-10-18, a pedido do usuário, a partir de foto de um tablet (~1000 px). Fora do IA Loop, sem Goal próprio. Revê o D-186.
+
+**Contexto:** abaixo de 1100 px a barra inferior tinha sempre Início, Conversas, Agenda, Clientes e "Mais". No tablet sobrava muito espaço vazio entre os cinco itens, e Serviços, Faturamento, Notificações e Configurações ficavam a dois toques.
+
+**Decisão:**
+
+1. A barra segue uma ordem de prioridade — Início, Conversas, Agenda, Clientes, Serviços, Faturamento, Notificações (com o contador) e Configurações — e mostra quantos couberem: abaixo de 600 px, os 4 do celular + "Mais" (como antes); de 600 px, 6 + "Mais"; de 768 px, os 8. Cada vaga fica com pelo menos ~83 px e o rótulo inteiro numa linha. Os degraus moram em `BOTTOM_NAV_TIERS` (`navigation.ts`) e, para a primeira pintura não esperar o JS, no CSS (`data-bottom-from` / `data-bottom-until`); um teste confere que os dois batem.
+2. "Mais" só aparece quando algum destino não coube, e o modal do D-186 lista só os que sobraram, mais "Sua conta" e "Sair". Fica ativo quando a tela atual é um dos que sobraram; as telas de dentro de Configurações contam como Configurações.
+3. Quando tudo cabe, o último item é "Conta" (com as iniciais da pessoa, como na sidebar), que abre o mesmo modal só com "Sua conta" e "Sair". Configurações › Conta não tem um "Sair" deste aparelho (só "Sair de todos os dispositivos"), então sem esse item o Sair ficaria fora de alcance abaixo de 1100 px.
+4. A nota do fim da importação no onboarding diz "Configurações › Importação" a partir de 768 px, onde Configurações já está na barra.
+
+**Consequências:** um destino novo da barra entra em `BOTTOM_NAV_DESTINATIONS` na posição da sua prioridade, e os degraus do CSS, de `BOTTOM_NAV_TIERS` e de `bottomNavItemsAt` (gate G-1) mudam juntos. Com a sidebar nada muda.

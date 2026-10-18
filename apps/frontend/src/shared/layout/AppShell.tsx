@@ -109,12 +109,13 @@ function AppShellChrome({
   mainClassName,
   module,
   pushed = false,
+  pushedWide = false,
   showBottomNav: showBottomNavConfig = true,
   title,
   whatsappInBand = false,
 }: AppShellProps) {
   const wide = useWideLayout();
-  const hideTabBar = pushed && !wide;
+  const hideTabBar = pushed && (!wide || pushedWide);
   const showBottomNav = showBottomNavConfig && !hideTabBar;
   const router = useRouter();
   const pathname = usePathname();

@@ -39,6 +39,12 @@ export type ShellConfig = {
    * (`PushedBar`) assume o voltar.
    */
   pushed?: boolean;
+  /**
+   * A tela empurrada vale também de 1024 px em diante: a casca esconde a
+   * barra de abas ali (que existe até 1100 px). É o agendamento da Agenda no
+   * tablet deitado, aberto em tela cheia sem a coluna do Dia (2026-10-18).
+   */
+  pushedWide?: boolean;
   showBottomNav?: boolean;
   title: string;
   /** A tela já diz o estado do WhatsApp em faixa própria: a casca não repete o banner. */
@@ -63,6 +69,7 @@ function sameConfig(a: ShellConfig | null, b: ShellConfig): boolean {
     a.mainClassName === b.mainClassName &&
     a.module === b.module &&
     a.pushed === b.pushed &&
+    a.pushedWide === b.pushedWide &&
     a.showBottomNav === b.showBottomNav &&
     a.whatsappInBand === b.whatsappInBand &&
     a.action?.href === b.action?.href &&

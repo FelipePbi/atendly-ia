@@ -75,7 +75,7 @@ export function AppointmentFlowShell({
     active: "agenda",
     loading,
     module: "agenda",
-    ...(appointmentRoute ? { pushed: true } : {}),
+    ...(appointmentRoute ? { pushed: true, pushedWide: !wide } : {}),
     title,
   });
   // Depois do splash da marca a tela se apresenta (D-168, revisão de

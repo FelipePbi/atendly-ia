@@ -9540,7 +9540,9 @@ main#main-content:focus-visible {
 .pushed-bar:has(.pushed-bar-title) .pushed-bar-menu {
   margin-left: 0;
 }
-@media (max-width: 1023px) {
+/* Até 1099 px, onde a barra de abas existe (tela empurrada no tablet deitado,
+   2026-10-18, `pushedWide`). */
+@media (max-width: 1099.98px) {
   .app-frame.is-pushed {
     padding-bottom: 0;
   }

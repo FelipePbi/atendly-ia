@@ -12,6 +12,7 @@ import type {
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Skeleton } from "@/shared/ui/States";
+import { showToast } from "@/shared/ui/toastBus";
 
 import {
   type ReminderPreviewService,
@@ -140,6 +141,7 @@ export function ReminderSettingsSection({
       setConfirmationEnabled(saved.confirmationEnabled);
       setPricePolicy(saved.pricePolicy);
       setMessage("Lembretes salvos.");
+      showToast("Lembretes salvos.");
     } catch {
       setMessage("Não foi possível salvar os lembretes.");
     } finally {

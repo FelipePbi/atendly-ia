@@ -10,6 +10,7 @@ import {
 } from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Dialog } from "@/shared/ui/Dialog";
+import { showToast } from "@/shared/ui/toastBus";
 
 import { formString } from "../settings/shared/fields";
 
@@ -76,6 +77,7 @@ export function KnowledgeDocumentForm({
               serviceId: serviceId || null,
               chunks: [{ content }],
             });
+      showToast(mode === "create" ? "Documento criado." : "Documento salvo.");
       onSaved(saved);
     } catch (caught: unknown) {
       setError(requestError(caught));

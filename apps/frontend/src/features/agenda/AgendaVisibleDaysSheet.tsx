@@ -11,6 +11,7 @@ import {
 } from "@/features/settings/CalendarSettings";
 import { weekdayLabels } from "@/features/settings/shared/labels";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { showToast } from "@/shared/ui/toastBus";
 
 /** O servidor recusa sete dias ocultos (Goal073); o cliente para em seis. */
 const MAX_HIDDEN_WEEKDAYS = 6;
@@ -65,6 +66,7 @@ export function AgendaVisibleDaysSheet({
           controller.signal,
         );
       if (controller.signal.aborted) return;
+      showToast("Dias visíveis salvos.");
       onSaved(preference.hiddenWeekdays);
     } catch (caught) {
       if (controller.signal.aborted) return;

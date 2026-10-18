@@ -27,6 +27,7 @@ import {
   swatchProps,
 } from "@/shared/serviceColor";
 import { CurrencyInput } from "@/shared/ui/CurrencyInput";
+import { showToast } from "@/shared/ui/toastBus";
 
 import { ServiceColorPicker } from "./ServiceColorPicker";
 import {
@@ -350,6 +351,7 @@ export function ServiceForm({
           return;
         }
       }
+      showToast(existingId ? "Serviço salvo." : "Serviço criado.");
       router.replace("/servicos");
     } catch (caught: unknown) {
       setMessage(requestError(caught, "Não foi possível salvar o serviço."));

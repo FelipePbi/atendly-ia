@@ -683,7 +683,7 @@ describe("Goal097 prova 2: AG1 — /configuracoes/agenda", () => {
     );
     expect(updateAgendaViewPreference).toHaveBeenCalledTimes(1);
     expect(
-      await screen.findByText("Preferências da Agenda salvas."),
+      await screen.findByText("Preferências da Agenda salvas.", { ignore: "script, style, .toast-stack *" }),
     ).toBeVisible();
   });
 
@@ -954,7 +954,7 @@ describe("Goal097 prova 3: AG3 — /configuracoes/agenda/regras", () => {
       ],
       timezone: "America/Fortaleza",
     });
-    expect(await screen.findByText("Regras da Agenda salvas.")).toBeVisible();
+    expect(await screen.findByText("Regras da Agenda salvas.", { ignore: "script, style, .toast-stack *" })).toBeVisible();
   });
 
   test("falha ao salvar mostra erro e não perde a edição", async () => {

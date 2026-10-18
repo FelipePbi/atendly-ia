@@ -7,6 +7,7 @@ import { ChatSheetShell } from "@/features/conversations/ConversationActionsShee
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Skeleton } from "@/shared/ui/States";
+import { showToast } from "@/shared/ui/toastBus";
 
 type RetentionCategory = "commercialRetentionDays" | "personalRetentionDays";
 
@@ -116,6 +117,7 @@ export function RetentionSection() {
       setDraft({});
       setConfirming(false);
       setMessage("Prazo de retenção salvo.");
+      showToast("Prazo de retenção salvo.");
     } catch {
       setConfirming(false);
       setFailed(true);

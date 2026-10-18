@@ -31,6 +31,7 @@ import { ContactPhoto, customerPhotoUrl } from "@/shared/ui/ContactPhoto";
 import { Dialog } from "@/shared/ui/Dialog";
 import { Field } from "@/shared/ui/Field";
 import { StatePanel } from "@/shared/ui/States";
+import { showToast } from "@/shared/ui/toastBus";
 
 import { CustomerAgenda } from "./CustomerAgenda";
 import { CustomerListPanel } from "./CustomerList";
@@ -196,6 +197,7 @@ export function CustomerProfile({
         current ? { ...current, ...updated } : current,
       );
       setEditing(false);
+      showToast("Cliente salvo.");
     } catch (caught: unknown) {
       setFormError(
         requestError(caught, "Não foi possível salvar as alterações."),

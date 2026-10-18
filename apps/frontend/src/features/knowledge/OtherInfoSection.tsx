@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useId, useState } from "react";
 
 import { BffHttpError, type KnowledgeDocument } from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { showToast } from "@/shared/ui/toastBus";
 
 import { formString, SaveActions } from "../settings/shared/fields";
 
@@ -52,6 +53,7 @@ export function OtherInfoSection() {
       setSaved(document);
       setContent(value);
       setMessage("Informações salvas.");
+      showToast("Informações salvas.");
     } catch (caught: unknown) {
       setMessage(requestError(caught));
     } finally {

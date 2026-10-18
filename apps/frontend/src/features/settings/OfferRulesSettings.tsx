@@ -5,6 +5,7 @@ import { useId, useState } from "react";
 import type { AvailabilitySettingsInput, SettingsState } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { showToast } from "@/shared/ui/toastBus";
 
 import {
   CUSTOMER_CHANGE_POLICY_OPTIONS,
@@ -174,6 +175,7 @@ export function OfferRulesSettings({
         await getProductServices().settings.updateAvailability(input);
       onSaved({ ...settings, availability: updated });
       setMessage("Regras da Agenda salvas.");
+      showToast("Regras da Agenda salvas.");
     } catch {
       setFailed(true);
       setMessage("Não foi possível salvar as regras da Agenda.");

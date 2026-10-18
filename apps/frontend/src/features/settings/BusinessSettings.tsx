@@ -22,6 +22,7 @@ import {
   addressPartsFromDraft,
 } from "@/shared/ui/AddressFields";
 import { Dialog } from "@/shared/ui/Dialog";
+import { showToast } from "@/shared/ui/toastBus";
 
 export function BusinessSettings({
   headingLevel = "h1",
@@ -121,6 +122,7 @@ export function BusinessSettings({
       await refreshSession();
       setTimezoneConfirmationOpen(false);
       setMessage("Dados do negócio salvos.");
+      showToast("Dados do negócio salvos.");
     } catch {
       setMessage("Não foi possível salvar os dados.");
     } finally {

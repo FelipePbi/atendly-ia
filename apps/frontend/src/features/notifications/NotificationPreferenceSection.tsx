@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react";
 
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Skeleton } from "@/shared/ui/States";
+import { showToast } from "@/shared/ui/toastBus";
 
 /**
  * Preferência da central (Goal022/WU-03): `aiAppointmentCreated`, único campo
@@ -39,6 +40,7 @@ export function NotificationPreferenceSection() {
           aiAppointmentCreated: next,
         });
       setEnabled(preferences.aiAppointmentCreated);
+      showToast("Preferência salva.");
       setMessage(
         preferences.aiAppointmentCreated
           ? "Você vai receber notificação quando a IA criar um agendamento."

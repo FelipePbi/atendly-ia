@@ -12,6 +12,7 @@ import {
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Dialog } from "@/shared/ui/Dialog";
+import { showToast } from "@/shared/ui/toastBus";
 
 import {
   availabilityGridSummary,
@@ -182,6 +183,7 @@ export function CalendarSettings({ settings }: { settings: SettingsState }) {
       setHiddenDays(new Set(preference.hiddenWeekdays));
       setInitialView(preference.initialView);
       setSavedMessage("Preferências da Agenda salvas.");
+      showToast("Preferências da Agenda salvas.");
       setSheet(null);
     } catch (error) {
       setSheetMessage(

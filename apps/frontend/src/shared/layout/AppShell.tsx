@@ -38,6 +38,7 @@ import {
 } from "@/shared/runtime/systemStatus";
 import { Brand } from "@/shared/ui/Brand";
 import { Dialog } from "@/shared/ui/Dialog";
+import { ToastHost } from "@/shared/ui/ToastHost";
 
 import {
   isDestinationActive,
@@ -383,6 +384,7 @@ function AppShellChrome({
           )}
           {children}
         </main>
+        <ToastHost />
         {showBottomNav && action && (
           <Link className="fab" href={action.href} aria-label={action.label}>
             <Icon name={action.icon} />

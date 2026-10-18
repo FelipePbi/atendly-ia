@@ -27,6 +27,7 @@ import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { useOptionalSystemStatus } from "@/shared/runtime/systemStatus";
 import { Dialog } from "@/shared/ui/Dialog";
 import { Skeleton } from "@/shared/ui/States";
+import { showToast } from "@/shared/ui/toastBus";
 
 import { SettingsPage } from "./shared/SettingsPage";
 
@@ -175,6 +176,7 @@ export function AiSettings({
     setMessage(null);
     try {
       await write(enabled, next);
+      showToast("Estilo da IA salvo.");
     } catch (error) {
       setTone(savedTone);
       if (!(await refusedForMissingTest(error))) {
@@ -605,6 +607,7 @@ function AppointmentNoticeRow() {
           aiAppointmentCreated: next,
         });
       setEnabled(preferences.aiAppointmentCreated);
+      showToast("Aviso salvo.");
     } catch {
       setMessage("Não foi possível salvar o aviso.");
     } finally {

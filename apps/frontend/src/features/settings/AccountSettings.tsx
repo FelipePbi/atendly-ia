@@ -15,6 +15,7 @@ import {
   useSystemStatus,
 } from "@/shared/runtime/systemStatus";
 import { Dialog } from "@/shared/ui/Dialog";
+import { showToast } from "@/shared/ui/toastBus";
 
 import { formString, Password, SaveActions } from "./shared/fields";
 import { SettingsPage } from "./shared/SettingsPage";
@@ -82,6 +83,7 @@ export function AccountSettings() {
       await refreshSession();
       setNameMessage(null);
       setSavedMessage("Nome salvo.");
+      showToast("Nome salvo.");
       setSheet(null);
     } catch {
       setNameMessage("Não foi possível salvar o nome.");

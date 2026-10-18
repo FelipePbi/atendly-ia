@@ -803,7 +803,7 @@ describe("Goal104 prova 3: R1 em /configuracoes/conversas", () => {
       personalRetentionDays: 90,
     });
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(await screen.findByText("Prazo de retenção salvo.")).toBeVisible();
+    expect(await screen.findByText("Prazo de retenção salvo.", { ignore: "script, style, .toast-stack *" })).toBeVisible();
   });
 
   test("reduzir abre a confirmação; cancelar não envia nada e mantém a escolha na tela", async () => {
@@ -975,7 +975,7 @@ describe("Goal104 prova 4: Conta em /configuracoes/conta", () => {
     await waitFor(() => expect(updateProfile).toHaveBeenCalledTimes(1));
     expect(updateProfile).toHaveBeenCalledWith("Marina Souza");
     await waitFor(() => expect(refreshSession).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText("Nome salvo.")).toBeVisible();
+    expect(await screen.findByText("Nome salvo.", { ignore: "script, style, .toast-stack *" })).toBeVisible();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 

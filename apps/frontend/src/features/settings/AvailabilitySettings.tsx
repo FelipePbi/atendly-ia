@@ -6,6 +6,7 @@ import type { SettingsState } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { TimeField } from "@/shared/ui/pickers/PickerFields";
+import { showToast } from "@/shared/ui/toastBus";
 
 import { SaveActions } from "./shared/fields";
 import { weekdayLabels } from "./shared/labels";
@@ -263,6 +264,7 @@ export function AvailabilitySettings({
         });
       onSaved({ ...settings, availability });
       setMessage("Disponibilidade salva.");
+      showToast("Disponibilidade salva.");
     } catch {
       setMessage("Não foi possível salvar a disponibilidade.");
     } finally {

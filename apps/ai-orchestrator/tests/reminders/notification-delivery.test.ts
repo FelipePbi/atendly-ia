@@ -85,6 +85,8 @@ interface HarnessOptions {
   seedMessages?: StoredMessage[];
   /** Modo sandbox (D-199); `"unreadable"` faz a leitura falhar. */
   sandbox?: { enabled: boolean; exceptionPhones: string[] } | "unreadable";
+  /** Chaves de conversas que ja existem no canal. */
+  existingConversations?: string[];
 }
 
 function harness(options: HarnessOptions = {}) {
@@ -94,7 +96,12 @@ function harness(options: HarnessOptions = {}) {
   const conversations = new Map<
     string,
     { id: string; customerName: string | null }
-  >();
+  >(
+    (options.existingConversations ?? []).map((key) => [
+      key,
+      { id: `conversation-${key}`, customerName: null },
+    ]),
+  );
   // Ordem real das chamadas: e assim que "a saida existe antes do transporte"
   // deixa de ser uma afirmacao e vira observacao.
   const trace: string[] = [];
@@ -132,6 +139,12 @@ function harness(options: HarnessOptions = {}) {
       },
     },
     conversation: {
+      findMany: async (args: {
+        where: { externalContactId: { in: string[] } };
+      }) =>
+        args.where.externalContactId.in
+          .filter((key) => conversations.has(key))
+          .map((key) => ({ externalContactId: key })),
       upsert: vi.fn(
         async (args: {
           where: {
@@ -255,7 +268,7 @@ function harness(options: HarnessOptions = {}) {
 
   const service = new NotificationDeliveryService({
     prisma: prisma as never,
-    settlement: { settleNotificationIntent } as NotificationSettlementPort,
+    settlement: { settleNotificationIntent },
     sessions,
     channels: {
       resolveChannelCredential: () => {
@@ -491,6 +504,53 @@ describe("notification delivery", () => {
     // A conversa e resolvida antes da sessao, como no processamento de entrada.
     expect(world.trace.indexOf("conversation.upsert")).toBeLessThan(
       world.trace.indexOf("sessions.resolveContext"),
+    );
+  });
+
+  // 2026-10-18: o telefone da agenda com o 9o digito abria uma segunda
+  // conversa com a cliente que o WhatsApp chama sem ele.
+  it("reuses the conversation the customer already has without the ninth digit", async () => {
+    const world = harness({ existingConversations: ["555599837958"] });
+
+    await world.service.deliver(
+      intent({ facts: facts({ customerPhone: "+55 (55) 99983-7958" }) }),
+    );
+
+    expect(world.prisma.conversation.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          tenantId_channelId_externalContactId: {
+            tenantId: "tenant-a",
+            channelId: "channel-a",
+            externalContactId: "555599837958",
+          },
+        },
+      }),
+    );
+    expect(world.sessions.resolveContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: "conversation-555599837958",
+        externalContactId: "555599837958",
+      }),
+    );
+  });
+
+  it("without a conversation yet, opens it with the key WhatsApp uses", async () => {
+    // DDD 55: o WhatsApp nao usa o 9o digito.
+    const south = harness();
+    await south.service.deliver(
+      intent({ facts: facts({ customerPhone: "5555999837958" }) }),
+    );
+    expect(south.sessions.resolveContext).toHaveBeenCalledWith(
+      expect.objectContaining({ externalContactId: "555599837958" }),
+    );
+    // DDD 11: usa.
+    const southeast = harness();
+    await southeast.service.deliver(
+      intent({ facts: facts({ customerPhone: "551199999999" }) }),
+    );
+    expect(southeast.sessions.resolveContext).toHaveBeenCalledWith(
+      expect.objectContaining({ externalContactId: "5511999999999" }),
     );
   });
 

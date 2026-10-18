@@ -1458,7 +1458,7 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
         {
           file: "modules/reminders/NotificationDeliveryService.ts",
           // Deslocada pelo gate do modo sandbox (D-199).
-          line: 329,
+          line: 340,
           category: "composed_by_composeNotificationText",
           origin: undefined,
         },

@@ -8,7 +8,10 @@ import { toErrorMessage } from "../../lib/errors.js";
 import { normalizePhone } from "../../lib/phone.js";
 import { EvolutionProvider } from "../channel/adapters/evolution/EvolutionProvider.js";
 import { ChannelConnectionService } from "../channel/ChannelConnectionService.js";
-import { resolveChannelConversation } from "../channel/conversation-resolution.js";
+import {
+  resolveChannelConversation,
+  resolveContactKeyForPhone,
+} from "../channel/conversation-resolution.js";
 import type { WhatsAppProvider } from "../channel/ports/WhatsAppProvider.js";
 import { classifySendFailure } from "../outbox/outbox-policy.js";
 import { OutboxStore } from "../outbox/OutboxStore.js";
@@ -205,8 +208,8 @@ export class NotificationDeliveryService {
       };
     }
 
-    const externalContactId = normalizePhone(intent.facts.customerPhone ?? "");
-    if (externalContactId.length < MIN_CONTACT_DIGITS) {
+    const customerPhone = normalizePhone(intent.facts.customerPhone ?? "");
+    if (customerPhone.length < MIN_CONTACT_DIGITS) {
       // O dono ja dispensa cliente sem telefone; aqui so sobra o numero que
       // nao descreve um destino. Mesmo vocabulario, nunca erro.
       return {
@@ -216,6 +219,14 @@ export class NotificationDeliveryService {
         detail: "customer phone is not a dialable number",
       };
     }
+
+    // O telefone da agenda pode ter o 9o digito que o WhatsApp nao usa:
+    // a conversa e a que ja existe com a cliente (ou a chave do WhatsApp).
+    const externalContactId = await resolveContactKeyForPhone(this.prisma, {
+      tenantId: intent.tenantId,
+      channelId: channel.id,
+      phone: customerPhone,
+    });
 
     // 3. Contato e conversa pelo **mesmo caminho** do processamento de
     //    entrada. `resolveContext` nao assume atendimento humano: ele so

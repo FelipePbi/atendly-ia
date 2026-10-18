@@ -285,6 +285,8 @@ function fakePrisma(options: { contacts?: ContactRow[]; sessions?: SessionRow[] 
   const prisma = {
     // Registro de atividade (D-176): gravado, não conferido aqui.
     activityLog: { create: async () => ({}) },
+    // Nao lidas (D-195): o dobro nao tem mensagens, entao nada a contar.
+    $queryRaw: async () => [],
     ...root,
     contacts,
     sessions,

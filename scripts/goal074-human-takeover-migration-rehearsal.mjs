@@ -113,6 +113,15 @@ const ACTIVITY_LOG_MIGRATION_SQL = path.join(
   "20261016120000_activity_log",
   "migration.sql",
 );
+const CONVERSATION_OWNER_READ_MIGRATION_SQL = path.join(
+  repositoryRoot,
+  "apps",
+  "ai-orchestrator",
+  "prisma",
+  "migrations",
+  "20261018120000_conversation_owner_read",
+  "migration.sql",
+);
 
 function refuse(message) {
   console.error(`goal074:human-takeover-migration-rehearsal REFUSED — ${message}`);
@@ -614,6 +623,58 @@ async function alignAiDurabilityTargetWithActivityLog(target) {
   }
 }
 
+/**
+ * Leva o banco de durabilidade da IA a coluna `ownerReadAt` da conversa
+ * (conversas nao lidas, D-195). O Prisma le a conversa sem `select`, entao a
+ * coluna precisa existir em todo banco que a suite usa. O DDL usa
+ * `ADD COLUMN IF NOT EXISTS` e o backfill so toca linha ainda nula, entao
+ * reaplicar sobre banco ja alinhado nao muda nada.
+ */
+async function alignAiDurabilityTargetWithConversationOwnerRead(target) {
+  const database = decodeURIComponent(
+    target.maintenance.pathname.replace(/^\//u, ""),
+  );
+  const durability = new URL(target.maintenance.href);
+  durability.pathname = `/${database}_goal004`;
+
+  const client = new Client({ connectionString: durability.href });
+  try {
+    await client.connect();
+  } catch {
+    console.log(
+      "durability target not provisioned yet — skipping the Conversation.ownerReadAt column",
+    );
+    return;
+  }
+  try {
+    const conversationTable = await client.query(
+      `SELECT to_regclass('"Conversation"') AS present`,
+    );
+    if (!conversationTable.rows[0].present) {
+      console.log(
+        "durability target has no Conversation table yet — skipping the Conversation.ownerReadAt column",
+      );
+      return;
+    }
+    const applied = await applyMigrationFile(
+      client,
+      CONVERSATION_OWNER_READ_MIGRATION_SQL,
+    );
+    if (applied !== true) {
+      console.error(
+        `goal074:human-takeover-migration-rehearsal FAILED — durability target column failed applying ${CONVERSATION_OWNER_READ_MIGRATION_SQL}: ${applied}`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    console.log(
+      `durability target aligned with the Conversation.ownerReadAt column: ${database}_goal004`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
 export async function main() {
   const target = rehearsalTarget(process.env);
 
@@ -624,6 +685,7 @@ export async function main() {
   await alignAiDurabilityTargetWithGoal146(target);
   await alignAiDurabilityTargetWithAiReplySplit(target);
   await alignAiDurabilityTargetWithActivityLog(target);
+  await alignAiDurabilityTargetWithConversationOwnerRead(target);
 
   if (process.exitCode) {
     console.error(

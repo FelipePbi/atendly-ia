@@ -49,6 +49,8 @@ function conversationRow(
 
 function fakePrisma(conversations: ConversationRow[]) {
   return {
+    // Nao lidas (D-195): o dobro nao tem mensagens, entao nada a contar.
+    $queryRaw: async () => [],
     conversation: {
       findMany: async ({
         where,

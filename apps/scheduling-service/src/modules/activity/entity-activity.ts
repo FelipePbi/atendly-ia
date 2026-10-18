@@ -125,15 +125,16 @@ export const customerActivity = {
     const wasActive = !before.deactivatedAt;
     const isActive = !after.deactivatedAt;
     if (wasActive !== isActive) {
-      return updated(
-        CUSTOMER,
-        transaction,
-        tenantId,
+      // Registra mesmo sem nome ou telefone mudarem: a ação já é o fato.
+      return recordActivity(transaction, tenantId, {
         actor,
-        before,
-        after,
-        isActive ? "customer.reactivated" : "customer.deactivated",
-      );
+        area: CUSTOMER.area,
+        action: isActive ? "customer.reactivated" : "customer.deactivated",
+        entityType: CUSTOMER.entityType,
+        entityId: before.id,
+        entityLabel: CUSTOMER.label(after) ?? CUSTOMER.label(before),
+        changes: diffFields(before, after, CUSTOMER.fields),
+      });
     }
     return updated(CUSTOMER, transaction, tenantId, actor, before, after);
   },

@@ -338,7 +338,7 @@ describeWithDatabase("customer list pagination against PostgreSQL", () => {
     const soon = new Date(Date.now() + 2 * 86_400_000).toISOString();
     const later = new Date(Date.now() + 9 * 86_400_000).toISOString();
     await visit(third.id, later, "CONFIRMED");
-    await visit(first.id, soon, "SCHEDULED");
+    await visit(first.id, soon, "CONFIRMED");
     const next = await walk(tenantA, { limit: "15", sort: "next" });
     expect(next.items.slice(0, 3).map((item) => item.name)).toEqual([
       "Cliente 01",

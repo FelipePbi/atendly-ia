@@ -106,12 +106,13 @@ export interface CustomerListFilter {
   status?: "active" | "inactive" | null;
   /**
    * Ordem da página (2026-10-18): nome (padrão), último atendimento (mais
-   * recente primeiro) ou frequência (mais atendimentos concluídos primeiro).
+   * recente primeiro), frequência (mais atendimentos concluídos primeiro) ou
+   * próximos atendimentos (o horário marcado mais perto primeiro).
    */
   sort?: CustomerListSort | null;
 }
 
-export type CustomerListSort = "name" | "last" | "frequency";
+export type CustomerListSort = "name" | "last" | "frequency" | "next";
 
 /** `contains` do Prisma não escapa os curingas do `LIKE`: `%` e `_` são texto. */
 function escapeLike(value: string): string {
@@ -308,14 +309,25 @@ export class AvenlyCustomerService {
   ) {
     const offset = page.cursor ? decodeRankedCursor(page.cursor, sort) : 0;
     const customers = await this.sortedList(filter);
+    const now = options.now ?? new Date();
     const metric =
       sort === "last"
-        ? await this.lastVisitMetric(options.now ?? new Date())
-        : await this.frequencyMetric();
-    // `sort` é estável: empate (ou sem atendimento) mantém a ordem de nome.
-    const ranked = [...customers].sort(
-      (a, b) => (metric.get(b.id) ?? -1) - (metric.get(a.id) ?? -1),
-    );
+        ? await this.lastVisitMetric(now)
+        : sort === "next"
+          ? await this.nextVisitMetric(now)
+          : await this.frequencyMetric();
+    // Próximos: o mais perto primeiro; as outras, o maior primeiro. Quem não
+    // tem a métrica vai para o fim, e o `sort` estável mantém, no empate, a
+    // ordem de nome.
+    const direction = sort === "next" ? 1 : -1;
+    const ranked = [...customers].sort((a, b) => {
+      const left = metric.get(a.id);
+      const right = metric.get(b.id);
+      if (left === undefined || right === undefined) {
+        return (left === undefined ? 1 : 0) - (right === undefined ? 1 : 0);
+      }
+      return (left - right) * direction;
+    });
     const rows = ranked.slice(offset, offset + page.limit + 1);
     const pageRows = rows.slice(0, page.limit);
     return {
@@ -342,6 +354,24 @@ export class AvenlyCustomerService {
     const metric = new Map<string, number>();
     for (const row of rows) {
       if (row._max.startAt) metric.set(row.customerId, row._max.startAt.getTime());
+    }
+    return metric;
+  }
+
+  /** Início do próximo atendimento marcado (confirmado ou aguardando). */
+  private async nextVisitMetric(now: Date): Promise<Map<string, number>> {
+    const rows = await this.database.appointment.groupBy({
+      by: ["customerId"],
+      where: {
+        tenantId: this.tenantId,
+        status: { in: [...NEXT_APPOINTMENT_STATUSES] },
+        startAt: { gt: now },
+      },
+      _min: { startAt: true },
+    });
+    const metric = new Map<string, number>();
+    for (const row of rows) {
+      if (row._min.startAt) metric.set(row.customerId, row._min.startAt.getTime());
     }
     return metric;
   }

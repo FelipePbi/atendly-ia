@@ -90,6 +90,11 @@ export const CUSTOMER_SORT_OPTIONS: ReadonlyArray<{
     label: "Frequência",
     description: "Quem mais concluiu atendimentos primeiro",
   },
+  {
+    value: "next",
+    label: "Próximos atendimentos",
+    description: "Quem você atende primeiro, a partir de agora",
+  },
 ];
 
 /** Espera entre a digitação e a busca no servidor. */
@@ -358,12 +363,7 @@ export function CustomerListPanelView({
           </button>
         </div>
       )}
-      <Dialog
-        onClose={closeSort}
-        open={sortOpen}
-        title="Ordenar clientes"
-        variant="sheet"
-      >
+      <Dialog onClose={closeSort} open={sortOpen} title="Ordenar clientes">
         <div
           aria-label="Ordenar clientes por"
           className="customer-sort-options"
@@ -376,10 +376,10 @@ export function CustomerListPanelView({
                 name="customer-sort"
                 type="radio"
                 value={option.value}
-                onChange={() => {
-                  data.setSort(option.value);
-                  setSortOpen(false);
-                }}
+                onChange={() => data.setSort(option.value)}
+                // Tocar em qualquer opção fecha, mesmo na que já estava
+                // marcada (onde `onChange` não dispara).
+                onClick={closeSort}
               />
               <span className="customer-sort-option-text">
                 <strong>{option.label}</strong>

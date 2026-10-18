@@ -333,6 +333,20 @@ describeWithDatabase("customer list pagination against PostgreSQL", () => {
     // Sem atendimento, a ordem de nome continua valendo.
     expect(frequency.items[2]?.name).toBe("Álvaro");
 
+    // Próximos atendimentos: o horário marcado mais perto primeiro; quem não
+    // tem nada marcado fica no fim, por nome.
+    const soon = new Date(Date.now() + 2 * 86_400_000).toISOString();
+    const later = new Date(Date.now() + 9 * 86_400_000).toISOString();
+    await visit(third.id, later, "CONFIRMED");
+    await visit(first.id, soon, "SCHEDULED");
+    const next = await walk(tenantA, { limit: "15", sort: "next" });
+    expect(next.items.slice(0, 3).map((item) => item.name)).toEqual([
+      "Cliente 01",
+      "Cliente 03",
+      "Álvaro",
+    ]);
+    expect(next.items).toHaveLength(36);
+
     const mixed = await app.inject({
       method: "GET",
       url: `/internal/customers?limit=15&sort=frequency&cursor=${last.pages[0]?.nextCursor}`,

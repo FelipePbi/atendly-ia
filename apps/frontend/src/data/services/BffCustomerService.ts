@@ -27,7 +27,7 @@ export interface CreateCustomerInput {
 }
 
 export type CustomerListStatus = "active" | "inactive";
-export type CustomerListSort = "name" | "last" | "frequency";
+export type CustomerListSort = "name" | "last" | "frequency" | "next";
 
 export interface CustomerListQuery {
   limit?: number;

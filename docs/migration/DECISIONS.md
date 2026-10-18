@@ -7968,7 +7968,7 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 
 1. `Customer.deactivatedAt` (nulo é ativo). "Desativar cliente" fica no menu ⋯ do perfil, com confirmação; "Reativar cliente" no mesmo lugar, sem confirmação. O perfil inativo mostra o selo "Inativo". O registro de atividade grava `customer.deactivated` e `customer.reactivated`.
 2. A lista de Clientes ganha as abas Ativos (padrão) e Inativos. Desativar só tira das listas da tela de Clientes: agenda, conversas, IA, busca por telefone e histórico continuam reconhecendo a pessoa (sem `status`, a API devolve todos).
-3. "Ordenar" abre uma folha com Nome (A a Z), Último atendimento (mais recente primeiro) e Frequência (mais atendimentos concluídos primeiro). Sem atendimento, vale a ordem de nome. As letras de grupo só aparecem na ordem de nome. A ordem vale também para a busca e para a aba Inativos.
+3. "Ordenar" abre um modal no centro da tela (tocar numa opção já fecha) com Nome (A a Z), Último atendimento (mais recente primeiro), Frequência (mais atendimentos concluídos primeiro) e Próximos atendimentos (o horário marcado mais perto primeiro; quem não tem nada marcado vai para o fim). Sem atendimento, vale a ordem de nome. As letras de grupo só aparecem na ordem de nome. A ordem vale também para a busca e para a aba Inativos.
 4. Nas ordens por métrica, a métrica sai de uma consulta agrupada por negócio e o cursor é a posição na lista ordenada, marcado com a ordem: trocar a ordem recomeça do início.
 
 **Consequências:** quem agendar com uma cliente inativa não a reativa sozinho; a profissional reativa no perfil.

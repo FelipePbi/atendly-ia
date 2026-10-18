@@ -305,7 +305,12 @@ describe("Clientes — scroll infinito", () => {
           (radio) =>
             radio.closest("label")?.querySelector("strong")?.textContent,
         ),
-    ).toEqual(["Nome", "Último atendimento", "Frequência"]);
+    ).toEqual([
+      "Nome",
+      "Último atendimento",
+      "Frequência",
+      "Próximos atendimentos",
+    ]);
     await user.click(within(sheet).getByRole("radio", { name: /Frequência/ }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -319,5 +324,31 @@ describe("Clientes — scroll infinito", () => {
       screen.getByRole("button", { name: /Ordenar por/ }),
     ).toHaveTextContent("Frequência");
     expect(document.querySelector(".customer-panel-letter")).toBeNull();
+  });
+
+  test("Ordenar é um modal no centro e fecha ao tocar até na opção já marcada", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await waitFor(() => expect(rows()).toHaveLength(15));
+
+    await user.click(screen.getByRole("button", { name: /Ordenar por/ }));
+    const dialog = screen.getByRole("dialog", { name: "Ordenar clientes" });
+    expect(dialog.closest(".bottom-sheet-wrap")).toBeNull();
+    await user.click(within(dialog).getByRole("radio", { name: /^Nome/ }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Ordenar por/ }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("radio", {
+        name: /Próximos atendimentos/,
+      }),
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(customersList).toHaveBeenLastCalledWith(
+        { limit: 15, q: undefined, status: "active", sort: "next" },
+        expect.any(AbortSignal),
+      ),
+    );
   });
 });

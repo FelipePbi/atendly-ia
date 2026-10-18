@@ -1124,7 +1124,7 @@ export class SchedulingClient {
       limit?: number;
       cursor?: string;
       status?: "active" | "inactive";
-      sort?: "name" | "last" | "frequency";
+      sort?: "name" | "last" | "frequency" | "next";
     } = {},
   ) {
     return this.get(

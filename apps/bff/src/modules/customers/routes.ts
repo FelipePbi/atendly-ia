@@ -51,7 +51,7 @@ const listQuerySchema = z.object({
   // Abas Ativos/Inativos e ordem da tela de Clientes (2026-10-18). Ausentes,
   // todos por nome — o que a agenda e os formulários sempre receberam.
   status: z.enum(["active", "inactive"]).optional(),
-  sort: z.enum(["name", "last", "frequency"]).optional(),
+  sort: z.enum(["name", "last", "frequency", "next"]).optional(),
 });
 // Telefone deixou de ser obrigatório: cliente sem telefone existe (criança,
 // pessoa agendada presencialmente). O que não pode é nascer sem nada.

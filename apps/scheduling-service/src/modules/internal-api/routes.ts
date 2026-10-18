@@ -355,7 +355,7 @@ const customerQuerySchema = z.object({
   cursor: z.string().trim().min(1).max(1_024).optional(),
   // Abas e ordem da tela de Clientes (2026-10-18); ausentes, todos por nome.
   status: z.enum(["active", "inactive"]).optional(),
-  sort: z.enum(["name", "last", "frequency"]).optional(),
+  sort: z.enum(["name", "last", "frequency", "next"]).optional(),
 });
 const CUSTOMER_PAGE_DEFAULT_LIMIT = 50;
 const customerDependentsQuerySchema = z.object({

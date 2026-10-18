@@ -217,7 +217,7 @@ Os dois campos existem só na lista. `GET /v1/customers/:id` segue trazendo `pri
 
 `total` e `nextCursor` são opcionais no contrato: resposta anterior a esta mudança continua válida sem eles.
 
-**Ativos, inativos e ordem (2026-10-18).** A lista aceita `status=active|inactive` (as abas da tela de Clientes) e `sort=name|last|frequency` (nome, último atendimento mais recente primeiro, ou mais atendimentos concluídos primeiro; sem atendimento, a ordem de nome desempata). Sem `status`, a lista traz todos — a agenda, os formulários e a IA nunca escondem uma cliente desativada. Com `sort` diferente de `name`, o `cursor` vale só para a mesma ordem; trocar a ordem recomeça do início. Cada cliente traz `active`; `PATCH /v1/customers/:id` com `{ "active": false }` desativa (registro de atividade `customer.deactivated`) e com `true` reativa (`customer.reactivated`).
+**Ativos, inativos e ordem (2026-10-18).** A lista aceita `status=active|inactive` (as abas da tela de Clientes) e `sort=name|last|frequency|next` (nome, último atendimento mais recente primeiro, mais atendimentos concluídos primeiro, ou próximo atendimento marcado mais perto primeiro; sem atendimento, a ordem de nome desempata). Sem `status`, a lista traz todos — a agenda, os formulários e a IA nunca escondem uma cliente desativada. Com `sort` diferente de `name`, o `cursor` vale só para a mesma ordem; trocar a ordem recomeça do início. Cada cliente traz `active`; `PATCH /v1/customers/:id` com `{ "active": false }` desativa (registro de atividade `customer.deactivated`) e com `true` reativa (`customer.reactivated`).
 
 ### Responsável principal
 

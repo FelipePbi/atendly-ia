@@ -307,6 +307,29 @@ function composeFollowUp(facts: ReturnFacts, voice: ReturnVoice): string {
   return blocks.join("\n\n");
 }
 
+/**
+ * Texto-base inicial do editor (D-202): o padrão de cada rotina escrito com
+ * os campos no lugar dos dados. Gravado igual, continua valendo o padrão.
+ */
+export function defaultReturnTemplate(
+  kind: "RENEWAL" | "WINBACK",
+  style: AiConversationStyle,
+): string {
+  const voice = VOICES[style];
+  if (kind === "RENEWAL") {
+    return [
+      voice.greeting("{nome}"),
+      `Está chegando a hora do seu atendimento de {servico}, {quando}. ${voice.reserve} Tenho {horarios}.`,
+    ].join("\n\n");
+  }
+  return [
+    voice.greeting("{nome}"),
+    voice.missYou,
+    voice.incentive("{incentivo}"),
+    voice.askSlot,
+  ].join("\n\n");
+}
+
 export function composeReturnText(input: {
   style: AiConversationStyle;
   facts: ReturnFacts;

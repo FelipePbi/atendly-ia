@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   absencePhrase,
   composeReturnText,
+  defaultReturnTemplate,
   relativeDay,
   returnFactualLines,
   slotsPhrase,
@@ -210,6 +211,29 @@ describe("lembrete único", () => {
     });
     expect(winbackFollowUp).toContain(
       "Para o seu retorno, há uma condição especial: 10% de desconto",
+    );
+  });
+});
+
+describe("texto-base inicial do editor", () => {
+  it("é o padrão escrito com os campos, e gera a mesma frase da prévia da tela", () => {
+    const template = defaultReturnTemplate("RENEWAL", "BALANCED");
+    expect(template).toBe(
+      [
+        "Oi, {nome}! Tudo bem?",
+        "Está chegando a hora do seu atendimento de {servico}, {quando}. Quer que eu já reserve um horário? Tenho {horarios}.",
+      ].join("\n\n"),
+    );
+    expect(
+      composeReturnText({
+        style: "BALANCED",
+        facts: renewal({ messageTemplate: template }),
+      }),
+    ).toBe(
+      [
+        "Oi, Adriana! Tudo bem?",
+        "Está chegando a hora do seu atendimento de Manutenção 5D, na quinta-feira. Quer que eu já reserve um horário? Tenho sexta às 17h30 ou sábado às 18h.",
+      ].join("\n\n"),
     );
   });
 });

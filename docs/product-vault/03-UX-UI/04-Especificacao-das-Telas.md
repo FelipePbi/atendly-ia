@@ -423,19 +423,22 @@ Linha "Aparência" no grupo "Dados e conta", entre Atividade e Conta (`/configur
 
 ### Atividade
 
-Linha "Atividade" no grupo "Dados e conta", entre Conversas e Aparência (`/configuracoes/atividade`, D-176). Mostra tudo o que você e a IA fizeram no negócio, do mais recente para o mais antigo, agrupado por dia ("Hoje", "Ontem", "Quinta, 16 de outubro").
+Linha "Atividade" no grupo "Dados e conta", entre Conversas e Aparência (`/configuracoes/atividade`, D-176, D-200). Mostra tudo o que você e a IA fizeram no negócio, do mais recente para o mais antigo, agrupado por dia ("Hoje", "Ontem", "Quinta, 16 de outubro"), um cartão por dia com a quantidade de registros.
 
 Cada linha:
 
-- marca de quem fez: "IA" ou o ícone de pessoa;
+- marca de quem fez: o ícone da IA ou o ícone de pessoa;
 - frase em português, com "Você" ou "A IA" como sujeito: "A IA remarcou Ana de 14:00 para 15:30 em 20/10", "Você alterou o cadastro de Ana Souza";
-- antes e depois de cada campo alterado ("Nome Ana → Ana Souza"), o antes riscado;
-- nota quando houver (motivo do cancelamento, resumo do que a IA passou, itens importados);
-- hora e área.
+- hora, à direita da frase;
+- antes e depois de cada campo alterado num bloco rebaixado ("Nome Ana → Ana Souza"), o antes riscado; o que a frase já diz (situação do cancelamento, IA ligada, serviço arquivado) não se repete embaixo, e o que foi adicionado ou apagado (observação, etiqueta, preferência) aparece como um valor só;
+- valores sempre legíveis: cor do serviço com o círculo da cor e o nome (o da paleta, "Rosa-antigo", ou o código da personalizada, "#D479FF"), telefone formatado ("+55 55 99693-6463"), minutos por extenso ("5 h 35 min antes"), dinheiro com centavos ("R$ 90,00"), fuso pelo nome da cidade, "Sim"/"Não", datas em pt-BR; campo sem tradução ganha o rótulo "Outro ajuste", nunca "Campo";
+- contato ou cliente pelo nome quando há; sem nome, o telefone formatado;
+- nota quando houver (motivo do cancelamento, resumo do que a IA passou, itens importados e não importados, dias e horário de um bloqueio que se repete, o efeito de ligar ou desligar o modo sandbox);
+- área numa etiqueta com ícone.
 
 Linha de cliente, agendamento ou conversa abre o detalhe, que volta para Atividade.
 
-Filtros, em duas colunas no celular: Período (todo o período, hoje, 7, 30 ou 90 dias), Quem fez (você e a IA, só você, só a IA), Área (Agenda, Clientes, Serviços, Conversas, Configurações, Importação) e Tipo de ação (criou ou marcou, alterou, cancelou ou removeu). Busca pelo nome do cliente, serviço ou contato, no servidor.
+Busca pelo nome do cliente, serviço ou contato, no servidor, sempre à vista. Ao lado, o botão "Filtros" abre um modal no centro com Período (todo o período, hoje, 7, 30 ou 90 dias), Quem fez (você e a IA, só você, só a IA), Área (Agenda, Clientes, Serviços, Conversas, Configurações, Importação) e Tipo de ação (criou ou marcou, alterou, cancelou ou removeu), cada um em chips de escolha única. Nada muda até "Aplicar"; fechar descarta a escolha; "Limpar filtros" volta tudo para o padrão. O botão mostra quantos filtros estão ligados, e cada filtro ligado aparece como chip embaixo da busca, que se remove com um toque ("Limpar filtros" ao lado quando há mais de um).
 
 Rolagem sob demanda como na lista de Clientes: a próxima leva chega perto do fim; falha numa leva mostra "Tentar novamente" sem perder o que já veio.
 

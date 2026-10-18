@@ -851,6 +851,12 @@ export function createEvolutionDouble() {
         });
         return;
       }
+      // Foto de perfil da cliente (2026-10-15): o dublê responde "sem foto",
+      // então a tela mostra as iniciais e nenhuma imagem sai da máquina.
+      if (request.method === "POST" && url.pathname === "/user/avatar") {
+        reply(response, 200, { data: null });
+        return;
+      }
 
       unexpected.push({ route, at: new Date().toISOString() });
       reply(response, 404, {

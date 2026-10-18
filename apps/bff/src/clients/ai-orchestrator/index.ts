@@ -313,8 +313,18 @@ const aiTenantConfigStateSchema = z
     enabled: z.boolean(),
     tone: z.string(),
     promptVersion: z.string(),
+    // Modo sandbox (D-199), para o aviso da casca. Opcional: IA anterior ao
+    // D-199 nao manda, e ausente vale desligado.
+    sandboxEnabled: z.boolean().optional(),
   })
   .nullable();
+
+// Modo sandbox (D-199): a IA e a dona do estado, porque e ela quem envia.
+const aiSandboxStateSchema = z.object({
+  enabled: z.boolean(),
+  exceptionPhones: z.array(z.string()),
+  updatedAt: z.string().nullable(),
+});
 
 // Goal019/WU-05: execucao do teste real. Espelha o DTO de
 // `activation-test/routes.ts` na IA — os oito passos e os seis marcos do
@@ -679,6 +689,38 @@ export class AiOrchestratorClient {
         path: "/internal/ai-tenant-config",
         context,
         schema: envelope(aiTenantConfigStateSchema),
+      })
+    ).data;
+  }
+
+  async getAiSandbox(context: InternalRequestContext) {
+    return (
+      await this.http.request({
+        method: "GET",
+        path: "/internal/ai-sandbox",
+        context,
+        schema: envelope(aiSandboxStateSchema),
+      })
+    ).data;
+  }
+
+  /**
+   * Grava o modo sandbox (D-199). Mesma credencial de provisionamento da
+   * configuracao do negocio. `AI_TENANT_CONFIG_NOT_PROJECTED` (409) sobe como
+   * `upstreamCode`: quem chama projeta a configuracao e repete.
+   */
+  async updateAiSandbox(
+    context: InternalRequestContext,
+    input: { enabled?: boolean; exceptionPhones?: string[] },
+  ) {
+    return (
+      await this.http.request({
+        method: "PUT",
+        path: "/internal/ai-sandbox",
+        context,
+        body: input,
+        use: "provisioning",
+        schema: envelope(aiSandboxStateSchema),
       })
     ).data;
   }

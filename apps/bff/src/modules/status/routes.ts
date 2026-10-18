@@ -97,6 +97,12 @@ export async function registerV1StatusRoutes(
           aiConfigResult.status === "ok",
         ),
         reconciled,
+        // Modo sandbox (D-199): da mesma leitura da IA. `null` quando a IA
+        // nao respondeu — o aviso da casca nao afirma nada nesse caso.
+        sandboxEnabled:
+          aiConfigResult.status === "ok"
+            ? (aiConfigResult.data?.sandboxEnabled ?? false)
+            : null,
       };
 
       // Goal022 §6: as condições de canal da central reconciliam **aqui**,

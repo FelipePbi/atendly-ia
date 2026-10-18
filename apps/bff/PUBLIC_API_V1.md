@@ -24,7 +24,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers`; `PATCH /v1/customers/:id`; `PUT /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/primary-guardian/confirm`; `DELETE /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/notes`; `PATCH /v1/customers/:id/notes/:noteId`; `DELETE /v1/customers/:id/notes/:noteId`; `POST /v1/customers/:id/tags`; `PATCH /v1/customers/:id/tags/:tagId`; `DELETE /v1/customers/:id/tags/:tagId`; `GET/POST /v1/customers/:id/memory`; `PATCH/DELETE /v1/customers/:id/memory/:memoryId`; `POST /v1/customers/:id/summary` (Goal012) |
 | Conhecimento do negócio (Goal012) | `GET/POST /v1/knowledge/documents`; `GET/PUT/DELETE /v1/knowledge/documents/:id`; `GET/PUT /v1/knowledge/other-info` |
 | Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id`; `GET/PUT /v1/services/:id/ai-instruction` (Goal078) |
-| Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability`; `GET /v1/settings/reminders`; `PATCH /v1/settings/reminders` (Goal021); `GET/PATCH /v1/settings/retention` (Goal023/WU-01); `GET/PATCH /v1/settings/agenda-view` (Goal073/WU-03); `GET/PATCH /v1/settings/appearance` (D-181) |
+| Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability`; `GET /v1/settings/reminders`; `PATCH /v1/settings/reminders` (Goal021); `GET/PATCH /v1/settings/retention` (Goal023/WU-01); `GET/PATCH /v1/settings/agenda-view` (Goal073/WU-03); `GET/PATCH /v1/settings/appearance` (D-181); `GET/PATCH /v1/settings/ai/sandbox` (D-199) |
 | WhatsApp | `GET /v1/whatsapp`; `GET /v1/whatsapp/qr` (Goal071/WU-01); `GET /v1/whatsapp/contacts`; `POST /v1/whatsapp/connect`; `POST /v1/whatsapp/reconnect`; `DELETE /v1/whatsapp` |
 | Teste real de ativação (Goal019/WU-05) | `GET /v1/activation-test`; `POST /v1/activation-test`; `POST /v1/activation-test/restart` |
 | Central de notificações (Goal022/WU-04) | `GET /v1/notifications`; `GET /v1/notifications/summary`; `POST /v1/notifications/read`; `GET/PATCH /v1/notifications/preferences` |
@@ -520,6 +520,7 @@ Concluir a importação (`POST /v1/calendar/imports/:sessionId/complete`) apaga,
 | `ai.desiredEnabled` | booleano | o que o negócio configurou em `PATCH /v1/settings/ai` (`AiSettings.enabled`), local ao BFF |
 | `ai.effectiveEnabled` | booleano ou `null` | o que a IA relata como configuração ativa; `null` quando o tenant ainda não foi projetado lá ou quando a IA não respondeu |
 | `ai.state` | `ACTIVE`, `OFF`, `PENDING`, `UNKNOWN` | `ACTIVE`: desejado ligado e a IA confirma ligado. `OFF`: desejado desligado — não importa o que a IA relate. `PENDING`: desejado ligado mas a IA relata desligado, `null` ou ainda não foi projetado. `UNKNOWN`: a IA não respondeu a esta requisição |
+| `ai.sandboxEnabled` (D-199) | booleano, `null` ou ausente | modo sandbox ligado, da mesma leitura da IA que dá `effectiveEnabled`; `false` quando o tenant nunca foi projetado; `null` quando a IA não respondeu (não afirma nada). Ausente numa resposta anterior ao D-199 vale desligado. É o que a casca usa para o lembrete "Modo sandbox" |
 | `accountDeletion.status` (Goal025/WU-03) | `NONE`, `SCHEDULED`, `CANCELLED`, `PURGED` | a mesma linha que `POST`/`DELETE /v1/account/deletion` gravam; `NONE` é o negócio que nunca pediu exclusão |
 | `accountDeletion.dueAt` (Goal025/WU-03) | timestamp ISO ou `null` | vencimento do prazo de sete dias, usado pela tela para contar os dias até a purga; `null` exatamente quando `status: "NONE"` |
 | `degraded` | booleano | `true` quando o Evolution ou a IA não responderam nesta requisição |
@@ -719,7 +720,9 @@ Os campos são opcionais e podem vir `null`: mensagem recebida (`INBOUND`) não 
 
 `UNKNOWN` é o estado que a plataforma **não pode afirmar**: o envio saiu e o transporte não respondeu a tempo, ou respondeu erro de servidor. A tentativa não é apagada nem reenviada automaticamente — ela muda de estado apenas por reconciliação, quando o transporte devolve o ID externo ou quando chega o recibo `Delivered`/`Read`. Até lá, apresente a mensagem como incerta, não como enviada.
 
-`FAILED` significa que a saída comprovadamente não foi entregue: recusa definitiva do transporte, credencial do canal ainda não projetada, ou resposta cancelada porque o cliente mandou mensagem nova antes do envio. A entrega é *at-least-once* com dedupe e reconciliação; a API não promete exactly-once.
+`FAILED` significa que a saída comprovadamente não foi entregue: recusa definitiva do transporte, credencial do canal ainda não projetada, resposta cancelada porque o cliente mandou mensagem nova antes do envio, ou estado do modo sandbox ilegível (`deliveryDetail: "sandbox_state_unavailable"`, D-199: sem saber se o negócio está em teste, nada sai).
+
+Com o modo sandbox ligado (D-199, seção própria abaixo), a saída para quem não está nas exceções fica `SENT` sem ter saído: é a escolha do negócio para testar, e o app mostra igual a um envio real. A entrega é *at-least-once* com dedupe e reconciliação; a API não promete exactly-once.
 
 `POST /v1/conversations/:id/messages` tem **dois** sucessos, com sentidos distintos, e o BFF repassa o status que a IA respondeu — não colapsa os dois em `201`:
 
@@ -1040,6 +1043,37 @@ A resposta **não** traz os fatos compostos para a entrega (nome e telefone do c
 | `true` | pedido explícito de aviso: se a mutação de fato mudou algo que o cliente precisaria saber (horário, serviços ou estado), nasce um aviso de alteração para ele |
 
 Cancelar sempre cancela os lembretes pendentes do horário anterior, com `notifyCustomer` ou sem — as duas decisões são independentes. `notifyCustomer` só decide o aviso de alteração, nunca os lembretes em si, e só existe nestas duas rotas: a IA cancela e remarca a pedido do próprio cliente dentro da conversa, e avisá-lo do que ele acabou de pedir seria ruído — por isso ela nunca tem este campo em nenhum contrato dela, e a interface manda-o sempre, explicitamente, marcado por padrão. A recomputação de lembretes e o aviso em si são regra do Scheduling, provada nas suítes de lá; o que este contrato garante é só o transporte do pedido.
+
+## Modo sandbox da IA (D-199)
+
+Para testar sem afetar clientes. Ligado, as mensagens que iriam para o WhatsApp de quem **não** está na lista de exceções — resposta da IA (em todas as partes, com o "digitando…" junto), mensagem da profissional pelo app, lembrete e aviso de alteração do agendamento — são gravadas e mostradas como enviadas (`deliveryState: "SENT"`), mas não saem. A entrada, a IA, a agenda e os lembretes seguem funcionando. Os números da lista recebem de verdade.
+
+Quem bloqueia é a IA, no transporte, e não esta rota nem a tela: o estado mora na IA (`AiTenantConfig`) e o BFF só valida, repassa e registra a atividade.
+
+| Rota | O que faz |
+| --- | --- |
+| `GET /v1/settings/ai/sandbox` | lê o estado do negócio da sessão |
+| `PATCH /v1/settings/ai/sandbox` | grava `enabled`, `exceptionPhones` ou os dois |
+
+Resposta:
+
+```json
+{
+  "enabled": true,
+  "exceptionPhones": ["5511912345678"],
+  "updatedAt": "2026-10-18T12:00:00.000Z"
+}
+```
+
+| Campo | Valores | Significado |
+| --- | --- | --- |
+| `enabled` | booleano | modo sandbox ligado; ausente na escrita preserva |
+| `exceptionPhones` | até 20 telefones | números que recebem de verdade, canônicos na resposta (`55` + DDD + número, só dígitos). Na escrita aceitam máscara, sem `55` e com ou sem o 9º dígito, e a lista enviada **substitui** a gravada; ausente preserva |
+| `updatedAt` | timestamp ISO ou `null` | última gravação; `null` quando nunca foi gravado |
+
+`PATCH` recusa com `400 VALIDATION_ERROR`, sem chamar a IA e sem gravar nada, número que não é brasileiro válido (`details.index` aponta qual), mais de 20 números ou campo desconhecido. Repetidos (inclusive com e sem o 9º dígito) ficam uma vez só. Negócio ainda sem configuração na IA: o BFF projeta a configuração e repete uma vez. Falha da IA ao ler ou gravar é `UPSTREAM_ERROR`, nunca sucesso. Ligar, desligar e mudar a lista entram no registro de atividade (`settings.ai_sandbox_enabled`, `settings.ai_sandbox_disabled`, `settings.ai_sandbox_updated`), só com o número de exceções, nunca os telefones.
+
+Na saída suprimida, o id de transporte é `sandbox-<correlationId>` e o `rawPayload` guardado leva `avenlySandbox: { suppressed: true, reason, suppressedAt }`, com `reason` `no_exceptions`, `not_exception` ou `recipient_phone_unknown` (conversa por LID cujo telefone não aparece em nenhuma mensagem recebida). Conversa por LID é comparada pelo telefone que o WhatsApp mandou junto (`SenderAlt`/`RecipientAlt`), como na entrada; sem ele, não é exceção. As travas globais do ambiente (`WHATSAPP_OUTBOUND_DISABLED`, `AI_REPLY_ONLY_PHONES`) continuam valendo por cima. O teste real de ativação (número da plataforma ↔ número do negócio) não fala com cliente e não passa pelo sandbox.
 
 ## Registro de atividade do negócio (D-176)
 

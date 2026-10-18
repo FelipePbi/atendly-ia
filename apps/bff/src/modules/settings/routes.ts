@@ -1,4 +1,7 @@
-import { reminderMessageExampleInputSchema } from "@avenly-ia/public-api-contract";
+import {
+  aiSandboxSettingsInputSchema,
+  reminderMessageExampleInputSchema,
+} from "@avenly-ia/public-api-contract";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
@@ -28,6 +31,10 @@ import {
 import { CALENDAR_SOURCE } from "../../lib/calendar-source.js";
 import { AppError, toErrorMessage } from "../../lib/errors.js";
 import { dataResponse, parseBody } from "../../lib/http.js";
+import {
+  normalizeBrazilianWhatsappPhone,
+  phonesMatch,
+} from "../../lib/phone.js";
 import { getPrisma } from "../../lib/prisma.js";
 import {
   currentTenantContext,
@@ -358,6 +365,74 @@ export async function registerV1SettingsRoutes(
         request,
         await settingsState(request, scheduling, projected),
       );
+    },
+  );
+
+  // --- Modo sandbox da IA (D-199) -----------------------------------------
+  // A IA e a dona do estado (e ela quem envia); o BFF valida, repassa e
+  // registra a atividade. Falha da IA nunca vira sucesso: a resposta e o erro.
+
+  app.get(
+    "/v1/settings/ai/sandbox",
+    { preHandler: requireTenantContext },
+    async (request) =>
+      dataResponse(request, await ai.getAiSandbox(internalContext(request))),
+  );
+
+  app.patch(
+    "/v1/settings/ai/sandbox",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const body = parseBody(aiSandboxSettingsInputSchema, request.body);
+      const exceptionPhones =
+        body.exceptionPhones === undefined
+          ? undefined
+          : normalizeSandboxExceptionPhones(body.exceptionPhones);
+      const tenant = currentTenantContext(request);
+      const context = internalContext(request);
+      const before = await ai.getAiSandbox(context);
+      const input = {
+        ...(body.enabled === undefined ? {} : { enabled: body.enabled }),
+        ...(exceptionPhones === undefined ? {} : { exceptionPhones }),
+      };
+      let after;
+      try {
+        after = await ai.updateAiSandbox(context, input);
+      } catch (error) {
+        // Negocio ainda sem configuracao na IA: projeta (como qualquer
+        // gravacao das Configuracoes faz) e tenta uma vez mais.
+        if (upstreamCodeOf(error) !== "AI_TENANT_CONFIG_NOT_PROJECTED") {
+          throw error;
+        }
+        await syncAi(request, ai);
+        after = await ai.updateAiSandbox(context, input);
+      }
+      const changes = diffFields(
+        {
+          enabled: before.enabled,
+          exceptionCount: before.exceptionPhones.length,
+        },
+        { enabled: after.enabled, exceptionCount: after.exceptionPhones.length },
+        ["enabled", "exceptionCount"],
+      );
+      const listChanged =
+        before.exceptionPhones.join(",") !== after.exceptionPhones.join(",");
+      if (changes.length > 0 || listChanged) {
+        await recordActivity(getPrisma(), tenant.tenantId, {
+          actor: userActor(tenant.userId),
+          area: "SETTINGS",
+          action:
+            before.enabled === after.enabled
+              ? "settings.ai_sandbox_updated"
+              : after.enabled
+                ? "settings.ai_sandbox_enabled"
+                : "settings.ai_sandbox_disabled",
+          entityType: "ai_settings",
+          // So o numero de excecoes: os telefones nao vao para o registro.
+          changes,
+        });
+      }
+      return dataResponse(request, after);
     },
   );
 
@@ -753,4 +828,36 @@ function businessActivityFields(
     modalities: [...profile.modalities].sort().join(",") || null,
     address: profile.address,
   };
+}
+
+/**
+ * Excecoes do modo sandbox (D-199): numero brasileiro valido, canonico, sem
+ * repeticao (com ou sem o 9o digito). Numero invalido recusa a gravacao
+ * inteira: nunca e descartado em silencio.
+ */
+function normalizeSandboxExceptionPhones(phones: string[]): string[] {
+  const result: string[] = [];
+  phones.forEach((raw, index) => {
+    const phone = normalizeBrazilianWhatsappPhone(raw);
+    if (!phone) {
+      throw new AppError(
+        "VALIDATION_ERROR",
+        "Sandbox exception phone is not a valid Brazilian number.",
+        400,
+        { field: "exceptionPhones", index },
+      );
+    }
+    if (!result.some((existing) => phonesMatch(existing, phone))) {
+      result.push(phone);
+    }
+  });
+  return result;
+}
+
+function upstreamCodeOf(error: unknown): string | undefined {
+  if (!(error instanceof AppError) || error.code !== "UPSTREAM_ERROR") {
+    return undefined;
+  }
+  return (error.details as { upstreamCode?: string } | undefined)
+    ?.upstreamCode;
 }

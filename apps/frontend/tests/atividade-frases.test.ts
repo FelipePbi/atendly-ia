@@ -26,13 +26,26 @@ function entry(overrides: Partial<ActivityEntry>): ActivityEntry {
   };
 }
 
+/** As linhas como a tela as lê: rótulo, antes (ou `null`) e depois. */
+function lines(value: ActivityEntry) {
+  return changeLines(value).map((line) => ({
+    label: line.label,
+    before: line.before?.text ?? null,
+    after: line.after.text,
+  }));
+}
+
 describe("frases do registro de atividade", () => {
   it("diz que a IA remarcou, de que horário para qual", () => {
     const rescheduled = entry({
       actor: "AI",
       action: "appointment.rescheduled",
       changes: [
-        { field: "startsAt", before: "2026-10-20T14:00", after: "2026-10-20T15:30" },
+        {
+          field: "startsAt",
+          before: "2026-10-20T14:00",
+          after: "2026-10-20T15:30",
+        },
       ],
       details: { customerName: "Ana", startsAt: "2026-10-20T15:30" },
     });
@@ -49,7 +62,11 @@ describe("frases do registro de atividade", () => {
         entry({
           action: "appointment.rescheduled",
           changes: [
-            { field: "startsAt", before: "2026-10-20T14:00", after: "2026-10-22T09:00" },
+            {
+              field: "startsAt",
+              before: "2026-10-20T14:00",
+              after: "2026-10-22T09:00",
+            },
           ],
           details: { customerName: "Ana" },
         }),
@@ -74,14 +91,17 @@ describe("frases do registro de atividade", () => {
     const cancelled = entry({
       action: "appointment.cancelled",
       changes: [{ field: "status", before: "CONFIRMED", after: "CANCELLED" }],
-      details: { customerName: "Bia", startsAt: "2026-10-21T10:00", reason: "Cliente viajou" },
+      details: {
+        customerName: "Bia",
+        startsAt: "2026-10-21T10:00",
+        reason: "Cliente viajou",
+      },
     });
     expect(activitySentence(cancelled)).toBe(
       "Você cancelou o horário de Bia de 21/10 às 10:00",
     );
-    expect(changeLines(cancelled)).toEqual([
-      { label: "Situação", before: "Confirmado", after: "Cancelado" },
-    ]);
+    // "Confirmado → Cancelado" repetiria a frase.
+    expect(changeLines(cancelled)).toEqual([]);
     expect(activityNote(cancelled)).toBe("Motivo: Cliente viajou");
   });
 
@@ -95,10 +115,16 @@ describe("frases do registro de atividade", () => {
         { field: "phone", before: "+5511988887777", after: "+5511977776666" },
       ],
     });
-    expect(activitySentence(edited)).toBe("Você alterou o cadastro de Ana Souza");
-    expect(changeLines(edited)).toEqual([
+    expect(activitySentence(edited)).toBe(
+      "Você alterou o cadastro de Ana Souza",
+    );
+    expect(lines(edited)).toEqual([
       { label: "Nome", before: "Ana", after: "Ana Souza" },
-      { label: "Telefone", before: "(11) 98888-7777", after: "(11) 97777-6666" },
+      {
+        label: "Telefone",
+        before: "+55 11 98888-7777",
+        after: "+55 11 97777-6666",
+      },
     ]);
     expect(activityHref(edited)).toBe(
       "/clientes/detalhes?id=customer-1&voltar=%2Fconfiguracoes%2Fatividade",
@@ -115,8 +141,8 @@ describe("frases do registro de atividade", () => {
         { field: "durationMinutes", before: 30, after: 60 },
       ],
     });
-    expect(changeLines(service)).toEqual([
-      { label: "Preço", before: "R$ 80", after: "R$ 95,50" },
+    expect(lines(service)).toEqual([
+      { label: "Preço", before: "R$ 80,00", after: "R$ 95,50" },
       { label: "Duração", before: "30 min", after: "1 h" },
     ]);
 
@@ -129,8 +155,10 @@ describe("frases do registro de atividade", () => {
         { field: "weekday.1", before: "08:00–20:00", after: "09:00–18:00" },
       ],
     });
-    expect(activitySentence(week)).toBe("Você alterou os horários de atendimento");
-    expect(changeLines(week)).toEqual([
+    expect(activitySentence(week)).toBe(
+      "Você alterou os horários de atendimento",
+    );
+    expect(lines(week)).toEqual([
       { label: "Domingo", before: "08:00–20:00", after: "Fechado" },
       { label: "Segunda", before: "08:00–20:00", after: "09:00–18:00" },
     ]);
@@ -153,39 +181,86 @@ describe("frases do registro de atividade", () => {
 
   it("nenhuma ação conhecida usa tenant, sync, handoff, LLM ou provider", () => {
     const actions = [
-      "appointment.created", "appointment.rescheduled", "appointment.cancelled",
-      "appointment.completed", "appointment.no_show", "appointment.final_value_set",
-      "appointment.presence_confirmed", "appointment.deleted", "customer.created",
-      "customer.updated", "customer.deleted", "customer.guardian_set",
-      "customer.guardian_confirmed", "customer.guardian_cleared", "customer.note_added",
-      "customer.note_deleted", "customer.note_ai_access", "customer.tag_added",
-      "customer.tag_deleted", "customer.tag_ai_access", "customer.memory_added",
-      "customer.memory_ai_access", "customer.memory_removed", "service.created",
-      "service.updated", "service.archived", "service.reactivated",
-      "service.ai_instruction_updated", "agenda.block_created", "agenda.block_removed",
-      "agenda.block_moved", "agenda.block_series_created", "agenda.block_series_updated",
-      "agenda.block_series_removed", "agenda.extra_availability_added",
-      "agenda.extra_availability_removed", "agenda.unavailability_added",
-      "agenda.unavailability_removed", "settings.business_updated", "settings.ai_enabled",
-      "settings.ai_paused", "settings.ai_updated", "settings.ai_sandbox_enabled",
-      "settings.ai_sandbox_disabled", "settings.ai_sandbox_updated",
+      "appointment.created",
+      "appointment.rescheduled",
+      "appointment.cancelled",
+      "appointment.completed",
+      "appointment.no_show",
+      "appointment.final_value_set",
+      "appointment.presence_confirmed",
+      "appointment.deleted",
+      "customer.created",
+      "customer.updated",
+      "customer.deleted",
+      "customer.guardian_set",
+      "customer.guardian_confirmed",
+      "customer.guardian_cleared",
+      "customer.note_added",
+      "customer.note_deleted",
+      "customer.note_ai_access",
+      "customer.tag_added",
+      "customer.tag_deleted",
+      "customer.tag_ai_access",
+      "customer.memory_added",
+      "customer.memory_ai_access",
+      "customer.memory_removed",
+      "service.created",
+      "service.updated",
+      "service.archived",
+      "service.reactivated",
+      "service.ai_instruction_updated",
+      "agenda.block_created",
+      "agenda.block_removed",
+      "agenda.block_moved",
+      "agenda.block_series_created",
+      "agenda.block_series_updated",
+      "agenda.block_series_removed",
+      "agenda.extra_availability_added",
+      "agenda.extra_availability_removed",
+      "agenda.unavailability_added",
+      "agenda.unavailability_removed",
+      "settings.business_updated",
+      "settings.ai_enabled",
+      "settings.ai_paused",
+      "settings.ai_updated",
+      "settings.ai_sandbox_enabled",
+      "settings.ai_sandbox_disabled",
+      "settings.ai_sandbox_updated",
       "settings.availability_updated",
-      "settings.reminders_updated", "settings.timezone_updated",
-      "settings.notifications_updated", "settings.retention_updated",
-      "settings.whatsapp_connect_started", "settings.whatsapp_disconnected",
-      "account.profile_updated", "account.password_changed", "account.deletion_requested",
-      "account.deletion_cancelled", "knowledge.document_created",
-      "knowledge.document_updated", "knowledge.document_removed",
-      "knowledge.other_info_updated", "conversation.taken_over",
-      "conversation.released_to_ai", "conversation.handoff_requested",
-      "conversation.category_changed", "conversation.contact_ignored",
-      "conversation.contact_unignored", "conversation.resolved", "import.started",
-      "import.completed", "import.source_connected", "import.source_disconnected",
+      "settings.reminders_updated",
+      "settings.timezone_updated",
+      "settings.notifications_updated",
+      "settings.retention_updated",
+      "settings.whatsapp_connect_started",
+      "settings.whatsapp_disconnected",
+      "account.profile_updated",
+      "account.password_changed",
+      "account.deletion_requested",
+      "account.deletion_cancelled",
+      "knowledge.document_created",
+      "knowledge.document_updated",
+      "knowledge.document_removed",
+      "knowledge.other_info_updated",
+      "conversation.taken_over",
+      "conversation.released_to_ai",
+      "conversation.handoff_requested",
+      "conversation.category_changed",
+      "conversation.contact_ignored",
+      "conversation.contact_unignored",
+      "conversation.resolved",
+      "import.started",
+      "customer.deactivated",
+      "customer.reactivated",
+      "import.completed",
+      "import.source_connected",
+      "import.source_disconnected",
     ];
     for (const action of actions) {
       for (const actor of ["AI", "USER"] as const) {
         const sentence = activitySentence(entry({ action, actor }));
-        expect(sentence, action).not.toMatch(/tenant|sync|handoff|llm|provider|undefined|null/iu);
+        expect(sentence, action).not.toMatch(
+          /tenant|sync|handoff|llm|provider|undefined|null/iu,
+        );
         expect(sentence, action).not.toMatch(/fez uma alteração/u);
       }
     }

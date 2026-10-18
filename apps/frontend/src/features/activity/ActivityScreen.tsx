@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   ActivityArea,
@@ -12,10 +12,12 @@ import type {
 } from "@/data";
 import { zonedDateTimeParts } from "@/features/agenda/occupancy";
 import { SettingsPage } from "@/features/settings/shared/SettingsPage";
-import { Icon } from "@/shared/icons/Icon";
+import { Icon, type IconName } from "@/shared/icons/Icon";
 import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
+import { swatchProps } from "@/shared/serviceColor";
 import { BrandLoader } from "@/shared/ui/Brand";
 import { Button } from "@/shared/ui/Button";
+import { Dialog } from "@/shared/ui/Dialog";
 import { Field } from "@/shared/ui/Field";
 import { StatePanel } from "@/shared/ui/States";
 
@@ -23,7 +25,9 @@ import {
   activityHref,
   activityNote,
   activitySentence,
+  type ChangeLine,
   changeLines,
+  type ChangeValue,
 } from "./activityCopy";
 import {
   ACTIVITY_PAGE_SIZE,
@@ -74,6 +78,55 @@ const AREA_LABELS: Record<ActivityArea, string> = {
   SETTINGS: "Configurações",
   IMPORT: "Importação",
 };
+
+const AREA_ICONS: Record<ActivityArea, IconName> = {
+  AGENDA: "calendar",
+  CUSTOMERS: "users",
+  SERVICES: "briefcase",
+  CONVERSATIONS: "chat",
+  SETTINGS: "settings",
+  IMPORT: "import",
+};
+
+/** Os quatro filtros do menu "Filtros" (D-200). "ALL" é o filtro desligado. */
+type Filters = {
+  period: Period;
+  actor: Actor;
+  area: ActivityArea | "ALL";
+  kind: ActivityKind | "ALL";
+};
+
+const NO_FILTERS: Filters = {
+  period: "ALL",
+  actor: "ALL",
+  area: "ALL",
+  kind: "ALL",
+};
+
+type FilterKey = keyof Filters;
+
+const FILTER_GROUPS: ReadonlyArray<{
+  key: FilterKey;
+  legend: string;
+  options: ReadonlyArray<{ value: string; label: string }>;
+}> = [
+  { key: "period", legend: "Período", options: PERIODS },
+  { key: "actor", legend: "Quem fez", options: ACTORS },
+  { key: "area", legend: "Área", options: AREAS },
+  { key: "kind", legend: "Tipo de ação", options: KINDS },
+];
+
+/** Filtros ligados, na ordem do menu, com o rótulo da opção escolhida. */
+function activeFilters(
+  filters: Filters,
+): Array<{ key: FilterKey; label: string }> {
+  return FILTER_GROUPS.flatMap((group) => {
+    const value = filters[group.key];
+    if (value === "ALL") return [];
+    const option = group.options.find((item) => item.value === value);
+    return option ? [{ key: group.key, label: option.label }] : [];
+  });
+}
 
 const DAY_MS = 86_400_000;
 const SEARCH_DELAY_MS = 300;
@@ -130,17 +183,17 @@ function groupByDay(items: ActivityEntry[], timeZone: string): DayGroup[] {
 }
 
 /**
- * Configurações → Atividade (D-176): tudo o que você e a IA fizeram no
- * negócio, do mais recente para o mais antigo, com o antes e o depois de
- * cada alteração. Filtros de período, autor, área e tipo, busca por nome e
- * scroll infinito como na lista de Clientes.
+ * Configurações → Atividade (D-176, D-200): tudo o que você e a IA fizeram
+ * no negócio, do mais recente para o mais antigo, com o antes e o depois de
+ * cada alteração. A busca fica à vista; período, autor, área e tipo ficam no
+ * menu "Filtros" (modal no centro), e os ligados aparecem como chips que se
+ * removem com um toque. Scroll infinito como na lista de Clientes.
  */
 export function ActivityScreen({ timeZone }: { timeZone: string }) {
-  const [period, setPeriod] = useState<Period>("ALL");
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [from, setFrom] = useState<string | undefined>(undefined);
-  const [actor, setActor] = useState<Actor>("ALL");
-  const [area, setArea] = useState<ActivityArea | "ALL">("ALL");
-  const [kind, setKind] = useState<ActivityKind | "ALL">("ALL");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const filterButton = useRef<HTMLButtonElement>(null);
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
 
@@ -153,15 +206,30 @@ export function ActivityScreen({ timeZone }: { timeZone: string }) {
   const query = useMemo(() => {
     const value: Omit<ActivityQuery, "cursor" | "limit"> = {};
     if (from) value.from = from;
-    if (actor !== "ALL") value.actor = actor;
-    if (area !== "ALL") value.areas = [area];
-    if (kind !== "ALL") value.kinds = [kind];
+    if (filters.actor !== "ALL") value.actor = filters.actor;
+    if (filters.area !== "ALL") value.areas = [filters.area];
+    if (filters.kind !== "ALL") value.kinds = [filters.kind];
     if (q) value.q = q;
     return value;
-  }, [actor, area, from, kind, q]);
+  }, [filters.actor, filters.area, filters.kind, from, q]);
 
   const pages = useActivityPages(query);
   const filtered = Object.keys(query).length > 0;
+  const chips = activeFilters(filters);
+
+  function apply(next: Filters) {
+    setFilters(next);
+    // O início do período é calculado ao aplicar: "Hoje" é o hoje de agora.
+    setFrom(periodStart(next.period, timeZone));
+  }
+
+  /** Chip removido some da tela: o foco vai para o botão "Filtros". */
+  function removeChip(next: Filters) {
+    apply(next);
+    filterButton.current?.focus();
+  }
+
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
 
   return (
     <SettingsPage title="Atividade">
@@ -169,83 +237,155 @@ export function ActivityScreen({ timeZone }: { timeZone: string }) {
         <p className="activity-intro">
           Tudo o que você e a IA fizeram no seu negócio, com o que mudou.
         </p>
-        <div className="activity-filters">
+        <div className="activity-toolbar">
           <Field
             className="activity-search"
             icon="search"
             label="Buscar"
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Nome do cliente, serviço ou contato"
+            placeholder="Ex.: Ana ou Corte"
             type="search"
             value={search}
           />
-          <div className="activity-selects">
-            <FilterSelect
-              label="Período"
-              onChange={(value) => {
-                setPeriod(value);
-                setFrom(periodStart(value, timeZone));
-              }}
-              options={PERIODS}
-              value={period}
-            />
-            <FilterSelect
-              label="Quem fez"
-              onChange={setActor}
-              options={ACTORS}
-              value={actor}
-            />
-            <FilterSelect
-              label="Área"
-              onChange={setArea}
-              options={AREAS}
-              value={area}
-            />
-            <FilterSelect
-              label="Tipo de ação"
-              onChange={setKind}
-              options={KINDS}
-              value={kind}
-            />
-          </div>
+          <button
+            aria-haspopup="dialog"
+            aria-label={
+              chips.length > 0
+                ? `Filtros, ${chips.length} ${chips.length === 1 ? "ativo" : "ativos"}`
+                : "Filtros"
+            }
+            className={clsx(
+              "btn btn-secondary activity-filter-button",
+              chips.length > 0 && "is-active",
+            )}
+            onClick={() => setMenuOpen(true)}
+            ref={filterButton}
+            type="button"
+          >
+            <Icon name="nav-sliders" />
+            <span>Filtros</span>
+            {chips.length > 0 && (
+              <span aria-hidden="true" className="activity-filter-count">
+                {chips.length}
+              </span>
+            )}
+          </button>
         </div>
+        {chips.length > 0 && (
+          <ul aria-label="Filtros ativos" className="activity-chips">
+            {chips.map((chip) => (
+              <li key={chip.key}>
+                <button
+                  aria-label={`Remover filtro: ${chip.label}`}
+                  className="activity-chip"
+                  onClick={() => removeChip({ ...filters, [chip.key]: "ALL" })}
+                  type="button"
+                >
+                  <span>{chip.label}</span>
+                  <Icon name="x" />
+                </button>
+              </li>
+            ))}
+            {chips.length > 1 && (
+              <li>
+                <button
+                  className="activity-chip-clear"
+                  onClick={() => removeChip(NO_FILTERS)}
+                  type="button"
+                >
+                  Limpar filtros
+                </button>
+              </li>
+            )}
+          </ul>
+        )}
         <ActivityList filtered={filtered} pages={pages} timeZone={timeZone} />
       </div>
+      <Dialog
+        onClose={closeMenu}
+        open={menuOpen}
+        title="Filtros"
+        variant="modal"
+      >
+        {menuOpen && (
+          <ActivityFiltersForm
+            filters={filters}
+            onApply={(next) => {
+              apply(next);
+              setMenuOpen(false);
+            }}
+          />
+        )}
+      </Dialog>
     </SettingsPage>
   );
 }
 
-function FilterSelect<T extends string>({
-  label,
-  onChange,
-  options,
-  value,
+/**
+ * Menu "Filtros": os quatro grupos em chips de escolha única. Nada muda na
+ * lista até "Aplicar"; fechar descarta o rascunho. "Limpar filtros" volta o
+ * rascunho para "tudo".
+ */
+function ActivityFiltersForm({
+  filters,
+  onApply,
 }: {
-  label: string;
-  onChange: (value: T) => void;
-  options: Array<{ value: T; label: string }>;
-  value: T;
+  filters: Filters;
+  onApply: (filters: Filters) => void;
 }) {
+  // O rascunho nasce dos filtros aplicados a cada abertura.
+  const [draft, setDraft] = useState<Filters>(filters);
+  const draftCount = activeFilters(draft).length;
   return (
-    <label className="field activity-select">
-      <span className="label">{label}</span>
-      <span className="input-wrap">
-        <select
-          className="input select"
-          onChange={(event) => onChange(event.target.value as T)}
-          value={value}
+    <form
+      className="activity-filters-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onApply(draft);
+      }}
+    >
+      {FILTER_GROUPS.map((group) => (
+        <fieldset className="activity-filter-group" key={group.key}>
+          <legend>{group.legend}</legend>
+          <div className="activity-filter-options">
+            {group.options.map((option) => (
+              <label
+                className={clsx(
+                  "activity-filter-option",
+                  draft[group.key] === option.value && "is-selected",
+                )}
+                key={option.value}
+              >
+                <input
+                  checked={draft[group.key] === option.value}
+                  name={`activity-${group.key}`}
+                  onChange={() =>
+                    setDraft((current) => ({
+                      ...current,
+                      [group.key]: option.value,
+                    }))
+                  }
+                  type="radio"
+                  value={option.value}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ))}
+      <div className="modal-actions activity-filters-actions">
+        <Button
+          disabled={draftCount === 0}
+          onClick={() => setDraft(NO_FILTERS)}
+          type="button"
+          variant="tertiary"
         >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <span aria-hidden="true" className="select-icon">
-          <Icon name="chevron-down" />
-        </span>
-      </span>
-    </label>
+          Limpar filtros
+        </Button>
+        <Button type="submit">Aplicar</Button>
+      </div>
+    </form>
   );
 }
 
@@ -317,10 +457,24 @@ function ActivityList({
   return (
     <div className={clsx("activity-days", arriving && "is-arriving")}>
       {groups.map((group) => (
-        <section className="activity-day" key={group.date}>
-          <h2 className="activity-day-title">
-            {dayTitle(group.date, today, yesterday)}
-          </h2>
+        <section
+          aria-labelledby={`activity-day-${group.date}`}
+          className="activity-day"
+          key={group.date}
+        >
+          <div className="activity-day-head">
+            <h2
+              className="activity-day-title"
+              id={`activity-day-${group.date}`}
+            >
+              {dayTitle(group.date, today, yesterday)}
+            </h2>
+            <span className="activity-day-count">
+              {group.items.length === 1
+                ? "1 registro"
+                : `${group.items.length} registros`}
+            </span>
+          </div>
           <ol className="activity-list">
             {group.items.map((entry) => (
               <ActivityRow entry={entry} key={entry.id} timeZone={timeZone} />
@@ -345,57 +499,106 @@ function ActivityRow({
   const href = activityHref(entry);
   const time = zonedDateTimeParts(entry.occurredAt, timeZone).time;
   const sentence = activitySentence(entry);
+  const ai = entry.actor === "AI";
   return (
     <li className="activity-row">
       <span
         aria-hidden="true"
-        className={clsx(
-          "activity-actor",
-          entry.actor === "AI" ? "is-ai" : "is-user",
-        )}
+        className={clsx("activity-actor", ai ? "is-ai" : "is-user")}
       >
-        {entry.actor === "AI" ? "IA" : <Icon name="user" />}
+        <Icon name={ai ? "spark" : "user"} />
       </span>
       <div className="activity-row-body">
-        <p className="activity-sentence">
-          {href ? (
-            <Link className="activity-link" href={href}>
-              {sentence}
-            </Link>
-          ) : (
-            sentence
-          )}
-        </p>
+        <div className="activity-row-head">
+          <p className="activity-sentence">
+            {href ? (
+              <Link className="activity-link" href={href}>
+                {sentence}
+              </Link>
+            ) : (
+              sentence
+            )}
+          </p>
+          <time className="activity-time" dateTime={entry.occurredAt}>
+            {time}
+          </time>
+        </div>
         {lines.length > 0 && (
           <dl className="activity-changes">
             {lines.map((line, index) => (
-              <div className="activity-change" key={`${line.label}-${index}`}>
-                <dt>{line.label}</dt>
-                <dd>
-                  <span className="activity-before">
-                    <span className="sr-only">de </span>
-                    {line.before}
-                  </span>
-                  <span aria-hidden="true" className="activity-arrow">
-                    →
-                  </span>
-                  <span className="activity-after">
-                    <span className="sr-only"> para </span>
-                    {line.after}
-                  </span>
-                </dd>
-              </div>
+              <ActivityChangeRow key={`${line.field}-${index}`} line={line} />
             ))}
           </dl>
         )}
         {note && <p className="activity-note">{note}</p>}
         <p className="activity-meta">
-          <time dateTime={entry.occurredAt}>{time}</time>
-          <span aria-hidden="true"> · </span>
-          {AREA_LABELS[entry.area]}
+          <span className="activity-area">
+            <Icon name={AREA_ICONS[entry.area]} />
+            {AREA_LABELS[entry.area]}
+          </span>
         </p>
       </div>
     </li>
+  );
+}
+
+function ActivityChangeRow({ line }: { line: ChangeLine }) {
+  return (
+    <div className={clsx("activity-change", !line.before && "is-single")}>
+      <dt>{line.label}</dt>
+      <dd>
+        {line.before && (
+          <>
+            <ChangeSide side="before" value={line.before} />
+            <span aria-hidden="true" className="activity-arrow">
+              →
+            </span>
+          </>
+        )}
+        <ChangeSide side={line.before ? "after" : "only"} value={line.after} />
+      </dd>
+    </div>
+  );
+}
+
+function ChangeSide({
+  side,
+  value,
+}: {
+  side: "before" | "after" | "only";
+  value: ChangeValue;
+}) {
+  return (
+    <span
+      className={clsx(
+        "activity-value",
+        side === "before" && "activity-before",
+        side === "after" && "activity-after",
+        value.muted && "is-muted",
+      )}
+    >
+      {side === "before" && <span className="sr-only">de </span>}
+      {side === "after" && <span className="sr-only"> para </span>}
+      {value.color !== undefined && (
+        <span
+          aria-hidden="true"
+          className={clsx(
+            "activity-swatch",
+            value.color === null && "is-empty",
+          )}
+          {...swatchProps(value.color)}
+        />
+      )}
+      {value.items && value.items.length > 1 ? (
+        <span className="activity-value-items">
+          {value.items.map((item) => (
+            <span key={item}>{item}</span>
+          ))}
+        </span>
+      ) : (
+        <span className="activity-value-text">{value.text}</span>
+      )}
+    </span>
   );
 }
 

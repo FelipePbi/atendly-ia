@@ -18,6 +18,37 @@ export interface ColoredService {
   colorHex?: string | null;
 }
 
+/** As seis cores sugeridas, na ordem do editor de serviço, com o nome que a pessoa vê. */
+export const SERVICE_COLOR_OPTIONS: ReadonlyArray<{
+  value: ServiceColorToken;
+  label: string;
+}> = [
+  { value: "SKY", label: "Ameixa" },
+  { value: "AMBER", label: "Terracota" },
+  { value: "EMERALD", label: "Oliva" },
+  { value: "SLATE", label: "Ardósia" },
+  { value: "ROSE", label: "Rosa-antigo" },
+  { value: "VIOLET", label: "Lavanda" },
+];
+
+export function isServiceColorToken(
+  value: unknown,
+): value is ServiceColorToken {
+  return SERVICE_COLOR_OPTIONS.some((option) => option.value === value);
+}
+
+/**
+ * Nome legível de uma cor de serviço: o da paleta ("Rosa-antigo") ou o
+ * código da personalizada em maiúsculas ("#D479FF").
+ */
+export function serviceColorLabel(color: ServiceColor): string {
+  if (isHexColor(color)) return color.toUpperCase();
+  return (
+    SERVICE_COLOR_OPTIONS.find((option) => option.value === color)?.label ??
+    color
+  );
+}
+
 const HEX = /^#[0-9a-f]{6}$/i;
 
 export function isHexColor(value: unknown): value is HexColor {

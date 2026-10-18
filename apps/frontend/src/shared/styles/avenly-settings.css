@@ -4104,9 +4104,11 @@ html.vt-settings-swap::view-transition-new(settings-panel) {
   }
 }
 
-/* Configurações → Atividade (D-176): registro do que a profissional e a IA
-   fizeram, com o antes e o depois. Mobile-first: filtros em duas colunas,
-   lista em cartão agrupada por dia, como a central de notificações. */
+/* Configurações → Atividade (D-176, D-200): registro do que a profissional e
+   a IA fizeram, com o antes e o depois. Mobile-first: busca à vista e o
+   botão "Filtros" ao lado (o resto dos filtros fica no modal), um cartão por
+   dia e, em cada linha, quem fez, a frase, a hora, o antes → depois num
+   bloco rebaixado e a área numa etiqueta. */
 .activity-page {
   display: flex;
   flex-direction: column;
@@ -4119,55 +4121,204 @@ html.vt-settings-swap::view-transition-new(settings-panel) {
   font-size: 15px;
   line-height: 1.45;
 }
-.activity-filters {
+.activity-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.activity-search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.activity-filter-button {
+  flex: none;
+  padding: 0 14px;
+}
+.activity-filter-button .icon {
+  width: 18px;
+  height: 18px;
+}
+.activity-filter-button.is-active {
+  border-color: var(--at-color-primary);
+  background: var(--at-color-primary-tint);
+}
+.activity-filter-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--at-color-primary);
+  color: var(--at-color-on-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-chips {
+  margin: -4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+}
+.activity-chip {
+  min-height: 32px;
+  padding: 0 8px 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--at-color-primary-tint-border);
+  border-radius: 999px;
+  background: var(--at-color-primary-tint);
+  color: var(--at-color-primary-ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--at-duration-fast) var(--at-ease-standard);
+}
+.activity-chip:hover {
+  background: var(--at-color-primary-tint-hover);
+}
+.activity-chip .icon {
+  width: 14px;
+  height: 14px;
+}
+.activity-chip-clear {
+  min-height: 32px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  color: var(--at-color-primary-ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* Menu "Filtros" (modal no centro): cada grupo é uma escolha única em chips. */
+.activity-filters-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
-.activity-selects {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-.activity-select .select {
-  width: 100%;
+.activity-filter-group {
   min-width: 0;
-  text-overflow: ellipsis;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
-@media (min-width: 1280px) {
-  .activity-selects {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
+.activity-filter-group legend {
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--at-color-ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+.activity-filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.activity-filter-option {
+  position: relative;
+  min-height: 36px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--at-color-border);
+  border-radius: 999px;
+  background: var(--at-color-surface);
+  color: var(--at-color-ink-soft);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color var(--at-duration-fast) var(--at-ease-standard),
+    background-color var(--at-duration-fast) var(--at-ease-standard);
+}
+.activity-filter-option:hover {
+  border-color: var(--at-color-border-hover);
+}
+.activity-filter-option input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  appearance: none;
+  cursor: pointer;
+}
+.activity-filter-option.is-selected {
+  border-color: var(--at-color-primary);
+  background: var(--at-color-primary-tint);
+  color: var(--at-color-ink);
+}
+.activity-filter-option:has(input:focus-visible) {
+  outline: 2px solid var(--at-color-primary);
+  outline-offset: 2px;
+}
+/* "Limpar filtros" e "Aplicar" sempre à vista no pé do modal, lado a lado
+   também no celular (a regra geral empilha `.modal-actions`). */
+.modal .activity-filters-actions {
+  position: sticky;
+  bottom: calc(var(--s6) * -1);
+  margin: 0 calc(var(--s6) * -1) calc(var(--s6) * -1);
+  padding: 12px var(--s6) var(--s6);
+  flex-direction: row;
+  justify-content: space-between;
+  border-top: 1px solid var(--at-color-border);
+  background: var(--at-color-surface);
+}
+.modal .activity-filters-actions .btn {
+  width: auto;
+  flex: 1 1 0;
 }
 
 .activity-days {
   display: flex;
   flex-direction: column;
-  padding: 4px 0;
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  background: var(--surface);
+  gap: 20px;
+}
+.activity-day {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.activity-day-head {
+  padding: 0 4px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
 }
 .activity-day-title {
   margin: 0;
-  padding: 12px 16px 4px;
-  color: var(--at-color-ink-muted);
+  color: var(--at-color-ink);
   font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 14px;
+  font-weight: 700;
 }
-.activity-day + .activity-day .activity-day-title {
-  padding-top: 18px;
+.activity-day-count {
+  color: var(--at-color-ink-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 .activity-list {
   margin: 0;
   padding: 0;
   list-style: none;
+  border: 1px solid var(--at-color-border);
+  border-radius: var(--r-card);
+  background: var(--at-color-surface);
 }
 .activity-row {
-  padding: 12px 16px;
+  padding: 14px 16px;
   display: flex;
   gap: 12px;
   color: var(--at-color-ink);
@@ -4176,21 +4327,17 @@ html.vt-settings-swap::view-transition-new(settings-panel) {
   border-top: 1px solid var(--at-color-border);
 }
 .activity-actor {
-  width: 28px;
-  height: 28px;
-  margin-top: 1px;
+  width: 32px;
+  height: 32px;
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
 }
 .activity-actor svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 .activity-actor.is-ai {
   background: var(--at-color-primary-tint-strong);
@@ -4205,13 +4352,28 @@ html.vt-settings-swap::view-transition-new(settings-panel) {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+}
+.activity-row-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
 }
 .activity-sentence {
+  min-width: 0;
+  flex: 1;
   margin: 0;
+  padding-top: 5px;
   font-size: 15px;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+.activity-time {
+  flex: none;
+  padding-top: 7px;
+  color: var(--at-color-ink-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 .activity-link {
   color: inherit;
@@ -4221,17 +4383,23 @@ html.vt-settings-swap::view-transition-new(settings-panel) {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* Antes → depois: bloco rebaixado, rótulo em cima no celular e ao lado a
+   partir de 600 px. */
 .activity-changes {
   margin: 0;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  border-radius: 10px;
+  background: var(--at-color-surface-sunken);
 }
 .activity-change {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 8px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
   font-size: 13px;
   line-height: 1.4;
 }
@@ -4239,25 +4407,71 @@ html.vt-settings-swap::view-transition-new(settings-panel) {
   color: var(--at-color-ink-muted);
 }
 .activity-change dd {
+  min-width: 0;
   margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+}
+@media (min-width: 600px) {
+  .activity-change {
+    grid-template-columns: minmax(120px, 30%) minmax(0, 1fr);
+    align-items: baseline;
+    gap: 12px;
+  }
+  .activity-change dd {
+    align-items: baseline;
+  }
+}
+.activity-value {
   min-width: 0;
   display: inline-flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 6px;
+  align-items: center;
+  gap: 6px;
   overflow-wrap: anywhere;
 }
 .activity-before {
   color: var(--at-color-ink-muted);
+}
+.activity-before .activity-value-text,
+.activity-before .activity-value-items {
   text-decoration: line-through;
   text-decoration-color: var(--at-color-border-strong);
+}
+.activity-after {
+  color: var(--at-color-ink);
+  font-weight: 600;
+}
+.activity-value.is-muted {
+  color: var(--at-color-ink-muted);
+  font-weight: 400;
+  font-style: italic;
+}
+.activity-value.is-muted .activity-value-text {
+  text-decoration: none;
+}
+.activity-value-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .activity-arrow {
   color: var(--at-color-ink-muted);
 }
-.activity-after {
-  color: var(--at-color-ink);
-  font-weight: 500;
+.activity-swatch {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  align-self: center;
+  border-radius: 50%;
+  background: var(--swatch);
+  box-shadow: 0 0 0 1px var(--at-color-border-strong);
+}
+.activity-swatch.is-empty {
+  background: transparent;
+  box-shadow: none;
+  border: 1px dashed var(--at-color-border-strong);
 }
 .activity-note {
   margin: 0;
@@ -4268,9 +4482,26 @@ html.vt-settings-swap::view-transition-new(settings-panel) {
 }
 .activity-meta {
   margin: 0;
-  color: var(--at-color-ink-muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.activity-area {
+  min-height: 22px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  background: var(--at-color-surface-subtle);
+  color: var(--at-color-ink-soft);
   font-size: 12px;
-  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.activity-area .icon {
+  width: 13px;
+  height: 13px;
 }
 .activity-sentinel {
   height: 1px;
@@ -4278,7 +4509,7 @@ html.vt-settings-swap::view-transition-new(settings-panel) {
 .activity-more-loading,
 .activity-end {
   margin: 0;
-  padding: 14px 16px;
+  padding: 4px 16px;
   color: var(--at-color-ink-muted);
   font-size: 13px;
   text-align: center;

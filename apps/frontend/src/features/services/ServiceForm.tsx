@@ -12,7 +12,7 @@ import {
   useState,
 } from "react";
 
-import { type Service, type ServiceColorToken } from "@/data";
+import { type Service } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { PushedBar } from "@/shared/layout/PushedBar";
@@ -24,6 +24,7 @@ import {
   type HexColor,
   isHexColor,
   savedServiceColors,
+  SERVICE_COLOR_OPTIONS,
   type ServiceColor,
   serviceColorOf,
   swatchProps,
@@ -57,14 +58,7 @@ const priceTypeOptions: Array<{
 
 const COLOR_REQUIRED_MESSAGE = "Escolha uma cor para o serviço.";
 
-const colorTokenOptions: Array<{ value: ServiceColorToken; label: string }> = [
-  { value: "SKY", label: "Ameixa" },
-  { value: "AMBER", label: "Terracota" },
-  { value: "EMERALD", label: "Oliva" },
-  { value: "SLATE", label: "Ardósia" },
-  { value: "ROSE", label: "Rosa-antigo" },
-  { value: "VIOLET", label: "Lavanda" },
-];
+const colorTokenOptions = SERVICE_COLOR_OPTIONS;
 
 /*
  * S4 colapsa nome, duração e preço numa linha-resumo. Aqui a linha abre

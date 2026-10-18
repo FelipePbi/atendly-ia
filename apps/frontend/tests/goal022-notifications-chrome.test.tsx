@@ -19,18 +19,16 @@
  */
 
 import {
-  cleanup,
   render,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { SystemStatus } from "@/data";
 import { AppShell } from "@/shared/layout/AppShell";
-import { MoreScreen } from "@/shared/layout/MoreScreen";
-import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
 import { expectNoA11yViolations } from "./support/a11y";
 
@@ -86,16 +84,6 @@ function renderShell() {
   );
 }
 
-/** A tela "Mais" (D-186), dentro da casca como na rota `/mais`. */
-function renderMoreScreen() {
-  return render(
-    <ShellConfigProvider>
-      <AppShell active="mais" title="Mais">
-        <MoreScreen />
-      </AppShell>
-    </ShellConfigProvider>,
-  );
-}
 
 beforeEach(() => {
   statusGet.mockReset();
@@ -110,56 +98,53 @@ beforeEach(() => {
 });
 
 describe("entrada de Notificações", () => {
-  test("existe fora do 'Mais' e também dentro da tela 'Mais'", async () => {
+  test("existe fora do 'Mais' e também dentro do modal 'Mais'", async () => {
     renderShell();
 
     const link = await screen.findByRole("link", { name: /^Notificações/ });
     expect(link).toHaveAttribute("href", "/notificacoes");
-    // "Mais" é um link para a tela própria (D-186), não um diálogo.
-    expect(screen.getByRole("link", { name: "Mais" })).toHaveAttribute(
-      "href",
-      "/mais",
-    );
-    cleanup();
 
-    renderMoreScreen();
-    // Na tela "Mais", Notificações aparece no chrome e entre os atalhos.
-    await waitFor(() =>
-      expect(
-        screen.getAllByRole("link", { name: /^Notificações/ }),
-      ).toHaveLength(2),
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Mais" }));
+
+    // Com o modal aberto, Notificações aparece no chrome e entre os atalhos.
+    expect(screen.getAllByRole("link", { name: /^Notificações/ })).toHaveLength(
+      2,
     );
   });
 
-  test("a tela 'Mais' (D-186): voltar, atalhos no topo, grupos com título, 'Sair' no fim", async () => {
-    renderMoreScreen();
-    expect(
-      await screen.findByRole("heading", { level: 1, name: "Mais" }),
-    ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Voltar" })).toBeVisible();
-    expect(screen.queryByRole("dialog")).toBeNull();
-    const sheet = document.querySelector(".more-page") as HTMLElement;
+  test("o 'Mais' (2026-10-18): modal centralizado, só atalhos, Configurações numa entrada, conta e Sair", async () => {
+    renderShell();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Mais" }));
+    const dialog = screen.getByRole("dialog", { name: "Mais" });
 
-    // Sem o cartão interno de antes.
-    expect(sheet.querySelector(".list")).toBeNull();
-    // Notificações e Serviços como atalhos em destaque.
-    const tiles = sheet.querySelectorAll(".more-tile");
-    expect([...tiles].map((tile) => tile.textContent)).toEqual(
-      expect.arrayContaining([
-        expect.stringMatching(/^Notificações/),
-        "Serviços",
-      ]),
+    // Modal no centro, não folha que sobe de baixo.
+    expect(dialog.closest(".bottom-sheet-wrap")).toBeNull();
+    const tiles = [...dialog.querySelectorAll(".more-tile")].map(
+      (tile) => tile.textContent,
     );
-    // Configurações e conta em grupos com título, para o leitor de tela.
-    const settings = within(sheet).getByRole("region", {
-      name: "Configurações",
-    });
+    expect(tiles).toEqual([
+      expect.stringMatching(/^Notificações/),
+      "Serviços",
+      "Faturamento",
+      "Configurações",
+    ]);
     expect(
-      within(settings).getByRole("link", { name: "Disponibilidade" }),
-    ).toHaveAttribute("href", "/configuracoes/disponibilidade");
-    const account = within(sheet).getByRole("region", { name: "Sua conta" });
-    expect(within(account).getByRole("link", { name: "Conta" })).toBeVisible();
-    expect(within(account).getByRole("button", { name: "Sair" })).toBeVisible();
+      within(dialog).getByRole("link", { name: "Configurações" }),
+    ).toHaveAttribute("href", "/configuracoes");
+    // As configurações não se repetem uma a uma: já têm a própria tela.
+    expect(
+      within(dialog).queryByRole("link", { name: "Disponibilidade" }),
+    ).toBeNull();
+    expect(
+      within(dialog).getByRole("link", { name: "Sua conta" }),
+    ).toHaveAttribute("href", "/configuracoes/conta");
+    expect(within(dialog).getByRole("button", { name: "Sair" })).toBeVisible();
+
+    // Tocar num atalho fecha o modal.
+    await user.click(within(dialog).getByRole("link", { name: "Serviços" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   test("não vira uma quinta aba do bottom nav mobile", async () => {
@@ -168,7 +153,7 @@ describe("entrada de Notificações", () => {
 
     const bottomNav = screen
       .getAllByRole("navigation", { name: "Navegação principal" })
-      .find((nav) => within(nav).queryByRole("link", { name: "Mais" }));
+      .find((nav) => within(nav).queryByRole("button", { name: "Mais" }));
     expect(bottomNav).toBeDefined();
     expect(
       within(bottomNav as HTMLElement).queryByRole("link", {

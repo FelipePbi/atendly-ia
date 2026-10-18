@@ -274,7 +274,7 @@ describe("Conta mostra e edita o nome (Goal067)", () => {
 });
 
 describe("'Mais' tem Disponibilidade e Conversas, sem 'Ajuda' em menu nenhum (Goal067)", () => {
-  test("a tela 'Mais' (D-186) lista Disponibilidade e Conversas, sem 'Ajuda'", () => {
+  test("o 'Mais' leva às Configurações, onde estão Disponibilidade e Conversas, sem 'Ajuda'", () => {
     const { container } = render(
       <MoreMenu
         isCurrent={() => false}
@@ -282,14 +282,11 @@ describe("'Mais' tem Disponibilidade e Conversas, sem 'Ajuda' em menu nenhum (Go
         onLogout={() => undefined}
       />,
     );
-    const dialog = container.querySelector(".more-sheet") as HTMLElement;
+    const menu = container.querySelector(".more-sheet") as HTMLElement;
     expect(
-      within(dialog).getByRole("link", { name: /Disponibilidade/ }),
-    ).toHaveAttribute("href", "/configuracoes/disponibilidade");
-    expect(
-      within(dialog).getByRole("link", { name: /Conversas/ }),
-    ).toHaveAttribute("href", "/configuracoes/conversas");
-    expect(within(dialog).queryByText("Ajuda")).not.toBeInTheDocument();
+      within(menu).getByRole("link", { name: "Configurações" }),
+    ).toHaveAttribute("href", "/configuracoes");
+    expect(within(menu).queryByText("Ajuda")).not.toBeInTheDocument();
   });
 
   test("o menu da conta (sidebar) não mostra 'Ajuda'", async () => {

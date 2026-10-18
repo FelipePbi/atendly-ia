@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   type ReactNode,
   type RefObject,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -36,8 +37,10 @@ import {
   useSystemStatus,
 } from "@/shared/runtime/systemStatus";
 import { Brand } from "@/shared/ui/Brand";
+import { Dialog } from "@/shared/ui/Dialog";
 import { ToastHost } from "@/shared/ui/ToastHost";
 
+import { MoreMenu } from "./MoreMenu";
 import {
   isDestinationActive,
   isMobileTab,
@@ -102,6 +105,11 @@ function AppShellChrome({
   const status = useSystemStatus();
   const notificationsDrawer = useNotificationsDrawer();
   const [accountOpen, setAccountOpen] = useState(false);
+  // "Mais" do celular e do tablet: modal centralizado e compacto (2026-10-18).
+  const [moreOpen, setMoreOpen] = useState(false);
+  const closeMore = useCallback(() => setMoreOpen(false), []);
+  const isCurrent = (href: string) =>
+    pathname === href || pathname.startsWith(`${href}/`);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   // O menu da conta fecha ao clicar fora dele (pedido de 2026-10-16), como
   // fecha pelo próprio botão e pelo Esc.
@@ -404,20 +412,36 @@ function AppShellChrome({
                 <span>{item.label}</span>
               </Link>
             ))}
-            <Link
+            <button
               aria-current={isMoreActive(active) ? "page" : undefined}
+              aria-expanded={moreOpen}
+              aria-haspopup="dialog"
               className={clsx(
                 "bottom-nav-item",
                 isMoreActive(active) && "is-active",
               )}
-              href="/mais"
+              onClick={() => setMoreOpen(true)}
+              type="button"
             >
               <Icon name="nav-more" />
               <span>Mais</span>
-            </Link>
+            </button>
           </nav>
         )}
       </div>
+      <Dialog
+        onClose={closeMore}
+        open={moreOpen}
+        title="Mais"
+        variant="modal"
+      >
+        <MoreMenu
+          isCurrent={isCurrent}
+          notificationsBadge={notificationsBadge}
+          onLogout={() => void logout()}
+          onNavigate={closeMore}
+        />
+      </Dialog>
     </>
   );
 }

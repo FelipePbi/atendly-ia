@@ -7975,12 +7975,12 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 
 **Consequências:** quem agendar com uma cliente inativa não a reativa sozinho; a profissional reativa no perfil.
 
-## D-186 — "Mais" do celular e do tablet vira uma tela
+## D-186 — "Mais" do celular e do tablet: modal centralizado e compacto
 
-**Status:** ACCEPTED em 2026-10-18, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Substitui a folha "Mais" de 2026-10-16.
+**Status:** ACCEPTED em 2026-10-18, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Substitui a folha "Mais" de 2026-10-16 (e a tela `/mais`, que durou um dia).
 
-**Contexto:** o botão "Mais" da barra inferior abria uma folha por cima da tela atual. O usuário pediu uma tela de navegação, com voltar, em que tocar numa opção navega.
+**Contexto:** a folha "Mais" listava, além das telas fora da barra inferior, todas as configurações uma a uma — que já têm a própria tela de Configurações — e subia de baixo cobrindo a tela inteira.
 
-**Decisão:** "Mais" é um link para `/mais`, marcado como ativo nessa rota. A tela tem a barra das telas empurradas (voltar à tela anterior; aberta direto, volta ao Início) e o mesmo conteúdo da folha: atalhos (Notificações com o contador, Serviços, Faturamento), Configurações, Sua conta e Sair. Com a sidebar nada muda; `/mais` também abre ali.
+**Decisão:** o botão "Mais" da barra inferior abre um modal no centro da tela com quatro atalhos — Notificações (com o contador), Serviços, Faturamento e Configurações — e, abaixo, "Sua conta" e "Sair". Tocar num atalho navega e fecha o modal. Com a sidebar nada muda.
 
-**Consequências:** o conteúdo mora em `shared/layout/MoreMenu.tsx`, sem diálogo.
+**Consequências:** telas novas fora da barra inferior entram como atalho; configuração nova entra na tela de Configurações, não no "Mais".

@@ -1231,10 +1231,6 @@ p {
   gap: 20px;
   padding-bottom: 8px;
 }
-/* Tela "Mais" (D-186): o mesmo conteúdo, com a margem das telas. */
-.more-page .more-sheet {
-  padding: 8px 0 24px;
-}
 .more-tiles {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -148,15 +148,19 @@ describe("com movimento reduzido, trocar de item não pisca", () => {
     expect(
       ruleFor(
         motionCss,
-        ".shell-status-layer > .shell-status-banner:nth-child(1) {",
+        // Por tipo: o lembrete do modo sandbox (`<a>`, D-199) vem antes.
+        ".shell-status-layer > .shell-status-banner:nth-of-type(1) {",
       ),
     ).toMatch(/view-transition-name:\s*shell-status-1/);
     expect(
       ruleFor(
         motionCss,
-        ".shell-status-layer > .shell-status-banner:nth-child(2) {",
+        ".shell-status-layer > .shell-status-banner:nth-of-type(2) {",
       ),
     ).toMatch(/view-transition-name:\s*shell-status-2/);
+    expect(
+      ruleFor(motionCss, ".shell-status-layer > .shell-sandbox-chip {"),
+    ).toMatch(/view-transition-name:\s*shell-sandbox/);
     // Fora de navegação, a foto antiga da página não fica sob a nova.
     expect(motionCss).toMatch(
       /html:not\(\.vt-nav-fade\):not\(\.vt-nav-forward\):not\(\s*\.vt-nav-back\s*\)::view-transition-old\(page-content\) \{\s*display: none;/,

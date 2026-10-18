@@ -362,7 +362,7 @@ html.vt-nav-back::view-transition-new(page-content) {
 html.vt-section #main-content {
   view-transition-name: app-main;
 }
-html.vt-section #main-content *:not(.shell-status-banner) {
+html.vt-section #main-content *:not(.shell-status-banner, .shell-sandbox-chip) {
   view-transition-name: none !important;
 }
 ::view-transition-group(app-main) {
@@ -542,20 +542,28 @@ html.vt-appointment-swap::view-transition-new(agenda-content) {
    tela, que tem nome, era desenhada por cima dele. O nome vai em cada aviso,
    não na camada: ela tem altura zero e a foto dela saía vazia (vídeo de
    2026-10-16, o aviso sumia a cada troca de agendamento). */
-.shell-status-layer > .shell-status-banner:nth-child(1) {
+/* Contado por tipo: o lembrete do modo sandbox (D-199) é um `<a>` que vem
+   antes dos avisos e fica parado do mesmo jeito, com nome próprio. */
+.shell-status-layer > .shell-status-banner:nth-of-type(1) {
   view-transition-name: shell-status-1;
 }
-.shell-status-layer > .shell-status-banner:nth-child(2) {
+.shell-status-layer > .shell-status-banner:nth-of-type(2) {
   view-transition-name: shell-status-2;
+}
+.shell-status-layer > .shell-sandbox-chip {
+  view-transition-name: shell-sandbox;
 }
 ::view-transition-group(shell-status-1),
 ::view-transition-group(shell-status-2),
+::view-transition-group(shell-sandbox),
 ::view-transition-new(shell-status-1),
-::view-transition-new(shell-status-2) {
+::view-transition-new(shell-status-2),
+::view-transition-new(shell-sandbox) {
   animation: none;
 }
 ::view-transition-old(shell-status-1),
-::view-transition-old(shell-status-2) {
+::view-transition-old(shell-status-2),
+::view-transition-old(shell-sandbox) {
   display: none;
 }
 

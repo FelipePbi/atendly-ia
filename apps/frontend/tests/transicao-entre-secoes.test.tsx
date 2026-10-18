@@ -210,8 +210,12 @@ describe("o CSS da transição entre seções", () => {
     expect(body(css, "html.vt-section #main-content {")).toMatch(
       /view-transition-name:\s*app-main/,
     );
+    // Os avisos e o lembrete do modo sandbox (D-199) ficam parados.
     expect(
-      body(css, "html.vt-section #main-content *:not(.shell-status-banner)"),
+      body(
+        css,
+        "html.vt-section #main-content *:not(.shell-status-banner, .shell-sandbox-chip)",
+      ),
     ).toMatch(/view-transition-name:\s*none !important/);
   });
 

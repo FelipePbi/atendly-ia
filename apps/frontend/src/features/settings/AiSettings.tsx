@@ -29,6 +29,7 @@ import { Dialog } from "@/shared/ui/Dialog";
 import { Skeleton } from "@/shared/ui/States";
 import { showToast } from "@/shared/ui/toastBus";
 
+import { AiSandboxSection } from "./AiSandboxSection";
 import { SettingsPage } from "./shared/SettingsPage";
 
 /**
@@ -431,6 +432,7 @@ export function AiSettings({
           )}
         </div>
         <AppointmentNoticeRow />
+        <AiSandboxSection />
         <div className="ai-contract">
           <div className="ai-contract-column">
             <h2 className="ai-contract-title is-can">Sozinha, ela</h2>

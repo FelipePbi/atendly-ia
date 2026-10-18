@@ -393,6 +393,12 @@ export function activitySentence(entry: ActivityEntry): string {
       return `${who} pausou a IA`;
     case "settings.ai_updated":
       return `${who} mudou o estilo da IA`;
+    case "settings.ai_sandbox_enabled":
+      return `${who} ligou o modo sandbox`;
+    case "settings.ai_sandbox_disabled":
+      return `${who} desligou o modo sandbox`;
+    case "settings.ai_sandbox_updated":
+      return `${who} alterou os números do modo sandbox`;
     case "settings.availability_updated":
       return `${who} alterou os horários de atendimento`;
     case "settings.reminders_updated":

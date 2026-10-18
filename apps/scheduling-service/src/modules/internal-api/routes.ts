@@ -358,6 +358,13 @@ const customerQuerySchema = z.object({
   sort: z.enum(["name", "last", "frequency", "next"]).optional(),
 });
 const CUSTOMER_PAGE_DEFAULT_LIMIT = 50;
+// Desativação em massa (2026-10-18).
+const inactivityQuerySchema = z.object({
+  months: z.coerce.number().int().min(1).max(60).default(6),
+});
+const bulkDeactivateSchema = z.object({
+  customerIds: z.array(z.string().trim().min(1).max(128)).min(1).max(1_000),
+});
 const customerDependentsQuerySchema = z.object({
   phone: z.string().trim().min(6).max(32),
 });
@@ -848,6 +855,68 @@ export async function registerManagementRoutes(
    * estática: o Fastify a prefere a `/internal/customers/:id`, então
    * `dependents` nunca é lido como identificador.
    */
+  /**
+   * Candidatas à desativação em massa (2026-10-18): quem não vem há `months`
+   * meses e não tem nada marcado. Só lista; nada muda aqui.
+   */
+  app.get(
+    "/internal/customers/inactivity-candidates",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      await requireCalendar(prisma, context.tenantId);
+      const { months } = parse(inactivityQuerySchema, request.query ?? {});
+      const customers = new AvenlyCustomerService(prisma, context.tenantId);
+      const items = await customers.inactivityCandidates(months);
+      return data(request, {
+        months,
+        items: items.map((customer) => ({
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          lastVisitAt: customer.lastVisitAt?.toISOString() ?? null,
+        })),
+      });
+    },
+  );
+
+  /**
+   * Desativa várias clientes de uma vez (2026-10-18), numa transação só, com
+   * o registro de atividade de cada uma. Quem já estava inativa fica como
+   * estava; id de outro negócio não é encontrado.
+   */
+  app.post(
+    "/internal/customers/deactivate",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      await requireCalendar(prisma, context.tenantId);
+      const { customerIds } = parse(bulkDeactivateSchema, request.body);
+      const deactivated = await prisma.$transaction(async (transaction) => {
+        const customers = new AvenlyCustomerService(
+          transaction,
+          context.tenantId,
+        );
+        let count = 0;
+        for (const id of new Set(customerIds)) {
+          const before = await customers.get(id);
+          if (before.deactivatedAt) continue;
+          const after = await customers.update(id, { active: false });
+          await customerActivity.updated(
+            transaction,
+            context.tenantId,
+            actorFromContext(context),
+            before,
+            after,
+          );
+          count += 1;
+        }
+        return count;
+      });
+      return data(request, { deactivated });
+    },
+  );
+
   app.get("/internal/customers/dependents", internalOnly, async (request) => {
     const context = currentInternalContext(request);
     await requireCalendar(prisma, context.tenantId);

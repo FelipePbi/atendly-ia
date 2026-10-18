@@ -358,6 +358,37 @@ export class AvenlyCustomerService {
     return metric;
   }
 
+  /**
+   * Candidatas à desativação em massa (2026-10-18): clientes ativas sem
+   * atendimento (não cancelado) há `months` meses ou mais — ou, sem nenhum
+   * atendimento, cadastradas antes disso — e sem nada marcado para frente.
+   * A mais antiga primeiro.
+   */
+  async inactivityCandidates(months: number, now: Date = new Date()) {
+    const cutoff = new Date(now);
+    cutoff.setMonth(cutoff.getMonth() - months);
+    const [customers, last, upcoming] = await Promise.all([
+      this.database.customer.findMany({
+        where: { tenantId: this.tenantId, deactivatedAt: null },
+      }),
+      this.lastVisitMetric(now),
+      this.nextVisitMetric(now),
+    ]);
+    return customers
+      .filter((customer) => !upcoming.has(customer.id))
+      .map((customer) => {
+        const lastVisit = last.get(customer.id);
+        return {
+          customer,
+          lastVisitAt: lastVisit === undefined ? null : new Date(lastVisit),
+          since: lastVisit ?? customer.createdAt.getTime(),
+        };
+      })
+      .filter((row) => row.since < cutoff.getTime())
+      .sort((a, b) => a.since - b.since)
+      .map(({ customer, lastVisitAt }) => ({ ...customer, lastVisitAt }));
+  }
+
   /** Início do próximo atendimento marcado (confirmado ou aguardando). */
   private async nextVisitMetric(now: Date): Promise<Map<string, number>> {
     const rows = await this.database.appointment.groupBy({

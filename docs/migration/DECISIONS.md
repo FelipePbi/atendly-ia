@@ -7971,6 +7971,8 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 3. "Ordenar" abre um modal no centro da tela (tocar numa opção já fecha) com Nome (A a Z), Último atendimento (mais recente primeiro), Frequência (mais atendimentos concluídos primeiro) e Próximos atendimentos (o horário marcado mais perto primeiro; quem não tem nada marcado vai para o fim). Sem atendimento, vale a ordem de nome. As letras de grupo só aparecem na ordem de nome. A ordem vale também para a busca e para a aba Inativos.
 4. Nas ordens por métrica, a métrica sai de uma consulta agrupada por negócio e o cursor é a posição na lista ordenada, marcado com a ordem: trocar a ordem recomeça do início.
 
+5. Na aba Inativos, "Desativar em massa" abre um modal: a profissional escolhe há quanto tempo a cliente não vem (3, 6 — padrão —, 12 ou 24 meses), a lista chega toda marcada (quem não vem desde então, ou nunca veio e foi cadastrada antes disso, e não tem nada marcado), ela desmarca quem não quer e confirma. Todas as marcadas vão para Inativos numa transação, com o registro de atividade de cada uma.
+
 **Consequências:** quem agendar com uma cliente inativa não a reativa sozinho; a profissional reativa no perfil.
 
 ## D-186 — "Mais" do celular e do tablet vira uma tela

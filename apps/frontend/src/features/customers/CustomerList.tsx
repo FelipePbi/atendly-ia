@@ -31,6 +31,7 @@ import { ContactPhoto, customerPhotoUrl } from "@/shared/ui/ContactPhoto";
 import { Dialog } from "@/shared/ui/Dialog";
 import { Field } from "@/shared/ui/Field";
 
+import { BulkDeactivateDialog } from "./BulkDeactivateDialog";
 import { CustomerListMore } from "./CustomerListMore";
 import { CustomerEmptyState, CustomerErrorState } from "./CustomerStates";
 import {
@@ -275,6 +276,8 @@ export function CustomerListPanelView({
   const inactiveTab = data.view.status === "inactive";
   const [sortOpen, setSortOpen] = useState(false);
   const closeSort = useCallback(() => setSortOpen(false), []);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const closeBulk = useCallback(() => setBulkOpen(false), []);
   // Aba Inativos vazia não é "nenhum cliente": as abas ficam para voltar.
   const showingState =
     Boolean(error) || (!loading && customers.length === 0 && !inactiveTab);
@@ -363,6 +366,18 @@ export function CustomerListPanelView({
           </button>
         </div>
       )}
+      {!searching && !error && inactiveTab && (
+        <div className="customer-bulk-row">
+          <button
+            className="customer-bulk-button"
+            onClick={() => setBulkOpen(true)}
+            type="button"
+          >
+            Desativar em massa
+          </button>
+        </div>
+      )}
+      {bulkOpen && <BulkDeactivateDialog onClose={closeBulk} open />}
       <Dialog onClose={closeSort} open={sortOpen} title="Ordenar clientes">
         <div
           aria-label="Ordenar clientes por"

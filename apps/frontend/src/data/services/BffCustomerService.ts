@@ -4,6 +4,7 @@ import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import {
   type Customer,
   type CustomerDetail,
+  type CustomerInactivityCandidates,
   type CustomerList,
   type CustomerMemory,
   type CustomerMemoryKind,
@@ -131,6 +132,34 @@ export class BffCustomerService {
         method: "POST",
         path: "/v1/customers",
         schema: routeSchema<Customer>("POST", "/v1/customers"),
+        signal,
+      })
+      .then(changed);
+  }
+
+  /** Candidatas à desativação em massa: sem vir há `months` meses (2026-10-18). */
+  inactivityCandidates(months: number, signal?: AbortSignal) {
+    return this.http.request({
+      path: `/v1/customers/inactivity-candidates?months=${months}`,
+      schema: routeSchema<CustomerInactivityCandidates>(
+        "GET",
+        "/v1/customers/inactivity-candidates",
+      ),
+      signal,
+    });
+  }
+
+  /** Desativa as clientes escolhidas de uma vez (2026-10-18). */
+  deactivateMany(customerIds: string[], signal?: AbortSignal) {
+    return this.http
+      .request({
+        body: { customerIds },
+        method: "POST",
+        path: "/v1/customers/deactivate",
+        schema: routeSchema<{ deactivated: number }>(
+          "POST",
+          "/v1/customers/deactivate",
+        ),
         signal,
       })
       .then(changed);

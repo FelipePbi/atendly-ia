@@ -60,6 +60,8 @@ import {
   revenueAppointmentListSchema,
   revenueCustomerListSchema,
   revenueReportSchema,
+  customerInactivityCandidatesSchema,
+  customerBulkDeactivateResultSchema,
   seriesOccurrencePreviewSchema,
   serviceAiInstructionSchema,
   serviceListSchema,
@@ -190,6 +192,17 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
 
   // revenue (D-177)
   { method: "GET", pathPattern: "/v1/revenue", schema: revenueReportSchema },
+  // customers bulk deactivation (2026-10-18)
+  {
+    method: "GET",
+    pathPattern: "/v1/customers/inactivity-candidates",
+    schema: customerInactivityCandidatesSchema,
+  },
+  {
+    method: "POST",
+    pathPattern: "/v1/customers/deactivate",
+    schema: customerBulkDeactivateResultSchema,
+  },
   // revenue customers, the full list behind the top five (2026-10-18)
   {
     method: "GET",

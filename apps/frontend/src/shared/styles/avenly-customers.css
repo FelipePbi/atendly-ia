@@ -2280,3 +2280,100 @@
   justify-content: flex-end;
   gap: 10px;
 }
+
+/* Desativação em massa na aba Inativos (2026-10-18) */
+.customer-bulk-row {
+  flex: none;
+  padding: 10px 20px 0;
+}
+.customer-bulk-button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--at-radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.customer-bulk-button:focus-visible {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 2px;
+}
+.bulk-deactivate {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bulk-deactivate-intro,
+.bulk-deactivate-status,
+.bulk-deactivate-note {
+  margin: 0;
+  color: var(--fg-soft);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.bulk-deactivate-note {
+  color: var(--muted);
+  font-size: 13px;
+}
+.bulk-deactivate-periods {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.bulk-deactivate-periods .customer-status-tab {
+  padding: 0 6px;
+}
+.bulk-deactivate-all,
+.bulk-deactivate-row {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+.bulk-deactivate-all {
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+}
+.bulk-deactivate-all input,
+.bulk-deactivate-row input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+.bulk-deactivate-list {
+  max-height: min(46vh, 360px);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.bulk-deactivate-list li + li .bulk-deactivate-row {
+  border-top: 1px solid var(--border);
+}
+.bulk-deactivate-row {
+  padding: 8px 0;
+}
+.bulk-deactivate-name {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bulk-deactivate-name strong {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.bulk-deactivate-name span {
+  color: var(--muted);
+  font-size: 13px;
+}

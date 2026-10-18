@@ -119,6 +119,48 @@ export async function registerV1CustomerRoutes(
     });
   });
 
+  // Desativação em massa (2026-10-18): candidatas e confirmação.
+  app.get(
+    "/v1/customers/inactivity-candidates",
+    authenticated,
+    async (request) => {
+      const query = parseQuery(
+        z.object({
+          months: z.coerce.number().int().min(1).max(60).default(6),
+        }),
+        request.query,
+      );
+      return dataResponse(
+        request,
+        await scheduling.customerInactivityCandidates(
+          internalContext(request),
+          query,
+        ),
+      );
+    },
+  );
+
+  app.post("/v1/customers/deactivate", authenticated, async (request) => {
+    const body = parseBody(
+      z
+        .object({
+          customerIds: z
+            .array(z.string().trim().min(1).max(128))
+            .min(1)
+            .max(1_000),
+        })
+        .strict(),
+      request.body,
+    );
+    return dataResponse(
+      request,
+      await scheduling.deactivateCustomers(
+        internalContext(request),
+        body.customerIds,
+      ),
+    );
+  });
+
   app.get("/v1/customers/:id", authenticated, async (request) => {
     const { id } = parseParams(idSchema, request.params);
     return dataResponse(

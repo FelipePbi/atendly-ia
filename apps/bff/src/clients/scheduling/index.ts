@@ -1116,6 +1116,43 @@ export class SchedulingClient {
     );
   }
 
+  /** Candidatas à desativação em massa (2026-10-18). */
+  async customerInactivityCandidates(
+    context: InternalRequestContext,
+    query: { months: number },
+  ) {
+    return this.get(
+      context,
+      "/internal/customers/inactivity-candidates",
+      z.object({
+        months: z.number().int().positive(),
+        items: z.array(
+          z.object({
+            id: z.string(),
+            name: z.string().nullable(),
+            phone: z.string().nullable(),
+            lastVisitAt: z.string().nullable(),
+          }),
+        ),
+      }),
+      query,
+    );
+  }
+
+  /** Desativa várias clientes numa transação só (2026-10-18). */
+  async deactivateCustomers(
+    context: InternalRequestContext,
+    customerIds: string[],
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      "/internal/customers/deactivate",
+      { customerIds },
+      z.object({ deactivated: z.number().int().nonnegative() }),
+    );
+  }
+
   async listCustomers(
     context: InternalRequestContext,
     query: {

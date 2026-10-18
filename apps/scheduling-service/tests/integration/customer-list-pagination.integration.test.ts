@@ -355,6 +355,63 @@ describeWithDatabase("customer list pagination against PostgreSQL", () => {
     expect(mixed.statusCode).toBe(400);
   });
 
+  it("desativação em massa: candidatas sem vir há N meses e sem nada marcado", async () => {
+    const byName = async (name: string) =>
+      prisma.customer.findFirstOrThrow({ where: { tenantId: tenantA, name } });
+    const [old, recent, booked] = await Promise.all([
+      byName("Cliente 01"),
+      byName("Cliente 02"),
+      byName("Cliente 03"),
+    ]);
+    const day = 86_400_000;
+    const visit = (customerId: string, startAt: Date, status: string) =>
+      prisma.appointment.create({
+        data: {
+          tenantId: tenantA,
+          customerId,
+          source: "USER",
+          startAt,
+          endAt: new Date(startAt.getTime() + 30 * 60_000),
+          status,
+          statusRaw: status,
+          title: "Corte",
+          createdBy: "user-1",
+        },
+      });
+    await visit(old.id, new Date(Date.now() - 300 * day), "COMPLETED");
+    await visit(recent.id, new Date(Date.now() - 20 * day), "COMPLETED");
+    await visit(booked.id, new Date(Date.now() - 300 * day), "COMPLETED");
+    await visit(booked.id, new Date(Date.now() + 5 * day), "CONFIRMED");
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/customers/inactivity-candidates?months=6",
+      headers: headers(tenantA),
+    });
+    expect(response.statusCode).toBe(200);
+    const ids = (response.json().data.items as Array<{ id: string }>).map(
+      (item) => item.id,
+    );
+    expect(ids).toContain(old.id);
+    expect(ids).not.toContain(recent.id);
+    expect(ids).not.toContain(booked.id);
+
+    const done = await app.inject({
+      method: "POST",
+      url: "/internal/customers/deactivate",
+      headers: headers(tenantA),
+      payload: { customerIds: [old.id, old.id] },
+    });
+    expect(done.statusCode).toBe(200);
+    expect(done.json().data.deactivated).toBe(1);
+    const inactive = await getList(tenantA, { limit: "50", status: "inactive" });
+    expect(inactive.items.map((item) => item.id)).toEqual([old.id]);
+    const activity = await prisma.activityLog.count({
+      where: { tenantId: tenantA, action: "customer.deactivated" },
+    });
+    expect(activity).toBe(1);
+  });
+
   it("cursor que não veio da lista é recusado com 400", async () => {
     const response = await app.inject({
       method: "GET",

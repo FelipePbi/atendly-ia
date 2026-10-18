@@ -1154,6 +1154,28 @@ const revenueActorSchema = z.enum(["AI", "USER", "SYSTEM", "INTEGRATION"]);
  * período, do que mais faturou para o que menos — a lista completa por trás
  * do cartão "Clientes que mais faturaram", que mostra só os cinco primeiros.
  */
+/**
+ * Desativação em massa (2026-10-18): candidatas — clientes ativas sem
+ * atendimento há `months` meses e sem nada marcado — e o resultado.
+ */
+export const customerInactivityCandidatesSchema = z.object({
+  months: z.number().int().positive(),
+  items: z.array(
+    z.object({
+      id: z.string().min(1),
+      name: z.string().nullable(),
+      phone: z.string().nullable(),
+      lastVisitAt: z.string().nullable(),
+    }),
+  ),
+});
+export type CustomerInactivityCandidates = z.infer<
+  typeof customerInactivityCandidatesSchema
+>;
+export const customerBulkDeactivateResultSchema = z.object({
+  deactivated: z.number().int().nonnegative(),
+});
+
 export const revenueCustomerListSchema = z.object({
   period: revenuePeriodSchema,
   start: z.string(),

@@ -20,6 +20,7 @@ import type {
 import { Icon } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
+import { useSwipeBack } from "@/shared/motion/swipeBack";
 import {
   getProductServices,
   useProductRuntime,
@@ -471,6 +472,9 @@ export function ConversationThread({
     pushed: ready,
     title: conversation ? conversationLabel(conversation) : "Conversas",
   });
+  // O chat em tela cheia volta para a lista arrastando da borda (D-198),
+  // como o voltar do cabeçalho.
+  useSwipeBack({ enabled: ready, href: "/conversas" });
 
   const businessName =
     session?.businessProfile?.businessName ??

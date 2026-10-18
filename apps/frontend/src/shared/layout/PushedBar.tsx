@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { Icon } from "@/shared/icons/Icon";
+import { useSwipeBack } from "@/shared/motion/swipeBack";
 
 export type PushedBarMenuItem = {
   label: string;
@@ -26,6 +27,12 @@ type PushedBarProps = {
   subtitle?: string;
   menuItems?: PushedBarMenuItem[];
   menuLabel?: string;
+  /**
+   * Voltar arrastando da borda esquerda no celular e no tablet (D-198). Por
+   * padrão só com o chevron: o `x` fecha um formulário, e um arrasto sem
+   * querer não pode jogar fora o que a pessoa digitou.
+   */
+  swipeBack?: boolean;
 };
 
 /**
@@ -43,8 +50,10 @@ export function PushedBar({
   title,
   menuItems,
   menuLabel = "Mais ações",
+  swipeBack = backIcon === "chevron-left",
 }: PushedBarProps) {
   const [open, setOpen] = useState(false);
+  useSwipeBack({ enabled: swipeBack, href: backHref });
   const menuId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
 

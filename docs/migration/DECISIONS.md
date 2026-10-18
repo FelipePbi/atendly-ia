@@ -8088,3 +8088,24 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 4. Composição (ai-orchestrator, determinística, copiada na prévia do frontend): cada linha do exemplo vira um bloco; os campos são trocados numa passada só pelos fatos; sem nome, `{nome}` sai com a vírgula; sem `{servico}`, `{data}` e `{hora}` juntos, a frase padrão entra depois da primeira linha; o valor entra só pela política de preço, logo depois da frase do atendimento; a pergunta de confirmação (voz do estilo) entra no fim quando pedida. Campo desconhecido, ou `{servico}` num atendimento sem serviço nem título, volta ao padrão.
 
 **Consequências:** a frase factual continua uma só (`notificationFactualLines`), e o exemplo nunca é fonte de fato. Mudança na composição muda os dois lados juntos (ai-orchestrator e `reminderPreview.ts`), com os mesmos textos nas duas suítes.
+
+## D-198 — Voltar arrastando da borda esquerda nas telas empurradas
+
+**Status:** ACCEPTED em 2026-10-18, a pedido do usuário ("no celular, numa subtela com voltar, arrastar da lateral volta para a tela anterior, como nos apps nativos"). Fora do IA Loop, sem Goal próprio. Regra em `docs/product-vault/03-UX-UI/05-Design-System-Conceitual.md` (seção de movimento).
+
+**Contexto:** as telas empurradas (detalhe, configuração, perfil, chat) só voltavam pelo botão do topo. No Safari do iOS, numa aba comum, o voltar nativo da borda já funciona quando a tela foi aberta por navegação (é o histórico); no app instalado (PWA, `standalone`) não existe gesto nativo, e no Android a borda é do sistema (voltar do histórico). Quem chega por link direto não tem histórico para o gesto nativo.
+
+**Decisão:**
+
+1. `useSwipeBack({ href, enabled })` (`src/shared/motion/swipeBack.ts`) liga o gesto para a tela que tem voltar. `PushedBar` chama o hook com o próprio `backHref`, então toda tela empurrada ganha o gesto sem mudar nada; o chat em tela cheia (`ConversationThread`) chama com `/conversas`.
+2. Por padrão só com o chevron. Com o `x` (formulário de criação/edição) o gesto fica desligado: um arrasto sem querer jogaria fora o que a pessoa digitou. `swipeBack` no `PushedBar` liga ou desliga explicitamente.
+3. Começa só com toque (`pointerType === "touch"`), a até 24 px da borda esquerda, abaixo de 1024 px e sem `prefers-reduced-motion`. Não começa fora do `#main-content` (folhas e diálogos), dentro de diálogo, campo de texto, controle deslizante, conteúdo com rolagem horizontal ou `touch-action` que reserva o eixo x, com texto selecionado, durante uma View Transition, nem em `[data-swipe-back="off"]`. Arrasto que pende para cima ou para baixo é rolagem e é deixado em paz (decisão em 10 px).
+4. A tela (`#main-content`) segue o dedo com `transform`; por trás entra um véu (`.swipe-back-scrim`) que clareia com `opacity`. Soltar depois de 35% da largura, ou num arremesso (≥ 0,5 px/ms para a direita), completa: a tela sai em 160 ms e a navegação vai para o mesmo destino do botão (`router.push(backHref)`, como o `Link`); a tela de destino entra como no voltar normal (16 px da esquerda, com fade, 240 ms). Antes disso, ou num arremesso para a esquerda, a tela volta ao lugar em 160 ms. Só `transform` e `opacity` mudam por quadro.
+5. Com movimento reduzido o gesto não existe (é movimento contínuo, sem forma só de opacidade que faça sentido); o botão voltar continua. O gesto não acrescenta nada à árvore acessível nem ao teclado: o botão é o caminho acessível.
+6. Sem biblioteca: Pointer Events para acompanhar o dedo e um `touchmove` não passivo que só segura o arrasto que já pende para a direita (sem isso o navegador assume o toque e manda `pointercancel`).
+
+**Alternativas:** `router.back()` em vez do `backHref` (rejeitada: diverge do botão quando a tela foi aberta por link direto ou de outra seção); desligar o gesto no Safari do iOS fora do PWA para não competir com o nativo (rejeitada: quem chegou por link direto ficaria sem gesto; quando o nativo existe ele ganha e o nosso desiste pelo `pointercancel`); mostrar a tela anterior por baixo durante o arrasto, como o iOS (rejeitada: exigiria manter a rota anterior montada; o véu sobre o fundo da casca é o equivalente barato); biblioteca de gestos (rejeitada: o hook tem algumas centenas de linhas e nenhuma dependência).
+
+**Consequências:** tela empurrada nova com `PushedBar` e chevron já ganha o gesto. Componente com arrasto horizontal próprio perto da borda usa rolagem horizontal, `touch-action` ou `data-swipe-back="off"`. Prova: `tests/voltar-arrastando.test.tsx`.
+
+**Revisar se:** o Android passar a entregar a borda à página no PWA de forma que os dois gestos briguem, ou se surgir pedido de ligar o gesto também nos formulários com `x` (com confirmação de descarte).

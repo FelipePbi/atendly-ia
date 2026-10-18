@@ -763,6 +763,28 @@ html.is-view-transition .motion-enter-back {
   animation: none;
 }
 
+/* --- Voltar arrastando da borda (D-198) -----------------------------------
+   `useSwipeBack` (src/shared/motion/swipeBack.ts) move o `#main-content` com
+   `transform` enquanto o dedo arrasta da borda esquerda, e põe o véu logo
+   antes dele: o véu clareia (`opacity`) conforme a tela sai. A tela que se
+   move fica opaca e com sombra na borda, para o véu não aparecer através
+   dela; nenhuma das duas propriedades anima. Com movimento reduzido o gesto
+   nem começa. */
+.swipe-back-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgb(var(--at-shadow-rgb) / 0.14);
+  pointer-events: none;
+}
+#main-content.is-swipe-back {
+  min-height: 100dvh;
+  background: var(--bg);
+  box-shadow: -12px 0 24px rgb(var(--at-shadow-rgb) / 0.12);
+  will-change: transform;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 /* --- Movimento reduzido --------------------------------------------------
    Sem movimento: o conteúdo troca no mesmo quadro. `tokens.css` já zera
    duração de toda animação e transição; aqui o desligamento é explícito para

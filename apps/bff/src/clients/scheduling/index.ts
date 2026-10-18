@@ -1,7 +1,7 @@
 import {
   type RevenueAppointmentKind,
-  type RevenuePeriod,
   revenueAppointmentListSchema,
+  type RevenuePeriod,
   revenueReportSchema,
 } from "@avenly-ia/public-api-contract";
 import { z } from "zod";
@@ -685,6 +685,134 @@ const aiCreatedAppointmentEventsPageSchema = z.object({
 
 const envelope = <T extends z.ZodType>(schema: T) =>
   z.object({ data: schema, requestId: z.string() });
+
+// --- Retorno de clientes (D-202) --------------------------------------------
+// Forma interna do Scheduling; o BFF a recorta para o contrato publico.
+const returnHabitInternalSchema = z.object({
+  weekdays: z.array(z.number().int()),
+  bandStart: z.string(),
+  bandEnd: z.string(),
+});
+const returnSettingsInternalSchema = z.object({
+  configured: z.boolean(),
+  dailyLimit: z.number().int(),
+  windowDays: z.array(z.number().int()),
+  windowStart: z.string(),
+  windowEnd: z.string(),
+  leadDays: z.number().int(),
+  winbackDays: z.number().int(),
+  winbackIncentive: z.string().nullable(),
+  renewalMessage: z.string().nullable(),
+  winbackMessage: z.string().nullable(),
+});
+const returnCandidateInternalSchema = z.object({
+  customerId: z.string(),
+  name: z.string().nullable(),
+  phone: z.string(),
+  serviceId: z.string().nullable(),
+  serviceName: z.string().nullable(),
+  expectedDate: z.string().nullable(),
+  intervalDays: z.number().int().nullable(),
+  intervalSource: z.enum(["SERVICE", "AVERAGE"]).nullable(),
+  lastVisitDate: z.string(),
+  daysSinceLastVisit: z.number().int(),
+  sendBy: z.string().nullable(),
+  habit: returnHabitInternalSchema.nullable(),
+});
+const returnCandidateListInternalSchema = z.object({
+  kind: z.enum(["RENEWAL", "WINBACK"]),
+  timezone: z.string(),
+  today: z.string(),
+  weekStart: z.string().nullable(),
+  weekEnd: z.string().nullable(),
+  days: z.number().int().nullable(),
+  candidates: z.array(returnCandidateInternalSchema),
+  excluded: z.object({
+    deactivated: z.number().int(),
+    noPhone: z.number().int(),
+    futureAppointment: z.number().int(),
+    blocked: z.number().int(),
+    recentlyContacted: z.number().int(),
+    queued: z.number().int(),
+  }),
+});
+const returnPlanInternalSchema = z.object({
+  dailyLimit: z.number().int(),
+  total: z.number().int(),
+  notFitting: z.array(z.string()),
+  minimumDailyLimit: z.number().int().nullable(),
+  lastPlannedDate: z.string().nullable(),
+});
+const returnCampaignSummaryInternalSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["RENEWAL", "WINBACK"]),
+  state: z.enum(["ACTIVE", "PAUSED", "DONE", "CANCELLED"]),
+  dailyLimit: z.number().int(),
+  incentive: z.string().nullable(),
+  weekStart: z.string().nullable(),
+  winbackDays: z.number().int().nullable(),
+  createdAt: z.string(),
+  pausedAt: z.string().nullable(),
+  cancelledAt: z.string().nullable(),
+  completedAt: z.string().nullable(),
+  counts: z.object({
+    total: z.number().int(),
+    queued: z.number().int(),
+    sent: z.number().int(),
+    replied: z.number().int(),
+    booked: z.number().int(),
+    declined: z.number().int(),
+    skipped: z.number().int(),
+    failed: z.number().int(),
+    revenue: z.number(),
+  }),
+});
+const returnCampaignDetailInternalSchema =
+  returnCampaignSummaryInternalSchema.extend({
+    messageTemplate: z.string().nullable(),
+    targets: z.array(
+      z.object({
+        id: z.string(),
+        customerId: z.string(),
+        customerName: z.string().nullable(),
+        state: z.enum([
+          "QUEUED",
+          "CLAIMED",
+          "SENT",
+          "REPLIED",
+          "BOOKED",
+          "DECLINED",
+          "SKIPPED",
+          "FAILED",
+        ]),
+        reason: z.string().nullable(),
+        serviceName: z.string().nullable(),
+        expectedDate: z.string().nullable(),
+        lastVisitDate: z.string().nullable(),
+        sendBy: z.string().nullable(),
+        plannedDate: z.string().nullable(),
+        sentAt: z.string().nullable(),
+        repliedAt: z.string().nullable(),
+        bookedAt: z.string().nullable(),
+        appointmentId: z.string().nullable(),
+        followUpState: z.string().nullable(),
+        followUpSentAt: z.string().nullable(),
+        offeredSlots: z.array(z.object({ date: z.string(), time: z.string() })),
+        messageBody: z.string().nullable(),
+      }),
+    ),
+  });
+const customerReturnStatusInternalSchema = z.object({
+  customerId: z.string(),
+  blocked: z.boolean(),
+  permanent: z.boolean(),
+  blockedUntil: z.string().nullable(),
+  reason: z.enum(["DECLINED", "STOPPED", "OWNER"]).nullable(),
+  lastMessageAt: z.string().nullable(),
+});
+export type ReturnCandidateListInternal = z.output<
+  typeof returnCandidateListInternalSchema
+>;
 
 export class SchedulingClient {
   private readonly http = new InternalHttpClient(
@@ -1696,6 +1824,128 @@ export class SchedulingClient {
       "/internal/revenue/appointments",
       revenueAppointmentListSchema,
       query,
+    );
+  }
+
+  // --- Retorno de clientes (D-202) ----------------------------------------
+
+  async returnSettings(context: InternalRequestContext) {
+    return this.get(
+      context,
+      "/internal/customer-return/settings",
+      returnSettingsInternalSchema,
+    );
+  }
+
+  async updateReturnSettings(context: InternalRequestContext, input: unknown) {
+    return this.mutate(
+      context,
+      "PATCH",
+      "/internal/customer-return/settings",
+      input,
+      returnSettingsInternalSchema,
+    );
+  }
+
+  async returnCandidates(
+    context: InternalRequestContext,
+    query: {
+      kind: "RENEWAL" | "WINBACK";
+      week?: "this" | "next";
+      days?: number;
+    },
+  ) {
+    return this.get(
+      context,
+      "/internal/customer-return/candidates",
+      returnCandidateListInternalSchema,
+      query,
+    );
+  }
+
+  async returnPlan(context: InternalRequestContext, input: unknown) {
+    return this.mutate(
+      context,
+      "POST",
+      "/internal/customer-return/plan",
+      input,
+      returnPlanInternalSchema,
+    );
+  }
+
+  async createReturnCampaign(context: InternalRequestContext, input: unknown) {
+    return this.mutate(
+      context,
+      "POST",
+      "/internal/customer-return/campaigns",
+      input,
+      returnCampaignDetailInternalSchema,
+    );
+  }
+
+  async returnCampaigns(context: InternalRequestContext) {
+    return this.get(
+      context,
+      "/internal/customer-return/campaigns",
+      z.array(returnCampaignSummaryInternalSchema),
+    );
+  }
+
+  async returnCampaign(context: InternalRequestContext, id: string) {
+    return this.get(
+      context,
+      `/internal/customer-return/campaigns/${encodeURIComponent(id)}`,
+      returnCampaignDetailInternalSchema,
+    );
+  }
+
+  async changeReturnCampaign(
+    context: InternalRequestContext,
+    id: string,
+    action: "pause" | "resume" | "cancel",
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      `/internal/customer-return/campaigns/${encodeURIComponent(id)}/${action}`,
+      {},
+      returnCampaignDetailInternalSchema,
+    );
+  }
+
+  async skipReturnTarget(
+    context: InternalRequestContext,
+    id: string,
+    targetId: string,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      `/internal/customer-return/campaigns/${encodeURIComponent(id)}/targets/${encodeURIComponent(targetId)}/skip`,
+      {},
+      returnCampaignDetailInternalSchema,
+    );
+  }
+
+  async customerReturnStatus(context: InternalRequestContext, id: string) {
+    return this.get(
+      context,
+      `/internal/customers/${encodeURIComponent(id)}/return-status`,
+      customerReturnStatusInternalSchema,
+    );
+  }
+
+  async setCustomerReturnStatus(
+    context: InternalRequestContext,
+    id: string,
+    blocked: boolean,
+  ) {
+    return this.mutate(
+      context,
+      "PUT",
+      `/internal/customers/${encodeURIComponent(id)}/return-status`,
+      { blocked },
+      customerReturnStatusInternalSchema,
     );
   }
 

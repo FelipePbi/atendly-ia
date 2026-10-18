@@ -31,6 +31,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Ciclo de vida da conta (Goal025/WU-03) | `POST /v1/account/deletion`; `DELETE /v1/account/deletion` |
 | Perfil da conta (Goal067) | `PATCH /v1/account/profile` |
 | Registro de atividade (D-176) | `GET /v1/activity` |
+| Retorno de clientes (D-202) | `GET/PATCH /v1/customer-return/settings`; `GET /v1/customer-return/candidates`; `POST /v1/customer-return/plan`; `GET/POST /v1/customer-return/campaigns`; `GET /v1/customer-return/campaigns/:id`; `POST /v1/customer-return/campaigns/:id/:action` (`pause`, `resume`, `cancel`); `POST /v1/customer-return/campaigns/:id/targets/:targetId/skip`; `GET/PUT /v1/customers/:id/return-messages` |
 
 As rotas autenticadas resolvem o negócio a partir da sessão; `tenantId` enviado isoladamente pelo browser não concede autorização.
 
@@ -1108,6 +1109,34 @@ Resposta: `{ items, nextCursor }`, `nextCursor` nulo no fim. Cada item:
 A cor do serviço é um campo só, `color`, com o token da paleta (`ROSE`…) ou o `#rrggbb` da cor personalizada (D-200); registros anteriores trazem `colorHex` (e nunca `colorToken`, que o filtro de segredo descartava).
 
 Nenhum campo carrega senha, hash, token, credencial ou chave: o diff só percorre campos permitidos e qualquer chave com cara de segredo é descartada antes de gravar. A troca de senha e a conexão da Minha Agenda aparecem só como fato. A conclusão automática de atendimento (`SYSTEM`) e cada item importado (`INTEGRATION`) não viram atividade; a importação aparece como início e conclusão, com as contagens.
+
+## Retorno de clientes: Renovação e Resgate (D-202)
+
+Todas sob `requireTenantContext`; o negócio vem só da sessão. O Scheduling decide quem entra, simula o ritmo e guarda as rodadas (`/internal/customer-return/*`); a IA diz quem é contato ignorado ou conversa pessoal (`POST /internal/contacts/return-eligibility`, telefones no corpo, nunca na URL). Nenhuma mensagem sai sem rodada aprovada por pessoa: as rotas de escrita do Scheduling recusam a IA (`requireHumanCaller`), e a entrega pela IA confere de novo cada regra antes do envio. Fluxo e regras em `docs/product-vault/02-Fluxos/06-Retorno-de-Clientes.md`.
+
+| Rota | O que faz |
+| --- | --- |
+| `GET /v1/customer-return/settings` | configuração do retorno; sem linha gravada, o padrão do produto com `configured: false` |
+| `PATCH /v1/customer-return/settings` | grava só os campos enviados (corpo `strict`): `dailyLimit` 1 a 30, `windowDays` (0 = domingo), `windowStart`/`windowEnd` `HH:MM` (`24:00` vale como fim), `leadDays` 1 a 5, `winbackDays` 14 a 365, `winbackIncentive` até 300, `renewalMessage`/`winbackMessage` até 600 com só `{nome}`, `{servico}`, `{quando}`, `{horarios}` e `{incentivo}` (data ou horário escritos à mão são recusados, `returnMessageIssue`); `null` ou vazio volta ao padrão. Inválido responde `400 VALIDATION_ERROR` sem chamar o Scheduling. Registra `settings.customer_return_updated` com o antes e o depois |
+| `GET /v1/customer-return/candidates` | lista pré-selecionada. Query `kind` (`RENEWAL` ou `WINBACK`), `week` (`this`, padrão, ou `next`, só Renovação) e `days` (14 a 365, só Resgate; ausente vale `winbackDays`) |
+| `POST /v1/customer-return/plan` | simula o ritmo para `{ kind, week?, days?, customerIds, dailyLimit? }` sem gravar nada |
+| `POST /v1/customer-return/campaigns` | aprova a rodada (`201`); mesmo corpo do plano, mais `acceptNotFitting` |
+| `GET /v1/customer-return/campaigns` | as 20 rodadas mais recentes, com os números |
+| `GET /v1/customer-return/campaigns/:id` | a rodada com cada cliente |
+| `POST /v1/customer-return/campaigns/:id/:action` | `pause` (só `ACTIVE`), `resume` (só `PAUSED`) ou `cancel` (as duas); fora disso, `409` com `upstreamCode` `RETURN_CAMPAIGN_STATE_CONFLICT`. Cancelar tira da fila quem ainda não recebeu (`SKIPPED`, `CAMPAIGN_CANCELLED`) |
+| `POST /v1/customer-return/campaigns/:id/targets/:targetId/skip` | tira da rodada uma cliente ainda na fila (`OWNER_SKIPPED`) |
+| `GET /v1/customers/:id/return-messages` | bloqueio de mensagens de retorno da cliente |
+| `PUT /v1/customers/:id/return-messages` | `{ blocked }`: a profissional bloqueia (sem data) ou libera, inclusive o "pare" que a cliente pediu |
+
+**Quem entra.** Renovação: a data esperada de volta cai na semana pedida (segunda a domingo). O prazo vem do `recurrenceIntervalDays` do serviço (último concluído daquele serviço + prazo); sem prazo em nenhum serviço do histórico, a média da cliente (dois ou mais concluídos) a partir do último atendimento; sem os dois, ela não entra. Resgate: último atendimento concluído há `days` dias ou mais. Nunca entram: desativada, sem telefone, com agendamento futuro (`CONFIRMED`), bloqueada (recusa: 90 dias; pedido para parar: até a profissional liberar), chamada por mensagem de retorno há menos de 14 dias (Renovação) ou 30 (Resgate), já na fila de rodada ativa ou pausada, contato ignorado e conversa pessoal. Se a IA não responder, a lista sai sem o último filtro (a entrega confere de novo).
+
+**Lista** (`candidates`): `{ kind, timezone, today, weekStart, weekEnd, days, candidates, excluded }`. Cada cliente: `{ customerId, name, phone, serviceName, expectedDate, intervalDays, intervalSource, lastVisitDate, daysSinceLastVisit, sendBy, habit }` — `intervalSource` `SERVICE` ou `AVERAGE` (nulo no Resgate), `sendBy` o último dia em que a mensagem pode sair (nulo sem prazo) e `habit` `{ weekdays, bandStart, bandEnd }` (dias que somam 70% dos últimos 10 concluídos, até 3, vazio sem dia claro; faixa da mediana ±90 min; nulo com menos de 3 concluídos). `excluded` conta quem ficou de fora por motivo: `deactivated`, `noPhone`, `futureAppointment`, `blocked`, `recentlyContacted`, `queued`, `ignored`, `personal`. Renovação em ordem de vencimento; Resgate de quem está longe há menos tempo.
+
+**Ritmo e prazo** (`plan`): `{ dailyLimit, total, notFitting, minimumDailyLimit, lastPlannedDate }`. Quem vence antes recebe antes, `dailyLimit` por dia, só nos dias e no horário da janela; envios de hoje e a fila de outras rodadas ativas entram na conta. `sendBy` é `leadDays` antes da data esperada; aprovada depois disso, o último dia antes da data; data que já chegou na aprovação não tem prazo. Ninguém recebe no próprio dia do vencimento. `notFitting` lista quem não cabe até o próprio prazo; `minimumDailyLimit` é o menor limite (até 30) em que todas cabem, nulo se nem 30 basta. Aprovar com alguém de fora do prazo sem `acceptNotFitting` responde `409` com `upstreamCode` `RETURN_PLAN_DOES_NOT_FIT` e o plano em `upstreamDetails`; com ele, essas clientes entram sem prazo (e continuam sem receber no dia da data). Nenhuma cliente que pode receber responde `409` com `upstreamCode` `RETURN_NO_CANDIDATES`. Na aprovação o BFF tira de novo quem a IA exclui. Registra `customer_return.campaign_approved`.
+
+**Rodada** (`campaigns`): `{ id, kind, state, dailyLimit, incentive, weekStart, winbackDays, createdAt, pausedAt, cancelledAt, completedAt, counts }`, com `counts` `{ total, queued, sent, replied, booked, declined, skipped, failed, revenue }` — `revenue` é o faturado (regra do Faturamento) dos atendimentos marcados pela rodada e já concluídos. `state`: `ACTIVE`, `PAUSED`, `DONE` (ninguém na fila; o lembrete único ainda pode sair) ou `CANCELLED`. O detalhe soma `messageTemplate` e `targets`: `{ id, customerId, customerName, state, reason, serviceName, expectedDate, lastVisitDate, sendBy, plannedDate, sentAt, repliedAt, bookedAt, appointmentId, followUpState, followUpSentAt, offeredSlots, messageBody }`. `state` da cliente: `QUEUED`, `CLAIMED`, `SENT`, `REPLIED`, `BOOKED` (atendimento não cancelado criado depois do envio, para depois dele, em até 30 dias), `DECLINED` (`reason` `DECLINED` ou `STOPPED`), `SKIPPED` (`reason` `DEACTIVATED`, `NO_PHONE`, `HAS_APPOINTMENT`, `OPTED_OUT`, `RECENTLY_CONTACTED`, `DEADLINE_PASSED`, `OWNER_SKIPPED`, `CAMPAIGN_CANCELLED`, `CONTACT_IGNORED`, `PERSONAL_CONTACT`, `NOT_ALLOWED_LOCALLY`, `INVALID_PHONE`) ou `FAILED` (`TRANSPORT_FAILED`, `TRANSPORT_UNKNOWN`, `ATTEMPTS_EXHAUSTED`). `followUpState` (`SENT`, `SKIPPED`, `FAILED` ou nulo) é o lembrete único depois de 3 dias sem resposta.
+
+**Bloqueio** (`return-messages`): `{ customerId, blocked, permanent, blockedUntil, reason, lastMessageAt }`, `reason` `DECLINED`, `STOPPED` ou `OWNER`. Registra `customer.return_messages_blocked`/`customer.return_messages_allowed`; recusa e pedido para parar registrados pela IA na conversa viram `customer.return_declined`/`customer.return_stopped`.
 
 ## Faturamento (D-177, D-178)
 

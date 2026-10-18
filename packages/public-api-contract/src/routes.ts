@@ -1,6 +1,15 @@
 import { z } from "zod";
 
 import {
+  customerReturnStatusSchema,
+  returnCampaignDetailSchema,
+  returnCampaignListSchema,
+  returnCandidateListSchema,
+  returnPlanSchema,
+  returnSettingsSchema,
+} from "./customer-return.js";
+
+import {
   accountDeletionResultSchema,
   accountProfileResultSchema,
   activationTestRunSchema,
@@ -241,6 +250,19 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
   { method: "POST", pathPattern: "/v1/calendar/imports/:sessionId/execute", schema: importWorkStartSchema },
   { method: "GET", pathPattern: "/v1/calendar/imports/:sessionId/progress", schema: importProgressSchema },
   { method: "POST", pathPattern: "/v1/calendar/imports/:sessionId/complete", schema: importCompletionSchema },
+
+  // customer return (D-202)
+  { method: "GET", pathPattern: "/v1/customer-return/settings", schema: returnSettingsSchema },
+  { method: "PATCH", pathPattern: "/v1/customer-return/settings", schema: returnSettingsSchema },
+  { method: "GET", pathPattern: "/v1/customer-return/candidates", schema: returnCandidateListSchema },
+  { method: "POST", pathPattern: "/v1/customer-return/plan", schema: returnPlanSchema },
+  { method: "GET", pathPattern: "/v1/customer-return/campaigns", schema: returnCampaignListSchema },
+  { method: "POST", pathPattern: "/v1/customer-return/campaigns", schema: returnCampaignDetailSchema },
+  { method: "GET", pathPattern: "/v1/customer-return/campaigns/:id", schema: returnCampaignDetailSchema },
+  { method: "POST", pathPattern: "/v1/customer-return/campaigns/:id/:action", schema: returnCampaignDetailSchema },
+  { method: "POST", pathPattern: "/v1/customer-return/campaigns/:id/targets/:targetId/skip", schema: returnCampaignDetailSchema },
+  { method: "GET", pathPattern: "/v1/customers/:id/return-messages", schema: customerReturnStatusSchema },
+  { method: "PUT", pathPattern: "/v1/customers/:id/return-messages", schema: customerReturnStatusSchema },
 
   // notifications
   { method: "GET", pathPattern: "/v1/notifications", schema: notificationListSchema },

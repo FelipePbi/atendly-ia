@@ -634,6 +634,33 @@ export class AiOrchestratorClient {
     ).data;
   }
 
+  /**
+   * Quem a lista do retorno deixa de fora pelo lado da IA (D-202): contato
+   * ignorado e conversa pessoal, pelos telefones da lista.
+   */
+  async returnContactExclusions(
+    context: InternalRequestContext,
+    phones: string[],
+  ) {
+    const response = await this.http.request({
+      method: "POST",
+      path: "/internal/contacts/return-eligibility",
+      context,
+      body: { phones },
+      schema: envelope(
+        z.object({
+          excluded: z.array(
+            z.object({
+              phone: z.string(),
+              reason: z.enum(["IGNORED", "PERSONAL"]),
+            }),
+          ),
+        }),
+      ),
+    });
+    return response.data.excluded;
+  }
+
   async takeover(context: InternalRequestContext, id: string) {
     return this.mutateConversation(context, id, "takeover");
   }

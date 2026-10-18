@@ -343,10 +343,23 @@ export async function measureRunningAnimations(page: Page): Promise<string[]> {
       const parent = el.parentElement;
       return parent ? `${parent.tagName.toLowerCase()}.${classes(parent)} > ${tag}` : tag;
     };
+    // D-173: a fade that only changes opacity is allowed under reduced
+    // motion. Nothing moves, so it is not reported; any other property in
+    // the keyframes, or a transition, still is.
+    const keyframeMeta = new Set(["offset", "computedOffset", "easing", "composite"]);
+    const onlyFades = (el: Element, style: CSSStyleDeclaration) => {
+      if (parseFloat(style.transitionDuration) > tolerance) return false;
+      const animations = el.getAnimations();
+      return animations.length > 0 && animations.every((animation) =>
+        (animation.effect as KeyframeEffect | null)?.getKeyframes().every((frame) =>
+          Object.keys(frame).every((key) => keyframeMeta.has(key) || key === "opacity"),
+        ) === true,
+      );
+    };
     for (const el of Array.from(document.querySelectorAll("*"))) {
       const style = getComputedStyle(el);
       const duration = parseFloat(style.animationDuration) + parseFloat(style.transitionDuration);
-      if (duration > tolerance) {
+      if (duration > tolerance && !onlyFades(el, style)) {
         offenders.push(`${label(el)}: ${style.animationDuration}/${style.transitionDuration}`);
       }
     }

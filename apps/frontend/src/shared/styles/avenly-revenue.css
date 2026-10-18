@@ -1241,6 +1241,8 @@
   align-items: center;
   align-self: flex-start;
   gap: 2px;
+  /* Alvo de toque mínimo do WCAG 2.5.8 AA. */
+  min-height: 24px;
   color: var(--accent);
   font-size: 14px;
   font-weight: 600;

@@ -192,6 +192,14 @@ describe("disponibilidade extra e indisponibilidade podem ser criadas e removida
     expect(within(list).getByText("Fechado")).toBeVisible();
     expect(within(list).getByText("Feriado local")).toBeVisible();
     expect(within(list).getByText("Dia inteiro")).toBeVisible();
+    // D-191: o item diz o tipo pela cor da borda e do selo, e a data é
+    // `<time>` com a data ISO.
+    const closedItem = within(list).getByText("Fechado").closest("li");
+    expect(closedItem).toHaveClass("is-closed");
+    expect(closedItem?.querySelector("time")).toHaveAttribute(
+      "datetime",
+      ISO_TODAY,
+    );
     await expectNoA11yViolations(container);
 
     await user.click(
@@ -218,11 +226,12 @@ describe("disponibilidade extra e indisponibilidade podem ser criadas e removida
 
     await user.click(within(list).getByRole("button", { name: "Remover" }));
     expect(removeAvailabilityException).toHaveBeenCalledWith("exc-unavailable");
-    expect(
-      await screen.findByText(
-        "Nenhum horário extra ou dia fechado nos próximos 90 dias.",
-      ),
-    ).toBeVisible();
+    const empty = await screen.findByText(
+      "Nenhum horário extra ou dia fechado nos próximos 90 dias.",
+    );
+    expect(empty).toBeVisible();
+    // D-191: o vazio usa o estado vazio da app, não um parágrafo solto.
+    expect(empty.closest(".empty-state")).not.toBeNull();
   });
 
   test("o dia fechado de dia inteiro nasce em Bloquear horário com o payload de antes", async () => {

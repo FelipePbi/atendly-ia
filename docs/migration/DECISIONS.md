@@ -7985,6 +7985,16 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 
 **Consequências:** telas novas fora da barra inferior entram como atalho; configuração nova entra na tela de Configurações, não no "Mais".
 
+## D-191 — Tela "Horário extra": coluna centrada, cartões com respiro e lista legível
+
+**Status:** ACCEPTED em 2026-10-18, a pedido do usuário. Fora do IA Loop, sem Goal próprio. O protótipo do Claude Design não tem esta tela; o desvio segue o padrão das outras telas de Configurações e dos fluxos da Agenda.
+
+**Contexto:** `/agenda/excecoes` (Configurações > Agenda > "Horário extra", D-169) usava a largura de 960 px dos fluxos da Agenda para um formulário de três campos, os dois cartões ("Liberar horário" e "Horários extras e dias fechados") ficavam colados, a lista empilhava data, tipo, horário e "Remover" como linhas soltas e o vazio era um parágrafo sem estilo.
+
+**Decisão:** a página fica numa coluna centrada de até 800 px, com o respiro dos fluxos da Agenda (16 px nas bordas do celular). Os cartões e o aviso de erro ficam numa pilha com 20 px entre si (16 px no celular). No celular os campos empilham e o botão ocupa a largura toda; de 480 px a 767 px a data fica sozinha e Início e Fim lado a lado; de 768 px em diante Data, Início e Fim ficam numa linha. Cada item da lista mostra a data, um selo do tipo ("Horário extra" em destaque, "Fechado" em perigo, com a borda esquerda da mesma cor), o horário com ícone de relógio, o motivo e a decisão em texto secundário, e "Remover" à direita (abaixo do conteúdo em telas menores que 480 px), com 40 px de altura. O vazio usa o estado vazio da app (`.empty-state` com ícone). Comportamento, textos e chamadas ao BFF não mudam.
+
+**Consequências:** cores só por token, então o tema escuro acompanha. Sem animação nova: a pilha entra na apresentação da página como um bloco só, e com movimento reduzido nada anima.
+
 ## D-193 — "Excluir conta" vira a última linha da Conta, sem cartão de perigo no pé
 
 **Status:** ACCEPTED em 2026-10-18, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Diverge do quadro C1 (Mais-WhatsApp), que mostra um cartão rosado fixado no pé da tela.

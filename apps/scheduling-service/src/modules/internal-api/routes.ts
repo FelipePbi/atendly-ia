@@ -440,6 +440,8 @@ const revenueQuerySchema = z.object({
       );
     }, "Invalid calendar date.")
     .optional(),
+  // Lista completa de clientes do período (2026-10-18); ausente, os cinco.
+  customers: z.enum(["top", "all"]).optional(),
 });
 
 const customerChildParamsSchema = z.object({
@@ -2452,6 +2454,7 @@ export async function registerManagementRoutes(
         date: query.date ?? localDate(now, calendar.timezone),
         timeZone: calendar.timezone,
         now,
+        customers: query.customers,
       }),
     );
   });

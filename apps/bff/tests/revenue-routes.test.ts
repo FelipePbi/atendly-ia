@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   revenueAppointmentListSchema,
+  revenueCustomerListSchema,
   revenueReportSchema,
 } from "@avenly-ia/public-api-contract";
 
@@ -250,6 +251,34 @@ describe("GET /v1/revenue (D-177)", () => {
       expect(response.statusCode).toBe(400);
     }
     expect(upstream).toHaveLength(0);
+  });
+});
+
+describe("GET /v1/revenue/customers (2026-10-18)", () => {
+  it("pede ao Scheduling todos os clientes do período, pelo negócio da sessão", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/revenue/customers?period=week&date=2026-10-14&tenantId=outro-negocio",
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(() =>
+      revenueCustomerListSchema.parse(response.json().data),
+    ).not.toThrow();
+    const call = upstream.find(
+      (entry) => entry.url.pathname === "/internal/revenue",
+    );
+    expect(call?.tenantId).toBe("tenant-session");
+    expect(call?.url.searchParams.get("period")).toBe("week");
+    expect(call?.url.searchParams.get("customers")).toBe("all");
+    expect(call?.url.searchParams.has("tenantId")).toBe(false);
+    expect(Object.keys(response.json().data).sort()).toEqual([
+      "customers",
+      "end",
+      "period",
+      "start",
+      "today",
+    ]);
   });
 });
 

@@ -73,6 +73,38 @@ export async function registerV1RevenueRoutes(
   );
 
   /**
+   * `GET /v1/revenue/customers` (2026-10-18): todos os clientes com valor no
+   * período, do que mais faturou para o que menos. Mesma soma do
+   * `GET /v1/revenue`, sem o corte dos cinco primeiros.
+   */
+  app.get(
+    "/v1/revenue/customers",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const parsed = revenueQuerySchema.safeParse(request.query ?? {});
+      if (!parsed.success) {
+        throw new AppError(
+          "VALIDATION_ERROR",
+          "Invalid revenue customers query.",
+          400,
+          z.flattenError(parsed.error).fieldErrors,
+        );
+      }
+      const report = await scheduling.revenue(internalContext(request), {
+        ...parsed.data,
+        customers: "all",
+      });
+      return dataResponse(request, {
+        period: report.period,
+        start: report.start,
+        end: report.end,
+        today: report.today,
+        customers: report.customers,
+      });
+    },
+  );
+
+  /**
    * `GET /v1/revenue/appointments` (D-179): os atendimentos por trás dos
    * números — cancelados, faltas ou concluídos sem valor do período —, com
    * quem marcou e quem fez a mudança. Mesmo escopo: só o negócio da sessão.

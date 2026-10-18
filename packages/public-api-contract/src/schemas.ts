@@ -1147,6 +1147,26 @@ export type RevenueAppointmentKind = z.infer<
   typeof revenueAppointmentKindSchema
 >;
 const revenueActorSchema = z.enum(["AI", "USER", "SYSTEM", "INTEGRATION"]);
+/**
+ * `GET /v1/revenue/customers` (2026-10-18): todos os clientes com valor no
+ * período, do que mais faturou para o que menos — a lista completa por trás
+ * do cartão "Clientes que mais faturaram", que mostra só os cinco primeiros.
+ */
+export const revenueCustomerListSchema = z.object({
+  period: revenuePeriodSchema,
+  start: z.string(),
+  end: z.string(),
+  today: z.string(),
+  customers: z.array(
+    z.object({
+      customerId: z.string(),
+      name: z.string().nullable(),
+      amount: revenueAmountSchema,
+      count: revenueCountSchema,
+    }),
+  ),
+});
+
 export const revenueAppointmentListSchema = z.object({
   kind: revenueAppointmentKindSchema,
   start: z.string(),
@@ -1173,6 +1193,7 @@ export const revenueAppointmentListSchema = z.object({
 export type RevenueAppointmentList = z.infer<
   typeof revenueAppointmentListSchema
 >;
+export type RevenueCustomerList = z.infer<typeof revenueCustomerListSchema>;
 
 export const dashboardSchema = z.object({
   platform: z.object({

@@ -1628,7 +1628,7 @@ export class SchedulingClient {
   /** Faturamento do período (D-177), já somado pelo Scheduling. */
   async revenue(
     context: InternalRequestContext,
-    query: { period: RevenuePeriod; date?: string },
+    query: { period: RevenuePeriod; date?: string; customers?: "top" | "all" },
   ) {
     return this.get(context, "/internal/revenue", revenueReportSchema, query);
   }

@@ -124,6 +124,45 @@
   font-size: 15px;
   font-weight: 600;
 }
+/* "Clientes que mais faturaram" abre a lista completa (2026-10-18). */
+.revenue-card-link {
+  color: inherit;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+}
+.revenue-card-link .icon,
+.revenue-card-more .icon {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+.revenue-card-link:hover {
+  color: var(--accent);
+}
+.revenue-card-more {
+  margin-top: 12px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.revenue-period-tabs.revenue-customers-order {
+  width: 100%;
+  max-width: 360px;
+  margin-bottom: 14px;
+  box-sizing: border-box;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.revenue-customers-page > .card {
+  margin-top: 4px;
+}
 .revenue-card-sub {
   margin: 4px 0 0;
   color: var(--muted);

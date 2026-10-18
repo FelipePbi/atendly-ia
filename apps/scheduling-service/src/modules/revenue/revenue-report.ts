@@ -68,6 +68,12 @@ export interface RevenueReportInput {
   date: string;
   timeZone: string;
   now: Date;
+  /**
+   * Quantos clientes vêm em `customers`, do que mais faturou para o que menos.
+   * Ausente, os cinco do cartão (`REVENUE_TOP_CUSTOMERS`); `"all"`, todos com
+   * valor no período — a lista completa do Faturamento (2026-10-18).
+   */
+  customers?: "top" | "all";
 }
 
 /** Uma faixa do horário de atendimento semanal, em minutos do dia. */
@@ -663,7 +669,7 @@ export function buildRevenueReport(
     customers: [...customers.values()]
       .filter((customer) => customer.amount > 0)
       .sort(byAmount)
-      .slice(0, REVENUE_TOP_CUSTOMERS)
+      .slice(0, input.customers === "all" ? undefined : REVENUE_TOP_CUSTOMERS)
       .map((customer) => ({ ...customer, amount: fromCents(customer.amount) })),
     weekdays: weekdays.map((weekday) => ({
       ...weekday,

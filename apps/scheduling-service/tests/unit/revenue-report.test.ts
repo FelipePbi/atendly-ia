@@ -351,6 +351,28 @@ describe("revenue report: períodos e comparação", () => {
     // 03/10 e 10/10 são sábados.
     expect(result.weekdays[6]).toEqual({ weekday: 6, amount: 300, count: 2 });
   });
+
+  it("o cartão traz cinco clientes; a lista completa (2026-10-18) traz todos", () => {
+    const rows = Array.from({ length: 7 }, (_, index) =>
+      row({
+        customerId: `c${index}`,
+        customerName: `Cliente ${index}`,
+        items: [item({ price: `${100 + index}.00` })],
+      }),
+    );
+    expect(report(rows).customers).toHaveLength(5);
+    const all = buildRevenueReport(rows, {
+      period: "month",
+      date: "2026-10-16",
+      timeZone,
+      now,
+      customers: "all",
+    }).customers;
+    expect(all).toHaveLength(7);
+    expect(all.map((customer) => customer.amount)).toEqual([
+      106, 105, 104, 103, 102, 101, 100,
+    ]);
+  });
 });
 
 /**

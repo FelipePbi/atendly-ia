@@ -23,6 +23,7 @@ import { StatePanel } from "@/shared/ui/States";
 import { AiValueCard } from "./AiValueCard";
 import { RevenueAppointmentsDialog } from "./RevenueAppointmentsDialog";
 import { RevenueChart } from "./RevenueChart";
+import { revenueCustomersHref } from "./RevenueCustomersScreen";
 import {
   adjacentPeriodDate,
   bestBar,
@@ -504,7 +505,18 @@ function CustomersCard({ report }: { report: RevenueReport }) {
   return (
     <section aria-labelledby="revenue-customers" className="card revenue-card">
       <header className="revenue-card-head">
-        <h2 id="revenue-customers">Clientes que mais faturaram</h2>
+        <h2 id="revenue-customers">
+          <Link
+            className="revenue-card-link"
+            href={revenueCustomersHref({
+              period: report.period,
+              date: report.start,
+            })}
+          >
+            Clientes que mais faturaram
+            <Icon name="chevron-right" />
+          </Link>
+        </h2>
       </header>
       <ol className="revenue-rank">
         {report.customers.map((customer, index) => (
@@ -529,6 +541,16 @@ function CustomersCard({ report }: { report: RevenueReport }) {
           </li>
         ))}
       </ol>
+      <Link
+        className="revenue-card-more"
+        href={revenueCustomersHref({
+          period: report.period,
+          date: report.start,
+        })}
+      >
+        Ver todos os clientes
+        <Icon name="chevron-right" />
+      </Link>
     </section>
   );
 }

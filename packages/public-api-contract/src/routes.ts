@@ -58,6 +58,7 @@ import {
   reminderSettingsSchema,
   retentionSettingsSchema,
   revenueAppointmentListSchema,
+  revenueCustomerListSchema,
   revenueReportSchema,
   seriesOccurrencePreviewSchema,
   serviceAiInstructionSchema,
@@ -189,6 +190,12 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
 
   // revenue (D-177)
   { method: "GET", pathPattern: "/v1/revenue", schema: revenueReportSchema },
+  // revenue customers, the full list behind the top five (2026-10-18)
+  {
+    method: "GET",
+    pathPattern: "/v1/revenue/customers",
+    schema: revenueCustomerListSchema,
+  },
   // revenue appointments (D-179)
   {
     method: "GET",

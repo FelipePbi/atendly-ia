@@ -19,6 +19,7 @@ import {
   rememberCustomer,
   rememberServiceCatalog,
 } from "@/features/agenda/agendaMemory";
+import { CustomerReturnMessages } from "@/features/customer-return/CustomerReturnMessages";
 import { Icon } from "@/shared/icons/Icon";
 import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { PushedBar } from "@/shared/layout/PushedBar";
@@ -603,6 +604,7 @@ export function CustomerProfile({
               <div className="resume-body">
                 <div className="resume-main">
                   <CustomerHistory stats={customer.appointmentStats} />
+                  <CustomerReturnMessages customerId={customer.id} />
                 </div>
                 <div className="resume-side">
                   <CustomerNextAppointment

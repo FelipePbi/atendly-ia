@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import type { SettingsState } from "@/data";
 import { ActivityScreen } from "@/features/activity/ActivityScreen";
+import { ReturnSettingsSection } from "@/features/customer-return/ReturnSettingsSection";
 import { ReminderSettingsSection } from "@/features/reminders/ReminderSettingsSection";
 import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
@@ -89,7 +90,8 @@ function isHubScenario(scenario: SettingsScenario): boolean {
     scenario === "account" ||
     scenario === "account-deletion" ||
     scenario === "appearance" ||
-    scenario === "activity"
+    scenario === "activity" ||
+    scenario === "customer-return"
   );
 }
 
@@ -109,6 +111,7 @@ function openHrefFor(scenario: SettingsScenario): string {
   if (scenario === "account" || scenario === "account-deletion")
     return "/configuracoes/conta";
   if (scenario === "activity") return "/configuracoes/atividade";
+  if (scenario === "customer-return") return "/configuracoes/retorno";
   if (scenario === "appearance") return "/configuracoes/aparencia";
   return "/configuracoes/negocio";
 }
@@ -201,6 +204,12 @@ function SettingsSection({
   if (scenario === "availability")
     return <AvailabilitySettings settings={settings} onSaved={setSettings} />;
   if (scenario === "conversations") return <ConversationsSettings />;
+  if (scenario === "customer-return")
+    return (
+      <SettingsPage title="Retorno de clientes">
+        <ReturnSettingsSection tone={settings.ai.tone ?? "BALANCED"} />
+      </SettingsPage>
+    );
   if (scenario === "account") return <AccountSettings />;
   if (scenario === "appearance") return <AppearanceSettings />;
   if (scenario === "account-deletion")

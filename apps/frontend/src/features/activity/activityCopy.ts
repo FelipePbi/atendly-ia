@@ -211,6 +211,15 @@ const FIELD_LABELS: Record<string, string> = {
   aiInstruction: "Instrução para a IA",
   exceptionPhones: "Números que recebem de verdade",
   exceptionCount: "Números que recebem de verdade",
+  dailyLimit: "Mensagens por dia",
+  windowDays: "Dias de envio",
+  windowStart: "Envio a partir de",
+  windowEnd: "Envio até",
+  leadDays: "Renovação: dias antes da data",
+  winbackDays: "Resgate: sem vir há",
+  winbackIncentive: "Incentivo do Resgate",
+  renewalMessage: "Mensagem da Renovação",
+  winbackMessage: "Mensagem do Resgate",
 };
 
 /** Campo que nenhuma tradução conhece: rótulo neutro, nunca "Campo". */
@@ -261,6 +270,9 @@ const EMPTY_TEXT: Record<string, string> = {
   modalities: "Nenhum",
   exceptionPhones: "Nenhum",
   category: "Sem categoria",
+  winbackIncentive: "Sem incentivo",
+  renewalMessage: "Padrão",
+  winbackMessage: "Padrão",
 };
 
 const MINUTE_FIELDS = new Set([
@@ -277,6 +289,8 @@ const DAY_FIELDS = new Set([
   "recurrenceIntervalDays",
   "commercialRetentionDays",
   "personalRetentionDays",
+  "leadDays",
+  "winbackDays",
 ]);
 
 function plain(value: string): ChangeValue {
@@ -320,6 +334,12 @@ export function formatChangeValue(
     return plain(value ? "Ligada" : "Desligada");
   }
   if (field === "active") return plain(value ? "Ativo" : "Arquivado");
+  if (field === "dailyLimit" && typeof value === "number") {
+    return plain(`${value} por dia`);
+  }
+  if (field === "windowDays" && typeof value === "string") {
+    return plain(weekdayList(value));
+  }
   if (value === null || value === "") {
     return { text: EMPTY_TEXT[field] ?? "—", muted: true };
   }
@@ -374,6 +394,27 @@ export function formatChangeValue(
     if (stamp) return plain(stamp);
   }
   return plain(String(value));
+}
+
+/** Dias da janela de envio do retorno (`"[1,2,3]"`), em palavras. */
+function weekdayList(value: string): string {
+  let days: unknown;
+  try {
+    days = JSON.parse(value);
+  } catch {
+    return value;
+  }
+  if (!Array.isArray(days)) return value;
+  const names = days
+    .filter((day): day is number => typeof day === "number")
+    .sort((left, right) => left - right)
+    .map((day) => WEEKDAY_NAMES[day])
+    .filter((day): day is string => Boolean(day));
+  if (names.length === 0) return "Nenhum dia";
+  if (names.length === 7) return "Todos os dias";
+  return names.length === 1
+    ? names[0]
+    : `${names.slice(0, -1).join(", ")} e ${names.at(-1)}`;
 }
 
 /**
@@ -715,6 +756,31 @@ export function activitySentence(entry: ActivityEntry): string {
       return `${who} alterou os avisos`;
     case "settings.retention_updated":
       return `${who} mudou por quanto tempo as conversas ficam guardadas`;
+    case "settings.customer_return_updated":
+      return `${who} alterou o retorno de clientes`;
+
+    case "customer_return.campaign_approved": {
+      const total = count(details.customers);
+      return `${who} aprovou uma rodada de ${returnRoutine(details)}${
+        total === null ? "" : ` para ${plural(total, "cliente", "clientes")}`
+      }`;
+    }
+    case "customer_return.campaign_paused":
+      return `${who} pausou uma rodada de ${returnRoutine(details)}`;
+    case "customer_return.campaign_resumed":
+      return `${who} retomou uma rodada de ${returnRoutine(details)}`;
+    case "customer_return.campaign_cancelled":
+      return `${who} cancelou o que faltava de uma rodada de ${returnRoutine(details)}`;
+    case "customer_return.target_skipped":
+      return `${who} tirou ${person} de uma rodada de retorno`;
+    case "customer.return_messages_blocked":
+      return `${who} parou as mensagens de retorno para ${person}`;
+    case "customer.return_messages_allowed":
+      return `${who} liberou as mensagens de retorno para ${person}`;
+    case "customer.return_declined":
+      return `${person} recusou o convite de retorno`;
+    case "customer.return_stopped":
+      return `${person} pediu para não receber mensagens de retorno`;
     case "settings.whatsapp_connect_started":
       return `${who} começou a conectar o WhatsApp`;
     case "settings.whatsapp_disconnected":
@@ -765,6 +831,11 @@ export function activitySentence(entry: ActivityEntry): string {
         ? `${who} fez uma alteração em ${personLabel(label, label)}`
         : `${who} fez uma alteração`;
   }
+}
+
+/** "Renovação" ou "Resgate", pelo `kind` gravado na rodada. */
+function returnRoutine(details: Details): string {
+  return details.kind === "WINBACK" ? "Resgate" : "Renovação";
 }
 
 function count(value: unknown): number | null {
@@ -819,6 +890,14 @@ export function activityNote(entry: ActivityEntry): string | null {
       return "As mensagens deixam de sair para os clientes; só os números de exceção recebem de verdade.";
     case "settings.ai_sandbox_disabled":
       return "As mensagens voltaram a sair para os clientes.";
+    case "customer_return.campaign_approved": {
+      const incentive = text(details.incentive);
+      return incentive ? `Incentivo: “${incentive}”` : null;
+    }
+    case "customer.return_declined":
+      return "Registrado pela IA na conversa: 90 dias sem convite de retorno.";
+    case "customer.return_stopped":
+      return "Registrado pela IA na conversa: sem convites até você liberar no perfil.";
     case "agenda.block_series_created":
     case "agenda.block_series_updated":
     case "agenda.block_series_removed":
@@ -853,5 +932,6 @@ export function activityHref(entry: ActivityEntry): string | null {
   if (entry.entity.type === "conversation") {
     return `/conversas/${encodeURIComponent(id)}`;
   }
+  if (entry.entity.type === "return_campaign") return "/clientes/retorno";
   return null;
 }

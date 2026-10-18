@@ -6,6 +6,7 @@ export * from "./services/BffActivityService";
 export * from "./services/BffAuthService";
 export * from "./services/BffCalendarService";
 export * from "./services/BffConversationService";
+export * from "./services/BffCustomerReturnService";
 export * from "./services/BffCustomerService";
 export * from "./services/BffDashboardService";
 export * from "./services/BffMigrationService";

@@ -20,6 +20,7 @@ export type SettingsScenario =
   | "appearance"
   | "account-deletion"
   | "activity"
+  | "customer-return"
   | "loading"
   | "error";
 export interface SettingsService {

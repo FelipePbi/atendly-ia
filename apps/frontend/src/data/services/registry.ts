@@ -8,6 +8,7 @@ import { BffActivityService } from "./BffActivityService";
 import { BffAuthService } from "./BffAuthService";
 import { BffCalendarService } from "./BffCalendarService";
 import { BffConversationService } from "./BffConversationService";
+import { BffCustomerReturnService } from "./BffCustomerReturnService";
 import { BffCustomerService } from "./BffCustomerService";
 import { BffDashboardService } from "./BffDashboardService";
 import { BffKnowledgeService } from "./BffKnowledgeService";
@@ -28,6 +29,7 @@ export interface BffServiceRegistry {
   auth: BffAuthService;
   calendar: BffCalendarService;
   conversations: BffConversationService;
+  customerReturn: BffCustomerReturnService;
   customers: BffCustomerService;
   dashboard: BffDashboardService;
   knowledge: BffKnowledgeService;
@@ -64,6 +66,7 @@ export function createBffServiceRegistry(
     auth: new BffAuthService(http),
     calendar: new BffCalendarService(http),
     conversations: new BffConversationService(http),
+    customerReturn: new BffCustomerReturnService(http),
     customers: new BffCustomerService(http),
     dashboard: new BffDashboardService(http),
     knowledge: new BffKnowledgeService(http),

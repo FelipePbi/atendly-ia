@@ -104,6 +104,9 @@ services:
       PLATFORM_WHATSAPP_INSTANCE_ID: ${PLATFORM_WHATSAPP_INSTANCE_ID:-}
       PLATFORM_WHATSAPP_CREDENTIAL: ${PLATFORM_WHATSAPP_CREDENTIAL:-}
       PLATFORM_WHATSAPP_NUMBER: ${PLATFORM_WHATSAPP_NUMBER:-}
+      # Vazia, a IA responde todo contato. Com números (dígitos com DDI,
+      # separados por vírgula), só eles recebem resposta.
+      AI_REPLY_ONLY_PHONES: ${AI_REPLY_ONLY_PHONES:-}
       # Caminho de mensagem e de lembrete: explícitos, não default.
       INBOX_WORKER_ENABLED: "true"
       NOTIFICATION_DELIVERY_ENABLED: "true"

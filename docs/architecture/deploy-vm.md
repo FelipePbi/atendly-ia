@@ -130,6 +130,7 @@ dele. `SERVICE_FQDN_*` e `SERVICE_URL_*` são geradas pelo próprio Coolify.
 | E-mail | `RESEND_API_KEY`, `EMAIL_FROM` | preenchidas; seção "E-mail" |
 | Documentos legais | `AVENLY_*` (razão social, CNPJ, endereço, e-mails, encarregado, fornecedores, retenção, foro) | preenchidas; Termos e Privacidade sem marcadores e indexáveis (`AVENLY_LEGAL_REVIEW_APPROVED` e `AVENLY_LEGAL_INDEXABLE` em `true`) |
 | Número oficial | `PLATFORM_WHATSAPP_INSTANCE_ID`, `PLATFORM_WHATSAPP_CREDENTIAL`, `PLATFORM_WHATSAPP_NUMBER` | **vazias**: falta conectar o chip da Avenly (seção "Número oficial da plataforma") |
+| Filtro da IA | `AI_REPLY_ONLY_PHONES` | só o número do dono, para testar o fluxo em produção sem a IA responder clientes; esvaziar para liberar a IA a todos |
 | Minha Agenda | `MINHA_AGENDA_OAUTH_CLIENT_CREDENTIAL` | **vazia**: a importação da Minha Agenda fica indisponível |
 
 ## Cuidados

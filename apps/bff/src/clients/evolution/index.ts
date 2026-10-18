@@ -110,7 +110,14 @@ export class EvolutionClient {
         token: input.token,
         webhook: input.webhookUrl,
         webhookEvents: DEFAULT_SUBSCRIPTIONS,
-        advancedSettings: { ignoreGroups: true },
+        // D-205: a Evolution nunca marca como lida nem deixa o aparelho
+        // vinculado online por conta própria; os dois tiram a notificação do
+        // celular do dono. Explícito para não depender do padrão do fork.
+        advancedSettings: {
+          ignoreGroups: true,
+          alwaysOnline: false,
+          readMessages: false,
+        },
       },
       schema: envelope(createDataSchema),
     });

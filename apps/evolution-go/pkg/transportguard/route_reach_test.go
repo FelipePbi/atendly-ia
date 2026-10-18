@@ -86,15 +86,15 @@ var expectedProseLiteralsReachedFromRegisteredRoutes = []reachedProseExpectation
 	{Route: "POST /send/button", Location: "pkg/sendMessage/service/send_service.go:1765", Content: "{\"from\":\"api\",\"templateId\":", Field: "MessageParamsJSON"},
 	{Route: "POST /send/button", Location: "pkg/sendMessage/service/send_service.go:1782", Content: "*", Field: "Text"},
 	{Route: "POST /send/button", Location: "pkg/sendMessage/service/send_service.go:1784", Content: "\n\n", Field: "Text"},
+	{Route: "POST /send/list", Location: "pkg/sendMessage/service/send_service.go:1956", Content: " ", Field: "Title"},
 	{Route: "POST /send/list", Location: "pkg/sendMessage/service/send_service.go:1962", Content: " ", Field: "Title"},
-	{Route: "POST /send/list", Location: "pkg/sendMessage/service/send_service.go:1968", Content: " ", Field: "Title"},
-	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2541", Content: "image/jpeg", Field: "Mimetype"},
-	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2566", Content: "video/mp4", Field: "Mimetype"},
-	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2600", Content: "cta_url", Field: "Name"},
-	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2604", Content: "cta_call", Field: "Name"},
-	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2608", Content: "cta_copy", Field: "Name"},
-	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2614", Content: "quick_reply", Field: "Name"},
-	{Route: "POST /send/status/media", Location: "pkg/sendMessage/service/send_service.go:2818", Content: "image/jpeg", Field: "Mimetype"},
+	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2529", Content: "image/jpeg", Field: "Mimetype"},
+	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2554", Content: "video/mp4", Field: "Mimetype"},
+	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2588", Content: "cta_url", Field: "Name"},
+	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2592", Content: "cta_call", Field: "Name"},
+	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2596", Content: "cta_copy", Field: "Name"},
+	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2602", Content: "quick_reply", Field: "Name"},
+	{Route: "POST /send/status/media", Location: "pkg/sendMessage/service/send_service.go:2806", Content: "image/jpeg", Field: "Mimetype"},
 }
 
 // reachedProseExpectationsOf renders computed literals the way the

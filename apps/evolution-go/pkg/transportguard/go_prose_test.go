@@ -55,15 +55,15 @@ var expectedGoProseLiterals = []goProseExpectation{
 	{Location: "pkg/sendMessage/service/send_service.go:1765", Content: "{\"from\":\"api\",\"templateId\":", Fields: []string{"MessageParamsJSON"}},
 	{Location: "pkg/sendMessage/service/send_service.go:1782", Content: "*", Fields: []string{"Text"}},
 	{Location: "pkg/sendMessage/service/send_service.go:1784", Content: "\n\n", Fields: []string{"Text"}},
+	{Location: "pkg/sendMessage/service/send_service.go:1956", Content: " ", Fields: []string{"Title"}},
 	{Location: "pkg/sendMessage/service/send_service.go:1962", Content: " ", Fields: []string{"Title"}},
-	{Location: "pkg/sendMessage/service/send_service.go:1968", Content: " ", Fields: []string{"Title"}},
-	{Location: "pkg/sendMessage/service/send_service.go:2541", Content: "image/jpeg", Fields: []string{"Mimetype"}},
-	{Location: "pkg/sendMessage/service/send_service.go:2566", Content: "video/mp4", Fields: []string{"Mimetype"}},
-	{Location: "pkg/sendMessage/service/send_service.go:2600", Content: "cta_url", Fields: []string{"Name"}},
-	{Location: "pkg/sendMessage/service/send_service.go:2604", Content: "cta_call", Fields: []string{"Name"}},
-	{Location: "pkg/sendMessage/service/send_service.go:2608", Content: "cta_copy", Fields: []string{"Name"}},
-	{Location: "pkg/sendMessage/service/send_service.go:2614", Content: "quick_reply", Fields: []string{"Name"}},
-	{Location: "pkg/sendMessage/service/send_service.go:2818", Content: "image/jpeg", Fields: []string{"Mimetype"}},
+	{Location: "pkg/sendMessage/service/send_service.go:2529", Content: "image/jpeg", Fields: []string{"Mimetype"}},
+	{Location: "pkg/sendMessage/service/send_service.go:2554", Content: "video/mp4", Fields: []string{"Mimetype"}},
+	{Location: "pkg/sendMessage/service/send_service.go:2588", Content: "cta_url", Fields: []string{"Name"}},
+	{Location: "pkg/sendMessage/service/send_service.go:2592", Content: "cta_call", Fields: []string{"Name"}},
+	{Location: "pkg/sendMessage/service/send_service.go:2596", Content: "cta_copy", Fields: []string{"Name"}},
+	{Location: "pkg/sendMessage/service/send_service.go:2602", Content: "quick_reply", Fields: []string{"Name"}},
+	{Location: "pkg/sendMessage/service/send_service.go:2806", Content: "image/jpeg", Fields: []string{"Mimetype"}},
 }
 
 // TestGoProseLiteralsReachingTransportAreAssertedElementByElement is the

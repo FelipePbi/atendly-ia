@@ -1827,17 +1827,11 @@ func (s *sendService) SendButton(data *ButtonStruct, instance *instance_model.In
 	}
 
 	if data.Delay > 0 {
-		err := client.SendChatPresence(context.Background(), recipient, types.ChatPresence("composing"), types.ChatPresenceMedia(""))
+		release, err := s.showTyping(client, instance, recipient, "", data.Delay)
 		if err != nil {
 			return nil, err
 		}
-
-		time.Sleep(time.Duration(data.Delay) * time.Millisecond)
-
-		err = client.SendChatPresence(context.Background(), recipient, types.ChatPresence("paused"), types.ChatPresenceMedia(""))
-		if err != nil {
-			return nil, err
-		}
+		defer release()
 	}
 
 	response, err := client.SendMessage(context.Background(), recipient, msg, whatsmeow.SendRequestExtra{ID: messageId})
@@ -2036,17 +2030,11 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 			media = "audio"
 		}
 
-		err := s.clientPointer[instance.Id].SendChatPresence(context.Background(), recipient, types.ChatPresence("composing"), types.ChatPresenceMedia(media))
+		release, err := s.showTyping(s.clientPointer[instance.Id], instance, recipient, media, data.Delay)
 		if err != nil {
 			return nil, err
 		}
-
-		time.Sleep(time.Duration(data.Delay) * time.Millisecond)
-
-		err = s.clientPointer[instance.Id].SendChatPresence(context.Background(), recipient, types.ChatPresence("paused"), types.ChatPresenceMedia(media))
-		if err != nil {
-			return nil, err
-		}
+		defer release()
 	}
 
 	isMedia := false
@@ -2934,6 +2922,34 @@ func (s *sendService) sendStatusWebhook(messageSent *MessageSendStruct, instance
 		go s.whatsmeowService.SendToGlobalQueues("SendStatus", values, instance.Id)
 	}
 	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Status %s sent successfully", instance.Id, messageType)
+}
+
+// instanceTyping guarda as janelas de "digitando…" em andamento por instância.
+var instanceTyping = newTypingPresence()
+
+// showTyping mostra "digitando…" (ou "gravando…", com media "audio") por delay
+// ms e para. A conta fica disponível só nessa janela (D-205): a função
+// devolvida a marca indisponível de novo e deve rodar depois do envio.
+func (s *sendService) showTyping(client *whatsmeow.Client, instance *instance_model.Instance, recipient types.JID, media string, delay int32) (func(), error) {
+	release := instanceTyping.hold(instance.Id, instance.AlwaysOnline, client.SendPresence, func(presence types.Presence, err error) {
+		s.loggerWrapper.GetLogger(instance.Id).LogWarn("[%s] Failed to send %s presence around typing: %v", instance.Id, presence, err)
+	})
+
+	err := client.SendChatPresence(context.Background(), recipient, types.ChatPresence("composing"), types.ChatPresenceMedia(media))
+	if err != nil {
+		release()
+		return nil, err
+	}
+
+	time.Sleep(time.Duration(delay) * time.Millisecond)
+
+	err = client.SendChatPresence(context.Background(), recipient, types.ChatPresence("paused"), types.ChatPresenceMedia(media))
+	if err != nil {
+		release()
+		return nil, err
+	}
+
+	return release, nil
 }
 
 func NewSendService(

@@ -20,6 +20,8 @@ O produto deve explicar claramente:
 
 > **Você pode continuar usando seu WhatsApp normalmente. Quando você responde manualmente, a IA sai de cena.**
 
+Usar normalmente inclui as notificações: a IA ler e responder uma conversa não pode fazer o celular parar de avisar as mensagens das clientes. A plataforma nunca marca mensagem como lida no WhatsApp (ler no app da Avenly não muda nada no WhatsApp) e não deixa o número "online" por conta própria; só fica online nos poucos segundos em que mostra "digitando…" antes de uma parte da resposta. Detalhe técnico e limites em D-205.
+
 ## Inbox
 
 Todas as conversas aparecem organizadas em:

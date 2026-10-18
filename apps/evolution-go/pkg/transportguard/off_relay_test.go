@@ -106,24 +106,24 @@ var expectedOffRelaySources = []carrierWriteExpectation{
 	{Location: "pkg/sendMessage/service/send_service.go:1775", MessageType: "InteractiveMessage_NativeFlowMessage", FieldName: "MessageParamsJSON", Category: SourceComposedByConcatenation},
 	{Location: "pkg/sendMessage/service/send_service.go:1791", MessageType: "InteractiveMessage_Body", FieldName: "Text", Category: SourceComposedByConcatenation},
 	{Location: "pkg/sendMessage/service/send_service.go:1796", MessageType: "InteractiveMessage_NativeFlowMessage", FieldName: "MessageParamsJSON", Category: SourceComposedByConcatenation},
-	{Location: "pkg/sendMessage/service/send_service.go:1975", MessageType: "ListMessage_Row", FieldName: "Title", Category: SourceBranchDependent},
-	{Location: "pkg/sendMessage/service/send_service.go:1977", MessageType: "ListMessage_Row", FieldName: "RowID", Category: SourceBranchDependent},
-	{Location: "pkg/sendMessage/service/send_service.go:1981", MessageType: "ListMessage_Section", FieldName: "Title", Category: SourceBranchDependent},
-	{Location: "pkg/sendMessage/service/send_service.go:2538", MessageType: "ImageMessage", FieldName: "URL", Category: SourceLibraryComputedValue},
-	{Location: "pkg/sendMessage/service/send_service.go:2539", MessageType: "ImageMessage", FieldName: "DirectPath", Category: SourceLibraryComputedValue},
-	{Location: "pkg/sendMessage/service/send_service.go:2541", MessageType: "ImageMessage", FieldName: "Mimetype", Category: SourceGoLiteral},
-	{Location: "pkg/sendMessage/service/send_service.go:2563", MessageType: "VideoMessage", FieldName: "URL", Category: SourceLibraryComputedValue},
-	{Location: "pkg/sendMessage/service/send_service.go:2564", MessageType: "VideoMessage", FieldName: "DirectPath", Category: SourceLibraryComputedValue},
-	{Location: "pkg/sendMessage/service/send_service.go:2566", MessageType: "VideoMessage", FieldName: "Mimetype", Category: SourceGoLiteral},
-	{Location: "pkg/sendMessage/service/send_service.go:2619", MessageType: "InteractiveMessage_NativeFlowMessage_NativeFlowButton", FieldName: "Name", Category: SourceGoLiteral},
-	{Location: "pkg/sendMessage/service/send_service.go:2620", MessageType: "InteractiveMessage_NativeFlowMessage_NativeFlowButton", FieldName: "ButtonParamsJSON", Category: SourceLibraryComputedValue},
-	{Location: "pkg/sendMessage/service/send_service.go:2844", MessageType: "ImageMessage", FieldName: "URL", Category: SourceLibraryComputedValue},
-	{Location: "pkg/sendMessage/service/send_service.go:2845", MessageType: "ImageMessage", FieldName: "DirectPath", Category: SourceLibraryComputedValue},
-	{Location: "pkg/sendMessage/service/send_service.go:2847", MessageType: "ImageMessage", FieldName: "Mimetype", Category: SourceBranchDependent},
-	{Location: "pkg/sendMessage/service/send_service.go:2856", MessageType: "VideoMessage", FieldName: "URL", Category: SourceLibraryComputedValue},
-	{Location: "pkg/sendMessage/service/send_service.go:2857", MessageType: "VideoMessage", FieldName: "DirectPath", Category: SourceLibraryComputedValue},
-	{Location: "pkg/sendMessage/service/send_service.go:2859", MessageType: "VideoMessage", FieldName: "Mimetype", Category: SourceBranchDependent},
-	{Location: "pkg/whatsmeow/service/whatsmeow.go:1806", MessageType: "ExtendedTextMessage", FieldName: "Text", Category: SourceInstanceConfig},
+	{Location: "pkg/sendMessage/service/send_service.go:1969", MessageType: "ListMessage_Row", FieldName: "Title", Category: SourceBranchDependent},
+	{Location: "pkg/sendMessage/service/send_service.go:1971", MessageType: "ListMessage_Row", FieldName: "RowID", Category: SourceBranchDependent},
+	{Location: "pkg/sendMessage/service/send_service.go:1975", MessageType: "ListMessage_Section", FieldName: "Title", Category: SourceBranchDependent},
+	{Location: "pkg/sendMessage/service/send_service.go:2526", MessageType: "ImageMessage", FieldName: "URL", Category: SourceLibraryComputedValue},
+	{Location: "pkg/sendMessage/service/send_service.go:2527", MessageType: "ImageMessage", FieldName: "DirectPath", Category: SourceLibraryComputedValue},
+	{Location: "pkg/sendMessage/service/send_service.go:2529", MessageType: "ImageMessage", FieldName: "Mimetype", Category: SourceGoLiteral},
+	{Location: "pkg/sendMessage/service/send_service.go:2551", MessageType: "VideoMessage", FieldName: "URL", Category: SourceLibraryComputedValue},
+	{Location: "pkg/sendMessage/service/send_service.go:2552", MessageType: "VideoMessage", FieldName: "DirectPath", Category: SourceLibraryComputedValue},
+	{Location: "pkg/sendMessage/service/send_service.go:2554", MessageType: "VideoMessage", FieldName: "Mimetype", Category: SourceGoLiteral},
+	{Location: "pkg/sendMessage/service/send_service.go:2607", MessageType: "InteractiveMessage_NativeFlowMessage_NativeFlowButton", FieldName: "Name", Category: SourceGoLiteral},
+	{Location: "pkg/sendMessage/service/send_service.go:2608", MessageType: "InteractiveMessage_NativeFlowMessage_NativeFlowButton", FieldName: "ButtonParamsJSON", Category: SourceLibraryComputedValue},
+	{Location: "pkg/sendMessage/service/send_service.go:2832", MessageType: "ImageMessage", FieldName: "URL", Category: SourceLibraryComputedValue},
+	{Location: "pkg/sendMessage/service/send_service.go:2833", MessageType: "ImageMessage", FieldName: "DirectPath", Category: SourceLibraryComputedValue},
+	{Location: "pkg/sendMessage/service/send_service.go:2835", MessageType: "ImageMessage", FieldName: "Mimetype", Category: SourceBranchDependent},
+	{Location: "pkg/sendMessage/service/send_service.go:2844", MessageType: "VideoMessage", FieldName: "URL", Category: SourceLibraryComputedValue},
+	{Location: "pkg/sendMessage/service/send_service.go:2845", MessageType: "VideoMessage", FieldName: "DirectPath", Category: SourceLibraryComputedValue},
+	{Location: "pkg/sendMessage/service/send_service.go:2847", MessageType: "VideoMessage", FieldName: "Mimetype", Category: SourceBranchDependent},
+	{Location: "pkg/whatsmeow/service/whatsmeow.go:1827", MessageType: "ExtendedTextMessage", FieldName: "Text", Category: SourceInstanceConfig},
 }
 
 // relativeToModuleRoot renders an absolute source position the way the
@@ -214,7 +214,7 @@ func TestTheInstanceConfigurationSourceIsTheRejectCallMessage(t *testing.T) {
 
 	only := configured[0]
 	location := positionRelativeToModuleRoot(t, only.File, only.Line)
-	const expectedLocation = "pkg/whatsmeow/service/whatsmeow.go:1806"
+	const expectedLocation = "pkg/whatsmeow/service/whatsmeow.go:1827"
 	if location != expectedLocation {
 		t.Errorf("the instance configuration source moved: expected %s, found %s", expectedLocation, location)
 	}

@@ -791,6 +791,15 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 	}
 }
 
+// connectPresence é a presença enviada ao conectar. Só alwaysOnline mantém o
+// aparelho vinculado online; sem ele, o WhatsApp volta a notificar o celular.
+func connectPresence(alwaysOnline bool) types.Presence {
+	if alwaysOnline {
+		return types.PresenceAvailable
+	}
+	return types.PresenceUnavailable
+}
+
 func schedulePresenceUpdates(mycli *MyClient) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
@@ -803,6 +812,12 @@ func schedulePresenceUpdates(mycli *MyClient) {
 			if err != nil {
 				mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Instance no longer exists, stopping presence updates", mycli.userID)
 				return // Encerra a goroutine se a instância não existir mais
+			}
+
+			// alwaysOnline desligado depois de conectar: para de se marcar online (D-205).
+			if !mycli.Instance.AlwaysOnline {
+				mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] alwaysOnline is off, stopping presence updates", mycli.userID)
+				return
 			}
 
 			processPresenceUpdates(mycli)
@@ -903,13 +918,19 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 
 			postMap["data"] = dataMap
 
-			go schedulePresenceUpdates(mycli)
+			// Avenly D-205: aparelho vinculado "disponível" faz o WhatsApp parar de
+			// notificar o celular do dono. Só fica online quem pediu alwaysOnline;
+			// o padrão é avisar "indisponível" ao conectar (o pushname vai junto).
+			presence := connectPresence(mycli.Instance.AlwaysOnline)
+			if presence == types.PresenceAvailable {
+				go schedulePresenceUpdates(mycli)
+			}
 
-			err := mycli.WAClient.SendPresence(context.Background(), types.PresenceAvailable)
+			err := mycli.WAClient.SendPresence(context.Background(), presence)
 			if err != nil {
-				mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Failed to send available presence %v", mycli.userID, err)
+				mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Failed to send %s presence %v", mycli.userID, presence, err)
 			} else {
-				mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Marked self as available", mycli.userID)
+				mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Marked self as %s", mycli.userID, presence)
 			}
 
 			mycli.Instance.Connected = true
@@ -2640,6 +2661,14 @@ func (w whatsmeowService) UpdateInstanceAdvancedSettings(instanceId string) erro
 
 	// Atualiza a instância no MyClient com as advanced settings atualizadas
 	myClient.Instance = instance
+
+	// alwaysOnline vale já, sem esperar reconectar (D-205).
+	if myClient.WAClient != nil && myClient.WAClient.IsLoggedIn() {
+		presence := connectPresence(instance.AlwaysOnline)
+		if err := myClient.WAClient.SendPresence(context.Background(), presence); err != nil {
+			w.loggerWrapper.GetLogger(instanceId).LogWarn("[%s] Failed to send %s presence %v", instanceId, presence, err)
+		}
+	}
 
 	w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Advanced settings updated in runtime successfully", instanceId)
 	return nil

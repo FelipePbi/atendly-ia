@@ -19,6 +19,8 @@ export interface CreateAvenlyCustomerInput {
 export interface UpdateAvenlyCustomerInput {
   name?: string | null;
   phone?: string | null;
+  /** Desativar tira da lista principal de Clientes (2026-10-18). */
+  active?: boolean;
 }
 
 export interface SetPrimaryGuardianInput {
@@ -97,7 +99,19 @@ export interface CustomerListFilter {
   phone?: string | null;
   /** Trecho do nome ou dos dígitos do telefone. */
   search?: string | null;
+  /**
+   * Abas Ativos/Inativos da tela de Clientes (2026-10-18). Ausente, todos —
+   * agenda, IA e busca por telefone nunca escondem uma cliente desativada.
+   */
+  status?: "active" | "inactive" | null;
+  /**
+   * Ordem da página (2026-10-18): nome (padrão), último atendimento (mais
+   * recente primeiro) ou frequência (mais atendimentos concluídos primeiro).
+   */
+  sort?: CustomerListSort | null;
 }
+
+export type CustomerListSort = "name" | "last" | "frequency";
 
 /** `contains` do Prisma não escapa os curingas do `LIKE`: `%` e `_` são texto. */
 function escapeLike(value: string): string {
@@ -152,6 +166,33 @@ function encodeCustomerCursor(customer: CustomerListKey): string {
       customer.id,
     ]),
   ).toString("base64url");
+}
+
+function encodeRankedCursor(sort: CustomerListSort, offset: number): string {
+  return Buffer.from(JSON.stringify(["rank", sort, offset])).toString(
+    "base64url",
+  );
+}
+
+function decodeRankedCursor(cursor: string, sort: CustomerListSort): number {
+  try {
+    const value: unknown = JSON.parse(
+      Buffer.from(cursor, "base64url").toString("utf8"),
+    );
+    if (
+      Array.isArray(value) &&
+      value.length === 3 &&
+      value[0] === "rank" &&
+      value[1] === sort &&
+      Number.isInteger(value[2]) &&
+      (value[2] as number) >= 0
+    ) {
+      return value[2] as number;
+    }
+  } catch {
+    // Cai no erro abaixo.
+  }
+  throw new AppError("VALIDATION_ERROR", "Invalid customer cursor.", 400);
 }
 
 function decodeCustomerCursor(cursor: string): CustomerListKey {
@@ -230,6 +271,9 @@ export class AvenlyCustomerService {
     page: { limit: number; cursor?: string | null },
     options: { timezone?: string; now?: Date } = {},
   ) {
+    if (filter.sort && filter.sort !== "name") {
+      return this.rankedPage(filter.sort, filter, page, options);
+    }
     const after = page.cursor ? decodeCustomerCursor(page.cursor) : null;
     const customers = await this.sortedList(filter);
     const start = after
@@ -247,6 +291,69 @@ export class AvenlyCustomerService {
       nextCursor:
         rows.length > page.limit && last ? encodeCustomerCursor(last) : null,
     };
+  }
+
+  /**
+   * Página por último atendimento ou por frequência. A métrica sai de uma
+   * consulta agrupada para o negócio inteiro (nunca uma por cliente) e a
+   * ordem é total: métrica, depois a ordem de nome. O cursor é a posição na
+   * lista ordenada, marcado com a ordem a que pertence — trocar a ordem
+   * recomeça do início.
+   */
+  private async rankedPage(
+    sort: Exclude<CustomerListSort, "name">,
+    filter: CustomerListFilter,
+    page: { limit: number; cursor?: string | null },
+    options: { timezone?: string; now?: Date },
+  ) {
+    const offset = page.cursor ? decodeRankedCursor(page.cursor, sort) : 0;
+    const customers = await this.sortedList(filter);
+    const metric =
+      sort === "last"
+        ? await this.lastVisitMetric(options.now ?? new Date())
+        : await this.frequencyMetric();
+    // `sort` é estável: empate (ou sem atendimento) mantém a ordem de nome.
+    const ranked = [...customers].sort(
+      (a, b) => (metric.get(b.id) ?? -1) - (metric.get(a.id) ?? -1),
+    );
+    const rows = ranked.slice(offset, offset + page.limit + 1);
+    const pageRows = rows.slice(0, page.limit);
+    return {
+      items: await this.withListExtras(pageRows, options),
+      total: ranked.length,
+      nextCursor:
+        rows.length > page.limit
+          ? encodeRankedCursor(sort, offset + page.limit)
+          : null,
+    };
+  }
+
+  /** Início do último atendimento não cancelado que já começou, por cliente. */
+  private async lastVisitMetric(now: Date): Promise<Map<string, number>> {
+    const rows = await this.database.appointment.groupBy({
+      by: ["customerId"],
+      where: {
+        tenantId: this.tenantId,
+        status: { not: "CANCELLED" },
+        startAt: { lte: now },
+      },
+      _max: { startAt: true },
+    });
+    const metric = new Map<string, number>();
+    for (const row of rows) {
+      if (row._max.startAt) metric.set(row.customerId, row._max.startAt.getTime());
+    }
+    return metric;
+  }
+
+  /** Atendimentos concluídos por cliente. */
+  private async frequencyMetric(): Promise<Map<string, number>> {
+    const rows = await this.database.appointment.groupBy({
+      by: ["customerId"],
+      where: { tenantId: this.tenantId, status: "COMPLETED" },
+      _count: { _all: true },
+    });
+    return new Map(rows.map((row) => [row.customerId, row._count._all]));
   }
 
   private async sortedList(filter: CustomerListFilter) {
@@ -271,6 +378,8 @@ export class AvenlyCustomerService {
       search && !/\p{L}/u.test(search) ? search.replace(/\D/gu, "") : "";
     return {
       tenantId: this.tenantId,
+      ...(filter.status === "active" ? { deactivatedAt: null } : {}),
+      ...(filter.status === "inactive" ? { deactivatedAt: { not: null } } : {}),
       ...(phoneCandidates ? { normalizedPhone: { in: phoneCandidates } } : {}),
       ...(search
         ? {
@@ -620,6 +729,11 @@ export class AvenlyCustomerService {
     const current = await this.get(customerId);
     const data: Prisma.CustomerUpdateInput = {};
     if (input.name !== undefined) data.name = normalizeName(input.name);
+    if (input.active !== undefined) {
+      data.deactivatedAt = input.active
+        ? null
+        : (current.deactivatedAt ?? new Date());
+    }
     if (input.phone !== undefined) {
       const phone = normalizeOptionalPhone(input.phone);
       data.phone = phone?.phone ?? null;

@@ -313,6 +313,107 @@
 .customer-panel.has-state {
   overflow-y: auto;
 }
+/* Abas Ativos/Inativos e ordem da lista (2026-10-18) */
+.customer-panel-view {
+  flex: none;
+  padding: 12px 20px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.customer-status-tabs {
+  padding: 3px;
+  border-radius: var(--at-radius-sm);
+  background: var(--surface-interactive);
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+}
+.customer-status-tab {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-soft);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.customer-status-tab.is-active {
+  background: var(--surface);
+  color: var(--fg);
+  box-shadow: 0 1px 2px rgb(var(--at-shadow-rgb) / 0.12);
+}
+.customer-status-tab:focus-visible,
+.customer-sort-button:focus-visible {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 2px;
+}
+.customer-sort-button {
+  min-height: 40px;
+  padding: 0 4px 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.customer-sort-button .icon {
+  width: 16px;
+  height: 16px;
+}
+.customer-sort-options {
+  display: flex;
+  flex-direction: column;
+}
+.customer-sort-option {
+  min-height: 56px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+.customer-sort-option:last-child {
+  border-bottom: 0;
+}
+.customer-sort-option input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+.customer-sort-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.customer-sort-option-text strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.customer-sort-option-text span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.customer-inactive-empty {
+  margin: 24px 20px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 .customer-panel-header {
   padding: 24px 20px 0;
   display: flex;
@@ -2154,4 +2255,28 @@
 }
 .contact-photo.is-loaded {
   opacity: 1;
+}
+
+/* Desativar cliente (2026-10-18) */
+.customer-inactive-badge {
+  margin-left: 10px;
+  vertical-align: middle;
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+.customer-deactivate {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.customer-deactivate p {
+  margin: 0;
+  color: var(--fg-soft);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.customer-deactivate-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }

@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { BffHttpError, type CustomerListItem } from "@/data";
+import {
+  BffHttpError,
+  type CustomerListItem,
+  type CustomerListSort,
+  type CustomerListStatus,
+} from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { recall, remember } from "@/shared/runtime/sessionMemory";
 
@@ -48,8 +53,19 @@ type PagesState = {
   moreError: CustomerPagesError | null;
 };
 
-/** A primeira leva sem busca, como veio por último nesta aba (D-168). */
-const FIRST_PAGE = "customers:first-page";
+/**
+ * A primeira leva sem busca, como veio por último nesta aba (D-168): uma por
+ * aba (Ativos/Inativos) e ordem.
+ */
+function firstPageKey(view: CustomerListView): string {
+  return `customers:first-page:${view.status}:${view.sort}`;
+}
+
+/** Aba e ordem da lista (2026-10-18). */
+export interface CustomerListView {
+  status: CustomerListStatus;
+  sort: CustomerListSort;
+}
 
 type RememberedFirstPage = Pick<
   PagesState,
@@ -60,10 +76,14 @@ type RememberedFirstPage = Pick<
  * Voltar a Clientes abre com a primeira leva que a aba já leu, sem esqueleto,
  * e a leitura nova a revalida no lugar (2026-10-16). Busca não é lembrada.
  */
-function seededState(key: string, search: string): PagesState {
+function seededState(
+  key: string,
+  search: string,
+  view: CustomerListView,
+): PagesState {
   const remembered = search
     ? undefined
-    : recall<RememberedFirstPage>(FIRST_PAGE);
+    : recall<RememberedFirstPage>(firstPageKey(view));
   return remembered
     ? { ...initialState(key), ...remembered, loaded: true }
     : initialState(key);
@@ -90,16 +110,21 @@ function initialState(key: string): PagesState {
  * uma busca antiga nunca entra na lista da busca nova: cada estado carrega a
  * chave da lista a que pertence, e o que chega com outra chave é descartado.
  */
+const DEFAULT_VIEW: CustomerListView = { status: "active", sort: "name" };
+
 export function useCustomerPages(
   search: string,
   enabled: boolean,
+  view: CustomerListView = DEFAULT_VIEW,
 ): CustomerPages {
   const [reload, setReload] = useState(0);
-  const key = `${reload}:${search}`;
+  const { status, sort } = view;
+  const key = `${reload}:${status}:${sort}:${search}`;
   const [stored, setState] = useState<PagesState>(() =>
-    seededState(key, search),
+    seededState(key, search, view),
   );
-  const state = stored.key === key ? stored : seededState(key, search);
+  const state =
+    stored.key === key ? stored : seededState(key, search, { status, sort });
   const moreController = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -108,7 +133,7 @@ export function useCustomerPages(
     moreController.current?.abort();
     getProductServices()
       .customers.list(
-        { limit: CUSTOMER_PAGE_SIZE, q: search || undefined },
+        { limit: CUSTOMER_PAGE_SIZE, q: search || undefined, status, sort },
         controller.signal,
       )
       .then((page) => {
@@ -118,7 +143,7 @@ export function useCustomerPages(
           managedExternally: page.managedExternally,
           nextCursor: page.nextCursor ?? null,
         };
-        if (!search) remember(FIRST_PAGE, first);
+        if (!search) remember(firstPageKey({ status, sort }), first);
         setState({ ...initialState(key), ...first, loaded: true });
       })
       .catch((caught: unknown) => {
@@ -126,7 +151,7 @@ export function useCustomerPages(
         setState({ ...initialState(key), error: requestError(caught) });
       });
     return () => controller.abort();
-  }, [enabled, key, search]);
+  }, [enabled, key, search, status, sort]);
 
   useEffect(() => () => moreController.current?.abort(), []);
 
@@ -146,6 +171,8 @@ export function useCustomerPages(
           limit: CUSTOMER_PAGE_SIZE,
           cursor: nextCursor,
           q: search || undefined,
+          status,
+          sort,
         },
         controller.signal,
       )
@@ -166,7 +193,7 @@ export function useCustomerPages(
           moreError: requestError(caught),
         }));
       });
-  }, [key, loaded, loadingMore, nextCursor, search]);
+  }, [key, loaded, loadingMore, nextCursor, search, status, sort]);
 
   // Depois de uma falha, o sentinela não pede de novo sozinho: quem decide é
   // "Tentar de novo", para a lista não martelar o servidor fora do ar.
@@ -196,6 +223,8 @@ export function useCustomerPages(
           // As mesmas pessoas que já estavam na tela, até o teto da rota.
           limit: Math.min(100, Math.max(CUSTOMER_PAGE_SIZE, loadedCount)),
           q: search || undefined,
+          status,
+          sort,
         },
         controller.signal,
       )
@@ -215,7 +244,7 @@ export function useCustomerPages(
       })
       // Falha aqui não apaga nada: a lista que estava na tela continua.
       .catch(() => undefined);
-  }, [enabled, key, loaded, loadedCount, search]);
+  }, [enabled, key, loaded, loadedCount, search, status, sort]);
 
   return {
     items: state.items,

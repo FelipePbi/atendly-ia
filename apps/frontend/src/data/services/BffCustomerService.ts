@@ -26,16 +26,25 @@ export interface CreateCustomerInput {
   phone?: string | null;
 }
 
+export type CustomerListStatus = "active" | "inactive";
+export type CustomerListSort = "name" | "last" | "frequency";
+
 export interface CustomerListQuery {
   limit?: number;
   cursor?: string | null;
   /** Trecho do nome ou do telefone. */
   q?: string;
+  /** Abas Ativos/Inativos (2026-10-18); ausente, todos. */
+  status?: CustomerListStatus;
+  /** Ordem (2026-10-18); ausente, nome. */
+  sort?: CustomerListSort;
 }
 
 export interface UpdateCustomerInput {
   name?: string | null;
   phone?: string | null;
+  /** Desativar tira da lista principal; reativar devolve (2026-10-18). */
+  active?: boolean;
 }
 
 export interface SetPrimaryGuardianInput {
@@ -83,6 +92,8 @@ export class BffCustomerService {
     if (query.limit !== undefined) params.set("limit", String(query.limit));
     if (query.cursor) params.set("cursor", query.cursor);
     if (query.q?.trim()) params.set("q", query.q.trim());
+    if (query.status) params.set("status", query.status);
+    if (query.sort && query.sort !== "name") params.set("sort", query.sort);
     const search = params.toString();
     return this.http.request({
       path: search ? `/v1/customers?${search}` : "/v1/customers",

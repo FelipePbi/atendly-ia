@@ -94,6 +94,10 @@ export function CustomerProfile({
   // entra, sem passar pelo painel vazio. Trocar de aba não repete a entrada.
   const [enterId, setEnterId] = useState<string | null>(null);
   const [guardianOpen, setGuardianOpen] = useState(false);
+  // Desativar cliente (2026-10-18): pede confirmação; reativar não.
+  const [deactivateOpen, setDeactivateOpen] = useState(false);
+  const [activeBusy, setActiveBusy] = useState(false);
+  const [activeError, setActiveError] = useState<string | null>(null);
   const shownIdRef = useRef<string | null>(null);
   const notesPanelRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -270,8 +274,51 @@ export function CustomerProfile({
             label: "Responsável principal",
             onSelect: () => setGuardianOpen(true),
           },
+          ...(editable
+            ? [
+                customer.active === false
+                  ? {
+                      label: "Reativar cliente",
+                      onSelect: () => void setActive(true),
+                    }
+                  : {
+                      label: "Desativar cliente",
+                      onSelect: () => {
+                        setActiveError(null);
+                        setDeactivateOpen(true);
+                      },
+                    },
+              ]
+            : []),
         ]
       : undefined;
+
+  async function setActive(active: boolean) {
+    if (!customer) return;
+    setActiveBusy(true);
+    setActiveError(null);
+    try {
+      const updated = await getProductServices().customers.update(customer.id, {
+        active,
+      });
+      setCustomer((current) =>
+        current ? { ...current, ...updated } : current,
+      );
+      setDeactivateOpen(false);
+      showToast(active ? "Cliente reativado." : "Cliente desativado.");
+    } catch (caught: unknown) {
+      const message = requestError(
+        caught,
+        active
+          ? "Não foi possível reativar o cliente."
+          : "Não foi possível desativar o cliente.",
+      );
+      if (active) showToast(message, "danger");
+      else setActiveError(message);
+    } finally {
+      setActiveBusy(false);
+    }
+  }
 
   const refreshing = Boolean(
     customer && customerId && customer.id !== customerId && !error,
@@ -335,7 +382,14 @@ export function CustomerProfile({
                 <ContactPhoto src={customerPhotoUrl(customer.id)} />
               </span>
               <div>
-                <h1>{customer.name || "Cliente sem nome"}</h1>
+                <h1>
+                  {customer.name || "Cliente sem nome"}
+                  {customer.active === false && (
+                    <span className="badge customer-inactive-badge">
+                      Inativo
+                    </span>
+                  )}
+                </h1>
                 <p className="directory-detail-phone">
                   {[
                     customer.phone
@@ -544,6 +598,42 @@ export function CustomerProfile({
               </div>
             </div>
           )}
+          <Dialog
+            onClose={() => !activeBusy && setDeactivateOpen(false)}
+            open={deactivateOpen}
+            title="Desativar cliente?"
+          >
+            <div className="customer-deactivate">
+              <p>
+                {customer.name || "Este cliente"} sai da lista principal de
+                Clientes e fica em Inativos. Agenda, conversas e histórico
+                continuam como estão, e você pode reativar quando quiser.
+              </p>
+              {activeError && (
+                <p className="field-help" role="alert">
+                  {activeError}
+                </p>
+              )}
+              <div className="customer-deactivate-actions">
+                <button
+                  className="btn btn-secondary"
+                  disabled={activeBusy}
+                  onClick={() => setDeactivateOpen(false)}
+                  type="button"
+                >
+                  Cancelar
+                </button>
+                <button
+                  className="btn btn-primary"
+                  disabled={activeBusy}
+                  onClick={() => void setActive(false)}
+                  type="button"
+                >
+                  {activeBusy ? "Desativando..." : "Desativar"}
+                </button>
+              </div>
+            </div>
+          </Dialog>
           <Dialog
             onClose={() => setGuardianOpen(false)}
             open={guardianOpen}

@@ -259,6 +259,88 @@ describeWithDatabase("customer list pagination against PostgreSQL", () => {
     expect(underscore.total).toBe(0);
   });
 
+  // Abas Ativos/Inativos e ordem (2026-10-18).
+  it("status separa ativos de inativos só quando pedido; sem ele, todos", async () => {
+    const ana = await prisma.customer.findFirstOrThrow({
+      where: { tenantId: tenantA, name: "Álvaro" },
+    });
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/internal/customers/${ana.id}`,
+      headers: headers(tenantA),
+      payload: { active: false },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.active).toBe(false);
+
+    const active = await getList(tenantA, { limit: "50", status: "active" });
+    const inactive = await getList(tenantA, { limit: "50", status: "inactive" });
+    const everyone = await getList(tenantA, { limit: "50" });
+    expect(active.total).toBe(35);
+    expect(inactive.items.map((item) => item.name)).toEqual(["Álvaro"]);
+    expect(everyone.total).toBe(36);
+
+    const back = await app.inject({
+      method: "PATCH",
+      url: `/internal/customers/${ana.id}`,
+      headers: headers(tenantA),
+      payload: { active: true },
+    });
+    expect(back.json().data.active).toBe(true);
+    expect((await getList(tenantA, { limit: "50", status: "inactive" })).total).toBe(0);
+  });
+
+  it("ordena por último atendimento e por frequência, paginando sem repetir", async () => {
+    const byName = async (name: string) =>
+      prisma.customer.findFirstOrThrow({ where: { tenantId: tenantA, name } });
+    const [first, second, third] = await Promise.all([
+      byName("Cliente 01"),
+      byName("Cliente 02"),
+      byName("Cliente 03"),
+    ]);
+    const visit = (customerId: string, iso: string, status: string) =>
+      prisma.appointment.create({
+        data: {
+          tenantId: tenantA,
+          customerId,
+          source: "USER",
+          startAt: new Date(iso),
+          endAt: new Date(new Date(iso).getTime() + 30 * 60_000),
+          status,
+          statusRaw: status,
+          title: "Corte",
+          createdBy: "user-1",
+        },
+      });
+    await visit(first.id, "2026-01-10T12:00:00.000Z", "COMPLETED");
+    await visit(second.id, "2026-03-10T12:00:00.000Z", "COMPLETED");
+    await visit(second.id, "2026-02-10T12:00:00.000Z", "COMPLETED");
+    await visit(third.id, "2026-04-10T12:00:00.000Z", "CANCELLED");
+
+    const last = await walk(tenantA, { limit: "15", sort: "last" });
+    expect(last.items.slice(0, 2).map((item) => item.name)).toEqual([
+      "Cliente 02",
+      "Cliente 01",
+    ]);
+    expect(new Set(last.items.map((item) => item.id)).size).toBe(36);
+
+    const frequency = await walk(tenantA, { limit: "15", sort: "frequency" });
+    expect(frequency.items.slice(0, 2).map((item) => item.name)).toEqual([
+      "Cliente 02",
+      "Cliente 01",
+    ]);
+    expect(frequency.items).toHaveLength(36);
+    // Sem atendimento, a ordem de nome continua valendo.
+    expect(frequency.items[2]?.name).toBe("Álvaro");
+
+    const mixed = await app.inject({
+      method: "GET",
+      url: `/internal/customers?limit=15&sort=frequency&cursor=${last.pages[0]?.nextCursor}`,
+      headers: headers(tenantA),
+    });
+    expect(mixed.statusCode).toBe(400);
+  });
+
   it("cursor que não veio da lista é recusado com 400", async () => {
     const response = await app.inject({
       method: "GET",

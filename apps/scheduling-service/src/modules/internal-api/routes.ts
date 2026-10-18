@@ -339,6 +339,8 @@ const customerPatchSchema = z
   .object({
     name: z.string().trim().min(1).max(200).nullable().optional(),
     phone: z.string().trim().min(6).max(32).nullable().optional(),
+    // Desativar/reativar (2026-10-18).
+    active: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one customer field is required.",
@@ -351,6 +353,9 @@ const customerQuerySchema = z.object({
   // como sempre saiu, para quem ainda depende dela inteira.
   limit: z.coerce.number().int().min(1).max(100).optional(),
   cursor: z.string().trim().min(1).max(1_024).optional(),
+  // Abas e ordem da tela de Clientes (2026-10-18); ausentes, todos por nome.
+  status: z.enum(["active", "inactive"]).optional(),
+  sort: z.enum(["name", "last", "frequency"]).optional(),
 });
 const CUSTOMER_PAGE_DEFAULT_LIMIT = 50;
 const customerDependentsQuerySchema = z.object({
@@ -803,7 +808,12 @@ export async function registerManagementRoutes(
     const settings = await requireCalendar(prisma, context.tenantId);
     const query = parse(customerQuerySchema, request.query ?? {});
     const customers = new AvenlyCustomerService(prisma, context.tenantId);
-    const filter = { phone: query.phone, search: query.q };
+    const filter = {
+      phone: query.phone,
+      search: query.q,
+      status: query.status,
+      sort: query.sort,
+    };
     const options = { timezone: settings.timezone };
     const page =
       query.limit !== undefined || query.cursor !== undefined
@@ -2693,6 +2703,7 @@ function customerDto(customer: {
   id: string;
   name: string | null;
   phone: string | null;
+  deactivatedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
   nextAppointment?: AppointmentSummary | null;
@@ -2704,6 +2715,7 @@ function customerDto(customer: {
     id: customer.id,
     name: customer.name,
     phone: customer.phone,
+    active: !customer.deactivatedAt,
     createdAt: customer.createdAt.toISOString(),
     updatedAt: customer.updatedAt.toISOString(),
     ...(customer.nextAppointment !== undefined

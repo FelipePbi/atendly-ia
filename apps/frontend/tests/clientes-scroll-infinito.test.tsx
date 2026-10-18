@@ -132,9 +132,12 @@ describe("Clientes — scroll infinito", () => {
 
     expect(rows()).toHaveLength(15);
     expect(customersList).toHaveBeenCalledTimes(1);
+    // A lista principal é a aba Ativos, por nome (2026-10-18).
     expect(customersList.mock.calls[0]?.[0]).toEqual({
       limit: 15,
       q: undefined,
+      status: "active",
+      sort: "name",
     });
     expect(screen.getByText("40")).toBeVisible();
     expect(screen.getByText("clientes")).toBeInTheDocument();
@@ -226,7 +229,7 @@ describe("Clientes — scroll infinito", () => {
       await screen.findByRole("link", { name: /^Cliente 38/ }),
     ).toBeVisible();
     expect(customersList).toHaveBeenLastCalledWith(
-      { limit: 15, q: "cliente 38" },
+      { limit: 15, q: "cliente 38", status: "active", sort: "name" },
       expect.any(AbortSignal),
     );
   });
@@ -253,5 +256,68 @@ describe("Clientes — scroll infinito", () => {
     expect(
       await screen.findByRole("link", { name: /^Cliente 38/ }),
     ).toBeVisible();
+  });
+
+  // Abas Ativos/Inativos e ordem (2026-10-18).
+  test("a aba Inativos pede só os desativados e mostra o vazio próprio", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await waitFor(() => expect(rows()).toHaveLength(15));
+    customersList.mockImplementation(async (query?: CustomerListQuery) =>
+      query?.status === "inactive"
+        ? {
+            items: [],
+            total: 0,
+            nextCursor: null,
+            source: "AVENLY",
+            managedExternally: false,
+          }
+        : serverPage(query),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Inativos" }));
+
+    expect(await screen.findByText(/Nenhum cliente inativo/)).toBeVisible();
+    expect(customersList).toHaveBeenLastCalledWith(
+      { limit: 15, q: undefined, status: "inactive", sort: "name" },
+      expect.any(AbortSignal),
+    );
+    expect(screen.getByRole("button", { name: "Inativos" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    // As abas continuam lá para voltar.
+    await user.click(screen.getByRole("button", { name: "Ativos" }));
+    await waitFor(() => expect(rows()).toHaveLength(15));
+  });
+
+  test("Ordenar abre a folha e a escolha vai para o servidor, sem letras", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await waitFor(() => expect(rows()).toHaveLength(15));
+
+    await user.click(screen.getByRole("button", { name: /Ordenar por/ }));
+    const sheet = screen.getByRole("dialog", { name: "Ordenar clientes" });
+    expect(
+      within(sheet)
+        .getAllByRole("radio")
+        .map(
+          (radio) =>
+            radio.closest("label")?.querySelector("strong")?.textContent,
+        ),
+    ).toEqual(["Nome", "Último atendimento", "Frequência"]);
+    await user.click(within(sheet).getByRole("radio", { name: /Frequência/ }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(customersList).toHaveBeenLastCalledWith(
+        { limit: 15, q: undefined, status: "active", sort: "frequency" },
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(
+      screen.getByRole("button", { name: /Ordenar por/ }),
+    ).toHaveTextContent("Frequência");
+    expect(document.querySelector(".customer-panel-letter")).toBeNull();
   });
 });

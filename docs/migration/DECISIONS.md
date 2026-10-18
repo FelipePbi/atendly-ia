@@ -7957,3 +7957,18 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 4. Novo serviço em duas colunas de 768 a 1099 px e a partir de 1280 px; de 1100 a 1279 px (sidebar e lista ao lado) os campos e as opções empilham.
 
 **Consequências:** a cor personalizada é igual em todos os temas, como a paleta (D-181). A ai-orchestrator não usa a cor e não muda.
+
+## D-185 — Clientes ativos e inativos, e ordem da lista de clientes
+
+**Status:** ACCEPTED em 2026-10-18, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Acrescenta controles que o quadro CL1 não tem.
+
+**Contexto:** a profissional quer tirar da lista principal quem não é mais cliente sem apagar ninguém, e ordenar a lista por nome, pelo último atendimento ou pela frequência.
+
+**Decisão:**
+
+1. `Customer.deactivatedAt` (nulo é ativo). "Desativar cliente" fica no menu ⋯ do perfil, com confirmação; "Reativar cliente" no mesmo lugar, sem confirmação. O perfil inativo mostra o selo "Inativo". O registro de atividade grava `customer.deactivated` e `customer.reactivated`.
+2. A lista de Clientes ganha as abas Ativos (padrão) e Inativos. Desativar só tira das listas da tela de Clientes: agenda, conversas, IA, busca por telefone e histórico continuam reconhecendo a pessoa (sem `status`, a API devolve todos).
+3. "Ordenar" abre uma folha com Nome (A a Z), Último atendimento (mais recente primeiro) e Frequência (mais atendimentos concluídos primeiro). Sem atendimento, vale a ordem de nome. As letras de grupo só aparecem na ordem de nome. A ordem vale também para a busca e para a aba Inativos.
+4. Nas ordens por métrica, a métrica sai de uma consulta agrupada por negócio e o cursor é a posição na lista ordenada, marcado com a ordem: trocar a ordem recomeça do início.
+
+**Consequências:** quem agendar com uma cliente inativa não a reativa sozinho; a profissional reativa no perfil.

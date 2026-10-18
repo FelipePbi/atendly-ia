@@ -13,7 +13,12 @@ import {
   useState,
 } from "react";
 
-import { type CustomerAppointmentSummary, type CustomerListItem } from "@/data";
+import {
+  type CustomerAppointmentSummary,
+  type CustomerListItem,
+  type CustomerListSort,
+  type CustomerListStatus,
+} from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { ListDetailEmpty, ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
@@ -23,11 +28,13 @@ import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
 import { ContactPhoto, customerPhotoUrl } from "@/shared/ui/ContactPhoto";
+import { Dialog } from "@/shared/ui/Dialog";
 import { Field } from "@/shared/ui/Field";
 
 import { CustomerListMore } from "./CustomerListMore";
 import { CustomerEmptyState, CustomerErrorState } from "./CustomerStates";
 import {
+  type CustomerListView,
   type CustomerPages,
   type CustomerPagesError,
   useCustomerPages,
@@ -60,7 +67,30 @@ export type CustomerListData = {
   today: Date;
   /** Total real de clientes do negócio, não só o carregado. */
   total: number;
+  /** Aba Ativos/Inativos e ordem da lista (2026-10-18). */
+  view: CustomerListView;
+  setStatus: (status: CustomerListStatus) => void;
+  setSort: (sort: CustomerListSort) => void;
 };
+
+/** Ordens da lista, na ordem da folha "Ordenar" (2026-10-18). */
+export const CUSTOMER_SORT_OPTIONS: ReadonlyArray<{
+  value: CustomerListSort;
+  label: string;
+  description: string;
+}> = [
+  { value: "name", label: "Nome", description: "De A a Z" },
+  {
+    value: "last",
+    label: "Último atendimento",
+    description: "Quem veio mais recentemente primeiro",
+  },
+  {
+    value: "frequency",
+    label: "Frequência",
+    description: "Quem mais concluiu atendimentos primeiro",
+  },
+];
 
 /** Espera entre a digitação e a busca no servidor. */
 const SEARCH_DEBOUNCE_MS = 250;
@@ -111,9 +141,31 @@ export function useCustomerListState(enabled = true): CustomerListData {
     return () => controller.abort();
   }, [enabled]);
 
-  const list = useCustomerPages("", enabled);
-  const results = useCustomerPages(search, enabled && search !== "");
-  const groups = useMemo(() => groupAlphabetically(list.items), [list.items]);
+  const [view, setView] = useState<CustomerListView>({
+    status: "active",
+    sort: "name",
+  });
+  const setStatus = useCallback(
+    (status: CustomerListStatus) =>
+      setView((current) => ({ ...current, status })),
+    [],
+  );
+  const setSort = useCallback(
+    (sort: CustomerListSort) => setView((current) => ({ ...current, sort })),
+    [],
+  );
+  const list = useCustomerPages("", enabled, view);
+  const results = useCustomerPages(search, enabled && search !== "", view);
+  // Letra só faz sentido na ordem de nome; nas outras, uma lista corrida.
+  const groups = useMemo(
+    () =>
+      view.sort === "name"
+        ? groupAlphabetically(list.items)
+        : list.items.length > 0
+          ? [{ customers: list.items, letter: NO_NAME_LABEL }]
+          : [],
+    [list.items, view.sort],
+  );
   const scroll = useRef(0);
   const rememberScroll = useCallback((top: number) => {
     scroll.current = top;
@@ -142,8 +194,11 @@ export function useCustomerListState(enabled = true): CustomerListData {
     savedScroll,
     searchPending: searchText !== search || results.loading,
     setQuery,
+    setSort,
+    setStatus,
     today: todayWallDate(timezone),
     total: list.total,
+    view,
   };
 }
 
@@ -212,7 +267,12 @@ export function CustomerListPanelView({
   // Esqueleto só se a primeira leva passar de ~150 ms (D-168): carga rápida
   // entra direto, sem piscar (2026-10-16).
   const showSkeleton = useDeferredLoading(loading);
-  const showingState = Boolean(error) || (!loading && customers.length === 0);
+  const inactiveTab = data.view.status === "inactive";
+  const [sortOpen, setSortOpen] = useState(false);
+  const closeSort = useCallback(() => setSortOpen(false), []);
+  // Aba Inativos vazia não é "nenhum cliente": as abas ficam para voltar.
+  const showingState =
+    Boolean(error) || (!loading && customers.length === 0 && !inactiveTab);
   const searchText = data.query.trim();
   const searching = !showingState && !loading && searchText !== "";
   // Só os itens rolam (o cabeçalho e a busca ficam parados); a lista volta ao
@@ -257,11 +317,88 @@ export function CustomerListPanelView({
           </div>
         </div>
       )}
+      {!searching && !error && (
+        <div className="customer-panel-view">
+          <div
+            aria-label="Mostrar clientes"
+            className="customer-status-tabs"
+            role="group"
+          >
+            {(
+              [
+                ["active", "Ativos"],
+                ["inactive", "Inativos"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                aria-pressed={data.view.status === value}
+                className={clsx(
+                  "customer-status-tab",
+                  data.view.status === value && "is-active",
+                )}
+                key={value}
+                onClick={() => data.setStatus(value)}
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button
+            aria-haspopup="dialog"
+            className="customer-sort-button"
+            onClick={() => setSortOpen(true)}
+            type="button"
+          >
+            <span className="sr-only">Ordenar por </span>
+            {CUSTOMER_SORT_OPTIONS.find(
+              (option) => option.value === data.view.sort,
+            )?.label ?? "Nome"}
+            <Icon name="chevron-down" />
+          </button>
+        </div>
+      )}
+      <Dialog
+        onClose={closeSort}
+        open={sortOpen}
+        title="Ordenar clientes"
+        variant="sheet"
+      >
+        <div
+          aria-label="Ordenar clientes por"
+          className="customer-sort-options"
+          role="radiogroup"
+        >
+          {CUSTOMER_SORT_OPTIONS.map((option) => (
+            <label className="customer-sort-option" key={option.value}>
+              <input
+                checked={data.view.sort === option.value}
+                name="customer-sort"
+                type="radio"
+                value={option.value}
+                onChange={() => {
+                  data.setSort(option.value);
+                  setSortOpen(false);
+                }}
+              />
+              <span className="customer-sort-option-text">
+                <strong>{option.label}</strong>
+                <span>{option.description}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </Dialog>
 
       {error ? (
         <CustomerErrorState onRetry={data.retry} reference={error.reference} />
-      ) : !loading && customers.length === 0 ? (
+      ) : !loading && customers.length === 0 && !inactiveTab ? (
         <CustomerEmptyState canCreate={canCreate} />
+      ) : !loading && customers.length === 0 ? (
+        <p className="customer-inactive-empty">
+          Nenhum cliente inativo. Quem você desativar no perfil aparece aqui,
+          fora da lista principal.
+        </p>
       ) : (
         <>
           <div

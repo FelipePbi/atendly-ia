@@ -347,6 +347,8 @@ export const customerSchema = z.object({
   id: z.string().min(1),
   name: z.string().nullable(),
   phone: z.string().nullable(),
+  // Desativada pela profissional (2026-10-18): fica em "Inativos".
+  active: z.boolean().optional(),
   createdAt: isoDateTimeSchema.optional(),
   updatedAt: isoDateTimeSchema.optional(),
   nextAppointment: customerAppointmentSummarySchema.nullable().optional(),

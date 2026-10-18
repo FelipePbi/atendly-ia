@@ -114,7 +114,29 @@ async function deleted(
 
 export const customerActivity = {
   created: created.bind(null, CUSTOMER),
-  updated: updated.bind(null, CUSTOMER),
+  /** Desativar e reativar viram ação própria (2026-10-18); o resto é edição. */
+  updated: (
+    transaction: Transaction,
+    tenantId: string,
+    actor: ActivityActor,
+    before: Row & { id: string },
+    after: Row,
+  ) => {
+    const wasActive = !before.deactivatedAt;
+    const isActive = !after.deactivatedAt;
+    if (wasActive !== isActive) {
+      return updated(
+        CUSTOMER,
+        transaction,
+        tenantId,
+        actor,
+        before,
+        after,
+        isActive ? "customer.reactivated" : "customer.deactivated",
+      );
+    }
+    return updated(CUSTOMER, transaction, tenantId, actor, before, after);
+  },
   deleted: deleted.bind(null, CUSTOMER),
 };
 

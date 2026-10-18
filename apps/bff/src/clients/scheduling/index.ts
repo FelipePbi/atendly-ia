@@ -74,6 +74,8 @@ const customerSchema = z.object({
   id: z.string(),
   name: z.string().nullable(),
   phone: z.string().nullable(),
+  // Desativada pela profissional (2026-10-18); ausente na resposta anterior.
+  active: z.boolean().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
   nextAppointment: customerAppointmentSummarySchema.nullable().optional(),
@@ -1116,7 +1118,14 @@ export class SchedulingClient {
 
   async listCustomers(
     context: InternalRequestContext,
-    query: { phone?: string; q?: string; limit?: number; cursor?: string } = {},
+    query: {
+      phone?: string;
+      q?: string;
+      limit?: number;
+      cursor?: string;
+      status?: "active" | "inactive";
+      sort?: "name" | "last" | "frequency";
+    } = {},
   ) {
     return this.get(
       context,

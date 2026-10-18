@@ -217,6 +217,8 @@ Os dois campos existem só na lista. `GET /v1/customers/:id` segue trazendo `pri
 
 `total` e `nextCursor` são opcionais no contrato: resposta anterior a esta mudança continua válida sem eles.
 
+**Ativos, inativos e ordem (2026-10-18).** A lista aceita `status=active|inactive` (as abas da tela de Clientes) e `sort=name|last|frequency` (nome, último atendimento mais recente primeiro, ou mais atendimentos concluídos primeiro; sem atendimento, a ordem de nome desempata). Sem `status`, a lista traz todos — a agenda, os formulários e a IA nunca escondem uma cliente desativada. Com `sort` diferente de `name`, o `cursor` vale só para a mesma ordem; trocar a ordem recomeça do início. Cada cliente traz `active`; `PATCH /v1/customers/:id` com `{ "active": false }` desativa (registro de atividade `customer.deactivated`) e com `true` reativa (`customer.reactivated`).
+
 ### Responsável principal
 
 `PUT /v1/customers/:id/primary-guardian` grava a relação com proveniência (`proposedBy`) e estado (`status`). A relação nasce `PROPOSED` e só vira `CONFIRMED` com confirmação explícita — no corpo do `PUT` ou por `POST .../primary-guardian/confirm`. Uma relação apenas proposta não é afirmada para a IA. No MVP existe no máximo um responsável principal por cliente.

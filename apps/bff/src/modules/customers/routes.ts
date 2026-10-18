@@ -48,6 +48,10 @@ const listQuerySchema = z.object({
   // `limit` ou `cursor` liga a paginação; sem eles a lista sai inteira.
   limit: z.coerce.number().int().min(1).max(100).optional(),
   cursor: z.string().trim().min(1).max(1_024).optional(),
+  // Abas Ativos/Inativos e ordem da tela de Clientes (2026-10-18). Ausentes,
+  // todos por nome — o que a agenda e os formulários sempre receberam.
+  status: z.enum(["active", "inactive"]).optional(),
+  sort: z.enum(["name", "last", "frequency"]).optional(),
 });
 // Telefone deixou de ser obrigatório: cliente sem telefone existe (criança,
 // pessoa agendada presencialmente). O que não pode é nascer sem nada.
@@ -64,6 +68,8 @@ const customerPatchSchema = z
   .object({
     name: z.string().trim().min(1).max(200).nullable().optional(),
     phone: z.string().trim().min(6).max(32).nullable().optional(),
+    // Desativar tira da lista principal; reativar devolve (2026-10-18).
+    active: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "Informe ao menos um campo.",

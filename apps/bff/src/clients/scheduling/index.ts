@@ -48,6 +48,7 @@ const serviceSchema = z.object({
   reviewOrigin: z.enum(["IMPORT", "MANUAL"]).nullable().default(null),
   description: z.string().nullable().default(null),
   colorToken: serviceColorTokenSchema.nullable().default(null),
+  colorHex: z.string().nullable().default(null),
   bufferBeforeMinutes: z.number().int().nonnegative().default(0),
   bufferAfterMinutes: z.number().int().nonnegative().default(0),
   recurrenceIntervalDays: z.number().int().positive().nullable().default(null),

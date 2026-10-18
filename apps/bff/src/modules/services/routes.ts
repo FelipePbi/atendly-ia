@@ -19,7 +19,12 @@ const serviceColorTokenSchema = z.enum([
   "VIOLET",
   "SLATE",
 ]);
-export const serviceSchema = z.object({
+// Cor escolhida no seletor de cores (2026-10-18). Exclusiva com o token.
+const serviceColorHexSchema = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/)
+  .transform((value) => value.toLowerCase());
+const serviceFieldsSchema = z.object({
   name: z.string().trim().min(1).max(200),
   // Ausente vira pendencia de revisao (Goal007); nunca zero/duracao inventada.
   durationMinutes: z.number().int().positive().max(1_440).nullable().optional(),
@@ -30,16 +35,28 @@ export const serviceSchema = z.object({
   // Decisão de 2026-10-12: a criação manual exige escolher a cor, e na edição
   // ela pode ser trocada, nunca removida. Onboarding (PATCH /v1/onboarding) e
   // importação não passam por aqui: o Scheduling sorteia a cor da paleta.
-  colorToken: serviceColorTokenSchema,
+  // Desde 2026-10-18 a cor é uma das seis sugeridas (`colorToken`) ou uma
+  // personalizada (`colorHex`), nunca as duas.
+  colorToken: serviceColorTokenSchema.optional(),
+  colorHex: serviceColorHexSchema.optional(),
   bufferBeforeMinutes: z.number().int().nonnegative().max(240).nullable().optional(),
   bufferAfterMinutes: z.number().int().nonnegative().max(240).nullable().optional(),
   recurrenceIntervalDays: z.number().int().positive().max(365).nullable().optional(),
 });
-export const patchSchema = serviceSchema
+const ONE_COLOR = "Choose one service color: colorToken or colorHex.";
+export const serviceSchema = serviceFieldsSchema.refine(
+  (value) => (value.colorToken === undefined) !== (value.colorHex === undefined),
+  { message: ONE_COLOR, path: ["colorToken"] },
+);
+export const patchSchema = serviceFieldsSchema
   .partial()
   .refine(
     (value) => Object.keys(value).length > 0,
     "At least one service field is required.",
+  )
+  .refine(
+    (value) => value.colorToken === undefined || value.colorHex === undefined,
+    { message: ONE_COLOR, path: ["colorToken"] },
   );
 
 // Instrucao privada por servico (Goal078): texto vazio remove, sem `min`,

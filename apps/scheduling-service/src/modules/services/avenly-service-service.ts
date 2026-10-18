@@ -38,6 +38,12 @@ export interface CreateAvenlyServiceInput {
    * pública (BFF). Na edição, a cor pode ser trocada, nunca removida.
    */
   colorToken?: ServiceColorToken | null;
+  /**
+   * Cor personalizada (`#rrggbb`), escolhida no seletor de cores (2026-10-18).
+   * Um serviço tem uma cor só: hex ou token, nunca os dois. Gravar um apaga o
+   * outro.
+   */
+  colorHex?: string | null;
   bufferBeforeMinutes?: number | null;
   bufferAfterMinutes?: number | null;
   recurrenceIntervalDays?: number | null;
@@ -63,6 +69,7 @@ export interface AvenlyServiceRecord {
   reviewOrigin: ServiceReviewOrigin | null;
   description: string | null;
   colorToken: ServiceColorToken | null;
+  colorHex: string | null;
   bufferBeforeMinutes: number;
   bufferAfterMinutes: number;
   recurrenceIntervalDays: number | null;
@@ -151,22 +158,21 @@ export class AvenlyServiceService {
   async create(input: CreateAvenlyServiceInput) {
     const data = serviceData(input);
     const colorToken =
-      data.colorToken ??
-      (await nextServiceColorForTenant(this.database, this.tenantId));
+      data.colorHex !== null
+        ? null
+        : (data.colorToken ??
+          (await nextServiceColorForTenant(this.database, this.tenantId)));
     return this.database.service.create({
       data: { tenantId: this.tenantId, ...data, colorToken },
     });
   }
 
   async update(serviceId: string, input: UpdateAvenlyServiceInput) {
-    if (input.colorToken === null) {
-      throw new AppError(
-        "INVALID_SERVICE_COLOR",
-        "Service color can be changed but not removed.",
-        400,
-      );
-    }
     const current = await this.requireService(serviceId);
+    const color = nextColor(input, {
+      colorToken: current.colorToken,
+      colorHex: current.colorHex,
+    });
     const priceType = input.priceType ?? (current.priceType);
     const price = !PRICED_TYPES.has(priceType)
       ? null
@@ -198,10 +204,8 @@ export class AvenlyServiceService {
         input.description !== undefined
           ? input.description
           : current.description,
-      colorToken:
-        input.colorToken !== undefined
-          ? input.colorToken
-          : (current.colorToken),
+      colorToken: color.colorToken,
+      colorHex: color.colorHex,
       bufferBeforeMinutes:
         input.bufferBeforeMinutes !== undefined
           ? input.bufferBeforeMinutes
@@ -324,7 +328,9 @@ function serviceData(input: CreateAvenlyServiceInput) {
   }
 
   const description = normalizeDescription(input.description);
-  const colorToken = normalizeColorToken(input.colorToken);
+  const colorHex = normalizeColorHex(input.colorHex);
+  const colorToken =
+    colorHex === null ? normalizeColorToken(input.colorToken) : null;
   const bufferBeforeMinutes = normalizeBuffer(
     input.bufferBeforeMinutes,
     "bufferBeforeMinutes",
@@ -350,6 +356,7 @@ function serviceData(input: CreateAvenlyServiceInput) {
     reviewOrigin,
     description,
     colorToken,
+    colorHex,
     bufferBeforeMinutes,
     bufferAfterMinutes,
     recurrenceIntervalDays,
@@ -368,6 +375,46 @@ function normalizeDescription(value: string | null | undefined): string | null {
     );
   }
   return trimmed;
+}
+
+/**
+ * Cor que a edição grava. Hex informado vence e apaga o token; token informado
+ * apaga o hex; nada informado mantém a cor atual. A cor pode ser trocada,
+ * nunca removida: o serviço sempre sai com uma das duas.
+ */
+function nextColor(
+  input: UpdateAvenlyServiceInput,
+  current: { colorToken: ServiceColorToken | null; colorHex: string | null },
+): { colorToken: ServiceColorToken | null; colorHex: string | null } {
+  if (input.colorHex !== undefined && input.colorHex !== null) {
+    return { colorToken: null, colorHex: input.colorHex };
+  }
+  if (input.colorToken !== undefined && input.colorToken !== null) {
+    return { colorToken: input.colorToken, colorHex: null };
+  }
+  if (input.colorToken === null || input.colorHex === null) {
+    throw new AppError(
+      "INVALID_SERVICE_COLOR",
+      "Service color can be changed but not removed.",
+      400,
+    );
+  }
+  return current;
+}
+
+const COLOR_HEX = /^#[0-9a-f]{6}$/i;
+
+function normalizeColorHex(value: string | null | undefined): string | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = value.trim();
+  if (!COLOR_HEX.test(trimmed)) {
+    throw new AppError(
+      "INVALID_SERVICE_COLOR",
+      "Service color must be a #rrggbb hex value.",
+      400,
+    );
+  }
+  return trimmed.toLowerCase();
 }
 
 function normalizeColorToken(

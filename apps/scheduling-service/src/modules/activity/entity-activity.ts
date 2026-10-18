@@ -23,6 +23,7 @@ export const SERVICE_ACTIVITY_FIELDS = [
   "price",
   "description",
   "colorToken",
+  "colorHex",
   "bufferBeforeMinutes",
   "bufferAfterMinutes",
   "recurrenceIntervalDays",

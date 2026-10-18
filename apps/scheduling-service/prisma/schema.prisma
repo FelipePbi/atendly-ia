@@ -478,6 +478,9 @@ model Service {
   reviewOrigin    ServiceReviewOrigin?
   description     String?
   colorToken      ServiceColorToken?
+  /// Cor personalizada `#rrggbb` (seletor de cores, 2026-10-18). Exclusiva com
+  /// `colorToken`: o servico tem uma cor so.
+  colorHex        String?
   /// Configuracao de catalogo (Goal007); sem efeito operacional na ocupacao
   /// ate o Goal009.
   bufferBeforeMinutes Int @default(0)

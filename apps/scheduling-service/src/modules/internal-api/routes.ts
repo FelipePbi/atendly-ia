@@ -290,6 +290,12 @@ const serviceBodySchema = z.object({
   active: z.boolean().optional(),
   description: z.string().trim().max(1_000).nullable().optional(),
   colorToken: serviceColorTokenSchema.nullable().optional(),
+  // Cor personalizada do seletor de cores (2026-10-18); exclusiva com o token.
+  colorHex: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .nullable()
+    .optional(),
   bufferBeforeMinutes: z
     .number()
     .int()
@@ -2657,6 +2663,7 @@ function serviceDto(service: {
   reviewOrigin: "IMPORT" | "MANUAL" | null;
   description: string | null;
   colorToken: string | null;
+  colorHex?: string | null;
   bufferBeforeMinutes: number;
   bufferAfterMinutes: number;
   recurrenceIntervalDays: number | null;
@@ -2672,6 +2679,7 @@ function serviceDto(service: {
     reviewOrigin: service.reviewOrigin,
     description: service.description,
     colorToken: service.colorToken,
+    colorHex: service.colorHex ?? null,
     bufferBeforeMinutes: service.bufferBeforeMinutes,
     bufferAfterMinutes: service.bufferAfterMinutes,
     recurrenceIntervalDays: service.recurrenceIntervalDays,

@@ -151,6 +151,34 @@ describe("nextServiceColorForTenant e a criação sem cor", () => {
     const untouched = await services.update(created.id, { name: "Corte curto" });
     expect(untouched.colorToken).toBe("ROSE");
   });
+
+  it("cor personalizada (2026-10-18): hex apaga o token e o token apaga o hex", async () => {
+    const database = createDatabaseDouble();
+    const services = new AvenlyServiceService(database.client as never, tenantId);
+    const created = await services.create({
+      name: "Corte",
+      durationMinutes: 30,
+      priceType: "ON_REQUEST",
+      colorHex: "#7A9E7E",
+    });
+    expect(created).toMatchObject({ colorToken: null, colorHex: "#7a9e7e" });
+
+    const suggested = await services.update(created.id, { colorToken: "SKY" });
+    expect(suggested).toMatchObject({ colorToken: "SKY", colorHex: null });
+
+    const custom = await services.update(created.id, { colorHex: "#123abc" });
+    expect(custom).toMatchObject({ colorToken: null, colorHex: "#123abc" });
+
+    const untouched = await services.update(created.id, { name: "Corte curto" });
+    expect(untouched).toMatchObject({ colorToken: null, colorHex: "#123abc" });
+
+    await expect(
+      services.update(created.id, { colorHex: null }),
+    ).rejects.toMatchObject({ code: "INVALID_SERVICE_COLOR" });
+    await expect(
+      services.update(created.id, { colorHex: "verde" }),
+    ).rejects.toMatchObject({ code: "INVALID_SERVICE_COLOR" });
+  });
 });
 
 describe("POST /internal/service-catalog sem cor (caminho do onboarding)", () => {

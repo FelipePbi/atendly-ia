@@ -43,6 +43,31 @@ describe("POST /v1/services: cor obrigatória", () => {
   });
 });
 
+describe("cor personalizada (2026-10-18)", () => {
+  it("aceita a criação com uma cor hex, em minúsculas", () => {
+    const result = serviceSchema.safeParse({ ...base, colorHex: "#7A9E7E" });
+    expect(result.success).toBe(true);
+    expect(result.data?.colorHex).toBe("#7a9e7e");
+  });
+
+  it("recusa hex malformado e as duas cores ao mesmo tempo", () => {
+    expect(serviceSchema.safeParse({ ...base, colorHex: "7a9e7e" }).success).toBe(false);
+    expect(serviceSchema.safeParse({ ...base, colorHex: "#7a9e7" }).success).toBe(false);
+    expect(
+      serviceSchema.safeParse({ ...base, colorToken: "SKY", colorHex: "#7a9e7e" }).success,
+    ).toBe(false);
+    expect(
+      patchSchema.safeParse({ colorToken: "SKY", colorHex: "#7a9e7e" }).success,
+    ).toBe(false);
+  });
+
+  it("na edição troca entre sugerida e personalizada, sem remover", () => {
+    expect(patchSchema.safeParse({ colorHex: "#7a9e7e" }).success).toBe(true);
+    expect(patchSchema.safeParse({ colorToken: "SKY" }).success).toBe(true);
+    expect(patchSchema.safeParse({ colorHex: null }).success).toBe(false);
+  });
+});
+
 describe("PATCH /v1/services/:id: cor editável, nunca removida", () => {
   it("aceita trocar a cor e aceita corpo sem cor", () => {
     expect(patchSchema.safeParse({ colorToken: "ROSE" }).success).toBe(true);

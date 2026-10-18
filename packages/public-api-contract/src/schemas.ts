@@ -189,6 +189,7 @@ export const onboardingStateSchema = z.object({
       reviewOrigin: z.enum(["IMPORT", "MANUAL"]).nullish().optional(),
       description: z.string().nullish().optional(),
       colorToken: serviceColorTokenSchema.nullish().optional(),
+      colorHex: z.string().nullish().optional(),
       bufferBeforeMinutes: z.number().int().nonnegative().optional().default(0),
       bufferAfterMinutes: z.number().int().nonnegative().optional().default(0),
       recurrenceIntervalDays: z.number().int().positive().nullish().optional(),
@@ -312,6 +313,9 @@ export const serviceSchema = z.object({
   reviewOrigin: z.enum(["IMPORT", "MANUAL"]).nullish().optional(),
   description: z.string().nullish().optional(),
   colorToken: serviceColorTokenSchema.nullish().optional(),
+  // Cor personalizada `#rrggbb` (2026-10-18), exclusiva com `colorToken`.
+  // Resposta anterior ao campo continua válida.
+  colorHex: z.string().nullish().optional(),
   bufferBeforeMinutes: z.number().int().nonnegative().optional().default(0),
   bufferAfterMinutes: z.number().int().nonnegative().optional().default(0),
   recurrenceIntervalDays: z.number().int().positive().nullish().optional(),
@@ -1093,6 +1097,7 @@ export const revenueReportSchema = z.object({
       serviceId: z.string().nullable(),
       name: z.string(),
       colorToken: serviceColorTokenSchema.nullable(),
+      colorHex: z.string().nullish().optional(),
       amount: revenueAmountSchema,
       count: revenueCountSchema,
       share: z.number().min(0).max(1),

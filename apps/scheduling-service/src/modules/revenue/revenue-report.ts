@@ -56,6 +56,7 @@ export interface RevenueAppointmentRow {
     serviceId: string;
     serviceName: string;
     colorToken: string | null;
+    colorHex?: string | null;
     priceType: PriceType;
     price: unknown;
   }>;
@@ -138,6 +139,7 @@ export interface RevenueReport {
     serviceId: string | null;
     name: string;
     colorToken: string | null;
+    colorHex: string | null;
     amount: number;
     count: number;
     share: number;
@@ -447,6 +449,7 @@ export function buildRevenueReport(
       serviceId: string | null;
       name: string;
       colorToken: string | null;
+      colorHex: string | null;
       amount: number;
       count: number;
     }
@@ -548,6 +551,7 @@ export function buildRevenueReport(
                 serviceId: null,
                 name: UNLISTED_SERVICE_NAME,
                 colorToken: null,
+                colorHex: null,
               },
             ]
           : row.items.map((item) => ({
@@ -555,12 +559,14 @@ export function buildRevenueReport(
               serviceId: item.serviceId,
               name: item.serviceName,
               colorToken: item.colorToken,
+              colorHex: item.colorHex ?? null,
             }));
       entries.forEach((entry, index) => {
         const service = services.get(entry.key) ?? {
           serviceId: entry.serviceId,
           name: entry.name,
           colorToken: entry.colorToken,
+          colorHex: entry.colorHex,
           amount: 0,
           count: 0,
         };
@@ -746,7 +752,7 @@ export async function loadRevenueReport(
           serviceNameSnapshot: true,
           priceTypeSnapshot: true,
           priceSnapshot: true,
-          service: { select: { name: true, colorToken: true } },
+          service: { select: { name: true, colorToken: true, colorHex: true } },
         },
       },
     },
@@ -767,6 +773,7 @@ export async function loadRevenueReport(
         // o preço é sempre o do dia do atendimento.
         serviceName: item.service.name || item.serviceNameSnapshot,
         colorToken: item.service.colorToken,
+        colorHex: item.service.colorHex,
         priceType: item.priceTypeSnapshot,
         price: item.priceSnapshot,
       })),

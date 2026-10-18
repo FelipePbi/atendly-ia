@@ -36,6 +36,8 @@ const GOAL109_MIGRATION = "20261003120000_goal109_avenly_human_control_source";
 const GOAL115_MIGRATION = "20261004120000_goal115_session_category_override";
 const GOAL146_MIGRATION =
   "20261007120000_goal146_contact_last_scheduled_customer";
+const CONVERSATION_OWNER_READ_MIGRATION =
+  "20261018120000_conversation_owner_read";
 // `DROP DATABASE` força um checkpoint cujo custo cresce com os bancos que os
 // ensaios anteriores do gate deixam no cluster; os 10s padrão não bastam.
 const DATABASE_HOOK_TIMEOUT_MS = 120_000;
@@ -138,6 +140,8 @@ describe.skipIf(!databaseUrl)(
       // Idem: o `SessionService` do semeio faz `upsert` em `Contact` e o client
       // atual seleciona `lastScheduledCustomerId` (Goal146).
       await client.query(migrationSql(GOAL146_MIGRATION));
+      // Idem: o client atual seleciona `Conversation.ownerReadAt` (D-195).
+      await client.query(migrationSql(CONVERSATION_OWNER_READ_MIGRATION));
 
       // Canal, conversa, contato e sessão pelo caminho do produto; nenhuma
       // dessas tabelas usa o enum, então o client atual escreve nelas.

@@ -380,6 +380,7 @@ A partir de 1024 px, a lista de Configurações fica ao lado da seção aberta, 
 - estilo;
 - comportamento geral;
 - status: com o WhatsApp desconectado, a IA aparece **pausada** ("IA pausada", sem "Pausar", com "Reconectar WhatsApp"), aqui e na lista de Configurações; ao reconectar, volta sozinha, sem mudar a escolha gravada;
+- "Modo sandbox", para testar sem afetar clientes ([[../../migration/DECISIONS#D-199|D-199]]): interruptor com explicação; ligado, as mensagens (respostas da IA, mensagens enviadas pelo app, lembretes e avisos de alteração) aparecem como enviadas, mas não chegam ao WhatsApp de quem não está na lista "Números que recebem de verdade" (até 20 números com DDD; vazia, nada sai). A IA, a agenda e os lembretes continuam funcionando. Enquanto ligado, toda tela mostra no topo o lembrete "Modo sandbox: mensagens não saem para clientes", sem opção de ocultar, que leva a esta seção;
 - FAQ/conhecimento acessado a partir dos módulos adequados.
 
 ### WhatsApp

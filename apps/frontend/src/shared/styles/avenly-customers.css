@@ -1272,7 +1272,14 @@
 .resume-body + .directory-section {
   margin-top: 24px;
 }
-@media (min-width: 768px) {
+/* Histórico e Próximo/Preferências lado a lado só quando o painel do perfil
+   tem largura para as duas colunas. No tablet deitado o painel divide a tela
+   com a lista e é estreito: lá eles ficam um abaixo do outro (pedido de
+   2026-10-18, D-183). Por isso a regra olha o painel, não a janela. */
+.resume-panel {
+  container-type: inline-size;
+}
+@container (min-width: 680px) {
   .resume-body {
     flex-direction: row;
     align-items: flex-start;
@@ -1281,6 +1288,11 @@
   .resume-main,
   .resume-side {
     flex: 1;
+  }
+}
+@media (min-width: 768px) {
+  .resume-main,
+  .resume-side {
     gap: 28px;
   }
   .resume-ai {

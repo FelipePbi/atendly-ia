@@ -7932,3 +7932,13 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 3. Agenda, de 1024 a 1279 px: o chevron do título ocupa o próprio espaço (sem a margem de -24 px), e o vão de 20 px entre o título e o seletor volta a existir. No desktop largo nada muda.
 
 **Consequências:** o quadro de Configurações do protótipo deixa de valer para a barra inferior.
+
+## D-183 — Resumo do cliente empilha Histórico e Próximo quando o painel é estreito
+
+**Status:** ACCEPTED em 2026-10-18, a pedido do usuário, a partir de foto de um tablet deitado. Fora do IA Loop, sem Goal próprio. Ajusta o quadro CL5.
+
+**Contexto:** a partir de 768 px de janela o Resumo punha Histórico de um lado e Próximo/Preferências do outro. No tablet deitado o perfil divide a tela com a lista de clientes, o painel fica estreito e a coluna da direita cortava o próximo atendimento ("Confirmado" saía do painel).
+
+**Decisão:** as duas colunas dependem da largura do painel do Resumo (container query em `.resume-panel`, a partir de 680 px), não da janela. Abaixo disso as seções ficam uma abaixo da outra, como no celular.
+
+**Consequências:** o mesmo perfil pode ter uma ou duas colunas na mesma janela, conforme a lista está ou não ao lado.

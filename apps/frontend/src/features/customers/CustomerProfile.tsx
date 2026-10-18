@@ -508,6 +508,7 @@ export function CustomerProfile({
           {tab === "resumo" && (
             <div
               aria-labelledby={`${tabsId}-tab-resumo`}
+              className="resume-panel"
               id={`${tabsId}-panel-resumo`}
               role="tabpanel"
               tabIndex={0}

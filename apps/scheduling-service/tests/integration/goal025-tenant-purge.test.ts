@@ -13,7 +13,7 @@ import { upcomingLocalSlot } from "./support/test-date.js";
 // Mesmo alvo descartavel das demais suites de integracao
 // (SCHEDULING_TEST_DATABASE_URL); sem ela a suite e pulada, para que o gate
 // local nao dependa de banco pessoal. O que esta suite prova nao e so "a
-// linha some": e que a purga atravessa as 28 tabelas com `tenantId` do
+// linha some": e que a purga atravessa as 31 tabelas com `tenantId` do
 // schema, respeita a ordem segura de chave estrangeira, respeita o teto por
 // passada, e idempotente, e nunca toca o negocio vizinho em nenhuma tabela.
 const connectionString = process.env.SCHEDULING_TEST_DATABASE_URL?.trim();
@@ -29,6 +29,9 @@ const ACCESSOR = {
   AppointmentSeries: "appointmentSeries",
   AppointmentHold: "appointmentHold",
   CalendarMutationIdempotency: "calendarMutationIdempotency",
+  ReturnCampaignTarget: "returnCampaignTarget",
+  ReturnCampaign: "returnCampaign",
+  ReturnSettings: "returnSettings",
   CustomerNote: "customerNote",
   CustomerTag: "customerTag",
   CustomerRelation: "customerRelation",
@@ -69,7 +72,7 @@ describe.skipIf(!connectionString)("tenant purge against PostgreSQL", () => {
 
   /**
    * `TENANT_PURGE_TABLES` ja e uma ordem segura de chave estrangeira (e a
-   * prova disso e o proprio teste "apaga todas as 28 tabelas" abaixo):
+   * prova disso e o proprio teste "apaga todas as 31 tabelas" abaixo):
    * reaproveitar a mesma ordem para a limpeza entre cenarios evita manter uma
    * segunda lista manual que pode divergir da primeira.
    */
@@ -92,7 +95,7 @@ describe.skipIf(!connectionString)("tenant purge against PostgreSQL", () => {
 
   /**
    * Povoa um grafo relacional completo para o negocio: pelo menos uma linha
-   * em cada uma das 28 tabelas (`Customer` ganha duas, para dar um alvo
+   * em cada uma das 31 tabelas (`Customer` ganha duas, para dar um alvo
    * distinto ao responsavel de `CustomerRelation`), encadeadas o suficiente
    * para provar que a purga nao quebra chave estrangeira nenhuma ao apagar
    * todas juntas.
@@ -168,6 +171,27 @@ describe.skipIf(!connectionString)("tenant purge against PostgreSQL", () => {
 
     await prisma.customerNote.create({
       data: { tenantId, customerId: customer.id, body: "nota de teste" },
+    });
+    // Retorno de clientes (D-202): configuracao, rodada e alvo.
+    await prisma.returnSettings.create({ data: { tenantId } });
+    const returnCampaign = await prisma.returnCampaign.create({
+      data: {
+        tenantId,
+        kind: "RENEWAL",
+        dailyLimit: 10,
+        windowDays: [1, 2, 3, 4, 5, 6],
+        windowStartMinutes: 540,
+        windowEndMinutes: 1140,
+        leadDays: 2,
+        createdBy: "user-1",
+      },
+    });
+    await prisma.returnCampaignTarget.create({
+      data: {
+        tenantId,
+        campaignId: returnCampaign.id,
+        customerId: customer.id,
+      },
     });
     await prisma.customerTag.create({
       data: { tenantId, customerId: customer.id, label: "vip" },
@@ -361,7 +385,7 @@ describe.skipIf(!connectionString)("tenant purge against PostgreSQL", () => {
     return Object.values(counts).reduce((sum, count) => sum + count, 0);
   }
 
-  it("apaga todas as 28 tabelas do negocio, sem violar chave estrangeira", async () => {
+  it("apaga todas as 31 tabelas do negocio, sem violar chave estrangeira", async () => {
     await seedTenant(TENANT_A);
 
     const before = await countsFor(TENANT_A);

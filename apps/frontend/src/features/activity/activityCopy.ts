@@ -320,6 +320,10 @@ export function activitySentence(entry: ActivityEntry): string {
       return `${who} alterou o cadastro de ${label ?? "um cliente"}`;
     case "customer.deleted":
       return `${who} excluiu o cadastro de ${label ?? "um cliente"}`;
+    case "customer.deactivated":
+      return `${who} desativou ${person}`;
+    case "customer.reactivated":
+      return `${who} reativou ${person}`;
     case "customer.guardian_set":
       return `${who} definiu quem agenda por ${person}`;
     case "customer.guardian_confirmed":

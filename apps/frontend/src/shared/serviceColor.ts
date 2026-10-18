@@ -124,7 +124,6 @@ function darkenUntil(hex: string, against: string, ratio: number): HexColor {
 
 /** Fundo claro do produto (`--at-color-canvas` de tokens.css). */
 const PAPER = "#f7f4ef";
-const WHITE = "#ffffff";
 
 /**
  * Traço legível sobre o papel: só cor clara de verdade escurece, o mínimo
@@ -137,11 +136,6 @@ export function legibleSwatch(hex: string): HexColor {
   return darkenUntil(hex, PAPER, 2.2);
 }
 
-/** Cartão da Semana no celular: o nome branco por cima pede 4,5:1. */
-export function cardSwatch(hex: string): HexColor {
-  return darkenUntil(legibleSwatch(hex), WHITE, 4.5);
-}
-
 // --- pintura ----------------------------------------------------------------
 
 type SwatchProps = {
@@ -152,8 +146,9 @@ type SwatchProps = {
 /**
  * Atributos que pintam a cor de um serviço. Token vira `data-color` (as
  * regras de `avenly-services.css` dão o `--swatch`); hex vira
- * `data-color="CUSTOM"` com o traço legível e a versão do cartão em
- * variáveis próprias, que o CSS liga ao `--swatch` conforme o lugar.
+ * `data-color="CUSTOM"` com o traço legível em `--swatch-custom`. O cartão
+ * pintado da Semana usa a mesma cor (2026-10-18: escurecer para o nome branco
+ * transformava um rosa vivo em roxo); quem muda é a cor do nome.
  */
 export function swatchProps(
   color: ServiceColor | null | undefined,
@@ -167,7 +162,6 @@ export function swatchProps(
     style: {
       ...style,
       ["--swatch-custom" as string]: legibleSwatch(color),
-      ["--swatch-custom-card" as string]: cardSwatch(color),
     },
   };
 }

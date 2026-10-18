@@ -1,7 +1,12 @@
 import { describe, expect, test } from "vitest";
 
 import {
-  cardSwatch,
+  DARK_INK,
+  LIGHT_INK,
+  weekBarLabelBackgrounds,
+  weekBarLabelInk,
+} from "@/features/agenda/weekBarLabel";
+import {
   contrastRatio,
   hexToRgb,
   hsvToRgb,
@@ -38,11 +43,22 @@ describe("serviceColor", () => {
     expect(contrastRatio(pale, "#f7f4ef")).toBeLessThan(2.6);
   });
 
-  test("o cartão da Semana deixa o nome branco acima de 4,5:1", () => {
-    for (const hex of ["#7a9e7e", "#f3ecd8", "#00ff00", "#123abc"]) {
-      expect(contrastRatio(cardSwatch(hex), "#ffffff")).toBeGreaterThanOrEqual(
-        4.5,
-      );
+  test("cor própria no cartão pintado da Semana: a cor escolhida, nome legível por cima", () => {
+    // Rosa vivo não vira roxo (2026-10-18): o fundo é a cor, o nome é que muda.
+    expect(weekBarLabelBackgrounds(["#ff5ad8"], false)).toEqual(["#ff5ad8"]);
+    expect(weekBarLabelInk(["#ff5ad8"], false)).toBe(DARK_INK);
+    expect(weekBarLabelInk(["#123abc"], false)).toBe(LIGHT_INK);
+    for (const hex of [
+      "#7a9e7e",
+      "#ff5ad8",
+      "#00ff00",
+      "#123abc",
+      "#f3ecd8",
+    ] as const) {
+      const [background] = weekBarLabelBackgrounds([hex], false);
+      expect(
+        contrastRatio(weekBarLabelInk([hex], false), background),
+      ).toBeGreaterThanOrEqual(4.5);
     }
   });
 
@@ -57,8 +73,8 @@ describe("serviceColor", () => {
     expect(custom.style).toMatchObject({
       flexGrow: 2,
       "--swatch-custom": "#7a9e7e",
-      "--swatch-custom-card": cardSwatch("#7a9e7e"),
     });
+    expect(custom.style).not.toHaveProperty("--swatch-custom-card");
   });
 
   test("Suas cores: uma entrada por cor, sem o serviço aberto, com as extras no fim", () => {

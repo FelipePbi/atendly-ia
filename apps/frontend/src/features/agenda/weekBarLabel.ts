@@ -1,5 +1,9 @@
 import { type ServiceColorToken } from "@/data";
-import { cardSwatch, isHexColor, type ServiceColor } from "@/shared/serviceColor";
+import {
+  isHexColor,
+  legibleSwatch,
+  type ServiceColor,
+} from "@/shared/serviceColor";
 
 /**
  * Rótulo visual do cartão da Semana no celular (pedido de 2026-10-12): o nome
@@ -144,7 +148,7 @@ export function weekBarLabelBackgrounds(
   const dark = theme === "dark";
   const swatch = first
     ? isHexColor(first)
-      ? cardSwatch(first)
+      ? legibleSwatch(first)
       : CARD_SWATCH_HEX[first]
     : dark
       ? DARK_NEUTRAL_SWATCH_HEX
@@ -164,7 +168,9 @@ export function weekBarLabelInk(
   // Pedido de 2026-10-12: nas cores do servico o nome fica branco; as quatro
   // cores mais claras foram escurecidas so no cartao (CARD_SWATCH_HEX) para
   // passar de 4,5:1. Cinza "sem cor" e cartao passado (traco esmaecido)
-  // seguem a regra de contraste.
-  if (!isPast && tokens[0]) return LIGHT_INK;
+  // seguem a regra de contraste. Cor própria (2026-10-18) fica como foi
+  // escolhida e também segue a regra: rosa vivo leva nome preto.
+  const first = tokens[0];
+  if (!isPast && first && !isHexColor(first)) return LIGHT_INK;
   return readableInk(weekBarLabelBackgrounds(tokens, isPast, theme));
 }

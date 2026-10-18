@@ -714,6 +714,17 @@
   color: var(--muted);
   cursor: not-allowed;
 }
+/* Um dia com mais de um intervalo quebra o horário em duas linhas no celular:
+   a linha cresce em vez de cortar (o onboarding tem um intervalo só). */
+.availability-screen .hours-day-row {
+  height: auto;
+  min-height: 52px;
+  padding-block: 10px;
+}
+.availability-screen .hours-day-range {
+  justify-content: flex-end;
+  text-align: right;
+}
 .hours-day-fields .availability-pattern {
   gap: 12px;
 }

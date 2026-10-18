@@ -1071,7 +1071,7 @@ Resposta:
 | `exceptionPhones` | até 20 telefones | números que recebem de verdade, canônicos na resposta (`55` + DDD + número, só dígitos). Na escrita aceitam máscara, sem `55` e com ou sem o 9º dígito, e a lista enviada **substitui** a gravada; ausente preserva |
 | `updatedAt` | timestamp ISO ou `null` | última gravação; `null` quando nunca foi gravado |
 
-`PATCH` recusa com `400 VALIDATION_ERROR`, sem chamar a IA e sem gravar nada, número que não é brasileiro válido (`details.index` aponta qual), mais de 20 números ou campo desconhecido. Repetidos (inclusive com e sem o 9º dígito) ficam uma vez só. Negócio ainda sem configuração na IA: o BFF projeta a configuração e repete uma vez. Falha da IA ao ler ou gravar é `UPSTREAM_ERROR`, nunca sucesso. Ligar, desligar e mudar a lista entram no registro de atividade (`settings.ai_sandbox_enabled`, `settings.ai_sandbox_disabled`, `settings.ai_sandbox_updated`), só com o número de exceções, nunca os telefones.
+`PATCH` recusa com `400 VALIDATION_ERROR`, sem chamar a IA e sem gravar nada, número que não é brasileiro válido (`details.index` aponta qual), mais de 20 números ou campo desconhecido. Repetidos (inclusive com e sem o 9º dígito) ficam uma vez só. Negócio ainda sem configuração na IA: o BFF projeta a configuração e repete uma vez. Falha da IA ao ler ou gravar é `UPSTREAM_ERROR`, nunca sucesso. Ligar, desligar e mudar a lista entram no registro de atividade (`settings.ai_sandbox_enabled`, `settings.ai_sandbox_disabled`, `settings.ai_sandbox_updated`), com o campo `exceptionPhones` antes e depois: os números mascarados (`+55 11 •••••-5678`, só o DDD e os quatro últimos dígitos, separados por vírgula; `null` sem nenhum), nunca o telefone inteiro (D-200). Registros anteriores trazem só `exceptionCount`.
 
 Na saída suprimida, o id de transporte é `sandbox-<correlationId>` e o `rawPayload` guardado leva `avenlySandbox: { suppressed: true, reason, suppressedAt }`, com `reason` `no_exceptions`, `not_exception` ou `recipient_phone_unknown` (conversa por LID cujo telefone não aparece em nenhuma mensagem recebida). Conversa por LID é comparada pelo telefone que o WhatsApp mandou junto (`SenderAlt`/`RecipientAlt`), como na entrada; sem ele, não é exceção. As travas globais do ambiente (`WHATSAPP_OUTBOUND_DISABLED`, `AI_REPLY_ONLY_PHONES`) continuam valendo por cima. O teste real de ativação (número da plataforma ↔ número do negócio) não fala com cliente e não passa pelo sandbox.
 
@@ -1101,9 +1101,11 @@ Resposta: `{ items, nextCursor }`, `nextCursor` nulo no fim. Cada item:
 | `occurredAt` | instante ISO da mudança |
 | `actor` | `AI` ou `USER`; o id da pessoa não sai do BFF |
 | `area`, `action` | área e verbo estável (`appointment.rescheduled`, `customer.updated`, `settings.ai_paused`…) |
-| `entity` | `{ type, id, label }`; `label` é o nome no momento do registro |
+| `entity` | `{ type, id, label }`; `label` é o nome no momento do registro. Conversa ou contato gravado só com o número ganha, na leitura, o nome que o contato tem hoje, quando já tem (D-200) |
 | `changes` | `[{ field, before, after }]`, só dos campos que mudaram, de uma lista permitida por entidade; valores escalares |
 | `details` | contexto da frase (cliente, serviços, horário local `YYYY-MM-DDTHH:mm`, motivo do cancelamento), ou `null` |
+
+A cor do serviço é um campo só, `color`, com o token da paleta (`ROSE`…) ou o `#rrggbb` da cor personalizada (D-200); registros anteriores trazem `colorHex` (e nunca `colorToken`, que o filtro de segredo descartava).
 
 Nenhum campo carrega senha, hash, token, credencial ou chave: o diff só percorre campos permitidos e qualquer chave com cara de segredo é descartada antes de gravar. A troca de senha e a conexão da Minha Agenda aparecem só como fato. A conclusão automática de atendimento (`SYSTEM`) e cada item importado (`INTEGRATION`) não viram atividade; a importação aparece como início e conclusão, com as contagens.
 

@@ -262,6 +262,15 @@ describe("D-199: GET/PATCH /v1/settings/ai/sandbox", () => {
       area: "SETTINGS",
     });
     expect(JSON.stringify(activity[0])).not.toContain("912345678");
+    // O numero entra mascarado: DDD e os quatro ultimos digitos (D-200).
+    expect(activity[0]?.changes).toEqual([
+      { field: "enabled", before: false, after: true },
+      {
+        field: "exceptionPhones",
+        before: null,
+        after: "+55 11 •••••-5678, +55 21 •••••-0000",
+      },
+    ]);
   });
 
   it("PATCH so com a lista mantem o ligado e registra a alteracao da lista", async () => {
@@ -272,7 +281,12 @@ describe("D-199: GET/PATCH /v1/settings/ai/sandbox", () => {
     expect(response.statusCode).toBe(200);
     const put = upstream.find((call) => call.method === "PUT");
     expect(put?.body).toEqual({ exceptionPhones: ["5511912345678"] });
-    expect(activity[0]).toMatchObject({ action: "settings.ai_sandbox_updated" });
+    expect(activity[0]).toMatchObject({
+      action: "settings.ai_sandbox_updated",
+      changes: [
+        { field: "exceptionPhones", before: null, after: "+55 11 •••••-5678" },
+      ],
+    });
   });
 
   it("PATCH desligando registra settings.ai_sandbox_disabled", async () => {

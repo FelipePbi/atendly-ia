@@ -1473,7 +1473,7 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
           // Deslocada pelo registro de atividade (D-176) e pela mídia com link
           // vencido da CDN e pelas rotas do modo sandbox (D-199); a linha é o
           // número real, não um valor escolhido.
-          line: 974,
+          line: 975,
           category: "person_typed_text",
           origin: undefined,
         },

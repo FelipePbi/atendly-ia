@@ -7,6 +7,10 @@ import {
   diffFields,
   sanitizeActivityJson,
 } from "../../src/modules/activity/activity-log.js";
+import {
+  SERVICE_ACTIVITY_FIELDS,
+  serviceActivityRow,
+} from "../../src/modules/activity/entity-activity.js";
 
 /** Registro de atividade (D-176): o que entra no antes/depois e o que nunca entra. */
 describe("activity log", () => {
@@ -57,5 +61,33 @@ describe("activity log", () => {
     });
     expect(actorFromSource("INTEGRATION", "owner-1")).toBeNull();
     expect(actorFromSource("SYSTEM", null)).toBeNull();
+  });
+
+  it("cor do servico e um campo so, de token para hex e de volta (D-200)", () => {
+    const rose = { colorToken: "ROSE", colorHex: null, name: "Teste" };
+    const custom = { colorToken: null, colorHex: "#D479FF", name: "Teste" };
+    expect(
+      diffFields(
+        serviceActivityRow(rose),
+        serviceActivityRow(custom),
+        SERVICE_ACTIVITY_FIELDS,
+      ),
+    ).toEqual([{ field: "color", before: "ROSE", after: "#d479ff" }]);
+    expect(
+      diffFields(
+        serviceActivityRow(custom),
+        serviceActivityRow({ ...rose, colorToken: "SKY" }),
+        SERVICE_ACTIVITY_FIELDS,
+      ),
+    ).toEqual([{ field: "color", before: "#d479ff", after: "SKY" }]);
+    // Token para token tambem entra: antes, `colorToken` caia no filtro de
+    // segredo e a troca sumia do registro.
+    expect(
+      diffFields(
+        serviceActivityRow(rose),
+        serviceActivityRow({ ...rose, colorToken: "SKY" }),
+        SERVICE_ACTIVITY_FIELDS,
+      ),
+    ).toEqual([{ field: "color", before: "ROSE", after: "SKY" }]);
   });
 });

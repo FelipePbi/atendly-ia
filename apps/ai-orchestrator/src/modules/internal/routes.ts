@@ -42,6 +42,7 @@ import {
   recordContactActivity,
   recordConversationActivity,
   recordKnowledgeActivity,
+  withCurrentContactNames,
 } from "../activity/orchestrator-activity.js";
 import { AssistantService } from "../assistant/assistant.service.js";
 import { EvolutionProvider } from "../channel/adapters/evolution/EvolutionProvider.js";
@@ -1022,28 +1023,29 @@ export async function registerInternalRoutes(
   app.get("/internal/activity", async (request) => {
     const { tenantId } = trustedTenantContext(request);
     const query = parseOrThrow(activityQuerySchema, request.query ?? {});
-    return internalData(
-      request,
-      await listActivity(prisma, tenantId, {
-        from: query.from ? new Date(query.from) : undefined,
-        to: query.to ? new Date(query.to) : undefined,
-        actor: query.actor,
-        areas: query.area,
-        actions: query.action,
-        q: query.q,
-        before: query.beforeAt
-          ? {
-              occurredAt: new Date(query.beforeAt),
-              sequence:
-                query.beforeSequence !== undefined
-                  ? parseActivitySequence(query.beforeSequence)
-                  : undefined,
-              inclusive: query.inclusive === "true",
-            }
-          : undefined,
-        limit: query.limit,
-      }),
-    );
+    const page = await listActivity(prisma, tenantId, {
+      from: query.from ? new Date(query.from) : undefined,
+      to: query.to ? new Date(query.to) : undefined,
+      actor: query.actor,
+      areas: query.area,
+      actions: query.action,
+      q: query.q,
+      before: query.beforeAt
+        ? {
+            occurredAt: new Date(query.beforeAt),
+            sequence:
+              query.beforeSequence !== undefined
+                ? parseActivitySequence(query.beforeSequence)
+                : undefined,
+            inclusive: query.inclusive === "true",
+          }
+        : undefined,
+      limit: query.limit,
+    });
+    return internalData(request, {
+      ...page,
+      items: await withCurrentContactNames(prisma, tenantId, page.items),
+    });
   });
 
   /**

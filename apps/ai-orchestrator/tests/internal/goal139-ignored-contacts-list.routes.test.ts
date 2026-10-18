@@ -160,6 +160,8 @@ function fakePrisma(options: {
       },
     },
     contact: {
+      // Nome do contato no registro de atividade (D-200): sem nome aqui.
+      findFirst: async () => null,
       findUnique: async ({ where }: { where: Record<string, unknown> }) =>
         findContact(where) ?? null,
       findMany: async ({

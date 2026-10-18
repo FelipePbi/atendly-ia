@@ -22,8 +22,7 @@ export const SERVICE_ACTIVITY_FIELDS = [
   "priceType",
   "price",
   "description",
-  "colorToken",
-  "colorHex",
+  "color",
   "bufferBeforeMinutes",
   "bufferAfterMinutes",
   "recurrenceIntervalDays",
@@ -141,16 +140,40 @@ export const customerActivity = {
   deleted: deleted.bind(null, CUSTOMER),
 };
 
+/**
+ * O serviço tem uma cor só (D-184): um token da paleta ou um `#rrggbb`. O
+ * registro guarda as duas como um campo `color` (D-200), para o antes e o
+ * depois falarem da mesma coisa. Antes eram dois campos, e `colorToken` ainda
+ * caía no filtro de segredo (tem "token" no nome): trocar uma cor da paleta
+ * por uma personalizada ficava "— → #d479ff".
+ */
+export function serviceActivityRow<T extends Row>(row: T): T & { color: string | null } {
+  const hex =
+    typeof row.colorHex === "string" && row.colorHex
+      ? row.colorHex.toLowerCase()
+      : null;
+  const token =
+    typeof row.colorToken === "string" && row.colorToken ? row.colorToken : null;
+  return { ...row, color: hex ?? token };
+}
+
 export const serviceActivity = {
-  created: created.bind(null, SERVICE),
+  created: (
+    transaction: Transaction,
+    tenantId: string,
+    actor: ActivityActor,
+    row: Row & { id: string },
+  ) => created(SERVICE, transaction, tenantId, actor, serviceActivityRow(row)),
   /** Arquivar e reativar viram ação própria; o resto é edição. */
   updated: (
     transaction: Transaction,
     tenantId: string,
     actor: ActivityActor,
-    before: Row & { id: string },
-    after: Row,
+    beforeRow: Row & { id: string },
+    afterRow: Row,
   ) => {
+    const before = serviceActivityRow(beforeRow);
+    const after = serviceActivityRow(afterRow);
     const onlyActive =
       before.active !== after.active &&
       diffFields(before, after, SERVICE.fields).length === 1;

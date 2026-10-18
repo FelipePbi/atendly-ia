@@ -407,13 +407,19 @@ export async function registerV1SettingsRoutes(
         await syncAi(request, ai);
         after = await ai.updateAiSandbox(context, input);
       }
+      // Os numeros entram mascarados (DDD e quatro ultimos digitos, D-200):
+      // o registro diz qual numero passou a receber de verdade sem guardar
+      // o telefone inteiro (D-199).
       const changes = diffFields(
         {
           enabled: before.enabled,
-          exceptionCount: before.exceptionPhones.length,
+          exceptionPhones: maskedSandboxPhones(before.exceptionPhones),
         },
-        { enabled: after.enabled, exceptionCount: after.exceptionPhones.length },
-        ["enabled", "exceptionCount"],
+        {
+          enabled: after.enabled,
+          exceptionPhones: maskedSandboxPhones(after.exceptionPhones),
+        },
+        ["enabled", "exceptionPhones"],
       );
       const listChanged =
         before.exceptionPhones.join(",") !== after.exceptionPhones.join(",");
@@ -428,7 +434,6 @@ export async function registerV1SettingsRoutes(
                 ? "settings.ai_sandbox_enabled"
                 : "settings.ai_sandbox_disabled",
           entityType: "ai_settings",
-          // So o numero de excecoes: os telefones nao vao para o registro.
           changes,
         });
       }
@@ -852,6 +857,25 @@ function normalizeSandboxExceptionPhones(phones: string[]): string[] {
     }
   });
   return result;
+}
+
+/**
+ * Telefone de excecao do sandbox para o registro de atividade (D-200): DDD e
+ * os quatro ultimos digitos, o resto escondido (`+55 11 •••••-5678`). Lista
+ * vazia e `null` ("Nenhum" na tela).
+ */
+export function maskedSandboxPhones(phones: readonly string[]): string | null {
+  if (phones.length === 0) return null;
+  return phones
+    .map((phone) => {
+      const digits = phone.replace(/\D/gu, "");
+      const national = digits.startsWith("55") ? digits.slice(2) : digits;
+      const ddd = national.slice(0, 2);
+      const subscriber = national.slice(2);
+      const hidden = "•".repeat(Math.max(subscriber.length - 4, 0));
+      return `+55 ${ddd} ${hidden}-${subscriber.slice(-4)}`;
+    })
+    .join(", ");
 }
 
 function upstreamCodeOf(error: unknown): string | undefined {

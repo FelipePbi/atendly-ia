@@ -1,3 +1,4 @@
+import { reminderMessageExampleInputSchema } from "@avenly-ia/public-api-contract";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
@@ -74,6 +75,10 @@ const reminderRuleSchema = z.object({
 const reminderSettingsSchema = z.object({
   confirmationEnabled: z.boolean().optional(),
   pricePolicy: reminderPricePolicySchema.optional(),
+  // Mensagem de exemplo (D-197): ausente mantem a gravada, `null` ou vazio
+  // volta ao padrao. A regra do texto (teto, so os campos conhecidos, nenhuma
+  // data, horario ou valor escrito a mao) e a do contrato, a mesma da tela.
+  messageExample: reminderMessageExampleInputSchema.optional(),
   // Vazio e escolha legitima: desligar os lembretes de proposito.
   rules: z.array(reminderRuleSchema).max(2),
 });

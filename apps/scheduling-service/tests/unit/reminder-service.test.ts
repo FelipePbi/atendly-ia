@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_REMINDER_LEAD_MINUTES,
   MAX_REMINDER_LEAD_MINUTES,
+  MAX_REMINDER_MESSAGE_EXAMPLE_LENGTH,
   ReminderService,
 } from "../../src/modules/reminders/reminder-service.js";
 import { createDatabaseDouble } from "./support/database-double.js";
@@ -164,5 +165,65 @@ describe("reminder configuration: does not leak across tenants", () => {
     expect(readB.rules).toEqual([
       { slot: "FIRST", leadMinutes: DEFAULT_REMINDER_LEAD_MINUTES },
     ]);
+  });
+});
+
+describe("reminder configuration: message example (D-197)", () => {
+  it("is null by default, both unconfigured and when saved without one", async () => {
+    const { reminders } = service();
+    expect((await reminders.get()).messageExample).toBeNull();
+    const saved = await reminders.set({ rules: [] });
+    expect(saved.messageExample).toBeNull();
+  });
+
+  it("saves the trimmed text and reads it back", async () => {
+    const { reminders } = service();
+    const saved = await reminders.set({
+      messageExample: "  Oii, {nome}! 💛\nTe espero {data}, às {hora}.  ",
+      rules: [{ slot: "FIRST", leadMinutes: 1440 }],
+    });
+    expect(saved.messageExample).toBe(
+      "Oii, {nome}! 💛\nTe espero {data}, às {hora}.",
+    );
+    expect((await reminders.get()).messageExample).toBe(saved.messageExample);
+  });
+
+  it("keeps the saved text when the body does not mention it", async () => {
+    const { reminders } = service();
+    await reminders.set({ messageExample: "Oii, {nome}!", rules: [] });
+    const saved = await reminders.set({
+      confirmationEnabled: true,
+      rules: [{ slot: "FIRST", leadMinutes: 120 }],
+    });
+    expect(saved.messageExample).toBe("Oii, {nome}!");
+    expect((await reminders.get()).messageExample).toBe("Oii, {nome}!");
+  });
+
+  it("goes back to the default with null or an empty text", async () => {
+    const { reminders } = service();
+    await reminders.set({ messageExample: "Oii, {nome}!", rules: [] });
+    expect(
+      (await reminders.set({ messageExample: "   ", rules: [] })).messageExample,
+    ).toBeNull();
+    await reminders.set({ messageExample: "Oii, {nome}!", rules: [] });
+    expect(
+      (await reminders.set({ messageExample: null, rules: [] })).messageExample,
+    ).toBeNull();
+    expect((await reminders.get()).messageExample).toBeNull();
+  });
+
+  it("refuses a text above the declared ceiling", async () => {
+    const { reminders } = service();
+    await expect(
+      reminders.set({
+        messageExample: "a".repeat(MAX_REMINDER_MESSAGE_EXAMPLE_LENGTH + 1),
+        rules: [],
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_REMINDER_MESSAGE_EXAMPLE" });
+    const atCeiling = "a".repeat(MAX_REMINDER_MESSAGE_EXAMPLE_LENGTH);
+    expect(
+      (await reminders.set({ messageExample: atCeiling, rules: [] }))
+        .messageExample,
+    ).toBe(atCeiling);
   });
 });

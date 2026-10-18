@@ -8050,3 +8050,18 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 5. O contrato não muda: o mesmo `PATCH /v1/settings/availability` com uma regra por intervalo de cada dia marcado, as regras inativas lidas devolvidas intactas, o limite de 28 regras, as mesmas mensagens de validação ("O horário final deve ser depois do horário inicial.", "Os intervalos não podem se sobrepor.", "Dia: mensagem" no status), "Salvar alterações", o status em linha e o toast "Disponibilidade salva.".
 
 **Consequências:** mudança visual no horário do onboarding agora aparece também nas Configurações. Prova: `tests/disponibilidade-como-onboarding.test.tsx`, com os testes de antes (`goal062`, `goal067`, `goal073`) apontando para os novos rótulos.
+
+## D-197 — Mensagem de exemplo do lembrete: referência de tom editável, nunca fonte de fato
+
+**Status:** ACCEPTED em 2026-10-18, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Complementa o Goal021 e o Goal125 (prévia do lembrete).
+
+**Contexto:** a prévia "Assim chega para a cliente" em Configurações › Agenda › Lembretes era só leitura, e a voz do lembrete vinha apenas do estilo da IA. A profissional quer escrever como gostaria que o lembrete soasse (saudação, emojis, uma linha como "Lembre de vir sem rímel 😉"), sem que isso vire um modelo que repete nome, data ou valor de exemplo. A composição do lembrete continua deliberadamente sem modelo de linguagem (Goal021): um gerador entre o fato e a cliente é a porta para horário inventado.
+
+**Decisão:**
+
+1. "Editar mensagem" abre um campo com o texto inicial do estilo (saudação + frase padrão) com `{nome}`, `{servico}`, `{data}` e `{hora}`; a prévia acompanha o que é digitado com os dados de exemplo. "Restaurar padrão" volta ao padrão. Texto vazio ou igual ao inicial grava `null`, que continua seguindo o estilo da IA.
+2. `ReminderSettings.messageExample` (scheduling-service): coluna aditiva, nula, até 600 caracteres (constraint SQL). No `PATCH`, ausente mantém, `null` ou vazio volta ao padrão. O texto vai nos fatos da intenção só no lembrete; o aviso de alteração não usa o exemplo.
+3. A regra do texto mora no contrato (`reminderMessageExampleIssue`), usada pelo BFF e pela tela: só os quatro campos; data, horário ou valor escritos à mão são recusados (`400 VALIDATION_ERROR`; na tela, mensagem inline e o salvar não chama a API).
+4. Composição (ai-orchestrator, determinística, copiada na prévia do frontend): cada linha do exemplo vira um bloco; os campos são trocados numa passada só pelos fatos; sem nome, `{nome}` sai com a vírgula; sem `{servico}`, `{data}` e `{hora}` juntos, a frase padrão entra depois da primeira linha; o valor entra só pela política de preço, logo depois da frase do atendimento; a pergunta de confirmação (voz do estilo) entra no fim quando pedida. Campo desconhecido, ou `{servico}` num atendimento sem serviço nem título, volta ao padrão.
+
+**Consequências:** a frase factual continua uma só (`notificationFactualLines`), e o exemplo nunca é fonte de fato. Mudança na composição muda os dois lados juntos (ai-orchestrator e `reminderPreview.ts`), com os mesmos textos nas duas suítes.

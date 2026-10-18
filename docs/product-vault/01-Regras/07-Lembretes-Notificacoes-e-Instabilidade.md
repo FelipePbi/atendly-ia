@@ -30,6 +30,19 @@ Informações padrão:
 
 Endereço não é repetido automaticamente; a IA responde quando o cliente perguntar ou quando o contexto exigir.
 
+### Mensagem de exemplo
+
+A profissional pode editar a mensagem de exemplo do lembrete (Configurações › Agenda › Lembretes) para mostrar como gostaria que ele soasse: saudação, emojis, tom e uma linha extra (ex.: "Lembre de vir sem rímel 😉"). `{nome}`, `{servico}`, `{data}` e `{hora}` marcam onde entram os dados de cada cliente.
+
+O exemplo é referência de tom, nunca fonte de fato:
+
+- nome, serviço, data e horário vêm sempre do agendamento;
+- se o exemplo não tiver `{servico}`, `{data}` e `{hora}`, a frase padrão com esses dados entra depois da primeira linha;
+- o valor só aparece pela regra de preço acima, logo depois da frase do atendimento;
+- com a confirmação habilitada, a pergunta de confirmação (na voz do estilo da IA) entra no fim;
+- data, horário ou valor escritos à mão e campos desconhecidos são recusados ao salvar;
+- "Restaurar padrão" volta à mensagem pelo estilo da IA. O aviso de alteração não usa o exemplo.
+
 Preço é configurável:
 
 - **Nunca** — padrão;

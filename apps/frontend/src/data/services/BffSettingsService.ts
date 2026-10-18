@@ -62,6 +62,8 @@ export interface ReminderSettingsInput {
   rules: Array<{ slot: ReminderSlot; leadMinutes: number }>;
   confirmationEnabled?: boolean;
   pricePolicy?: ReminderPricePolicy;
+  /** D-197: ausente mantém a gravada; `null` volta ao padrão. */
+  messageExample?: string | null;
 }
 
 export class BffSettingsService {

@@ -242,6 +242,57 @@ describe.skipIf(!RUN_INTEGRATION)(
       expect(upstream).toHaveLength(0);
     });
 
+    it("repassa a mensagem de exemplo ao Scheduling e a devolve (D-197)", async () => {
+      const owner = created[0]!;
+      const messageExample =
+        "Oii, {nome}! 💛\nSeu {servico} é {data}, às {hora}.";
+      const updated = reminderConfigPayload({
+        configured: true,
+        messageExample,
+      });
+      stubScheduling({ data: updated, requestId: "upstream-example" });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/v1/settings/reminders",
+        headers: browserMutation(owner),
+        payload: {
+          messageExample,
+          rules: [{ slot: "FIRST", leadMinutes: 1440 }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.messageExample).toBe(messageExample);
+      expect(JSON.parse(upstream[0].body ?? "{}")).toMatchObject({
+        messageExample,
+      });
+    });
+
+    it("recusa mensagem de exemplo com horário escrito à mão antes de chamar o Scheduling (D-197)", async () => {
+      const owner = created[0]!;
+      stubScheduling({
+        data: reminderConfigPayload(),
+        requestId: "upstream-example-invalid",
+      });
+
+      for (const messageExample of [
+        "Te espero às 15h30!",
+        "Oi {cliente}!",
+        "x".repeat(601),
+      ]) {
+        const response = await app.inject({
+          method: "PATCH",
+          url: "/v1/settings/reminders",
+          headers: browserMutation(owner),
+          payload: { messageExample, rules: [] },
+        });
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.code).toBe("VALIDATION_ERROR");
+      }
+      expect(upstream).toHaveLength(0);
+    });
+
     it("recusa mais de dois lembretes antes de chamar o Scheduling", async () => {
       const owner = created[0]!;
       stubScheduling({

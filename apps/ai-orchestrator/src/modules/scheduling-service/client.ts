@@ -173,6 +173,10 @@ const notificationFactsSchema = z.object({
   startAt: z.string(),
   price: z.number().nullable(),
   confirmationRequested: z.boolean(),
+  // Opcional de proposito (D-197): os fatos ficam gravados na intencao no
+  // instante da reivindicacao, e intencao gravada antes do campo nao o tem.
+  // Ausente e o padrao, nunca um texto inventado.
+  messageExample: z.string().nullable().optional(),
 });
 const claimedNotificationIntentSchema = z.object({
   id: z.string(),

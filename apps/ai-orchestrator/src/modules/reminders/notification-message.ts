@@ -23,6 +23,15 @@ import type { AiConversationStyle } from "../tenant-config/ai-settings.js";
  * inteiros (Sakamoto), sem objeto de data, sem biblioteca de formatacao e sem
  * fuso — e por isso que a IA nao depende do residuo do timezone replicado. Data
  * ou hora fora do formato mantem o texto literal "no dia {date} as {time}".
+ *
+ * **Mensagem de exemplo (D-197).** A profissional pode escrever como gostaria
+ * que o lembrete soasse, com `{nome}`, `{servico}`, `{data}` e `{hora}` no
+ * lugar dos dados. O exemplo e referencia de tom, nao fonte de fato, e
+ * continua sem modelo de linguagem: os campos sao trocados pelos fatos, a
+ * frase padrao com servico, data e horario entra quando o exemplo nao traz os
+ * tres campos, o valor segue a politica de preco e a pergunta de confirmacao
+ * entra no fim quando o negocio a pede. Exemplo com campo desconhecido, ou
+ * com `{servico}` num atendimento sem servico nem titulo, volta ao padrao.
  */
 
 /** Voz de cada estilo. So registro: nenhuma destas frases carrega fato. */
@@ -102,29 +111,46 @@ function weekdayIndex(year: number, month: number, day: number): number {
   return sum % 7;
 }
 
+interface LocalWhen {
+  /** "na quarta-feira, 16/09". */
+  day: string;
+  /** "14h30", ou "14h" com minuto zero. */
+  clock: string;
+}
+
 /**
- * "na quarta-feira, 16/09, às 14h30" a partir de `AAAA-MM-DD` e `HH:MM`
- * locais. Entrada fora do formato ou fora de calendario devolve o texto
- * literal antigo: melhor a data crua do que um dia da semana inventado.
+ * Data e hora locais em texto. `null` quando a entrada esta fora do formato
+ * ou fora de calendario: melhor a data crua do que um dia da semana inventado.
  */
-function whenOf(date: string, time: string): string {
-  const literal = `no dia ${date} às ${time}`;
+function localWhen(date: string, time: string): LocalWhen | null {
   const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(time);
-  if (!dateMatch || !timeMatch) return literal;
+  if (!dateMatch || !timeMatch) return null;
 
   const year = Number(dateMatch[1]);
   const month = Number(dateMatch[2]);
   const day = Number(dateMatch[3]);
   const hour = Number(timeMatch[1]);
   const minute = Number(timeMatch[2]);
-  if (month < 1 || month > 12) return literal;
-  if (day < 1 || day > daysInMonth(year, month)) return literal;
-  if (hour > 23 || minute > 59) return literal;
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > daysInMonth(year, month)) return null;
+  if (hour > 23 || minute > 59) return null;
 
   const weekday = WEEKDAYS[weekdayIndex(year, month, day)];
-  const clock = minute === 0 ? `${hour}h` : `${hour}h${timeMatch[2]}`;
-  return `${weekday}, ${dateMatch[3]}/${dateMatch[2]}, às ${clock}`;
+  return {
+    day: `${weekday}, ${dateMatch[3]}/${dateMatch[2]}`,
+    clock: minute === 0 ? `${hour}h` : `${hour}h${timeMatch[2]}`,
+  };
+}
+
+/**
+ * "na quarta-feira, 16/09, às 14h30" a partir de `AAAA-MM-DD` e `HH:MM`
+ * locais. Entrada fora do formato ou fora de calendario devolve o texto
+ * literal antigo.
+ */
+function whenOf(date: string, time: string): string {
+  const when = localWhen(date, time);
+  return when ? `${when.day}, às ${when.clock}` : `no dia ${date} às ${time}`;
 }
 
 /**
@@ -168,6 +194,94 @@ export function notificationFactualLines(facts: NotificationFacts): string[] {
   return lines;
 }
 
+/** Campos que a mensagem de exemplo pode usar (D-197). */
+export const REMINDER_MESSAGE_EXAMPLE_FIELDS = [
+  "nome",
+  "servico",
+  "data",
+  "hora",
+] as const;
+
+type ExampleField = (typeof REMINDER_MESSAGE_EXAMPLE_FIELDS)[number];
+
+const EXAMPLE_FIELD = /\{([^{}]*)\}/g;
+const FACT_FIELD = /\{(servico|data|hora)\}/;
+
+function isExampleField(value: string): value is ExampleField {
+  return (REMINDER_MESSAGE_EXAMPLE_FIELDS as readonly string[]).includes(value);
+}
+
+/**
+ * O lembrete escrito a partir da mensagem de exemplo da profissional, ou
+ * `null` quando o exemplo nao serve e o padrao deve valer.
+ *
+ * Cada linha nao vazia do exemplo vira um bloco, e os blocos saem separados
+ * por linha em branco, como no padrao. Os campos sao trocados numa passada so
+ * — um nome com `{data}` dentro continua sendo so um nome. Sem nome
+ * conhecido, `{nome}` sai junto com a virgula e o espaco que o precedem
+ * ("Oii, {nome}!" vira "Oii!").
+ */
+function composeFromExample(
+  example: string,
+  facts: NotificationFacts,
+  voice: StyleVoice,
+): string | null {
+  const fields = new Set<ExampleField>();
+  for (const match of example.matchAll(EXAMPLE_FIELD)) {
+    const field = match[1];
+    if (!isExampleField(field)) return null;
+    fields.add(field);
+  }
+  const subject = subjectOf(facts);
+  // Sem servico nem titulo nao ha o que pôr em `{servico}`: inventar seria
+  // afirmar um fato, e "atendimento de atendimento" seria pior que o padrao.
+  if (fields.has("servico") && subject === null) return null;
+
+  const name = facts.customerName?.trim() || null;
+  const when = localWhen(facts.date, facts.time);
+  const values: Record<ExampleField, string> = {
+    nome: name ?? "",
+    servico: subject ?? "",
+    data: when ? when.day : `no dia ${facts.date}`,
+    hora: when ? when.clock : facts.time,
+  };
+
+  const blocks: string[] = [];
+  let factualBlock = -1;
+  for (const raw of example.split(/\r?\n/)) {
+    let line = raw;
+    if (name === null) {
+      line = line
+        .replace(/[ \t]*,?[ \t]*\{nome\}/g, "")
+        .replace(/^[ \t]*[,;:][ \t]*/, "");
+    }
+    line = line
+      .replace(EXAMPLE_FIELD, (_match, field: ExampleField) => values[field])
+      .replace(/[ \t]{2,}/g, " ")
+      .trim();
+    if (line.length === 0) continue;
+    blocks.push(line);
+    if (FACT_FIELD.test(raw)) factualBlock = blocks.length - 1;
+  }
+
+  const factual = notificationFactualLines(facts);
+  const ownsFacts =
+    fields.has("servico") && fields.has("data") && fields.has("hora");
+  if (ownsFacts) {
+    // So o valor sobra da frase padrao: entra logo depois da frase do exemplo
+    // que fala do atendimento.
+    blocks.splice(factualBlock + 1, 0, ...factual.slice(1));
+  } else {
+    // Faltou servico, data ou horario: a frase padrao entra inteira depois da
+    // primeira linha (a saudacao, quase sempre).
+    blocks.splice(Math.min(1, blocks.length), 0, ...factual);
+  }
+  if (facts.kind === "REMINDER" && facts.confirmationRequested) {
+    blocks.push(voice.confirmation);
+  }
+  return blocks.join("\n\n");
+}
+
 /**
  * Texto final: voz do estilo em volta das frases factuais.
  *
@@ -181,6 +295,11 @@ export function composeNotificationText(input: {
   facts: NotificationFacts;
 }): string {
   const voice = STYLE_VOICES[input.style];
+  const example = input.facts.messageExample?.trim();
+  if (input.facts.kind === "REMINDER" && example) {
+    const custom = composeFromExample(example, input.facts, voice);
+    if (custom !== null) return custom;
+  }
   const blocks = [
     voice.greeting(input.facts.customerName?.trim() || null),
     ...notificationFactualLines(input.facts),

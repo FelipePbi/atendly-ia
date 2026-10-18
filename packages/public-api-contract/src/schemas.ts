@@ -254,6 +254,10 @@ export const reminderSettingsSchema = z.object({
   configured: z.boolean(),
   confirmationEnabled: z.boolean(),
   pricePolicy: reminderPricePolicySchema,
+  // Mensagem de exemplo da profissional (D-197), referência de tom do
+  // lembrete. `null` é o padrão pelo estilo da IA. Ausente numa resposta
+  // antiga vale como o padrão.
+  messageExample: z.string().max(600).nullable().optional(),
   rules: z.array(reminderRuleSchema).max(2),
 });
 

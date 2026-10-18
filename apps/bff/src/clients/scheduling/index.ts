@@ -270,6 +270,9 @@ const reminderConfigSchema = z.object({
   configured: z.boolean(),
   confirmationEnabled: z.boolean(),
   pricePolicy: reminderPricePolicySchema,
+  // Opcional: um Scheduling anterior ao D-197 nao o devolve, e ausente vale
+  // como o padrao.
+  messageExample: z.string().nullable().optional(),
   rules: z.array(
     z.object({
       slot: reminderSlotSchema,

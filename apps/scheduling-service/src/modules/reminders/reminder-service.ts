@@ -28,6 +28,12 @@ export const DEFAULT_REMINDER_LEAD_MINUTES = 24 * 60;
  */
 export const MAX_REMINDER_LEAD_MINUTES = 43_200;
 
+/**
+ * Teto da mensagem de exemplo (D-197), o mesmo da constraint SQL
+ * `ReminderSettings_messageExample_check` e da rota publica do BFF.
+ */
+export const MAX_REMINDER_MESSAGE_EXAMPLE_LENGTH = 600;
+
 export interface ReminderRuleInput {
   slot: ReminderSlot;
   leadMinutes: number;
@@ -36,6 +42,11 @@ export interface ReminderRuleInput {
 export interface ReminderConfigInput {
   confirmationEnabled?: boolean;
   pricePolicy?: ReminderPricePolicy;
+  /**
+   * Mensagem de exemplo (D-197). `undefined` mantem a gravada; `null` (ou
+   * texto vazio) volta ao padrao pelo estilo da IA.
+   */
+  messageExample?: string | null;
   rules: ReminderRuleInput[];
 }
 
@@ -54,6 +65,8 @@ export interface ReminderConfig {
   configured: boolean;
   confirmationEnabled: boolean;
   pricePolicy: ReminderPricePolicy;
+  /** Referencia de tom escrita pela profissional; `null` e o padrao. */
+  messageExample: string | null;
   rules: ReminderRuleRecord[];
 }
 
@@ -80,6 +93,7 @@ export class ReminderService {
         configured: false,
         confirmationEnabled: false,
         pricePolicy: "NEVER",
+        messageExample: null,
         rules: [
           { slot: "FIRST", leadMinutes: DEFAULT_REMINDER_LEAD_MINUTES },
         ],
@@ -89,6 +103,7 @@ export class ReminderService {
       configured: true,
       confirmationEnabled: settings.confirmationEnabled,
       pricePolicy: settings.pricePolicy,
+      messageExample: settings.messageExample ?? null,
       rules: sortRules(
         settings.rules.map((rule) => ({
           slot: rule.slot as ReminderSlot,
@@ -116,19 +131,33 @@ export class ReminderService {
     const rules = normalizeRules(input.rules);
     const pricePolicy = normalizePricePolicy(input.pricePolicy);
     const confirmationEnabled = input.confirmationEnabled ?? false;
-    const next: ReminderConfig = {
+    const messageExample = normalizeMessageExample(input.messageExample);
+    let next: ReminderConfig = {
       configured: true,
       confirmationEnabled,
       pricePolicy,
+      messageExample: null,
       rules,
     };
 
     await this.database.$transaction(async (transaction) => {
-      await transaction.reminderSettings.upsert({
+      // `messageExample` ausente do corpo mantem o valor gravado: o campo e
+      // aditivo e um cliente que nao o conhece nao apaga o texto de ninguem.
+      const saved = await transaction.reminderSettings.upsert({
         where: { tenantId: this.tenantId },
-        create: { tenantId: this.tenantId, confirmationEnabled, pricePolicy },
-        update: { confirmationEnabled, pricePolicy },
+        create: {
+          tenantId: this.tenantId,
+          confirmationEnabled,
+          pricePolicy,
+          messageExample: messageExample ?? null,
+        },
+        update: {
+          confirmationEnabled,
+          pricePolicy,
+          ...(messageExample === undefined ? {} : { messageExample }),
+        },
       });
+      next = { ...next, messageExample: saved.messageExample ?? null };
       await transaction.reminderRule.deleteMany({
         where: { tenantId: this.tenantId },
       });
@@ -169,6 +198,29 @@ function normalizePricePolicy(
     );
   }
   return value;
+}
+
+/**
+ * Texto aparado; vazio vira `null` (o padrao). So o teto e conferido aqui: o
+ * que o texto pode conter (campos conhecidos, nenhuma data ou valor escrito a
+ * mao) e regra da rota publica do BFF, e a composicao do lembrete ignora o
+ * exemplo que nao a cumpre.
+ */
+function normalizeMessageExample(
+  value: string | null | undefined,
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  if (trimmed.length > MAX_REMINDER_MESSAGE_EXAMPLE_LENGTH) {
+    throw new AppError(
+      "INVALID_REMINDER_MESSAGE_EXAMPLE",
+      `Reminder message example must have at most ${MAX_REMINDER_MESSAGE_EXAMPLE_LENGTH} characters.`,
+      400,
+    );
+  }
+  return trimmed;
 }
 
 function normalizeRules(rules: ReminderRuleInput[]): ReminderRuleRecord[] {

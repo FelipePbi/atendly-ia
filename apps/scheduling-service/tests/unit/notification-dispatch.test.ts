@@ -32,6 +32,7 @@ interface TenantOptions {
   timezone?: string;
   pricePolicy?: "NEVER" | "WHEN_FIXED";
   confirmationEnabled?: boolean;
+  messageExample?: string | null;
   /** Ausente é "nunca configurou": vale o default do produto (um, 24h). */
   rules?: Array<{ slot: "FIRST" | "SECOND"; leadMinutes: number }>;
 }
@@ -50,7 +51,8 @@ function seedTenant(
   if (
     options.rules === undefined &&
     options.pricePolicy === undefined &&
-    options.confirmationEnabled === undefined
+    options.confirmationEnabled === undefined &&
+    options.messageExample === undefined
   ) {
     return;
   }
@@ -59,6 +61,7 @@ function seedTenant(
     tenantId,
     confirmationEnabled: options.confirmationEnabled ?? false,
     pricePolicy: options.pricePolicy ?? "NEVER",
+    messageExample: options.messageExample ?? null,
   });
   for (const rule of options.rules ?? [{ slot: "FIRST", leadMinutes: 1440 }]) {
     database.tables.reminderRule.rows.push({
@@ -518,6 +521,36 @@ describe("fatos compostos pelo dono", () => {
       date: "2026-12-10",
       time: "09:00",
     });
+  });
+
+  it("leva a mensagem de exemplo da profissional só no lembrete (D-197)", async () => {
+    const example = "Oii, {nome}! 💛\n\nTe espero {data}, às {hora}, para {servico}.";
+    async function exampleFor(kind: "REMINDER" | "CHANGE_NOTICE") {
+      const database = createDatabaseDouble();
+      seedTenant(database, "tenant-a", { messageExample: example });
+      seedAppointment(database, {
+        id: "appointment-1",
+        tenantId: "tenant-a",
+        startAt: new Date("2026-12-10T12:00:00.000Z"),
+        customerName: "Ana",
+        customerPhone: "+5511999990000",
+      });
+      seedIntent(database, {
+        id: "intent-1",
+        tenantId: "tenant-a",
+        appointmentId: "appointment-1",
+        kind,
+      });
+      const result = await claimDueNotificationIntents(
+        database.client as never,
+        { owner },
+      );
+      return result.claimed[0]?.facts.messageExample;
+    }
+
+    expect(await exampleFor("REMINDER")).toBe(example);
+    // O aviso de alteração não é lembrete: segue a voz do estilo, sem exemplo.
+    expect(await exampleFor("CHANGE_NOTICE")).toBeNull();
   });
 
   it("só leva preço quando a política é mostrar e o acordo inteiro tem preço fixo", async () => {

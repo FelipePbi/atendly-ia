@@ -320,6 +320,12 @@ export interface NotificationFacts {
   startAt: string;
   price: number | null;
   confirmationRequested: boolean;
+  /**
+   * Mensagem de exemplo da profissional (D-197), so no lembrete: referencia
+   * de tom, com `{nome}`, `{servico}`, `{data}` e `{hora}`. Nunca fonte de
+   * fato. Ausente em intencao reivindicada antes do campo existir.
+   */
+  messageExample?: string | null;
 }
 
 export interface ClaimedNotificationIntent {

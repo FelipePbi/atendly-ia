@@ -480,6 +480,7 @@ export function createDatabaseDouble() {
       defaults: {
         confirmationEnabled: () => false,
         pricePolicy: () => "NEVER",
+        messageExample: () => null,
       },
     },
   );

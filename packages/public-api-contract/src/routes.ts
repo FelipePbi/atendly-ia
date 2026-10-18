@@ -20,6 +20,7 @@ import {
   conversationEventSchema,
   conversationSchema,
   conversationSuggestionsSchema,
+  conversationUnreadSummarySchema,
   customerDetailSchema,
   customerListSchema,
   customerMemorySchema,
@@ -145,6 +146,9 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
 
   // conversations
   { method: "GET", pathPattern: "/v1/conversations", schema: z.array(conversationSchema) },
+  // Conversas nao lidas (D-195): contador da navegacao e aviso de mensagem nova.
+  { method: "GET", pathPattern: "/v1/conversations/unread-summary", schema: conversationUnreadSummarySchema },
+  { method: "POST", pathPattern: "/v1/conversations/:id/read", schema: conversationSchema },
   { method: "GET", pathPattern: "/v1/conversations/:id", schema: conversationSchema },
   { method: "GET", pathPattern: "/v1/conversations/:id/messages", schema: z.array(messageSchema) },
   { method: "GET", pathPattern: "/v1/conversations/:id/events", schema: z.array(conversationEventSchema) },

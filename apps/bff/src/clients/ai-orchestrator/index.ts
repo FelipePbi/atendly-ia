@@ -136,6 +136,23 @@ const conversationSchema = z.object({
   contentExpiredThrough: z.string().nullish().optional(),
 });
 
+// Conversas nao lidas (D-195): espelha `unreadSummary` da IA.
+const unreadSummarySchema = z.object({
+  unreadConversations: z.number().int().nonnegative(),
+  recent: z.array(
+    z.object({
+      conversationId: z.string(),
+      messageId: z.string(),
+      customerName: z.string().nullable(),
+      externalContactId: z.string(),
+      customerId: z.string().nullable(),
+      kind: messageKindSchema,
+      preview: z.string(),
+      createdAt: z.string(),
+    }),
+  ),
+});
+
 // Contagens de uma passada de purga na IA (Goal023/WU-02). Linhas, por tabela:
 // nada aqui descreve o que foi apagado, e nada disto chega ao cliente final.
 const contentPurgeResultSchema = z.object({
@@ -412,6 +429,35 @@ export class AiOrchestratorClient {
         context,
         query,
         schema: envelope(z.array(conversationSchema)),
+      })
+    ).data;
+  }
+
+  /** Resumo das nao lidas para a navegacao (D-195). */
+  async unreadSummary(context: InternalRequestContext) {
+    return (
+      await this.http.request({
+        method: "GET",
+        path: "/internal/conversations/unread-summary",
+        context,
+        schema: envelope(unreadSummarySchema),
+      })
+    ).data;
+  }
+
+  /** A profissional viu a conversa no app ate `readThrough` (D-195). */
+  async markRead(
+    context: InternalRequestContext,
+    id: string,
+    input: { readThrough?: string },
+  ) {
+    return (
+      await this.http.request({
+        method: "POST",
+        path: `/internal/conversations/${encodeURIComponent(id)}/read`,
+        context,
+        body: input,
+        schema: envelope(conversationSchema),
       })
     ).data;
   }

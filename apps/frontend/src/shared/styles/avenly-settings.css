@@ -1534,17 +1534,81 @@ button.business-row:last-child {
   padding: 2px 20px 24px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 22px;
 }
-.rules-field {
+/* D-192: cada contexto num cartão com título, e cada grupo com descrição e
+   um exemplo concreto que muda com a escolha. */
+.rules-intro {
+  margin: 0;
+  color: var(--fg-soft);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.rules-section {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.rules-section-title {
+  margin: 0;
+  padding: 0 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: normal;
+  text-transform: uppercase;
+}
+.rules-section-title .icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--at-color-primary);
+  stroke-width: 2;
+}
+.rules-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--at-color-surface);
+}
+.rules-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rules-field + .rules-field {
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.rules-field-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 .rules-label {
   color: var(--fg-soft);
   font-size: 13px;
   font-weight: 600;
+}
+.rules-card .rules-label {
+  color: var(--fg);
+  font-size: 15px;
+  line-height: 1.3;
+}
+.rules-description {
+  color: var(--fg-soft);
+  font-size: 13px;
+  line-height: 1.4;
 }
 .rules-options {
   display: flex;
@@ -1607,21 +1671,73 @@ button.business-row:last-child {
   flex: none;
   stroke-width: 3;
 }
-.rules-example {
-  padding: 12px 14px;
+.rules-hint {
+  margin: 0;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  gap: 2px;
+  border-radius: 12px;
+  color: var(--at-color-primary-deep);
+  background: var(--at-color-primary-tint);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.rules-hint-tag {
+  color: var(--at-color-primary-ink);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: normal;
+  text-transform: uppercase;
+}
+/* Troca do exemplo: só opacidade, também com movimento reduzido (D-173). */
+.rules-swap {
+  animation: motion-fade-in var(--at-duration-base) var(--at-ease-standard)
+    both;
+}
+.rules-example {
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--at-color-primary-tint-border);
+  border-radius: 16px;
   background: var(--at-color-surface);
 }
 .rules-example-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+.rules-example-title .icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--at-color-primary);
+  stroke-width: 2;
+}
+.rules-example-lead,
+.rules-example-empty {
+  margin: 0;
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.rules-example-offer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rules-example-day {
+  color: var(--fg-soft);
+  font-size: 13px;
+  font-weight: 600;
 }
 .rules-example-times {
   display: flex;
@@ -1651,22 +1767,51 @@ button.business-row:last-child {
   color: var(--muted);
   font-size: 13px;
 }
-.rules-example-legend {
-  color: var(--fg-soft);
-  font-size: 13px;
-  line-height: 1.4;
-}
-.rules-policy {
-  padding-top: 16px;
+.rules-example-facts {
+  margin: 0;
+  padding: 10px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   border-top: 1px solid var(--border);
+  list-style: none;
 }
-.rules-help {
+.rules-example-facts li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--fg-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.rules-example-facts .icon {
+  width: 13px;
+  height: 13px;
+  margin-top: 3px;
+  flex: none;
+  color: var(--at-color-primary);
+  stroke-width: 3;
+}
+.rules-example-legend {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
+}
+.rules-help {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.rules-help .icon {
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  flex: none;
+  stroke-width: 2;
 }
 .rules-save {
   position: sticky;

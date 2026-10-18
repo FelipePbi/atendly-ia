@@ -7995,6 +7995,21 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 
 **Consequências:** cores só por token, então o tema escuro acompanha. Sem animação nova: a pilha entra na apresentação da página como um bloco só, e com movimento reduzido nada anima.
 
+## D-192 — "Antecedência e intervalos" em três contextos, com um exemplo concreto em cada grupo e "Na prática" juntando as quatro escolhas
+
+**Status:** ACCEPTED em 2026-10-18, a pedido do usuário ("a tela confunde"). Fora do IA Loop, sem Goal próprio. Revê só a apresentação do AG3 descrita em D-116 item 5; o contrato, o pedido, as opções e as mensagens continuam.
+
+**Contexto:** `/configuracoes/agenda/regras` era uma lista corrida de grupos de fichas (antecedência, até quando, intervalo, o bloco "Na prática" e a política de cancelamento), sem dizer o que cada valor significa. O "Na prática" não lia os dias e horários de atendimento: às 02:37 mostrava horários de madrugada que a IA nunca ofereceria.
+
+**Decisão:**
+
+1. Três cartões com título curto, no padrão de grupo do hub (título em caixa alta fora do cartão, cartão com borda e `surface`): **Quando a IA pode marcar** (antecedência e "Até quantos dias à frente", antes "Até quando no futuro"), **Horários que a IA oferece** (intervalo) e **Cancelamento e remarcação pelo cliente** (a política, com a nota de antes). Uma frase curta no topo diz que os exemplos usam a data e a hora de agora.
+2. Cada grupo tem uma descrição fixa e um **exemplo** que muda com a escolha, calculado com a hora de agora no fuso do negócio (`offerPreview.ts`, funções puras): antecedência ("Agora são 14:37, então a IA só oferece horários a partir das 18:37", com "amanhã às" ou o dia quando passa da meia-noite), até quando ("Hoje é 18 de outubro, então a IA não marca nada depois de 16 de janeiro de 2027"), intervalo ("Com 30 min, a IA oferece 09:00, 09:30, 10:00 e assim por diante", a partir do início de expediente ativo mais cedo) e cancelamento ("Quem tem horário amanhã às 10:00 só consegue cancelar ou remarcar pelo WhatsApp até hoje às 10:00"; o atendimento de exemplo é às 10:00 do primeiro dia cujo prazo ainda não passou). Descrição e exemplo são a `aria-describedby` do `radiogroup`; o exemplo é `aria-live="polite"`.
+3. "Na prática · agora são HH:MM" fica no fim e junta as quatro escolhas com os dias e horários lidos (`offerSimulation`): percorre a grade como o motor de disponibilidade (do início de cada intervalo ativo, em passos do intervalo, antes do fim), da hora de agora até o limite de dias, e mostra o dia ("Hoje", "Amanhã", "Segunda, 05/10"), os horários riscados pela antecedência, até três opções e uma frase por regra, inclusive o prazo de cancelamento da primeira opção ("já não pode cancelar nem remarcar pelo WhatsApp" quando a antecedência é menor que o prazo). Sem horário possível, diz o porquê. Continua ilustrativo: não lê a Agenda e diz que pula o que está ocupado ou bloqueado. A antiga `offerPreview` (sem os dias e horários) saiu.
+4. A troca do texto do exemplo é fade de opacidade de 200 ms depois da primeira edição, também com movimento reduzido (D-173, `.rules-swap`).
+
+**Consequências:** o AG3 deixa de seguir o quadro do protótipo na estrutura (cartões, descrições e exemplos); o `visual:compare` do AG3 vai divergir mais, por decisão. `tests/goal097-configuracoes.test.tsx` cobre as funções com relógio fixo, os cartões, as descrições, o axe e a troca dos exemplos antes de salvar.
+
 ## D-193 — "Excluir conta" vira a última linha da Conta, sem cartão de perigo no pé
 
 **Status:** ACCEPTED em 2026-10-18, a pedido do usuário. Fora do IA Loop, sem Goal próprio. Diverge do quadro C1 (Mais-WhatsApp), que mostra um cartão rosado fixado no pé da tela.

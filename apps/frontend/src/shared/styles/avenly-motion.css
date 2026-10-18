@@ -886,4 +886,10 @@ html.is-view-transition .motion-enter-back {
     animation: motion-fade-in var(--at-duration-moderate)
       var(--at-ease-standard) both !important;
   }
+  /* Exemplos de "Antecedência e intervalos" (D-192): a troca do texto é o
+     mesmo fade curto, só de opacidade. */
+  .rules-swap {
+    animation: motion-fade-in var(--at-duration-base) var(--at-ease-standard)
+      both !important;
+  }
 }

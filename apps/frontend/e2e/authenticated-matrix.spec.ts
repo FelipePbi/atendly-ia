@@ -12,7 +12,7 @@ import {
 
 import {
   BAR_CLEARANCE_TOLERANCE,
-  BOTTOM_NAV_ITEMS,
+  bottomNavItemsAt,
   findStaleExceptions,
   hasFocusIndicator,
   type KnownSmallTarget,
@@ -1690,9 +1690,9 @@ for (const routeName of ["inicio", "clientes"] as const) {
       expect
         .soft(
           bands.bottomNav?.items,
-          `${where}: the bottom bar has ${bands.bottomNav?.items ?? 0} rendered items, expected ${BOTTOM_NAV_ITEMS}.`,
+          `${where}: the bottom bar has ${bands.bottomNav?.items ?? 0} rendered items, expected ${bottomNavItemsAt(bands.viewportWidth)}.`,
         )
-        .toBe(BOTTOM_NAV_ITEMS);
+        .toBe(bottomNavItemsAt(bands.viewportWidth));
       expect
         .soft(bands.mobileHeaders, `${where}: a mobile brand header is rendered.`)
         .toBe(0);

@@ -40,11 +40,18 @@ import { Brand } from "@/shared/ui/Brand";
 import { Dialog } from "@/shared/ui/Dialog";
 import { ToastHost } from "@/shared/ui/ToastHost";
 
+import {
+  BottomNavMenuButtons,
+  useBottomNavTabCount,
+} from "./BottomNavOverflow";
 import { MoreMenu } from "./MoreMenu";
 import {
+  BOTTOM_NAV_DESTINATIONS,
+  bottomNavFitsAll,
+  bottomNavMinWidth,
+  bottomNavOverflow,
+  bottomNavSectionOf,
   isDestinationActive,
-  isMobileTab,
-  isMoreActive,
   NOTIFICATIONS_DESTINATION,
   notificationsBadgeLabel,
   SETTINGS_DESTINATION,
@@ -108,6 +115,9 @@ function AppShellChrome({
   // "Mais" do celular e do tablet: modal centralizado e compacto (2026-10-18).
   const [moreOpen, setMoreOpen] = useState(false);
   const closeMore = useCallback(() => setMoreOpen(false), []);
+  // Quantos destinos cabem na barra inferior nesta largura (D-194).
+  const bottomTabCount = useBottomNavTabCount();
+  const bottomSection = bottomNavSectionOf(active);
   const isCurrent = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
   const accountMenuRef = useRef<HTMLDivElement>(null);
@@ -394,45 +404,43 @@ function AppShellChrome({
         )}
         {showBottomNav && (
           <nav className={bottomNavClass} aria-label="Navegação principal">
-            {SIDEBAR_DESTINATIONS.filter((item) =>
-              isMobileTab(item.section),
-            ).map((item) => (
+            {BOTTOM_NAV_DESTINATIONS.map((item) => (
               <Link
                 className={clsx(
                   "bottom-nav-item",
-                  isDestinationActive(item.section, active) && "is-active",
+                  isDestinationActive(item.section, bottomSection) &&
+                    "is-active",
                 )}
+                data-bottom-from={bottomNavMinWidth(item.section) || undefined}
                 href={item.href}
                 key={item.section}
                 aria-current={
-                  isDestinationActive(item.section, active) ? "page" : undefined
+                  isDestinationActive(item.section, bottomSection)
+                    ? "page"
+                    : undefined
                 }
               >
                 <Icon name={item.icon} />
                 <span>{item.label}</span>
+                {item.section === "notificacoes" && notificationsBadge && (
+                  <span className="badge-count">{notificationsBadge}</span>
+                )}
               </Link>
             ))}
-            <button
-              aria-current={isMoreActive(active) ? "page" : undefined}
-              aria-expanded={moreOpen}
-              aria-haspopup="dialog"
-              className={clsx(
-                "bottom-nav-item",
-                isMoreActive(active) && "is-active",
-              )}
-              onClick={() => setMoreOpen(true)}
-              type="button"
-            >
-              <Icon name="nav-more" />
-              <span>Mais</span>
-            </button>
+            <BottomNavMenuButtons
+              accountInitials={initials(accountLabel)}
+              active={active}
+              expanded={moreOpen}
+              onOpen={() => setMoreOpen(true)}
+              tabCount={bottomTabCount}
+            />
           </nav>
         )}
       </div>
       <Dialog
         onClose={closeMore}
         open={moreOpen}
-        title="Mais"
+        title={bottomNavFitsAll(bottomTabCount) ? "Conta" : "Mais"}
         variant="modal"
       >
         <MoreMenu
@@ -440,6 +448,7 @@ function AppShellChrome({
           notificationsBadge={notificationsBadge}
           onLogout={() => void logout()}
           onNavigate={closeMore}
+          shortcuts={bottomNavOverflow(bottomTabCount)}
         />
       </Dialog>
     </>

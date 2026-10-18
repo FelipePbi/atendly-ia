@@ -1973,9 +1973,6 @@ p {
   }
   :where(.app-frame > nav) {
     height: calc(81px + env(safe-area-inset-bottom));
-    padding-inline: 0;
-    justify-content: center;
-    gap: 56px;
   }
 }
 .desktop-shell {
@@ -2731,6 +2728,67 @@ p {
 @media (min-width: 768px) {
   .bottom-nav-item {
     width: 72px;
+  }
+}
+
+/*
+ * Barra inferior dinâmica (D-194): enquanto houver largura, mais destinos
+ * entram direto na barra. Os degraus espelham `BOTTOM_NAV_TIERS`
+ * (`navigation.ts`) e decidem o que aparece já na primeira pintura, sem
+ * esperar o JS: abaixo de 600 px, 4 abas + "Mais"; de 600 px, 6 + "Mais"; de
+ * 768 px, as 8 + "Conta" (o "Mais" some quando tudo cabe).
+ */
+:where(.app-frame > nav) .bottom-nav-item {
+  position: relative;
+}
+:where(.app-frame > nav) .bottom-nav-item > span:not(.badge-count) {
+  white-space: nowrap;
+}
+:where(.app-frame > nav) .bottom-nav-item > .badge-count {
+  position: absolute;
+  top: 4px;
+  left: calc(50% + 4px);
+  margin-left: 0;
+}
+:where(.app-frame > nav) .bottom-nav-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface-interactive);
+  color: var(--fg-soft);
+  font-size: 10px;
+  font-weight: 700;
+}
+:where(.app-frame > nav) .bottom-nav-item[data-bottom-from="600"],
+:where(.app-frame > nav) .bottom-nav-item[data-bottom-from="768"] {
+  display: none;
+}
+@media (min-width: 600px) {
+  :where(.app-frame > nav) .bottom-nav-item[data-bottom-from="600"] {
+    display: flex;
+  }
+  /* Vagas iguais de ponta a ponta: com 7 a 9 itens, cada um fica entre
+     ~85 e ~122 px, rótulo inteiro e alvo de toque folgado. */
+  :where(.app-frame > nav) {
+    padding-inline: 8px;
+    justify-content: center;
+    gap: 0;
+  }
+  :where(.app-frame > nav) .bottom-nav-item {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    max-width: 128px;
+  }
+}
+@media (min-width: 768px) {
+  :where(.app-frame > nav) .bottom-nav-item[data-bottom-from="768"] {
+    display: flex;
+  }
+  :where(.app-frame > nav) .bottom-nav-item[data-bottom-until="768"] {
+    display: none;
   }
 }
 .bottom-sheet .menu-item {

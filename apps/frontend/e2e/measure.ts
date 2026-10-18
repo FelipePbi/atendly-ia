@@ -534,8 +534,17 @@ export async function measureComposition(marker: Locator): Promise<CompositionRe
 /** Where the shell swaps the bottom bar for the sidebar (`avenly.css`), and the sidebar's width in the prototype's desktop frames. */
 export const SIDEBAR_BREAKPOINT = 1100;
 export const SIDEBAR_WIDTH = 232;
-/** Início, Conversas, Agenda, Clientes and Mais — in the mobile and the tablet frames alike. */
-export const BOTTOM_NAV_ITEMS = 5;
+/**
+ * How many items the bottom bar renders at a window width (D-194), mirroring
+ * `BOTTOM_NAV_TIERS` in `src/shared/layout/navigation.ts`: Início, Conversas,
+ * Agenda, Clientes and Mais on a phone; Serviços and Faturamento join from
+ * 600px; from 768px all eight destinations fit and "Conta" replaces "Mais".
+ */
+export function bottomNavItemsAt(width: number): number {
+  if (width >= 768) return 9;
+  if (width >= 600) return 7;
+  return 5;
+}
 
 export type ShellBands = {
   viewportWidth: number;

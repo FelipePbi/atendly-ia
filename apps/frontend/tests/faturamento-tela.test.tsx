@@ -153,6 +153,8 @@ describe("Faturamento", () => {
     ).toBeVisible();
     const summary = screen.getByRole("region", { name: "Faturado" });
     expect(within(summary).getByText("R$ 2.000,00")).toBeVisible();
+    // Ticket médio saiu do resumo (2026-10-18).
+    expect(within(summary).queryByText("Ticket médio")).not.toBeInTheDocument();
     expect(within(summary).getByText("+25% que setembro")).toBeVisible();
     expect(
       within(summary).getByText(

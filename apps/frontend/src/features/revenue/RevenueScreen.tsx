@@ -353,14 +353,6 @@ function SummaryCard({
           <dt title="Atendimentos concluídos">Concluídos</dt>
           <dd>{billed.count}</dd>
         </div>
-        <div className="revenue-stat">
-          <dt>Ticket médio</dt>
-          <dd>
-            {billed.averageTicket === null
-              ? "—"
-              : formatMoney(billed.averageTicket)}
-          </dd>
-        </div>
         {(expected.count > 0 || isCurrentPeriod(report)) && (
           <div className="revenue-stat is-expected">
             <dt>Previsto</dt>

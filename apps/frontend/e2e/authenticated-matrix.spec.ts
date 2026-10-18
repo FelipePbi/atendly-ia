@@ -1842,6 +1842,12 @@ for (const routeName of ["servicos", "clientes"] as const) {
  * screens it walks through.
  */
 const WIDE_LAYOUT_BREAKPOINT = 1024;
+/**
+ * The Agenda keeps the Day column beside an appointment only from 1280px
+ * (2026-10-18, AGENDA_SPLIT_MIN_WIDTH): on a landscape tablet (1024 to 1279px)
+ * the detail and the new appointment open full screen, like on a portrait one.
+ */
+const AGENDA_SPLIT_BREAKPOINT = 1280;
 const LIST_COLUMN_WIDTH = 380;
 const LIST_COLUMN_TOLERANCE = 1;
 
@@ -2209,7 +2215,7 @@ test(`G-7 appointment detail from /agenda, five widths`, async ({ page }, testIn
   await proveAuthenticatedScreen(page, route);
 
   const width = page.viewportSize()?.width ?? 0;
-  const wide = width >= WIDE_LAYOUT_BREAKPOINT;
+  const wide = width >= AGENDA_SPLIT_BREAKPOINT;
   const what = `${route.path}: the seeded appointment`;
   const where = `${route.path} to /agenda/agendamento at ${testInfo.project.name} (${width}px)`;
 
@@ -2456,7 +2462,7 @@ test(`G-8 new appointment from /agenda, five widths`, async ({ page }, testInfo)
   await proveAuthenticatedScreen(page, route);
 
   const width = page.viewportSize()?.width ?? 0;
-  const wide = width >= WIDE_LAYOUT_BREAKPOINT;
+  const wide = width >= AGENDA_SPLIT_BREAKPOINT;
   const what = `${route.path}: the "Novo" sheet`;
   const where = `${route.path} to /agenda/novo at ${testInfo.project.name} (${width}px)`;
 

@@ -17,6 +17,7 @@ import { PrismaMessageAttachmentStore } from "../media/message-attachment-store.
 import { OpenAiTranscriptionProvider } from "../media/openai-transcription-provider.js";
 import { CustomerMemoryService } from "../memory/customer-memory-service.js";
 import { OutboxStore } from "../outbox/OutboxStore.js";
+import { tenantSandboxGate } from "../sandbox/SandboxGate.js";
 import { SchedulingClient } from "../scheduling-service/client.js";
 import { SessionService } from "../session/SessionService.js";
 import { AssistantToolRegistry } from "../tools/assistant-tools.js";
@@ -69,10 +70,17 @@ export function buildInboundMessageProcessor(input: InboundProcessorInput) {
     sessions,
     customerMemory,
   );
+  // A resposta da IA sai pelo sandbox do negocio (D-199). O mesmo provedor
+  // baixa midia, o que nao fala com o cliente e nao passa pelo gate.
   const provider = new EvolutionProvider(
     input.logger,
     input.instanceToken,
     input.instanceId,
+    tenantSandboxGate({
+      prisma: input.prisma,
+      tenantId: input.tenantId,
+      logger: input.logger,
+    }),
   );
   const idempotency = new IdempotencyStore(input.prisma);
   const handoff = new HandoffService(

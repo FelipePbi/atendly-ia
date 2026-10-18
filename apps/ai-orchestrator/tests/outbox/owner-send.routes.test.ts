@@ -54,12 +54,27 @@ interface StoredMessage {
   deliveryUpdatedAt: Date | null;
 }
 
-function fakePrisma() {
+function fakePrisma(
+  sandbox:
+    | { enabled: boolean; exceptionPhones: string[] }
+    | "unreadable" = { enabled: false, exceptionPhones: [] },
+) {
   const messages = new Map<string, StoredMessage>();
   const deleted: string[] = [];
   let sequence = 0;
 
   const prisma = {
+    // Modo sandbox (D-199): o envio le o estado antes do transporte.
+    aiTenantConfig: {
+      findUnique: async () => {
+        if (sandbox === "unreadable") throw new Error("db unavailable");
+        return {
+          sandboxEnabled: sandbox.enabled,
+          sandboxExceptionPhones: sandbox.exceptionPhones,
+          sandboxUpdatedAt: null,
+        };
+      },
+    },
     conversation: {
       findFirst: async () => ({
         id: "conversation-a",
@@ -121,6 +136,8 @@ function fakePrisma() {
         messages.set(where.id, updated);
         return updated;
       },
+      // Resolvedor de LID do sandbox: o contato aqui e telefone.
+      findMany: async () => [],
       findUniqueOrThrow: async ({ where }: { where: { id: string } }) => {
         const row = messages.get(where.id);
         if (!row) throw new Error("message not found");
@@ -337,5 +354,55 @@ describe("owner outbound message", () => {
     // Nada saiu, e a mensagem da profissional continua registrada.
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(store.deleted).toHaveLength(0);
+  });
+  it("sandbox ligado: a mensagem da profissional fica SENT sem chamar o Evolution (D-199)", async () => {
+    const store = fakePrisma({ enabled: true, exceptionPhones: ["5511912345678"] });
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    app = await buildApp(store.prisma, fakeSessions().port);
+
+    const response = await sendOwnerMessage(app);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(response.statusCode).toBe(201);
+    expect(response.json().data).toMatchObject({ deliveryState: "SENT" });
+    const stored = [...store.messages.values()][0];
+    expect(stored.externalMessageId).toBe(`sandbox-${stored.correlationId}`);
+    expect(stored.rawPayload).toMatchObject({
+      avenlySandbox: { suppressed: true, reason: "not_exception" },
+    });
+  });
+
+  it("sandbox ligado: excecao recebe de verdade (D-199)", async () => {
+    const store = fakePrisma({ enabled: true, exceptionPhones: ["11999999999"] });
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ key: { id: "wa-sent-1" } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    app = await buildApp(store.prisma, fakeSessions().port);
+
+    const response = await sendOwnerMessage(app);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(response.statusCode).toBe(201);
+  });
+
+  it("sandbox ilegivel: fecha na falha, sem envio e sem sucesso (D-199)", async () => {
+    const store = fakePrisma("unreadable");
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    app = await buildApp(store.prisma, fakeSessions().port);
+
+    const response = await sendOwnerMessage(app);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(response.statusCode).toBe(202);
+    expect(response.json().data).toMatchObject({
+      deliveryState: "FAILED",
+      deliveryDetail: "sandbox_state_unavailable",
+    });
   });
 });

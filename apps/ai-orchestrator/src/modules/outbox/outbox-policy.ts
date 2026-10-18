@@ -42,6 +42,16 @@ export function classifySendFailure(error: unknown): SendFailureClassification {
       // Trava local: o request nunca saiu, e retentar so repetiria a recusa.
       return { state: "FAILED", detail: "outbound_disabled", retryable: false };
     }
+    if (error.code === "AI_SANDBOX_STATE_UNAVAILABLE") {
+      // Sandbox fechado na falha (D-199): sem saber se o negocio esta em
+      // teste, o request nunca saiu. Nao retenta sozinho: a linha fica falha,
+      // visivel, e a profissional decide reenviar.
+      return {
+        state: "FAILED",
+        detail: "sandbox_state_unavailable",
+        retryable: false,
+      };
+    }
     if (error.code === "EVOLUTION_SEND_TIMEOUT") {
       return { state: "UNKNOWN", detail: "transport_timeout", retryable: false };
     }

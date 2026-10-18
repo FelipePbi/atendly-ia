@@ -83,6 +83,8 @@ interface HarnessOptions {
   send?: () => Promise<{ messageId?: string; raw: unknown }>;
   settle?: NotificationSettlementPort["settleNotificationIntent"];
   seedMessages?: StoredMessage[];
+  /** Modo sandbox (D-199); `"unreadable"` faz a leitura falhar. */
+  sandbox?: { enabled: boolean; exceptionPhones: string[] } | "unreadable";
 }
 
 function harness(options: HarnessOptions = {}) {
@@ -111,11 +113,23 @@ function harness(options: HarnessOptions = {}) {
       }),
     },
     aiTenantConfig: {
-      findUnique: async () => ({
-        enabled: options.aiEnabled ?? true,
-        tone: options.tone ?? "BALANCED",
-        settings: {},
-      }),
+      findUnique: async (args?: { select?: Record<string, boolean> }) => {
+        if (args?.select?.sandboxEnabled) {
+          if (options.sandbox === "unreadable") {
+            throw new Error('column "sandboxEnabled" does not exist');
+          }
+          return {
+            sandboxEnabled: options.sandbox?.enabled ?? false,
+            sandboxExceptionPhones: options.sandbox?.exceptionPhones ?? [],
+            sandboxUpdatedAt: null,
+          };
+        }
+        return {
+          enabled: options.aiEnabled ?? true,
+          tone: options.tone ?? "BALANCED",
+          settings: {},
+        };
+      },
     },
     conversation: {
       upsert: vi.fn(
@@ -144,6 +158,8 @@ function harness(options: HarnessOptions = {}) {
       ),
     },
     message: {
+      // Resolvedor de LID do sandbox: nenhum telefone aqui e LID.
+      findMany: async () => [],
       findUnique: async (args: {
         where: {
           tenantId_channelId_correlationId: { correlationId: string };
@@ -253,7 +269,13 @@ function harness(options: HarnessOptions = {}) {
       },
     },
     outbox,
-    providerFactory: () => ({ sendText: sendText as never }),
+    // Como o adapter do canal (D-199): o gate do sandbox que a entrega
+    // passa decide antes do transporte duble.
+    providerFactory: ({ sandbox }) => ({
+      sendText: async (input) =>
+        (await sandbox.intercept(input)) ??
+        ((await (sendText as () => Promise<unknown>)()) as never),
+    }),
   });
 
   return {
@@ -572,5 +594,64 @@ describe("notification delivery", () => {
     expect(source).not.toContain("assumeHumanControl");
     expect(source).not.toContain("/internal/conversations/");
     expect(source).not.toContain("HandoffService");
+  });
+});
+
+describe("modo sandbox (D-199) no lembrete e no aviso de alteracao", () => {
+  it.each(["REMINDER", "CHANGE_NOTICE"] as const)(
+    "%s para cliente fora das excecoes: nao chama o transporte e liquida como SENT",
+    async (kind) => {
+      const world = harness({
+        sandbox: { enabled: true, exceptionPhones: ["5511912345678"] },
+      });
+
+      const outcome = await world.service.deliver(
+        intent({ kind, facts: facts({ kind }) }),
+      );
+
+      expect(world.sendText).not.toHaveBeenCalled();
+      expect(outcome).toMatchObject({ outcome: "SENT", reason: null });
+      expect(world.outbox.markSent).toHaveBeenCalledWith({
+        messageRecordId: outcome.messageRecordId,
+        providerMessageId: `sandbox-${CORRELATION_ID}`,
+        rawPayload: {
+          avenlySandbox: expect.objectContaining({
+            suppressed: true,
+            reason: "not_exception",
+          }),
+        },
+      });
+      expect(world.settleNotificationIntent).toHaveBeenCalledWith(
+        expect.objectContaining({ outcome: "SENT" }),
+      );
+    },
+  );
+
+  it("cliente que e excecao recebe de verdade", async () => {
+    const world = harness({
+      sandbox: { enabled: true, exceptionPhones: ["(11) 99999-9999"] },
+    });
+
+    const outcome = await world.service.deliver(intent());
+
+    expect(world.sendText).toHaveBeenCalledTimes(1);
+    expect(outcome.outcome).toBe("SENT");
+    expect(world.outbox.markSent).toHaveBeenCalledWith(
+      expect.objectContaining({ providerMessageId: "wa-1" }),
+    );
+  });
+
+  it("estado ilegivel: nao envia, nao finge envio, falha com motivo", async () => {
+    const world = harness({ sandbox: "unreadable" });
+
+    const outcome = await world.service.deliver(intent());
+
+    expect(world.sendText).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({
+      outcome: "FAILED",
+      reason: "TRANSPORT_FAILED",
+      detail: "sandbox_state_unavailable",
+    });
+    expect(world.outbox.markSent).not.toHaveBeenCalled();
   });
 });

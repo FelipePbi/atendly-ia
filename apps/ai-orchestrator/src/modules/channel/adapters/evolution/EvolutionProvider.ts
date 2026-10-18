@@ -7,6 +7,7 @@ import {
 } from "../../../../lib/diagnostic-log.js";
 import { AppError } from "../../../../lib/errors.js";
 import { redactSensitive } from "../../../../lib/redact.js";
+import type { SandboxGate } from "../../../sandbox/SandboxGate.js";
 import type {
   DownloadMediaInput,
   DownloadMediaResult,
@@ -31,9 +32,15 @@ export class EvolutionProvider implements WhatsAppProvider {
     private readonly logger: DiagnosticLogger = noopDiagnosticLogger,
     private readonly instanceToken?: EvolutionInstanceCredential,
     private readonly instanceIdOverride?: string,
+    private readonly sandbox?: Pick<SandboxGate, "intercept">,
   ) {}
 
   async sendText(input: SendTextInput): Promise<SendTextResult> {
+    // Modo sandbox do negocio (D-199), antes de tudo: suprimido, nada sai.
+    // Sem gate (teste real entre os numeros da plataforma e do negocio), o
+    // envio segue como sempre. Estado ilegivel lanca e fecha.
+    const suppressed = await this.sandbox?.intercept(input);
+    if (suppressed) return suppressed;
     if (env.WHATSAPP_OUTBOUND_DISABLED) {
       this.logger.warn(
         {

@@ -1444,7 +1444,8 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
         },
         {
           file: "modules/channel/adapters/evolution/EvolutionProvider.ts",
-          line: 36,
+          // Deslocada pelo gate do modo sandbox (D-199).
+          line: 38,
           category: "adapter_implementation",
           origin: undefined,
         },
@@ -1456,7 +1457,8 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
         },
         {
           file: "modules/reminders/NotificationDeliveryService.ts",
-          line: 318,
+          // Deslocada pelo gate do modo sandbox (D-199).
+          line: 329,
           category: "composed_by_composeNotificationText",
           origin: undefined,
         },
@@ -1469,8 +1471,9 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
         {
           file: "modules/internal/routes.ts",
           // Deslocada pelo registro de atividade (D-176) e pela mídia com link
-          // vencido da CDN; a linha é o número real, não um valor escolhido.
-          line: 925,
+          // vencido da CDN e pelas rotas do modo sandbox (D-199); a linha é o
+          // número real, não um valor escolhido.
+          line: 974,
           category: "person_typed_text",
           origin: undefined,
         },
@@ -2520,8 +2523,9 @@ describe("todo egresso HTTP fora da porta do canal é enumerado com resíduo zer
     expect(httpEgressRelativePath(proseSites[0].filePath)).toBe(
       "ai-orchestrator/src/modules/channel/adapters/evolution/EvolutionProvider.ts",
     );
-    // Deslocada pela trava WHATSAPP_OUTBOUND_DISABLED (2026-10-15).
-    expect(proseSites[0].line).toBe(87);
+    // Deslocada pela trava WHATSAPP_OUTBOUND_DISABLED (2026-10-15) e pelo
+    // gate do modo sandbox (D-199).
+    expect(proseSites[0].line).toBe(94);
   });
 
   it("classifica cada um dos 10 sítios na categoria que a resolução de destino computa, sem lista escrita à mão e sem pular arquivo nenhum", () => {
@@ -2542,13 +2546,13 @@ describe("todo egresso HTTP fora da porta do canal é enumerado com resíduo zer
       {
         file: "ai-orchestrator/src/modules/channel/adapters/evolution/EvolutionProvider.ts",
         // Esta e a de baixo, deslocadas pela trava WHATSAPP_OUTBOUND_DISABLED
-        // (2026-10-15).
-        line: 87,
+        // (2026-10-15) e pelo gate do modo sandbox (D-199).
+        line: 94,
         category: "product_prose_to_client_number",
       },
       {
         file: "ai-orchestrator/src/modules/channel/adapters/evolution/EvolutionProvider.ts",
-        line: 186,
+        line: 193,
         category: "env_vars_EVOLUTION_BASE_URL_and_EVOLUTION_DOWNLOAD_MEDIA_PATH",
       },
       {
@@ -6284,13 +6288,13 @@ describe("Goal046 / WU-04 — o conjunto de categorias de recusa é conferido co
 });
 
 describe("Goal046 / WU-04 — a árvore real produz os números desta rodada, e as invariantes de reconhecimento não são vácuas", () => {
-  it("1 superfície, 4 ligações resolvidas, 12 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — os mesmos números da baseline do Goal045, exceto o de arquivos varridos pela resolução de instanciação e o de rotas: com o modelo AgendaViewPreference do Goal073 gerado em apps/bff/src/generated/prisma, o modelo HumanTakeover do Goal074 gerado em apps/ai-orchestrator/src/generated/prisma modules/prompts/service-instructions.ts do Goal078, lib/calendar-source.ts do Goal109, lib/whatsapp-contacts.ts do BFF, o registro de atividade (D-176: modules/activity/ e o modelo ActivityLog gerado nas duas árvores, clients/activity-source.ts do BFF) modules/whatsapp/contact-photo.ts do BFF, o faturamento (D-177: modules/revenue/routes.ts do BFF) o que a IA fez no faturamento (D-178: modules/conversations/inbound-hours.ts da IA e modules/revenue/missed-messages.ts do BFF), o modelo AppearancePreference da aparência por conta (D-181) gerado em apps/bff/src/generated/prisma e as conversas não lidas (D-195: modules/conversations/unread.ts da IA), elas somam hoje 227 arquivos .ts (127 em apps/ai-orchestrator/src, com modules/outbox/ai-reply-dispatch.ts do despacho em partes de 2026-10-11, 100 em apps/bff/src), a 11ª rota é o GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) e a 12ª é o POST /user/avatar da foto de perfil da cliente (2026-10-15) — o número computado pelo AST (227) prevalece sobre qualquer contagem anterior capturada antes desse arquivo existir na árvore", () => {
+  it("1 superfície, 4 ligações resolvidas, 12 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — os mesmos números da baseline do Goal045, exceto o de arquivos varridos pela resolução de instanciação e o de rotas: com o modelo AgendaViewPreference do Goal073 gerado em apps/bff/src/generated/prisma, o modelo HumanTakeover do Goal074 gerado em apps/ai-orchestrator/src/generated/prisma modules/prompts/service-instructions.ts do Goal078, lib/calendar-source.ts do Goal109, lib/whatsapp-contacts.ts do BFF, o registro de atividade (D-176: modules/activity/ e o modelo ActivityLog gerado nas duas árvores, clients/activity-source.ts do BFF) modules/whatsapp/contact-photo.ts do BFF, o faturamento (D-177: modules/revenue/routes.ts do BFF) o que a IA fez no faturamento (D-178: modules/conversations/inbound-hours.ts da IA e modules/revenue/missed-messages.ts do BFF), o modelo AppearancePreference da aparência por conta (D-181) gerado em apps/bff/src/generated/prisma as conversas não lidas (D-195: modules/conversations/unread.ts da IA) e o modo sandbox (D-199: os três arquivos de modules/sandbox/ da IA), elas somam hoje 230 arquivos .ts (130 em apps/ai-orchestrator/src, com modules/outbox/ai-reply-dispatch.ts do despacho em partes de 2026-10-11, 100 em apps/bff/src), a 11ª rota é o GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) e a 12ª é o POST /user/avatar da foto de perfil da cliente (2026-10-15) — o número computado pelo AST (230) prevalece sobre qualquer contagem anterior capturada antes desse arquivo existir na árvore", () => {
     const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
 
     expect(internalClientSurfaces).toHaveLength(1);
     expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
-    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(227);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(230);
     expect(requests).toHaveLength(12);
     expect(nonGoBoundInstantiations).toHaveLength(2);
     expect(nonTransportMemberCalls).toHaveLength(0);
@@ -11967,20 +11971,20 @@ describe("Goal047 / WU-04 (§5) — as categorias de recusa deste caminho existe
   });
 });
 
-describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta rodada, e as 52 ocorrências de this.http. são classificadas sem recusa alguma", () => {
-  it("1 superfície, 4 ligações, 227 arquivos varridos, 12 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal, exceto o de arquivos varridos, pelo modelo AgendaViewPreference do Goal073, pelo modelo HumanTakeover do Goal074, por modules/prompts/service-instructions.ts do Goal078, por lib/calendar-source.ts do Goal109, por lib/whatsapp-contacts.ts do BFF, por modules/outbox/ai-reply-dispatch.ts (2026-10-11), pelo registro de atividade (D-176), por modules/whatsapp/contact-photo.ts do BFF (2026-10-15), pelo faturamento (D-177), pelo que a IA fez no faturamento (D-178), pelo modelo AppearancePreference (D-181) e pelas conversas não lidas (D-195), e o de rotas, pelo GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) e pelo POST /user/avatar da foto de perfil da cliente (2026-10-15)", () => {
+describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta rodada, e as 54 ocorrências de this.http. são classificadas sem recusa alguma", () => {
+  it("1 superfície, 4 ligações, 230 arquivos varridos, 12 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal, exceto o de arquivos varridos, pelo modelo AgendaViewPreference do Goal073, pelo modelo HumanTakeover do Goal074, por modules/prompts/service-instructions.ts do Goal078, por lib/calendar-source.ts do Goal109, por lib/whatsapp-contacts.ts do BFF, por modules/outbox/ai-reply-dispatch.ts (2026-10-11), pelo registro de atividade (D-176), por modules/whatsapp/contact-photo.ts do BFF (2026-10-15), pelo faturamento (D-177), pelo que a IA fez no faturamento (D-178), pelo modelo AppearancePreference (D-181), pelas conversas não lidas (D-195) e pelo modo sandbox (D-199), e o de rotas, pelo GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) e pelo POST /user/avatar da foto de perfil da cliente (2026-10-15)", () => {
     const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
 
     expect(internalClientSurfaces).toHaveLength(1);
     expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
-    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(227);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(230);
     expect(requests).toHaveLength(12);
     expect(nonGoBoundInstantiations).toHaveLength(2);
     expect(nonTransportMemberCalls).toHaveLength(0);
   });
 
-  it("as 52 ocorrências de this.http. em apps/bff/src/clients/ — as 46 do Goal047, o this.http.request de EvolutionClient.getContacts (GET /user/contacts, validação de 2026-10-11), o de EvolutionClient.getAvatarUrl (POST /user/avatar, foto de perfil da cliente, 2026-10-15) o do registro de atividade no cliente do AI Orchestrator (D-176) o das mensagens por hora no mesmo cliente (D-178) e os dois das conversas não lidas no mesmo cliente (D-195: resumo e marcação de leitura) — estão todas na forma direta this.http.<membro>(, sem exceção, e a leitura completa não lança recusa alguma sobre a árvore real", () => {
+  it("as 54 ocorrências de this.http. em apps/bff/src/clients/ — as 46 do Goal047, o this.http.request de EvolutionClient.getContacts (GET /user/contacts, validação de 2026-10-11), o de EvolutionClient.getAvatarUrl (POST /user/avatar, foto de perfil da cliente, 2026-10-15) o do registro de atividade no cliente do AI Orchestrator (D-176) o das mensagens por hora no mesmo cliente (D-178) os dois das conversas não lidas no mesmo cliente (D-195: resumo e marcação de leitura) e os dois do modo sandbox no mesmo cliente (D-199: leitura e gravação) — estão todas na forma direta this.http.<membro>(, sem exceção, e a leitura completa não lança recusa alguma sobre a árvore real", () => {
     const clientsRoot = join(bffSrcPath, "clients");
     const files = listTypeScriptSources(clientsRoot);
     let totalOccurrences = 0;
@@ -11990,8 +11994,8 @@ describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta roda
       totalOccurrences += (source.match(/\bthis\.http\./gu) ?? []).length;
       totalDirectCalls += (source.match(/\bthis\.http\.[A-Za-z_$][\w$]*\(/gu) ?? []).length;
     }
-    expect(totalOccurrences).toBe(52);
-    expect(totalDirectCalls).toBe(52);
+    expect(totalOccurrences).toBe(54);
+    expect(totalDirectCalls).toBe(54);
     expect(() =>
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath),
     ).not.toThrow();

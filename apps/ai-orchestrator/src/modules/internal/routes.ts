@@ -97,6 +97,13 @@ import {
   inboxRetentionCutoff,
   purgeExpiredInboxEvents,
 } from "../retention/inbox-retention.js";
+import { SANDBOX_MAX_EXCEPTION_PHONES } from "../sandbox/sandbox-phone.js";
+import { tenantSandboxGate } from "../sandbox/SandboxGate.js";
+import {
+  readTenantSandbox,
+  type TenantSandboxState,
+  writeTenantSandbox,
+} from "../sandbox/tenant-sandbox.js";
 import { SchedulingClient } from "../scheduling-service/client.js";
 import { resolveCategoryScope } from "../session/session-policy.js";
 import {
@@ -228,6 +235,18 @@ const ignoredContactsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(100),
   offset: z.coerce.number().int().min(0).default(0),
 });
+
+// Modo sandbox (D-199). Ausente preserva; a lista chega inteira e e
+// normalizada (e recusada, se tiver numero invalido) pela loja.
+const aiSandboxUpdateSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    exceptionPhones: z
+      .array(z.string().trim().min(8).max(32))
+      .max(SANDBOX_MAX_EXCEPTION_PHONES)
+      .optional(),
+  })
+  .strict();
 
 const sendOwnerMessageSchema = z.object({
   text: z.string().trim().min(1).max(4_000),
@@ -630,7 +649,12 @@ export async function registerInternalRoutes(
     const { tenantId } = trustedTenantContext(request);
     const config = await prisma.aiTenantConfig.findUnique({
       where: { tenantId },
-      select: { enabled: true, tone: true, promptVersion: true },
+      select: {
+        enabled: true,
+        tone: true,
+        promptVersion: true,
+        sandboxEnabled: true,
+      },
     });
     return internalData(
       request,
@@ -639,8 +663,31 @@ export async function registerInternalRoutes(
             enabled: config.enabled,
             tone: config.tone,
             promptVersion: config.promptVersion,
+            // D-199: o aviso da casca le daqui, no mesmo `GET /v1/status`.
+            sandboxEnabled: config.sandboxEnabled,
           }
         : null,
+    );
+  });
+
+  /**
+   * Modo sandbox do negocio (D-199): leitura e escrita do estado que o envio
+   * consulta. A IA e a dona porque e ela quem envia; o BFF so repassa.
+   */
+  app.get("/internal/ai-sandbox", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    return internalData(
+      request,
+      sandboxDto(await readTenantSandbox(prisma, tenantId)),
+    );
+  });
+
+  app.put("/internal/ai-sandbox", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const body = parseOrThrow(aiSandboxUpdateSchema, request.body);
+    return internalData(
+      request,
+      sandboxDto(await writeTenantSandbox(prisma, tenantId, body)),
     );
   });
 
@@ -918,10 +965,12 @@ export async function registerInternalRoutes(
       const credential = channelConnections.resolveChannelCredential(
         conversation.channel,
       );
+      // Mensagem da profissional tambem passa pelo sandbox (D-199).
       sent = await new EvolutionProvider(
         app.log,
         credential,
         conversation.channel.externalInstanceId,
+        tenantSandboxGate({ prisma, tenantId, logger: app.log }),
       ).sendText({
         to: contactNumber(conversation.externalContactId),
         text: body.text,
@@ -2233,6 +2282,14 @@ function customerMemoryDto(memory: CustomerMemoryRecord) {
   };
 }
 
+function sandboxDto(state: TenantSandboxState) {
+  return {
+    enabled: state.enabled,
+    exceptionPhones: state.exceptionPhones,
+    updatedAt: state.updatedAt?.toISOString() ?? null,
+  };
+}
+
 function internalData<T>(request: FastifyRequest, data: T) {
   return { data, requestId: request.id };
 }
@@ -2340,6 +2397,13 @@ export function requiredScope(request: FastifyRequest): InternalScope {
     return "tenant-config:write";
   }
   if (path === "/internal/ai-tenant-config" && method === "GET") {
+    return "tenant-config:read";
+  }
+  // Sandbox (D-199) e configuracao do negocio: mesma autoridade.
+  if (path === "/internal/ai-sandbox" && method === "PUT") {
+    return "tenant-config:write";
+  }
+  if (path === "/internal/ai-sandbox" && method === "GET") {
     return "tenant-config:read";
   }
   if (path === "/internal/dashboard" && method === "GET") {

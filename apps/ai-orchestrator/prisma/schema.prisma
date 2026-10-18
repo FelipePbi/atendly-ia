@@ -611,6 +611,17 @@ model AiTenantConfig {
   settings      Json?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  /// Modo sandbox do negocio (D-199). Ligado, nada sai para o WhatsApp de
+  /// quem nao esta em `sandboxExceptionPhones`: a saida e gravada como
+  /// enviada, com id `sandbox-...` e a marca no `rawPayload`, sem chamar o
+  /// Evolution Go. A IA, a agenda e a entrada seguem iguais. Fica aqui, e nao
+  /// no BFF, porque e aqui que o envio acontece: uma copia projetada poderia
+  /// ficar para tras e deixar mensagem sair.
+  sandboxEnabled         Boolean   @default(false)
+  /// Excecoes que recebem de verdade: 55 + DDD + numero, so digitos.
+  sandboxExceptionPhones String[]  @default([])
+  sandboxUpdatedAt       DateTime?
 }
 
 model KnowledgeDocument {

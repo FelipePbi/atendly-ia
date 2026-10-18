@@ -417,7 +417,8 @@
   font-weight: 600;
 }
 .hm-week-value.is-empty {
-  color: var(--at-color-ink-ghost);
+  /* "muted" e não "ghost": texto de 11 px precisa de 4,5:1 (D-181). */
+  color: var(--at-color-ink-muted);
 }
 .hm-week-track {
   width: 100%;
@@ -452,7 +453,7 @@
   font-weight: 700;
 }
 .hm-week-labels .is-empty {
-  color: var(--at-color-ink-ghost);
+  color: var(--at-color-ink-muted);
 }
 .hm-ai-line {
   display: inline-flex;

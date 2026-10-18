@@ -42,6 +42,7 @@ function PlatformShellFrame({ children }: { children: ReactNode }) {
       mainClassName={config?.mainClassName}
       module={config?.module}
       pushed={config?.pushed}
+      pushedWide={config?.pushedWide}
       showBottomNav={config?.showBottomNav}
       title={config?.title ?? "Avenly"}
       whatsappInBand={config?.whatsappInBand}

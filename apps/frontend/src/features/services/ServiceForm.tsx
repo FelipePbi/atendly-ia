@@ -7,6 +7,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -22,6 +23,7 @@ import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import {
   type HexColor,
   isHexColor,
+  savedServiceColors,
   type ServiceColor,
   serviceColorOf,
   swatchProps,
@@ -163,6 +165,22 @@ function OptionRow({
     </div>
   );
 }
+
+const checkMark = (
+  <svg
+    aria-hidden="true"
+    fill="none"
+    height="16"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth="3"
+    viewBox="0 0 24 24"
+    width="16"
+  >
+    <path d="M5 12.5l4.5 4.5L19 7.5" />
+  </svg>
+);
 
 function priceRequiresValue(priceType: Service["priceType"]): boolean {
   return priceType === "FIXED" || priceType === "STARTING_AT";
@@ -403,6 +421,14 @@ export function ServiceForm({
     bufferBeforeMinutes === 0 && bufferAfterMinutes === 0
       ? "Nenhum"
       : `Antes ${bufferBeforeMinutes} · Depois ${bufferAfterMinutes}`;
+  const savedColors = useMemo(
+    () =>
+      savedServiceColors(catalog?.items ?? [], {
+        excludeId: edit ? serviceId : null,
+        extra: [service?.colorHex, color],
+      }),
+    [catalog, color, edit, service?.colorHex, serviceId],
+  );
   const colorLabel = isHexColor(color)
     ? "Personalizada"
     : (colorTokenOptions.find((option) => option.value === color)?.label ??
@@ -545,56 +571,11 @@ export function ServiceForm({
               className="service-color-circle"
               data-color={option.value}
             >
-              {color === option.value && (
-                <svg
-                  aria-hidden="true"
-                  fill="none"
-                  height="16"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="3"
-                  viewBox="0 0 24 24"
-                  width="16"
-                >
-                  <path d="M5 12.5l4.5 4.5L19 7.5" />
-                </svg>
-              )}
+              {color === option.value && checkMark}
             </span>
             <span className="sr-only">{option.label}</span>
           </label>
         ))}
-        {isHexColor(color) && (
-          <label className="service-color-choice">
-            <input
-              checked
-              name="service-color"
-              type="radio"
-              value={color}
-              onChange={() => setColorError(null)}
-            />
-            <span
-              aria-hidden="true"
-              className="service-color-circle"
-              {...swatchProps(color)}
-            >
-              <svg
-                aria-hidden="true"
-                fill="none"
-                height="16"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="3"
-                viewBox="0 0 24 24"
-                width="16"
-              >
-                <path d="M5 12.5l4.5 4.5L19 7.5" />
-              </svg>
-            </span>
-            <span className="sr-only">Cor personalizada</span>
-          </label>
-        )}
         <button
           aria-label="Escolher outra cor"
           className="service-color-more"
@@ -605,6 +586,49 @@ export function ServiceForm({
             <Icon name="plus" />
           </span>
         </button>
+        {savedColors.length > 0 && (
+          <div className="service-color-saved">
+            <span aria-hidden="true" className="service-color-saved-label">
+              Suas cores
+            </span>
+            {savedColors.map((saved) => {
+              const label =
+                saved.usedBy.length > 0
+                  ? `Cor ${saved.hex.toUpperCase()}, usada em ${saved.usedBy.join(", ")}`
+                  : `Cor ${saved.hex.toUpperCase()}`;
+              return (
+                <label
+                  className="service-color-choice"
+                  key={saved.hex}
+                  title={label}
+                >
+                  <input
+                    checked={
+                      isHexColor(color) && color.toLowerCase() === saved.hex
+                    }
+                    name="service-color"
+                    type="radio"
+                    value={saved.hex}
+                    onChange={() => {
+                      setColor(saved.hex);
+                      setColorError(null);
+                    }}
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="service-color-circle"
+                    {...swatchProps(saved.hex)}
+                  >
+                    {isHexColor(color) &&
+                      color.toLowerCase() === saved.hex &&
+                      checkMark}
+                  </span>
+                  <span className="sr-only">{label}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
       </div>
       {colorError ? (
         <span
@@ -617,7 +641,8 @@ export function ServiceForm({
       ) : (
         <span className="service-option-help">
           Seis cores sugeridas ou toque em <strong>+</strong> para escolher
-          qualquer outra no seletor de cores.
+          qualquer outra no seletor de cores. As cores que você cria ficam em
+          Suas cores para usar em outros serviços.
         </span>
       )}
       <div className="service-agenda-preview">

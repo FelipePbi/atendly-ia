@@ -227,8 +227,9 @@ async function renderNewForm() {
 async function renderEditForm(
   service: Service,
   instruction = "",
+  others: Service[] = [],
 ): Promise<ReturnType<typeof render>> {
-  catalog([service]);
+  catalog([service, ...others]);
   serviceCatalogGetAiInstruction.mockResolvedValue({ content: instruction });
   serviceCatalogUpdate.mockResolvedValue(service);
   serviceCatalogUpdateAiInstruction.mockResolvedValue({ content: "" });
@@ -746,7 +747,7 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     await user.click(within(picker).getByRole("button", { name: "Usar esta cor" }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Cor personalizada" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Cor #7A9E7E" })).toBeChecked();
     expect(within(optionRow("Cor na agenda")).getByText("Personalizada")).toBeVisible();
     const bar = container.querySelector(".service-agenda-preview-bar");
     expect(bar).toHaveAttribute("data-color", "CUSTOM");
@@ -769,9 +770,10 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     await renderEditForm({ ...edited(), colorToken: null, colorHex: "#123abc" });
     await user.click(optionRow("Cor na agenda"));
 
-    expect(screen.getByRole("radio", { name: "Cor personalizada" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Cor #123ABC" })).toBeChecked();
     await user.click(screen.getByRole("radio", { name: "Oliva" }));
-    expect(screen.queryByRole("radio", { name: "Cor personalizada" })).not.toBeInTheDocument();
+    // A cor que o serviço tinha continua em "Suas cores" para voltar a ela.
+    expect(screen.getByRole("radio", { name: "Cor #123ABC" })).not.toBeChecked();
 
     await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
     await waitFor(() =>
@@ -780,6 +782,46 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
         expect.objectContaining({ colorToken: "EMERALD" }),
       ),
     );
+  });
+
+  // Suas cores (2026-10-18): a cor criada para um serviço fica à mão nos outros.
+  test("a cor personalizada de outro serviço aparece em 'Suas cores' e vira a cor deste", async () => {
+    const user = userEvent.setup();
+    const other: Service = {
+      ...edited(),
+      colorHex: "#FF5AD8",
+      colorToken: null,
+      id: "s2",
+      name: "Aplicação 5D",
+    };
+    const twin: Service = { ...other, id: "s3", name: "Manutenção 5D" };
+    await renderEditForm(edited(), "", [other, twin]);
+    await user.click(optionRow("Cor na agenda"));
+
+    expect(screen.getByText("Suas cores")).toBeVisible();
+    // Uma entrada por cor, dizendo onde ela já é usada.
+    const saved = screen.getByRole("radio", {
+      name: "Cor #FF5AD8, usada em Aplicação 5D, Manutenção 5D",
+    });
+    expect(saved).not.toBeChecked();
+    await user.click(saved);
+    expect(saved).toBeChecked();
+    expect(within(optionRow("Cor na agenda")).getByText("Personalizada")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    await waitFor(() =>
+      expect(serviceCatalogUpdate).toHaveBeenCalledWith(
+        "s1",
+        expect.objectContaining({ colorHex: "#ff5ad8" }),
+      ),
+    );
+  });
+
+  test("sem cor personalizada em nenhum serviço, 'Suas cores' não aparece", async () => {
+    const user = userEvent.setup();
+    await renderEditForm(edited());
+    await user.click(optionRow("Cor na agenda"));
+    expect(screen.queryByText("Suas cores")).not.toBeInTheDocument();
   });
 
   test("intervalo, instruções e recorrência abertos escondem o valor da linha por CSS", async () => {

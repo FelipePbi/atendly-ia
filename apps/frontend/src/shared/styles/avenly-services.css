@@ -1010,6 +1010,22 @@
     0 0 0 3px var(--bg),
     0 0 0 5px var(--accent);
 }
+/* Suas cores: as personalizadas já usadas, numa linha própria abaixo das
+   seis sugeridas (2026-10-18). */
+.service-color-saved {
+  flex-basis: 100%;
+  padding-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.service-color-saved-label {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
 .service-color-choice input:focus-visible + .service-color-circle {
   outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
   outline-offset: 6px;

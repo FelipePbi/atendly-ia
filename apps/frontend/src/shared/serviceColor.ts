@@ -171,3 +171,39 @@ export function swatchProps(
     },
   };
 }
+
+/** Cor própria que o negócio já usa, com os serviços que a usam. */
+export interface SavedServiceColor {
+  hex: HexColor;
+  usedBy: string[];
+}
+
+/**
+ * "Suas cores" (2026-10-18): as cores personalizadas que o negócio já deu a
+ * algum serviço ficam à mão para reusar em outro. Vêm do próprio catálogo,
+ * sem lista separada para manter: a cor existe enquanto algum serviço a usa.
+ * `extra` acrescenta, sem serviço, a cor que o serviço aberto tinha e a que
+ * acabou de ser escolhida no seletor, para que trocar de ideia não a perca.
+ */
+export function savedServiceColors(
+  services: ReadonlyArray<{
+    colorHex?: string | null;
+    id: string;
+    name: string;
+  }>,
+  options: { excludeId?: string | null; extra?: ReadonlyArray<unknown> } = {},
+): SavedServiceColor[] {
+  const byHex = new Map<HexColor, string[]>();
+  for (const service of services) {
+    if (service.id === options.excludeId || !isHexColor(service.colorHex))
+      continue;
+    const hex = service.colorHex.toLowerCase() as HexColor;
+    byHex.set(hex, [...(byHex.get(hex) ?? []), service.name]);
+  }
+  for (const value of options.extra ?? []) {
+    if (!isHexColor(value)) continue;
+    const hex = value.toLowerCase() as HexColor;
+    if (!byHex.has(hex)) byHex.set(hex, []);
+  }
+  return [...byHex].map(([hex, usedBy]) => ({ hex, usedBy }));
+}

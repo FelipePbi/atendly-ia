@@ -8,6 +8,7 @@ import {
   legibleSwatch,
   rgbToHex,
   rgbToHsv,
+  savedServiceColors,
   serviceColorOf,
   swatchProps,
 } from "@/shared/serviceColor";
@@ -58,5 +59,24 @@ describe("serviceColor", () => {
       "--swatch-custom": "#7a9e7e",
       "--swatch-custom-card": cardSwatch("#7a9e7e"),
     });
+  });
+
+  test("Suas cores: uma entrada por cor, sem o serviço aberto, com as extras no fim", () => {
+    const services = [
+      { colorHex: "#FF5AD8", id: "a", name: "Aplicação 5D" },
+      { colorHex: null, id: "b", name: "Corte" },
+      { colorHex: "#ff5ad8", id: "c", name: "Manutenção 5D" },
+      { colorHex: "#123abc", id: "d", name: "Aberto" },
+    ];
+    expect(
+      savedServiceColors(services, {
+        excludeId: "d",
+        extra: ["#123ABC", "SKY", null, "#ff5ad8"],
+      }),
+    ).toEqual([
+      { hex: "#ff5ad8", usedBy: ["Aplicação 5D", "Manutenção 5D"] },
+      { hex: "#123abc", usedBy: [] },
+    ]);
+    expect(savedServiceColors([])).toEqual([]);
   });
 });

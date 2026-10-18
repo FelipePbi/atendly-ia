@@ -8,7 +8,7 @@ import { type CalendarState } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { PushedBar } from "@/shared/layout/PushedBar";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
-import { useWideLayout } from "@/shared/layout/useWideLayout";
+import { useAgendaSplitLayout } from "@/shared/layout/useWideLayout";
 import { useSplashPresenting } from "@/shared/motion/splash";
 import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import { StatePanel } from "@/shared/ui/States";
@@ -59,7 +59,7 @@ export function AppointmentFlowShell({
   loading: boolean;
   title: string;
 }) {
-  const wide = useWideLayout();
+  const wide = useAgendaSplitLayout();
   // Esqueleto só se a carga passar de ~150 ms (D-168): o que chega antes
   // entra direto, sem piscar.
   const showSkeleton = useDeferredLoading(loading);

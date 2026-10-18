@@ -3598,9 +3598,10 @@ button.agenda-new-hint:focus-visible {
   background: var(--at-color-ink-ghost);
 }
 
-/* A partir de 1024 px a lista fica numa coluna de 380 px, com o hairline à
-   direita, e o painel de detalhe ocupa o resto sem moldura. */
-@media (min-width: 1024px) {
+/* A partir de 1280 px (antes 1024; o tablet deitado ficava espremido,
+   2026-10-18) a lista fica numa coluna de 380 px, com o hairline à direita,
+   e o painel de detalhe ocupa o resto sem moldura. */
+@media (min-width: 1280px) {
   .agenda-page .agenda-day-layout {
     grid-template-columns: 380px minmax(0, 1fr);
     gap: 0;
@@ -3635,11 +3636,6 @@ button.agenda-new-hint:focus-visible {
     min-height: 480px;
   }
 }
-@media (min-width: 1024px) and (max-width: 1099px) {
-  .agenda-page .agenda-day-layout {
-    margin-inline: -24px;
-  }
-}
 .agenda-day-detail-empty {
   max-width: 260px;
   margin: 0;
@@ -3663,9 +3659,17 @@ button.agenda-new-hint:focus-visible {
 .agenda-appt-split {
   min-width: 0;
 }
-/* Divisão desligada (abaixo de 1024 px): o invólucro não gera caixa. */
+/* Divisão desligada (abaixo de 1280 px): o invólucro não gera caixa. */
 .agenda-appt-split.agenda-appt-split-flat {
   display: contents;
+}
+/* Tablet deitado (1024 a 1279 px, 2026-10-18): sem a coluna do Dia ao lado,
+   o agendamento abre em tela cheia e precisa do voltar, que a regra geral
+   esconde a partir de 1024 px. */
+@media (min-width: 1024px) and (max-width: 1279.98px) {
+  .agenda-appt-split-flat .pushed-bar .pushed-bar-back {
+    visibility: visible;
+  }
 }
 .agenda-appt-split .agenda-command-bar {
   margin: 0;

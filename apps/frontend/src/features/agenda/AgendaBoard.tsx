@@ -23,6 +23,7 @@ import { ChatSheetShell } from "@/features/conversations/ConversationActionsShee
 import { Icon } from "@/shared/icons/Icon";
 import { PushedBar } from "@/shared/layout/PushedBar";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { AGENDA_SPLIT_MIN_WIDTH } from "@/shared/layout/useWideLayout";
 import { useSplashPresenting } from "@/shared/motion/splash";
 import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import {
@@ -90,7 +91,9 @@ import { OccurrenceActions } from "./OccurrenceActions";
 import { WeekView } from "./WeekView";
 
 /** A partir daqui, o Dia mostra a lista e o painel de detalhe em duas colunas (Goal069 §2). */
-const TWO_COLUMN_MIN_WIDTH = 1024;
+// Lista e detalhe lado a lado só a partir de 1280 px (2026-10-18): no tablet
+// deitado o detalhe abre em tela cheia, como no tablet em pé.
+const TWO_COLUMN_MIN_WIDTH = AGENDA_SPLIT_MIN_WIDTH;
 
 export {
   customerLabel,

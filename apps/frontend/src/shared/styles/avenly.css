@@ -9427,7 +9427,9 @@ main#main-content:focus-visible {
 .agenda-day-detail {
   display: none;
 }
-@media (min-width: 1024px) {
+/* Detalhe ao lado da lista do Dia só a partir de 1280 px (2026-10-18,
+   AGENDA_SPLIT_MIN_WIDTH em useWideLayout.ts). */
+@media (min-width: 1280px) {
   .agenda-day-layout {
     grid-template-columns: minmax(0, 1fr) 360px;
   }

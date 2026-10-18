@@ -298,9 +298,20 @@ function serviceChips(): string[] {
 }
 
 describe("1. sem a barra da Agenda no novo agendamento (pedido de 2026-10-12)", () => {
+  // 2026-10-18: no tablet deitado (1024 a 1279 px) o fluxo abre em tela
+  // cheia, como no tablet em pé; a coluna do Dia ao lado só a partir de 1280.
+  test("no tablet deitado o novo agendamento ocupa a tela, sem a coluna do Dia", async () => {
+    const { container } = await renderNew(TABLET);
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Novo agendamento" }),
+    ).toBeVisible();
+    expect(container.querySelector(".list-detail-list")).toBeNull();
+    expect(container.querySelector(".agenda-command-bar")).toBeNull();
+  });
+
   test.each([
     ["desktop", DESKTOP],
-    ["tablet", TABLET],
+    ["notebook", 1280],
   ])(
     "no %s não há abas Dia/Semana/Mês, setas nem + Novo; fica o × com o título",
     async (_label, width) => {

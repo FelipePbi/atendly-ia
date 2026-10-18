@@ -205,6 +205,8 @@ describe.skipIf(!RUN_INTEGRATION)("Goal014: GET /v1/status", () => {
       effectiveEnabled: true,
       state: "ACTIVE",
       // Nada divergia: a reconciliação do Goal019 não teve o que convergir.
+      // Modo sandbox (D-199): `null` só quando a IA não respondeu.
+      sandboxEnabled: false,
       reconciled: "NOOP",
     });
     expect(body.degraded).toBe(false);
@@ -287,6 +289,7 @@ describe.skipIf(!RUN_INTEGRATION)("Goal014: GET /v1/status", () => {
       // Divergia, então a reconciliação tentou convergir. Mesmo assim o estado
       // lido continua sendo o real: `OFF` porque o desejado manda, e o efetivo
       // continua sendo o que a IA respondeu nesta requisição.
+      sandboxEnabled: false,
       reconciled: "CONVERGED",
     });
   });
@@ -310,6 +313,7 @@ describe.skipIf(!RUN_INTEGRATION)("Goal014: GET /v1/status", () => {
       effectiveEnabled: null,
       state: "PENDING",
       // Tenant nunca projetado: projetar o desejado é convergir, não inventar.
+      sandboxEnabled: false,
       reconciled: "CONVERGED",
     });
   });
@@ -334,6 +338,7 @@ describe.skipIf(!RUN_INTEGRATION)("Goal014: GET /v1/status", () => {
       state: "PENDING",
       // A convergência foi tentada; o dublê é estático e continua relatando
       // desligado, então `PENDING` é o estado honesto — não `ACTIVE`.
+      sandboxEnabled: false,
       reconciled: "CONVERGED",
     });
   });
@@ -357,6 +362,7 @@ describe.skipIf(!RUN_INTEGRATION)("Goal014: GET /v1/status", () => {
       state: "UNKNOWN",
       // A IA está fora do ar: a tentativa de convergir não deu certo, e isso
       // é dito em vez de escondido. A leitura continua respondendo 200.
+      sandboxEnabled: null,
       reconciled: "FAILED",
     });
     expect(body.degraded).toBe(true);
@@ -394,6 +400,7 @@ describe.skipIf(!RUN_INTEGRATION)("Goal014: GET /v1/status", () => {
       desiredEnabled: false,
       effectiveEnabled: false,
       state: "OFF",
+      sandboxEnabled: false,
       reconciled: "NOOP",
     });
   });

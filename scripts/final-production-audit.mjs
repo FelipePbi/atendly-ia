@@ -294,18 +294,23 @@ export async function main() {
       : "group discard is unconditional and EVOLUTION_IGNORE_GROUPS does not appear in apps/",
   );
 
+  // D-181 trouxe o modo escuro como escolha da conta: ele mora só em
+  // `themes.css`. Qualquer outra folha que declare tema escuro reabre o
+  // problema do Goal034 (tokens divergentes por arquivo).
   const darkThemeCssFiles = findDarkThemeCssReferences(
-    styleFiles("apps/frontend/src").map((file) => ({
-      path: file,
-      content: read(file),
-    })),
+    styleFiles("apps/frontend/src")
+      .filter((file) => file !== DARK_THEME_STYLESHEET)
+      .map((file) => ({
+        path: file,
+        content: read(file),
+      })),
   );
   check(
-    "frontend_has_no_dark_theme_css",
+    "frontend_dark_theme_only_in_themes_css",
     darkThemeCssFiles.length === 0,
     darkThemeCssFiles.length
       ? darkThemeCssFiles.join(", ")
-      : "no CSS under apps/frontend/src declares prefers-color-scheme or a dark theme selector",
+      : `no CSS under apps/frontend/src outside ${DARK_THEME_STYLESHEET} declares prefers-color-scheme or a dark theme selector`,
   );
 
   const composeYaml = read("docker-compose.prod.yml");
@@ -674,6 +679,8 @@ export function findGroupDiscardConfigurationViolations(files) {
 // color-scheme` é a media query nativa; os seletores cobrem os nomes comuns
 // de toggle manual de tema (classe, atributo ou combinação com `:root`/
 // `html`) para que a regra não valha só contra o media query.
+const DARK_THEME_STYLESHEET = "apps/frontend/src/shared/styles/themes.css";
+
 const DARK_THEME_CSS_PATTERN =
   /prefers-color-scheme\s*:\s*dark|\[\s*data-theme\s*=\s*["']?dark["']?\s*\]|(?:^|[^\w-])\.dark\b|:root\.dark\b|html\.dark\b/imu;
 

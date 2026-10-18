@@ -104,6 +104,15 @@ const AI_REPLY_SPLIT_MIGRATION_SQL = path.join(
   "20261011120000_ai_reply_split_dispatch",
   "migration.sql",
 );
+const ACTIVITY_LOG_MIGRATION_SQL = path.join(
+  repositoryRoot,
+  "apps",
+  "ai-orchestrator",
+  "prisma",
+  "migrations",
+  "20261016120000_activity_log",
+  "migration.sql",
+);
 
 function refuse(message) {
   console.error(`goal074:human-takeover-migration-rehearsal REFUSED — ${message}`);
@@ -554,6 +563,57 @@ async function alignAiDurabilityTargetWithAiReplySplit(target) {
   }
 }
 
+/**
+ * Leva o banco de durabilidade da IA a tabela `ActivityLog` (registro de
+ * atividade do negocio, D-176). A suite de integracao limpa e grava nessa
+ * tabela. A migracao cria tabela, funcao e trigger sem `IF NOT EXISTS`, entao
+ * banco que ja tem a tabela fica como esta.
+ */
+async function alignAiDurabilityTargetWithActivityLog(target) {
+  const database = decodeURIComponent(
+    target.maintenance.pathname.replace(/^\//u, ""),
+  );
+  const durability = new URL(target.maintenance.href);
+  durability.pathname = `/${database}_goal004`;
+
+  const client = new Client({ connectionString: durability.href });
+  try {
+    await client.connect();
+  } catch {
+    console.log(
+      "durability target not provisioned yet — skipping the ActivityLog table",
+    );
+    return;
+  }
+  try {
+    const activityTable = await client.query(
+      `SELECT to_regclass('"ActivityLog"') AS present`,
+    );
+    if (activityTable.rows[0].present) {
+      console.log(
+        `durability target already has the ActivityLog table: ${database}_goal004`,
+      );
+      return;
+    }
+    const applied = await applyMigrationFile(
+      client,
+      ACTIVITY_LOG_MIGRATION_SQL,
+    );
+    if (applied !== true) {
+      console.error(
+        `goal074:human-takeover-migration-rehearsal FAILED — durability target table failed applying ${ACTIVITY_LOG_MIGRATION_SQL}: ${applied}`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    console.log(
+      `durability target aligned with the ActivityLog table: ${database}_goal004`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
 export async function main() {
   const target = rehearsalTarget(process.env);
 
@@ -563,6 +623,7 @@ export async function main() {
   await alignAiDurabilityTargetWithGoal115(target);
   await alignAiDurabilityTargetWithGoal146(target);
   await alignAiDurabilityTargetWithAiReplySplit(target);
+  await alignAiDurabilityTargetWithActivityLog(target);
 
   if (process.exitCode) {
     console.error(

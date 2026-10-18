@@ -627,14 +627,15 @@
   font-size: 12px;
   text-align: right;
 }
+/* Dois indicadores (sem ticket médio, pedido de 2026-10-18): dividem a
+   largura toda em partes iguais, em qualquer tela. */
 .hm-facts {
   margin: 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px 12px;
 }
-.hm-facts.is-three {
-  grid-template-columns: repeat(3, 1fr);
+.hm-facts.is-wide {
   gap: 12px;
 }
 .hm-fact {
@@ -659,7 +660,7 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.hm-facts.is-three .hm-fact dd {
+.hm-facts.is-wide .hm-fact dd {
   font-size: 16px;
 }
 .hm-fact dd.is-muted {

@@ -7,7 +7,7 @@
  *   "Agenda que fatura", a escolha fica lembrada na aba e a troca entra com
  *   a coreografia de abertura;
  * - no celular, o painel alterna Hoje/Semana de verdade, com o número grande,
- *   a comparação "que ontem a esta hora", a entrar, ticket médio e o que veio
+ *   a comparação "que ontem a esta hora", a entrar e o que veio
  *   pela IA; o rodapé é o mês, que leva ao Faturamento;
  * - o mês nunca mostra meta nem projeção (decisão de 2026-10-18): só o que
  *   já entrou e o que está confirmado pela frente;
@@ -374,7 +374,9 @@ describe("1b · Painel do dia no celular", () => {
     expect(text(region)).toContain("+12%que ontem a esta hora (R$ 410)");
     expect(text(region)).toContain("R$ 1.100 no dia, se tudo confirmar");
     expect(text(region)).toContain("A entrarR$ 6403 confirmados");
-    expect(text(region)).toContain("Ticket médioR$ 153por atendimento");
+    // Sem ticket médio (pedido de 2026-10-18): dois indicadores dividem a linha.
+    expect(text(region)).not.toMatch(/ticket/i);
+    expect(within(region).getAllByRole("term")).toHaveLength(2);
     expect(text(region)).toContain("Pela IAR$ 59054% do dia · 3 atendimentos");
 
     const month = within(region).getByRole("link", { name: /Outubro/ });
@@ -439,7 +441,6 @@ describe("1b · Painel do dia no celular", () => {
       const region = await panel();
       await vi.waitFor(() => expect(text(region)).toContain("faturado hoje"));
       expect(text(region)).not.toMatch(/que ontem/);
-      expect(text(region)).toContain("Ticket médio—");
     } finally {
       REPORTS.day = DAY;
     }
@@ -537,6 +538,8 @@ describe("tablet e desktop", () => {
     expect(text(region)).toContain(
       "faltam 16 dias · sábado é seu dia mais forte",
     );
+    expect(text(region)).not.toMatch(/ticket/i);
+    expect(text(region)).toContain("Pela IAR$ 59054% do dia · 3 atendimentos");
     expect(
       within(region).getByRole("link", { name: /Ver faturamento completo/ }),
     ).toHaveAttribute("href", "/faturamento");

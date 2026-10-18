@@ -243,26 +243,13 @@ function DayFacts({
       : `${ai.share}% do dia${layout === "tablet" ? "" : ` · ${ai.count} ${ai.count === 1 ? "atendimento" : "atendimentos"}`}`;
   return (
     <dl
-      className={clsx(
-        "hm-facts",
-        layout !== "phone" && "is-three",
-        "hm-reveal",
-      )}
+      className={clsx("hm-facts", layout !== "phone" && "is-wide", "hm-reveal")}
       style={reveal(layout === "phone" ? 0.26 : 0.3)}
     >
       <Fact
         caption={confirmed}
         label="A entrar"
         value={homeMoney(report.expected.amount)}
-      />
-      <Fact
-        caption="por atendimento"
-        label="Ticket médio"
-        value={
-          report.billed.averageTicket === null
-            ? "—"
-            : homeMoney(Math.round(report.billed.averageTicket))
-        }
       />
       <Fact
         caption={aiCaption}

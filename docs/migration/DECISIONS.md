@@ -8172,6 +8172,32 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 
 **Revisar se:** o produto ganhar meta mensal guardada, ou se a Home precisar mostrar holds em confirmação.
 
+## D-202 — Edição do serviço igual ao protótipo: Duração e Preço alinhados, recorrência na folha do S6 e tipo de preço na folha do S5
+
+**Status:** ACCEPTED em 2026-10-18, a pedido do usuário ("campos desalinhados, parte da recorrência divergente"). Fora do IA Loop, sem Goal próprio. Quadros `Servicos*.dc.html`: "Serviço · recorrência" (S6) e "Serviço · tipo de preço" (S5), nos quatro devices. Revê a "rodada 2" de D-114 (o rótulo do tipo de preço abria o controle segmentado logo abaixo; "Recorrência" aberta revelava um campo de dias). Não mexe no modelo nem na API: o pedido continua sendo o mesmo `PATCH /v1/services/:id` com `priceType`, `price` e `recurrenceIntervalDays` em dias.
+
+**Contexto:** na edição, o campo do preço começava 6 px acima do − 90 + da duração (a `legend` do fieldset não é item flex e não recebia o `gap` do rótulo). Os atalhos 30/60/90 da criação herdavam a altura mínima do `.btn` (52 px no lugar de 36 px). No celular a linha-resumo quebrava "Nome, duração e preço" em duas linhas. A recorrência era um campo numérico de dias, sem nada do quadro S6, e o tipo de preço era o segmentado da criação aberto abaixo do campo, sem o S5.
+
+**Decisão:**
+
+1. **Alinhamento.** Na edição, rótulo e campo têm 6 px nos dois lados (Duração e Preço começam na mesma linha e têm 52 px); os atalhos da criação têm 36 px, como o S3; o rótulo "Nome, duração e preço" não quebra.
+2. **Recorrência (S6).** "Recorrência" aberta continua com o valor em petróleo e a nota "Referência para a IA quando a cliente pedir “as próximas”. Nunca marca sozinha." Tocar o valor abre a folha: caixa "Este serviço costuma ser recorrente" com "Uma referência para a IA — não uma obrigação para a cliente.", "A cada" com − e +, "dias / semanas / meses", o exemplo "Se a cliente pedir “as próximas 3”" com três datas e "A IA busca horários perto dessas datas, mostra as três opções e só marca depois que a cliente aceitar.", e "Salvar". Desmarcada, a caixa esconde o resto e "Salvar" grava sem recorrência.
+3. **Tipo de preço (S5).** O rótulo do tipo dentro do campo do preço (edição e serviço que precisa de revisão) abre a folha "Como cobrar <nome>?" com "Preço fixo", "A partir de", "Sob consulta" e "Sem preço informado", cada um pela frase da IA, e o valor dentro do tipo escolhido quando ele precisa de valor; "Aplicar" devolve a escolha ao formulário. A criação (S3) mantém o segmentado à vista.
+4. **Folha e modal.** As duas usam o `Dialog` `sheet`: folha presa ao pé abaixo de 768 px (com a tela atrás esmaecida, como o quadro), modal centralizado de 480 px de 768 a 1023 px e de 440 px a partir de 1024 px. "Salvar" e "Aplicar" só mudam o formulário; quem grava continua sendo "Salvar alterações", e o cabeçalho passa a "alterações não salvas".
+
+**Desvios do quadro, de propósito:**
+
+- "meses" grava **30 dias por mês**, porque o contrato só tem `recurrenceIntervalDays`. A linha da lista e o valor da opção mostram "a cada N meses" quando o intervalo é múltiplo de 30, "a cada N semanas" quando é múltiplo de 7, e dias no resto. Limites do contador: 365 dias, 52 semanas, 12 meses.
+- Abrir a folha num serviço sem recorrência começa com a caixa desmarcada; ao marcar, o contador começa em "2 semanas", o estado do quadro.
+- As três datas do exemplo são hoje + 1, 2 e 3 intervalos (o quadro mostra datas fixas).
+- O título do S5 usa o nome como está ("Como cobrar Escova?", não "a escova") e as frases são as de `formatServicePreview` sem a duração ("Escova custa a partir de R$ 60."), sem artigo nem "o valor final depende do comprimento", por D-091 item 7 e D-099; "Sem preço informado" usa a frase literal do quadro.
+- O X das folhas não aparece no quadro: fica fora da vista e só aparece quando o teclado chega nele (o `Dialog` foca nele ao abrir), como em 2.I9. A folha da recorrência tem o nome acessível "Recorrência"; a caixa é o título visível.
+- Ficam como estavam, por decisões anteriores: a linha-resumo aberta na edição (D-103 divergência 4, D-114 (d)); sem "Onde é feito" (D-103) e sem "•••" (D-114 divergência 10); "Escolha uma cor" no lugar de "Sem cor" (cor obrigatória, 2026-10-12); "Suas cores" dentro do seletor de cor em modal centralizado (2026-10-18) e o círculo da cor personalizada (D-184).
+
+**Consequências:** `ServiceRecurrenceSheet.tsx` e `ServicePriceSheet.tsx` em `features/services`; o `ServiceForm` deixa de ter o campo "Repetir automaticamente a cada (dias)" e o fieldset `#service-price-types`. `formatServiceRecurrence` ganha meses. Cores só por token, com o escuro vindo de `themes.css`; animações de entrada só sem movimento reduzido.
+
+**Revisar se:** o contrato passar a guardar a unidade da recorrência (meses de calendário), ou se o produto quiser a linha-resumo fechada na edição.
+
 ## D-205 — O celular do dono continua notificando: a plataforma não marca como lida e não deixa o número online
 
 **Status:** ACCEPTED em 2026-10-18, a pedido do usuário ("as mensagens não estão sendo notificadas no celular porque provavelmente a IA está lendo antes. Quero que o fato da IA ler e responder não evite as notificações do celular"). Fora do IA Loop, sem Goal próprio. Regra em `docs/product-vault/01-Regras/05-WhatsApp.md` (Regra central).

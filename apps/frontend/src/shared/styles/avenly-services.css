@@ -647,6 +647,7 @@
   flex: 1;
   min-width: 0;
   height: 36px;
+  min-height: 0;
   padding: 0;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
@@ -676,8 +677,10 @@
   min-width: 0;
   gap: 6px;
 }
+/* A legenda do fieldset não é item flex: o `gap` de 6 px do rótulo da duração
+   vira margem aqui, para o campo do preço começar na mesma linha que o − 90 +. */
 .service-form-edit .service-price-field legend {
-  margin-bottom: 0;
+  margin-bottom: 6px;
 }
 .service-form-edit .service-duration-row {
   display: block;
@@ -772,12 +775,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   cursor: pointer;
 }
 .service-summary-label {
+  flex: none;
   color: var(--fg-soft);
   font-size: 14px;
+  white-space: nowrap;
 }
 .service-summary-value {
   min-width: 0;
@@ -1819,5 +1824,467 @@ html.vt-service-swap::view-transition-new(service-panel) {
   }
   .service-form-screen > :not(.pushed-bar) {
     transition: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Folhas da edição do serviço (D-202): recorrência (S6) e tipo de preço (S5).
+   O `Dialog` `sheet`, escopado por `.service-sheet`: folha presa ao pé no
+   celular e modal centralizado de 480 px do tablet em diante, como os quadros.
+   -------------------------------------------------------------------------- */
+.overlay:has(.service-sheet) {
+  background: rgb(var(--at-shadow-rgb) / 0.38);
+}
+.bottom-sheet:has(.service-sheet) {
+  position: relative;
+  max-width: none;
+  padding: 10px 20px 46px;
+  border-radius: 24px 24px 0 0;
+  background: var(--at-color-surface);
+  box-shadow: 0 -12px 40px rgb(var(--at-shadow-rgb) / 0.18);
+  box-sizing: border-box;
+}
+.bottom-sheet:has(.service-sheet) .sheet-handle {
+  margin: 0 auto 16px;
+  border-radius: 2px;
+  background: var(--at-color-border-strong);
+}
+.bottom-sheet:has(.service-sheet) .modal-header {
+  margin: 0 0 14px;
+}
+.bottom-sheet:has(.service-sheet) .modal-header h2 {
+  margin: 0;
+  padding: 4px 0 2px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+/* A recorrência não tem título à parte: a caixa "Este serviço costuma ser
+   recorrente" é o título do quadro, e "Recorrência" fica só para o leitor. */
+.bottom-sheet:has(.service-recurrence) .modal-header {
+  margin: 0;
+}
+.bottom-sheet:has(.service-recurrence) .modal-header h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* O quadro não desenha o X: ele só aparece quando o teclado chega nele. */
+.bottom-sheet:has(.service-sheet) .modal-header .icon-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+.bottom-sheet:has(.service-sheet) .modal-header .icon-btn:not(:focus-visible) {
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.service-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.service-price-sheet {
+  gap: 14px;
+}
+.service-sheet-cta.btn {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 14px;
+  font-size: 16px;
+}
+.service-sheet-error {
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* S6: "Este serviço costuma ser recorrente". */
+.service-recurrence-check {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+.service-recurrence-check input {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.service-sheet-box {
+  width: 24px;
+  height: 24px;
+  margin-top: 2px;
+  border: 1.5px solid var(--at-color-border-strong);
+  border-radius: 7px;
+  background: var(--at-color-surface);
+  color: var(--at-color-on-primary);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.service-recurrence-check input:checked + .service-sheet-box {
+  border-color: var(--at-color-primary);
+  background: var(--at-color-primary);
+}
+.service-recurrence-check input:focus-visible + .service-sheet-box {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 2px;
+}
+.service-recurrence-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.service-sheet-title {
+  color: var(--at-color-ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.service-sheet-hint {
+  color: var(--at-color-ink-soft);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.service-recurrence-every {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.service-recurrence-label {
+  color: var(--at-color-ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+.service-recurrence-stepper {
+  height: 50px;
+  border: 1px solid var(--at-color-border-strong);
+  border-radius: 14px;
+  background: var(--at-color-canvas);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+.service-recurrence-stepper button {
+  width: 44px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid var(--at-color-border);
+  background: transparent;
+  color: var(--at-color-ink-soft);
+  font: inherit;
+  font-size: 22px;
+  cursor: pointer;
+}
+.service-recurrence-stepper button.is-increase {
+  border-right: 0;
+  border-left: 1px solid var(--at-color-border);
+  color: var(--at-color-primary);
+}
+.service-recurrence-stepper button:disabled {
+  color: var(--disabled-fg);
+  cursor: default;
+}
+.service-recurrence-stepper button:focus-visible,
+.service-recurrence-stepper input:focus-visible {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: -3px;
+}
+.service-recurrence-stepper input {
+  width: 52px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--at-color-ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  appearance: textfield;
+}
+.service-recurrence-stepper input::-webkit-inner-spin-button,
+.service-recurrence-stepper input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+.service-recurrence-units {
+  flex-basis: 100%;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--at-color-surface-active);
+  display: flex;
+  gap: 3px;
+}
+.service-recurrence-units label {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.service-recurrence-units input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.service-recurrence-units span {
+  height: 42px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--at-color-ink-soft);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.service-recurrence-units input:checked + span {
+  background: var(--at-color-surface);
+  box-shadow: 0 1px 2px rgb(var(--at-shadow-rgb) / 0.08);
+  color: var(--at-color-ink);
+  font-weight: 600;
+}
+.service-recurrence-units input:focus-visible + span {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 2px;
+}
+.service-recurrence-example {
+  padding: 14px;
+  border: 1px solid var(--at-color-border);
+  border-radius: 14px;
+  background: var(--at-color-canvas);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.service-recurrence-example-title {
+  color: var(--at-color-ink-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.service-recurrence-dates {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.service-recurrence-dates li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.service-recurrence-dates li + li {
+  flex: 1;
+}
+.service-recurrence-dates li > span[aria-hidden="true"] {
+  flex: 1;
+  height: 1px;
+  background: var(--at-color-border-strong);
+}
+.service-recurrence-date {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--at-color-primary-tint-strong);
+  color: var(--at-color-primary-ink);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+}
+.service-recurrence-example-note {
+  color: var(--at-color-ink-soft);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* S5: "Como cobrar …?", os quatro tipos pelo que a IA diz. */
+.service-price-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.service-price-option {
+  padding: 12px 14px;
+  border: 1px solid var(--at-color-border);
+  border-radius: 14px;
+  background: var(--at-color-canvas);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.service-price-option.is-selected {
+  border: 1.5px solid var(--at-color-primary);
+  background: var(--at-color-primary-tint);
+}
+.service-price-option-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+.service-price-option-row input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.service-price-radio {
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--at-color-border-strong);
+  border-radius: 50%;
+  box-sizing: border-box;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.service-price-option-row input:checked + .service-price-radio {
+  border: 0;
+  background: var(--at-color-primary);
+}
+.service-price-option-row input:checked + .service-price-radio::after {
+  content: "";
+  width: 9px;
+  height: 5px;
+  margin-top: -2px;
+  border-bottom: 2.5px solid var(--at-color-on-primary);
+  border-left: 2.5px solid var(--at-color-on-primary);
+  transform: rotate(-45deg);
+}
+.service-price-option-row input:focus-visible + .service-price-radio {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 2px;
+}
+.service-price-option-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.service-price-option-label {
+  color: var(--at-color-ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+.service-price-option-phrase {
+  color: var(--at-color-ink-soft);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.service-price-option-value {
+  height: 48px;
+  margin-left: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--at-color-border-strong);
+  border-radius: 12px;
+  background: var(--at-color-surface);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--at-color-ink-muted);
+  font-size: 16px;
+  white-space: nowrap;
+}
+.service-price-option-value.field-error {
+  border-color: var(--danger);
+}
+.service-price-option-value:focus-within {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 2px;
+}
+.service-price-option-value input {
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--at-color-ink);
+  font: inherit;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  outline: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .overlay:has(.service-sheet) {
+    animation: at-fade 0.2s ease-out both;
+  }
+  .bottom-sheet:has(.service-sheet) {
+    animation: at-sheet 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+}
+/* No celular o quadro esmaece o topo e o corpo da tela atrás do véu. */
+@media (max-width: 767px) {
+  body:has(.service-sheet) .service-form-screen {
+    opacity: 0.5;
+  }
+}
+@media (min-width: 768px) {
+  .overlay:has(.service-sheet) {
+    align-items: center;
+    padding: 0;
+  }
+  .bottom-sheet:has(.service-sheet) {
+    width: 480px;
+    max-width: calc(100% - 40px);
+    max-height: calc(100% - 80px);
+    padding: 22px 24px 24px;
+    border-radius: 20px;
+    box-shadow: 0 24px 64px rgb(var(--at-shadow-rgb) / 0.28);
+  }
+  .bottom-sheet:has(.service-sheet) .sheet-handle {
+    display: none;
+  }
+}
+/* Tablet deitado e desktop: o mesmo modal, com 440 px (quadros Landscape e
+   Desktop). */
+@media (min-width: 1024px) {
+  .bottom-sheet:has(.service-sheet) {
+    width: 440px;
+  }
+}
+@media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
+  .bottom-sheet:has(.service-sheet) {
+    animation: at-dialog 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
 }

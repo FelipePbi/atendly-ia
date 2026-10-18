@@ -376,9 +376,9 @@ test("resolveRelativeDays troca {today}, {today-N} e {today+N} pelo dia semeado 
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1 a W3, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 2.I6, 2.I7, 2.I8, 2.I9, 2.I10, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL1, CL2, CL3, CL8, CL9, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S1, S2 e S7 declaram responses", () => {
+test("targets.json: só W1 a W3, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 2.I6, 2.I7, 2.I8, 2.I9, 2.I10, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL1, CL2, CL3, CL8, CL9, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S1, S2, S5, S6 e S7 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I10", "2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL1", "CL10", "CL2", "CL3", "CL8", "CL9", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S1", "S2", "S7", "W1", "W2", "W3"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I10", "2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL1", "CL10", "CL2", "CL3", "CL8", "CL9", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S1", "S2", "S5", "S6", "S7", "W1", "W2", "W3"]);
   for (const target of declaring) {
     const owner = ["2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "2.I10"].includes(target.code)
       ? "Onboarding-2-Importacao.dc.html"

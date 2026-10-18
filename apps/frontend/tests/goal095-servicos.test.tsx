@@ -11,8 +11,9 @@
  *    grava o `priceType` certo, cinco linhas de opção fechadas, sem "Serviço
  *    ativo" e com o CTA "Salvar serviço";
  * 3. a edição (S4 e Agenda:S1): linhas que abrem ao toque sem perder valor,
- *    as seis cores com a paleta do protótipo, a prévia "Assim na agenda" e
- *    `active: false` no PATCH;
+ *    as seis cores com a paleta do protótipo, a prévia "Assim na agenda",
+ *    `active: false` no PATCH, a recorrência pela folha do S6 e o tipo de
+ *    preço pela folha do S5 (D-202);
  * 4. a paleta: o hex de cada token em `avenly-services.css`;
  * 5. a casca: uma chamada de `useShellConfig` por árvore, nas duas faixas.
  *
@@ -587,12 +588,13 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     expect(before.checkValidity()).toBe(true);
 
     await user.click(optionRow("Recorrência"));
-    const recurrence = screen.getByLabelText<HTMLInputElement>(
-      "Repetir automaticamente a cada (dias)",
-    );
-    expect(recurrence.value).toBe("35");
-    fireEvent.change(recurrence, { target: { value: "0" } });
-    expect(recurrence.checkValidity()).toBe(false);
+    await user.click(screen.getByRole("button", { name: "A cada 5 semanas" }));
+    const sheet = screen.getByRole("dialog", { name: "Recorrência" });
+    const count = within(sheet).getByLabelText<HTMLInputElement>("A cada");
+    expect(count.value).toBe("5");
+    expect(count).toHaveAttribute("min", "1");
+    expect(within(sheet).getByRole("radio", { name: "semanas" })).toBeChecked();
+    await user.keyboard("{Escape}");
 
     await user.click(optionRow("Instruções para a IA"));
     expect(screen.getByLabelText("Instruções para a IA")).toBeVisible();
@@ -628,10 +630,12 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     await user.click(optionRow("Descrição"));
 
     await user.click(optionRow("Recorrência"));
-    fireEvent.change(
-      screen.getByLabelText("Repetir automaticamente a cada (dias)"),
-      { target: { value: "14" } },
-    );
+    await user.click(screen.getByRole("button", { name: "A cada 5 semanas" }));
+    const sheet = screen.getByRole("dialog", { name: "Recorrência" });
+    fireEvent.change(within(sheet).getByLabelText("A cada"), {
+      target: { value: "2" },
+    });
+    await user.click(within(sheet).getByRole("button", { name: "Salvar" }));
     await user.click(optionRow("Recorrência"));
 
     await user.click(optionRow("Instruções para a IA"));
@@ -837,6 +841,24 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     expect(screen.queryByText("Suas cores")).not.toBeInTheDocument();
   });
 
+  test("Duração e Preço da edição começam na mesma linha e os atalhos têm 36 px (D-202)", () => {
+    const css = readLightStylesheet(
+      path.join(process.cwd(), "src/shared/styles/avenly-services.css"));
+    const durationGap =
+      /\.service-form-body \.service-form-edit \.service-duration-field \{[^}]*gap:\s*(\d+)px/.exec(
+        css,
+      );
+    const legendMargin =
+      /\.service-form-edit \.service-price-field legend \{[^}]*margin-bottom:\s*(\d+)px/.exec(
+        css,
+      );
+    expect(durationGap?.[1]).toBeDefined();
+    expect(legendMargin?.[1]).toBe(durationGap?.[1]);
+    expect(css).toMatch(
+      /\.service-form-body \.service-duration-shortcut \{[^}]*height:\s*36px;[^}]*min-height:\s*0;/,
+    );
+  });
+
   test("intervalo, instruções e recorrência abertos escondem o valor da linha por CSS", async () => {
     const css = readLightStylesheet(
       path.join(process.cwd(), "src/shared/styles/avenly-services.css"));
@@ -850,23 +872,105 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     }
   });
 
-  test("a recorrência aberta mostra o valor como botão que revela o campo", async () => {
+  test("a recorrência aberta mostra o valor como botão que abre a folha do S6", async () => {
     const user = userEvent.setup();
     await renderEditForm(edited());
     await user.click(optionRow("Recorrência"));
 
-    const field = screen.getByLabelText<HTMLInputElement>(
-      "Repetir automaticamente a cada (dias)",
-    );
-    expect(field).not.toBeVisible();
+    expect(
+      screen.getByText(
+        "Referência para a IA quando a cliente pedir “as próximas”. Nunca marca sozinha.",
+      ),
+    ).toBeVisible();
     const action = screen.getByRole("button", { name: "A cada 5 semanas" });
     expect(action).toHaveAttribute("aria-expanded", "false");
-    expect(action).toHaveAttribute("aria-controls", field.id);
+    expect(action).toHaveAttribute("aria-haspopup", "dialog");
+    expect(screen.queryByRole("dialog")).toBeNull();
 
     await user.click(action);
     expect(action).toHaveAttribute("aria-expanded", "true");
-    expect(field).toBeVisible();
-    expect(field.value).toBe("35");
+    const sheet = screen.getByRole("dialog", { name: "Recorrência" });
+    const check = within(sheet).getByRole("checkbox", {
+      name: /Este serviço costuma ser recorrente/,
+    });
+    expect(check).toBeChecked();
+    expect(check).toHaveAccessibleDescription(
+      "Uma referência para a IA — não uma obrigação para a cliente.",
+    );
+    expect(within(sheet).getByLabelText<HTMLInputElement>("A cada").value).toBe(
+      "5",
+    );
+    const units = within(sheet).getByRole("radiogroup", {
+      name: "Unidade da recorrência",
+    });
+    expect(
+      within(units)
+        .getAllByRole("radio")
+        .map((radio) => radio.closest("label")?.textContent),
+    ).toEqual(["dias", "semanas", "meses"]);
+    expect(within(units).getByRole("radio", { name: "semanas" })).toBeChecked();
+    expect(
+      within(sheet).getByText("Se a cliente pedir “as próximas 3”"),
+    ).toBeVisible();
+    expect(
+      within(sheet).getByText(
+        "A IA busca horários perto dessas datas, mostra as três opções e só marca depois que a cliente aceitar.",
+      ),
+    ).toBeVisible();
+    expect(within(sheet).getAllByRole("listitem")).toHaveLength(3);
+    await expectNoA11yViolations(sheet);
+  });
+
+  test("a folha da recorrência grava meses como 30 dias e o desmarcado como sem recorrência", async () => {
+    const user = userEvent.setup();
+    await renderEditForm(edited());
+    await user.click(optionRow("Recorrência"));
+    await user.click(screen.getByRole("button", { name: "A cada 5 semanas" }));
+    let sheet = screen.getByRole("dialog", { name: "Recorrência" });
+    await user.click(within(sheet).getByRole("radio", { name: "meses" }));
+    await user.click(
+      within(sheet).getByRole("button", {
+        name: "Diminuir intervalo da recorrência",
+      }),
+    );
+    await user.click(within(sheet).getByRole("button", { name: "Salvar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const action = screen.getByRole("button", { name: "A cada 4 meses" });
+
+    await user.click(action);
+    sheet = screen.getByRole("dialog", { name: "Recorrência" });
+    expect(within(sheet).getByRole("radio", { name: "meses" })).toBeChecked();
+    await user.click(within(sheet).getByRole("button", { name: "Fechar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    await waitFor(() =>
+      expect(serviceCatalogUpdate).toHaveBeenCalledWith(
+        "s1",
+        expect.objectContaining({ recurrenceIntervalDays: 120 }),
+      ),
+    );
+  });
+
+  test("desmarcar 'Este serviço costuma ser recorrente' grava sem recorrência", async () => {
+    const user = userEvent.setup();
+    await renderEditForm(edited());
+    await user.click(optionRow("Recorrência"));
+    await user.click(screen.getByRole("button", { name: "A cada 5 semanas" }));
+    const sheet = screen.getByRole("dialog", { name: "Recorrência" });
+    await user.click(
+      within(sheet).getByRole("checkbox", {
+        name: /Este serviço costuma ser recorrente/,
+      }),
+    );
+    expect(within(sheet).queryByLabelText("A cada")).toBeNull();
+    await user.click(within(sheet).getByRole("button", { name: "Salvar" }));
+    expect(screen.getByRole("button", { name: "Não" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    await waitFor(() =>
+      expect(serviceCatalogUpdate).toHaveBeenCalledWith(
+        "s1",
+        expect.objectContaining({ recurrenceIntervalDays: null }),
+      ),
+    );
   });
 
   test("na edição, Duração e Preço dividem a linha e não há atalhos de duração", async () => {
@@ -883,18 +987,48 @@ describe("Goal095 prova 3: edição (S4 e Agenda:S1)", () => {
     }
   });
 
-  test("na edição, o rótulo do tipo de preço abre o controle segmentado e grava o tipo", async () => {
+  test("na edição, o rótulo do tipo de preço abre a folha do S5 e grava o tipo", async () => {
     const user = userEvent.setup();
     await renderEditForm(edited());
     const toggle = screen.getByRole("button", { name: /Tipo de preço: Fixo/ });
-    const group = document.getElementById("service-price-types") as HTMLElement;
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(group).not.toBeVisible();
+    expect(toggle).toHaveAttribute("aria-haspopup", "dialog");
+    expect(screen.queryByRole("dialog")).toBeNull();
 
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(group).toBeVisible();
-    await user.click(within(group).getByRole("radio", { name: "Sob consulta" }));
+    const sheet = screen.getByRole("dialog", {
+      name: "Como cobrar Corte feminino?",
+    });
+    const group = within(sheet).getByRole("radiogroup", {
+      name: "Tipo de preço",
+    });
+    expect(
+      within(group)
+        .getAllByRole("radio")
+        .map(
+          (radio) =>
+            radio
+              .closest("label")
+              ?.querySelector(".service-price-option-label")?.textContent,
+        ),
+    ).toEqual(["Preço fixo", "A partir de", "Sob consulta", "Sem preço informado"]);
+    expect(within(sheet).getByText("“Corte feminino custa R$ 90.”")).toBeVisible();
+    expect(
+      within(sheet).getByText("A IA não fala de valor e diz que você confirma."),
+    ).toBeVisible();
+    expect(within(sheet).getByLabelText<HTMLInputElement>("Preço").value).toBe(
+      "90,00",
+    );
+    await expectNoA11yViolations(sheet);
+
+    await user.click(within(group).getByRole("radio", { name: /Sob consulta/ }));
+    expect(within(sheet).queryByLabelText("Preço")).toBeNull();
+    await user.click(within(sheet).getByRole("button", { name: "Aplicar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /Tipo de preço: Sob consulta/ }),
+    ).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
 
     await waitFor(() =>

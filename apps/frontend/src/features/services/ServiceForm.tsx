@@ -45,6 +45,8 @@ import {
   ServiceListPanel,
   useServiceListData,
 } from "./ServiceList";
+import { ServicePriceSheet } from "./ServicePriceSheet";
+import { ServiceRecurrenceSheet } from "./ServiceRecurrenceSheet";
 
 const priceTypeOptions: Array<{
   value: Service["priceType"];
@@ -115,7 +117,7 @@ function OptionRow({
   swatch?: ReactNode;
   title: string;
   value: string;
-  valueAction?: { controls: string; expanded: boolean; onClick: () => void };
+  valueAction?: { expanded: boolean; onClick: () => void };
 }) {
   const editorId = `service-option-${id}`;
   return (
@@ -144,8 +146,8 @@ function OptionRow({
       </button>
       {open && valueAction ? (
         <button
-          aria-controls={valueAction.controls}
           aria-expanded={valueAction.expanded}
+          aria-haspopup="dialog"
           className="service-option-value-action"
           type="button"
           onClick={valueAction.onClick}
@@ -208,8 +210,16 @@ export function ServiceForm({
   const [colorError, setColorError] = useState<string | null>(null);
   const [essentialsOpen, setEssentialsOpen] = useState(ESSENTIALS_OPEN_ON_EDIT);
   const [recurrenceValue, setRecurrenceValue] = useState("");
-  const [recurrenceFieldOpen, setRecurrenceFieldOpen] = useState(false);
-  const [priceTypesOpen, setPriceTypesOpen] = useState(false);
+  const [recurrenceSheetOpen, setRecurrenceSheetOpen] = useState(false);
+  const [priceSheetOpen, setPriceSheetOpen] = useState(false);
+  // Estáveis pelo mesmo motivo de `closePicker`.
+  const closeRecurrenceSheet = useCallback(
+    () => setRecurrenceSheetOpen(false),
+    [],
+  );
+  const closePriceSheet = useCallback(() => setPriceSheetOpen(false), []);
+  // "Aplicar" na folha do preço remonta o campo do valor com o valor novo.
+  const [priceRevision, setPriceRevision] = useState(0);
   const [description, setDescription] = useState("");
   const [openOptions, setOpenOptions] = useState<ReadonlySet<OptionKey>>(
     new Set(),
@@ -264,8 +274,8 @@ export function ServiceForm({
           setCreatedServiceId(null);
           setEssentialsOpen(ESSENTIALS_OPEN_ON_EDIT);
           setOpenOptions(new Set());
-          setRecurrenceFieldOpen(false);
-          setPriceTypesOpen(false);
+          setRecurrenceSheetOpen(false);
+          setPriceSheetOpen(false);
           setName(found.name);
           setDurationValue(
             found.durationMinutes === null ? "" : String(found.durationMinutes),
@@ -498,13 +508,9 @@ export function ServiceForm({
       }
       aria-label={priceType === "STARTING_AT" ? "Valor inicial" : "Preço"}
       className="input"
-      defaultValueCents={
-        service && service.price !== null
-          ? Math.round(service.price * 100)
-          : undefined
-      }
+      defaultValueCents={priceCents}
       hideSymbol={reviewMode}
-      key={service?.id ?? "new"}
+      key={`${service?.id ?? "new"}-${priceRevision}`}
       onValueChange={(value) => {
         setDirty(true);
         setPriceCents(value);
@@ -523,6 +529,23 @@ export function ServiceForm({
         "Uma alteração vale para novos agendamentos; o histórico é preservado."}
     </span>
   );
+
+  const priceSheet = priceSheetOpen ? (
+    <ServicePriceSheet
+      initialCents={priceCents}
+      initialType={priceType}
+      name={name}
+      onApply={(nextType, cents) => {
+        setDirty(true);
+        setPriceType(nextType);
+        setPriceCents(cents);
+        setPriceError(null);
+        setPriceRevision((value) => value + 1);
+        setPriceSheetOpen(false);
+      }}
+      onClose={closePriceSheet}
+    />
+  ) : null;
 
   const colorOption = (
     <OptionRow
@@ -827,12 +850,12 @@ export function ServiceForm({
                   }
                 >
                   <button
-                    aria-controls="service-price-types"
-                    aria-expanded={priceTypesOpen}
+                    aria-expanded={priceSheetOpen}
+                    aria-haspopup="dialog"
                     aria-label={`Tipo de preço: ${priceTypeLabel}`}
                     className="service-price-type-toggle"
                     type="button"
-                    onClick={() => setPriceTypesOpen((open) => !open)}
+                    onClick={() => setPriceSheetOpen(true)}
                   >
                     {priceTypeLabel}
                     {priceRequiresValue(priceType) && (
@@ -851,19 +874,7 @@ export function ServiceForm({
                   </span>
                 )}
               </fieldset>
-              <fieldset
-                className="directory-fieldset service-price-types"
-                hidden={!priceTypesOpen}
-                id="service-price-types"
-              >
-                <legend className="sr-only">Tipo de preço</legend>
-                {priceTypeControl}
-                {preview && (
-                  <span className="service-ai-says">
-                    A IA responde: “{preview}”
-                  </span>
-                )}
-              </fieldset>
+              {priceSheet}
               <h2 className="sr-only">Mais opções</h2>
               <div className="service-options service-review-options">
                 {colorOption}
@@ -1026,12 +1037,12 @@ export function ServiceForm({
                       }
                     >
                       <button
-                        aria-controls="service-price-types"
-                        aria-expanded={priceTypesOpen}
+                        aria-expanded={priceSheetOpen}
+                        aria-haspopup="dialog"
                         aria-label={`Tipo de preço: ${priceTypeLabel}`}
                         className="service-price-type-toggle"
                         type="button"
-                        onClick={() => setPriceTypesOpen((open) => !open)}
+                        onClick={() => setPriceSheetOpen(true)}
                       >
                         {priceTypeLabel}
                         {priceRequiresValue(priceType) ? " ·" : ""}
@@ -1062,21 +1073,7 @@ export function ServiceForm({
                   )}
                 </fieldset>
               </div>
-              {edit && (
-                <fieldset
-                  className="directory-fieldset service-price-types"
-                  hidden={!priceTypesOpen}
-                  id="service-price-types"
-                >
-                  <legend className="sr-only">Tipo de preço</legend>
-                  {priceTypeControl}
-                  {preview && (
-                    <span className="service-ai-says">
-                      A IA responde: “{preview}”
-                    </span>
-                  )}
-                </fieldset>
-              )}
+              {edit && priceSheet}
             </div>
 
             <h2 className={edit ? "sr-only" : "service-options-heading"}>
@@ -1109,24 +1106,24 @@ export function ServiceForm({
                 title="Recorrência"
                 value={recurrenceText}
                 valueAction={{
-                  controls: "service-recurrence-field",
-                  expanded: recurrenceFieldOpen,
-                  onClick: () => setRecurrenceFieldOpen((value) => !value),
+                  expanded: recurrenceSheetOpen,
+                  onClick: () => setRecurrenceSheetOpen(true),
                 }}
                 onToggle={() => toggleOption("recurrence")}
               >
-                <input
-                  aria-label="Repetir automaticamente a cada (dias)"
-                  className="input"
-                  hidden={!recurrenceFieldOpen}
-                  id="service-recurrence-field"
-                  min={1}
-                  name="recurrence"
-                  placeholder="Deixe em branco se não repetir"
-                  type="number"
-                  value={recurrenceValue}
-                  onChange={(event) => setRecurrenceValue(event.target.value)}
-                />
+                {recurrenceSheetOpen && (
+                  <ServiceRecurrenceSheet
+                    initialDays={
+                      recurrenceValue === "" ? null : Number(recurrenceValue)
+                    }
+                    onClose={closeRecurrenceSheet}
+                    onSave={(days) => {
+                      setDirty(true);
+                      setRecurrenceValue(days === null ? "" : String(days));
+                      setRecurrenceSheetOpen(false);
+                    }}
+                  />
+                )}
                 <span className="service-option-note">
                   Referência para a IA quando a cliente pedir “as próximas”.
                   Nunca marca sozinha.

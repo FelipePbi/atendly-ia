@@ -26,6 +26,11 @@ export function formatServiceRecurrence(
   recurrenceIntervalDays: Service["recurrenceIntervalDays"],
 ): string | null {
   if (!recurrenceIntervalDays) return null;
+  // "meses" da recorrência (quadro S6) grava 30 dias por mês (D-202).
+  if (recurrenceIntervalDays % 30 === 0) {
+    const months = recurrenceIntervalDays / 30;
+    return `a cada ${months} ${months === 1 ? "mês" : "meses"}`;
+  }
   if (recurrenceIntervalDays % 7 === 0) {
     const weeks = recurrenceIntervalDays / 7;
     return `a cada ${weeks} ${weeks === 1 ? "semana" : "semanas"}`;

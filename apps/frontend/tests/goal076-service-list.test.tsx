@@ -132,6 +132,30 @@ describe("§4.1 a linha mostra duração · preço, com recorrência e sem ofert
     ).toBeVisible();
     expect(screen.queryByText("Agenda Avenly")).toBeNull();
   });
+
+  test("a recorrência em múltiplos de 30 dias aparece em meses (D-202)", async () => {
+    await renderList([
+      serviceFixture({
+        durationMinutes: 60,
+        id: "s1",
+        name: "Pé e mão",
+        price: 80,
+        priceType: "FIXED",
+        recurrenceIntervalDays: 60,
+      }),
+      serviceFixture({
+        durationMinutes: 30,
+        id: "s2",
+        name: "Retoque",
+        price: 40,
+        priceType: "FIXED",
+        recurrenceIntervalDays: 10,
+      }),
+    ]);
+
+    expect(screen.getByText("1 h · R$ 80 · a cada 2 meses")).toBeVisible();
+    expect(screen.getByText("30 min · R$ 40 · a cada 10 dias")).toBeVisible();
+  });
 });
 
 describe("§4.2 grupos, resumo e busca", () => {

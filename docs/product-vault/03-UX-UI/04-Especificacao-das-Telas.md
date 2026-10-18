@@ -304,7 +304,8 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 - identidade visual/cor opcional;
 - preview simples da identidade visual quando apropriado;
 - ativo/inativo;
-- recorrência;
+- recorrência: folha "Este serviço costuma ser recorrente" com "A cada" N dias, semanas ou meses (mês = 30 dias) e o exemplo "Se a cliente pedir “as próximas 3”"; é referência para a IA, nunca série automática (D-202);
+- na edição, o tipo de preço abre a folha "Como cobrar …?", com cada tipo pela frase da IA (D-202);
 - buffers;
 - regras privadas para IA;
 - modalidade por serviço quando aplicável;

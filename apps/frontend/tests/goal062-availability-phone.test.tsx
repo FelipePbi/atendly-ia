@@ -135,16 +135,16 @@ describe("Disponibilidade não apaga em silêncio", () => {
     });
     render(<AvailabilitySettings onSaved={vi.fn()} settings={settings} />);
 
-    expect(screen.getByLabelText("Segunda · início do intervalo 1")).toHaveValue(
+    expect(screen.getByLabelText("Começa (1º)")).toHaveValue(
       "09:00",
     );
-    expect(screen.getByLabelText("Segunda · fim do intervalo 1")).toHaveValue(
+    expect(screen.getByLabelText("Termina (1º)")).toHaveValue(
       "12:00",
     );
-    expect(screen.getByLabelText("Segunda · início do intervalo 2")).toHaveValue(
+    expect(screen.getByLabelText("Começa (2º)")).toHaveValue(
       "14:00",
     );
-    expect(screen.getByLabelText("Segunda · fim do intervalo 2")).toHaveValue(
+    expect(screen.getByLabelText("Termina (2º)")).toHaveValue(
       "18:00",
     );
   });

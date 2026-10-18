@@ -170,21 +170,23 @@ describe("Disponibilidade por dia", () => {
     render(<AvailabilitySettings settings={settings} onSaved={vi.fn()} />);
 
     expect(
-      screen.getByLabelText("Segunda · início do intervalo 1"),
+      screen.getByLabelText("Começa (1º)"),
     ).toHaveValue("09:00");
-    expect(screen.getByLabelText("Segunda · fim do intervalo 1")).toHaveValue(
+    expect(screen.getByLabelText("Termina (1º)")).toHaveValue(
       "12:00",
     );
     expect(
-      screen.getByLabelText("Segunda · início do intervalo 2"),
+      screen.getByLabelText("Começa (2º)"),
     ).toHaveValue("14:00");
-    expect(screen.getByLabelText("Segunda · fim do intervalo 2")).toHaveValue(
+    expect(screen.getByLabelText("Termina (2º)")).toHaveValue(
       "18:00",
     );
-    expect(screen.getByLabelText("Terça · início do intervalo 1")).toHaveValue(
+    // Terça tem horário próprio: a linha dela abre os campos só daquele dia.
+    await user.click(screen.getByRole("button", { name: /^Terça/ }));
+    expect(screen.getByLabelText("Terça · Início")).toHaveValue(
       "10:00",
     );
-    expect(screen.getByLabelText("Terça · fim do intervalo 1")).toHaveValue(
+    expect(screen.getByLabelText("Terça · Fim")).toHaveValue(
       "16:00",
     );
 
@@ -208,7 +210,7 @@ describe("Disponibilidade por dia", () => {
     const user = userEvent.setup();
     render(<AvailabilitySettings settings={settings} onSaved={vi.fn()} />);
 
-    const mondayStart1 = screen.getByLabelText("Segunda · início do intervalo 1");
+    const mondayStart1 = screen.getByLabelText("Começa (1º)");
     await user.clear(mondayStart1);
     await user.type(mondayStart1, "13:00");
 

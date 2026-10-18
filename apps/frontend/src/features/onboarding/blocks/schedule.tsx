@@ -1,12 +1,21 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 import type { Service } from "@/data";
+import {
+  DayPills,
+  daysHead,
+  DaysSummary,
+  HoursCopyButton,
+  HoursDayRow,
+  TimeRangeFields,
+  weekdayLabels,
+  weekOrder,
+} from "@/features/availability/WeeklyHours";
 import { ImportIllustration } from "@/features/imports/ImportIllustration";
 import type { WhatsAppConsentPhase } from "@/features/whatsapp/WhatsAppConnectionPanel";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { CurrencyInput } from "@/shared/ui/CurrencyInput";
-import { TimeField } from "@/shared/ui/pickers/PickerFields";
 
 import type { OnboardingDraft } from "../OnboardingRuntime";
 import type { OnboardingScenario } from "../scenarios";
@@ -16,23 +25,6 @@ import {
   type OnboardingStepContext,
   Summary,
 } from "./shared";
-
-const weekdayLabels = [
-  "Domingo",
-  "Segunda",
-  "Terça",
-  "Quarta",
-  "Quinta",
-  "Sexta",
-  "Sábado",
-];
-
-const weekdayShortLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
-// A semana começa na segunda (vault §"Dias e horários"); os valores de
-// `dayOfWeek` gravados continuam 0=domingo…6=sábado (Goal065/WU-03), só a
-// ordem de exibição muda.
-const weekOrder = [1, 2, 3, 4, 5, 6, 0];
 
 type PriceType = OnboardingDraft["servicePriceType"];
 
@@ -98,8 +90,6 @@ function ListedPrice({
 
 const DURATION_STEP_MESSAGE = "A duração vai de 5 em 5 minutos.";
 const DURATION_SHORTCUTS = [30, 60, 90];
-const MINUTES_PER_DAY = 1440;
-
 function priceToCents(price: string): number | undefined {
   if (price.trim() === "") return undefined;
   const value = Number(price.replace(",", "."));
@@ -108,37 +98,6 @@ function priceToCents(price: string): number | undefined {
 
 function centsToPrice(cents: number | null): string {
   return cents === null ? "" : String(cents / 100);
-}
-
-function timeToMinutes(time: string): number | null {
-  const [hours, minutes] = time.split(":").map(Number);
-  if (hours === undefined || minutes === undefined) return null;
-  return Number.isFinite(hours) && Number.isFinite(minutes)
-    ? hours * 60 + minutes
-    : null;
-}
-
-function daysHead(days: number[]): string {
-  const selected = weekOrder.filter((day) => days.includes(day));
-  const count = selected.length;
-  const first = selected[0];
-  if (first === undefined) return "";
-  const names = selected.map((day) => (weekdayLabels[day] ?? "").toLowerCase());
-  const positions = selected.map((day) => weekOrder.indexOf(day));
-  const consecutive = positions.every(
-    (position, index) =>
-      index === 0 || position === (positions[index - 1] ?? 0) + 1,
-  );
-  if (count === 1) return `Só ${names[0]}`;
-  if (consecutive && count >= 3)
-    return `${weekdayLabels[first]} a ${names[count - 1]}`;
-  const list = `${names.slice(0, -1).join(", ")} e ${names[count - 1]}`;
-  return list.charAt(0).toUpperCase() + list.slice(1);
-}
-
-function daysCountText(days: number[]): string {
-  const count = weekOrder.filter((day) => days.includes(day)).length;
-  return `${count} ${count === 1 ? "dia" : "dias"} por semana`;
 }
 
 /** Descrição da etapa "horarios": o mesmo resumo dos dias da etapa anterior. */
@@ -150,8 +109,6 @@ export function hoursStepDescription(days: number[]): string {
 }
 
 const DAYS_REQUIRED_MESSAGE = "Escolha pelo menos um dia de atendimento.";
-const END_BEFORE_START_MESSAGE =
-  "O horário final deve ser depois do horário inicial.";
 
 /** O intervalo de um dia: cada campo (início, fim) usa o valor personalizado
  * daquele dia quando existe, e o intervalo-base quando não. Os dois campos
@@ -167,125 +124,6 @@ function dayHourOf(
     endTime: override?.endTime ?? draft.endTime,
     startTime: override?.startTime ?? draft.startTime,
   };
-}
-
-/** Início e fim de um intervalo, com o erro de "fim antes do início" no
- * campo final (QA O-33), via `setCustomValidity` lido por
- * `applyInlineValidation`. `hero` é o horário-base (quadro 2.6): dois
- * cartões com a hora em Literata e a régua de 0 a 24 h. */
-function TimeRangeFields({
-  endLabel,
-  endTime,
-  hero = false,
-  onChangeEnd,
-  onChangeStart,
-  startLabel,
-  startTime,
-}: {
-  endLabel: string;
-  endTime: string;
-  hero?: boolean;
-  onChangeEnd: (value: string) => void;
-  onChangeStart: (value: string) => void;
-  startLabel: string;
-  startTime: string;
-}) {
-  const startId = useId();
-  const endId = useId();
-  const endRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    endRef.current?.setCustomValidity(
-      startTime !== "" && endTime !== "" && endTime <= startTime
-        ? END_BEFORE_START_MESSAGE
-        : "",
-    );
-  }, [endTime, startTime]);
-  const startMinutes = timeToMinutes(startTime);
-  const endMinutes = timeToMinutes(endTime);
-  const inputClass = hero ? "time-card-input" : "input time-input";
-  const startInput = (
-    <TimeField
-      className={inputClass}
-      data-server-field="availability.startTime"
-      id={startId}
-      required
-      value={startTime}
-      onValueChange={(value) => onChangeStart(value)}
-    />
-  );
-  const endInput = (
-    <TimeField
-      className={inputClass}
-      data-server-field="availability.endTime"
-      id={endId}
-      ref={endRef}
-      required
-      value={endTime}
-      onValueChange={(value) => onChangeEnd(value)}
-    />
-  );
-  // Cada campo num `div.field`: a mensagem de erro entra logo depois do
-  // campo (ou do cartão), dentro da mesma célula da grade.
-  return (
-    <div className="time-range">
-      <div className={hero ? "time-cards" : "choice-grid"}>
-        <div className="field">
-          {hero ? (
-            <label className="time-card" htmlFor={startId}>
-              <span className="time-card-label">{startLabel}</span>
-              {startInput}
-            </label>
-          ) : (
-            <>
-              <label className="label" htmlFor={startId}>
-                {startLabel}
-              </label>
-              {startInput}
-            </>
-          )}
-        </div>
-        <div className="field">
-          {hero ? (
-            <label className="time-card" htmlFor={endId}>
-              <span className="time-card-label">{endLabel}</span>
-              {endInput}
-            </label>
-          ) : (
-            <>
-              <label className="label" htmlFor={endId}>
-                {endLabel}
-              </label>
-              {endInput}
-            </>
-          )}
-        </div>
-      </div>
-      {hero && startTime !== "" && endTime !== "" && (
-        <span aria-hidden="true" className="hours-bar">
-          <span className="hours-bar-track">
-            {startMinutes !== null &&
-              endMinutes !== null &&
-              endMinutes > startMinutes && (
-                <span
-                  className="hours-bar-fill"
-                  style={{
-                    left: `${(startMinutes / MINUTES_PER_DAY) * 100}%`,
-                    width: `${((endMinutes - startMinutes) / MINUTES_PER_DAY) * 100}%`,
-                  }}
-                />
-              )}
-          </span>
-          <span className="hours-bar-scale">
-            <span>0h</span>
-            <span>6h</span>
-            <span>12h</span>
-            <span>18h</span>
-            <span>24h</span>
-          </span>
-        </span>
-      )}
-    </div>
-  );
 }
 
 function summarizeHours(draft: OnboardingDraft): string {
@@ -650,31 +488,6 @@ function updateDayHour(
   });
 }
 
-function hoursRangeText(hours: { startTime: string; endTime: string }): string {
-  return `${hours.startTime} – ${hours.endTime}`;
-}
-
-function PencilIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="icon hours-day-pencil"
-      viewBox="0 0 24 24"
-    >
-      <path d="M4 20h4l10-10-4-4L4 16z" />
-    </svg>
-  );
-}
-
-function CopyIcon() {
-  return (
-    <svg aria-hidden="true" className="icon" viewBox="0 0 24 24">
-      <rect height="11" rx="2.5" width="11" x="9" y="9" />
-      <path d="M5 15V6.5A1.5 1.5 0 0 1 6.5 5H15" />
-    </svg>
-  );
-}
-
 /** Quadro 2.7: sete linhas de segunda a domingo. O dia marcado é um botão
  * que abre, dentro do cartão, os campos só daquele dia (um por vez); o dia
  * sem atendimento diz "Não atende" e não é controle — os dias se escolhem em
@@ -726,71 +539,38 @@ function DayHoursView({
       <div className="hours-day-card">
         {weekOrder.map((day) => {
           const name = weekdayLabels[day] ?? "";
-          if (!draft.days.includes(day)) {
-            return (
-              <div className="hours-day is-off" key={day}>
-                <div className="hours-day-row">
-                  <span className="hours-day-name">{name}</span>
-                  <span className="hours-day-quiet">Não atende</span>
-                </div>
-              </div>
-            );
-          }
           const hours = dayHourOf(draft, day);
-          const different = differs(day);
           // Um dia com "fim antes do início" não fecha: o campo inválido
           // precisa continuar na tela para o envio da etapa o conferir.
           const invalid =
             hours.startTime !== "" &&
             hours.endTime !== "" &&
             hours.endTime <= hours.startTime;
-          const expanded = openDay === day || invalid;
           return (
-            <div
-              className={`hours-day${different ? " is-different" : ""}`}
+            <HoursDayRow
+              day={day}
+              different={differs(day)}
+              expanded={openDay === day || invalid}
+              fieldsId={`${fieldsId}-${day}`}
+              intervals={[hours]}
               key={day}
+              off={!draft.days.includes(day)}
+              onToggle={() => setOpenDay(openDay === day ? null : day)}
             >
-              <button
-                aria-controls={expanded ? `${fieldsId}-${day}` : undefined}
-                aria-expanded={expanded}
-                aria-label={`${name} ${hoursRangeText(hours)}`}
-                className="hours-day-row"
-                type="button"
-                onClick={() => setOpenDay(openDay === day ? null : day)}
-              >
-                <span className="hours-day-name">{name}</span>
-                <span className="hours-day-range">
-                  {hoursRangeText(hours)}
-                  {different && <PencilIcon />}
-                </span>
-              </button>
-              {expanded && (
-                <div className="hours-day-fields" id={`${fieldsId}-${day}`}>
-                  <TimeRangeFields
-                    endLabel={`${name} · Fim`}
-                    endTime={hours.endTime}
-                    startLabel={`${name} · Início`}
-                    startTime={hours.startTime}
-                    onChangeEnd={(value) => adjust(day, "endTime", value)}
-                    onChangeStart={(value) => adjust(day, "startTime", value)}
-                  />
-                </div>
-              )}
-            </div>
+              <TimeRangeFields
+                endLabel={`${name} · Fim`}
+                endTime={hours.endTime}
+                startLabel={`${name} · Início`}
+                startTime={hours.startTime}
+                onChangeEnd={(value) => adjust(day, "endTime", value)}
+                onChangeStart={(value) => adjust(day, "startTime", value)}
+              />
+            </HoursDayRow>
           );
         })}
       </div>
       {copyDay !== undefined && (
-        <div className="hours-copy-row">
-          <button
-            className="hours-copy"
-            type="button"
-            onClick={copyToOtherDays}
-          >
-            <CopyIcon />
-            {`Copiar ${(weekdayLabels[copyDay] ?? "").toLowerCase()} para outros dias`}
-          </button>
-        </div>
+        <HoursCopyButton day={copyDay} onClick={copyToOtherDays} />
       )}
     </>
   );
@@ -910,50 +690,21 @@ export function scheduleStepBody(
   if (scenario === "dias-de-atendimento")
     return (
       <div className="onboarding-form">
-        <div
-          aria-label="Dias de atendimento"
-          className="day-pill-row"
-          data-group-error={
+        <DayPills
+          days={draft.days}
+          validationMessage={
             draft.days.length === 0 ? DAYS_REQUIRED_MESSAGE : ""
           }
-          data-validation-group=""
-          role="group"
-        >
-          {weekOrder.map((day) => (
-            <label
-              className={`day-pill${draft.days.includes(day) ? " is-selected" : ""}`}
-              key={day}
-            >
-              <input
-                className="sr-only"
-                checked={draft.days.includes(day)}
-                type="checkbox"
-                onChange={(event) =>
-                  setDraft((value) => ({
-                    ...value,
-                    days: event.target.checked
-                      ? [...value.days, day].sort()
-                      : value.days.filter((item) => item !== day),
-                  }))
-                }
-              />
-              <span aria-hidden="true">{weekdayShortLabels[day]}</span>
-              <span className="sr-only">{weekdayLabels[day]}</span>
-            </label>
-          ))}
-        </div>
-        {draft.days.length > 0 && (
-          <p aria-live="polite" className="days-summary">
-            <svg aria-hidden="true" className="icon" viewBox="0 0 24 24">
-              <rect height="14.5" rx="2.5" width="16" x="4" y="5.5" />
-              <path d="M4 10h16M8 3.5v4M16 3.5v4" />
-            </svg>
-            <span>
-              <strong>{daysHead(draft.days)}</strong> ·{" "}
-              {daysCountText(draft.days)}
-            </span>
-          </p>
-        )}
+          onToggle={(day, selected) =>
+            setDraft((value) => ({
+              ...value,
+              days: selected
+                ? [...value.days, day].sort()
+                : value.days.filter((item) => item !== day),
+            }))
+          }
+        />
+        <DaysSummary days={draft.days} />
       </div>
     );
   if (scenario === "horarios")

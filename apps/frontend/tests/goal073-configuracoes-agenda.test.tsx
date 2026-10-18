@@ -333,7 +333,7 @@ describe("Disponibilidade: limite de 28 regras ao ligar um dia", () => {
     const user = userEvent.setup();
     render(<AvailabilitySettings settings={settings} onSaved={vi.fn()} />);
 
-    await user.click(screen.getByLabelText("Terça"));
+    await user.click(screen.getByRole("checkbox", { name: "Terça" }));
 
     expect(updateAvailability).not.toHaveBeenCalled();
     expect(

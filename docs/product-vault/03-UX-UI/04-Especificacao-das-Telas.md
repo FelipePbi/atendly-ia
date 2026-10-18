@@ -363,7 +363,7 @@ A partir de 1024 px, a lista de Configurações fica ao lado da seção aberta, 
 
 ### Agenda
 
-- horários semanais;
+- horários semanais — a Disponibilidade usa as mesmas peças do onboarding (dias em pílulas, horário de sempre em cartões, "Personalizar dias diferentes" com "Horários por dia" e "Copiar … para outros dias"), e aqui cada dia aceita mais de um intervalo ([[../../migration/DECISIONS#D-187|D-187]]);
 - antecedência mínima/máxima;
 - granularidade;
 - bloqueios e regras relacionadas.

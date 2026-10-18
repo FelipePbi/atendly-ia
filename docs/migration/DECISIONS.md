@@ -8034,3 +8034,19 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 4. A nota do fim da importação no onboarding diz "Configurações › Importação" a partir de 768 px, onde Configurações já está na barra.
 
 **Consequências:** um destino novo da barra entra em `BOTTOM_NAV_DESTINATIONS` na posição da sua prioridade, e os degraus do CSS, de `BOTTOM_NAV_TIERS` e de `bottomNavItemsAt` (gate G-1) mudam juntos. Com a sidebar nada muda.
+
+## D-196 — Disponibilidade nas Configurações com as peças do onboarding
+
+**Status:** ACCEPTED em 2026-10-18, a pedido do usuário ("bem próximo como é no onboarding"). Fora do IA Loop, sem Goal próprio. Não há quadro próprio de Disponibilidade no protótipo; a tela segue os quadros 2.5 a 2.7 do onboarding.
+
+**Contexto:** `/configuracoes/disponibilidade` era um cartão com uma linha por dia (caixa de seleção, nome do dia, pílula cinza com dois campos de hora e "Adicionar intervalo" embaixo de cada dia ligado). O onboarding pergunta a mesma coisa de outro jeito, e a pessoa via duas linguagens para o mesmo horário.
+
+**Decisão:**
+
+1. As peças do horário semanal saíram de `features/onboarding/blocks/schedule.tsx` para `features/availability/WeeklyHours.tsx` (pílulas dos dias, resumo "Segunda a sexta · 5 dias por semana", cartões de hora com a régua de 24 h, linha de "Horários por dia", "Copiar … para outros dias"). O onboarding e as Configurações usam as mesmas peças.
+2. A tela, direto no fundo e sem o cartão de painel, numa coluna de até 560 px centralizada: "Em quais dias você atende?" (pílulas), "Qual é seu horário de atendimento?" (o horário de sempre em dois cartões, "Vale para …" e quais dias têm horário próprio) e "Personalizar dias diferentes", que abre "Horários por dia" na própria página, com as sete linhas do quadro 2.7: o dia com horário próprio ganha o tom e o lápis, tocar abre os campos só daquele dia, "Copiar … para outros dias" faz do horário daquele dia o de sempre.
+3. Ao ler a grade gravada, o horário de sempre é o padrão mais comum entre os dias marcados (no empate, o do primeiro dia da semana); os outros dias ficam com horário próprio, e a lista por dia já abre. Um dia cujo horário volta a ficar igual ao de sempre deixa de ter horário próprio.
+4. Diferente do onboarding (que deixa pausas para depois), aqui cada horário aceita mais de um intervalo: "Adicionar intervalo" no horário de sempre (vale para todos os dias que o seguem) e dentro de cada dia, com "Remover" a partir do segundo. O intervalo novo começa uma hora depois do fim do último e dura uma hora.
+5. O contrato não muda: o mesmo `PATCH /v1/settings/availability` com uma regra por intervalo de cada dia marcado, as regras inativas lidas devolvidas intactas, o limite de 28 regras, as mesmas mensagens de validação ("O horário final deve ser depois do horário inicial.", "Os intervalos não podem se sobrepor.", "Dia: mensagem" no status), "Salvar alterações", o status em linha e o toast "Disponibilidade salva.".
+
+**Consequências:** mudança visual no horário do onboarding agora aparece também nas Configurações. Prova: `tests/disponibilidade-como-onboarding.test.tsx`, com os testes de antes (`goal062`, `goal067`, `goal073`) apontando para os novos rótulos.

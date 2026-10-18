@@ -618,120 +618,118 @@
   background: var(--surface);
 }
 
-.availability-list {
-  display: grid;
-}
-.availability-row {
-  min-height: 76px;
-  padding: 12px 0;
-  display: grid;
-  grid-template-columns: 150px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
-  border-bottom: 1px solid var(--border);
-}
-.availability-row:last-child {
-  border-bottom: 0;
-}
-.availability-day {
-  min-height: 44px;
+/* Disponibilidade (D-187): o horário da semana com as peças do onboarding
+   (quadros 2.5 a 2.7, src/features/availability/WeeklyHours.tsx) direto no
+   fundo da página, sem o cartão de painel, numa coluna de leitura. */
+.availability-screen {
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 32px;
+}
+.availability-section {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.availability-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.availability-title {
+  margin: 0;
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+.availability-lead {
+  margin: 0;
+  color: var(--fg-soft);
   font-size: 14px;
-  font-weight: 600;
+  line-height: 1.45;
 }
-.availability-day .check {
-  width: 24px;
-  min-height: 24px;
-  flex: 0 0 24px;
-}
-.availability-periods {
+.availability-pattern {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+.availability-interval {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
-.availability-period {
-  min-height: 48px;
-  padding: 0 12px;
+.availability-remove {
+  min-height: 32px;
+  padding: 4px 8px;
+  align-self: flex-end;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  border-radius: var(--r-input);
-  background: var(--surface-interactive);
-  font-size: 13px;
-}
-.availability-period input {
-  width: 88px;
-  min-width: 88px;
-  min-height: 48px;
-  border: 0;
-  background: transparent;
-  color: var(--fg);
-  font: 500 13px/1 var(--font-mono);
-}
-.availability-period input:focus {
-  outline: 0;
-}
-/* Campo de hora compartilhado (src/shared/ui/pickers): o relógio cabe dentro
-   da pílula, sem alargar a linha do dia. */
-.availability-period .picker-field {
-  width: auto;
-  flex: none;
-}
-.availability-period .picker-field > input {
-  width: 104px;
-  min-width: 104px;
-  padding: 0 34px 0 0;
-}
-.availability-period .picker-field-toggle {
-  right: 0;
-  width: 32px;
-  height: 32px;
-}
-.availability-period .picker-field-toggle .icon {
-  width: 18px;
-  height: 18px;
-}
-.availability-period:focus-within {
-  box-shadow:
-    0 0 0 2px var(--surface),
-    0 0 0 4px var(--accent);
-}
-.availability-row.is-off .availability-periods {
-  color: var(--muted);
-}
-.availability-row.is-off .availability-period {
-  background: transparent;
-}
-.availability-row.is-off .availability-period input {
-  display: none;
-}
-.availability-period-remove {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
+  gap: 6px;
   border: 0;
   border-radius: 8px;
+  color: var(--fg-soft);
   background: transparent;
-  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: normal;
+  cursor: pointer;
 }
-.availability-period-remove:hover {
-  background: var(--surface);
+.availability-remove:hover {
   color: var(--fg);
+  background: var(--surface-secondary);
 }
-.availability-period-remove .icon {
-  width: 14px;
-  height: 14px;
+.availability-remove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
-.availability-period-error {
-  width: 100%;
+.availability-remove .icon {
+  width: 16px;
+  height: 16px;
+}
+.availability-error {
+  margin: 0;
   color: var(--danger);
   font-size: 13px;
   line-height: 1.4;
+}
+.hours-copy.availability-add {
+  min-height: 32px;
+  margin: 0;
+  align-self: flex-start;
+}
+.hours-copy.availability-add .icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
+}
+.hours-copy.availability-add:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.hours-day-fields .availability-pattern {
+  gap: 12px;
+}
+/* "Personalizar dias diferentes" abre a lista por dia na própria página: o
+   chevron aponta para baixo quando aberta (sem giro animado com movimento
+   reduzido). */
+.availability-screen .hours-custom[aria-expanded="true"] .icon {
+  transform: rotate(90deg);
+}
+.availability-screen .settings-form-actions {
+  margin-top: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .availability-screen .hours-custom .icon {
+    transition: none;
+  }
 }
 
 .knowledge-list {
@@ -895,13 +893,6 @@
   .settings-side-note {
     position: static;
   }
-  .availability-row {
-    grid-template-columns: 150px minmax(0, 1fr);
-  }
-  .availability-row > .btn {
-    grid-column: 2;
-    justify-self: start;
-  }
 }
 
 @media (max-width: 767px) {
@@ -1017,19 +1008,6 @@
   }
   .settings-mobile-only {
     display: block;
-  }
-  .availability-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 10px;
-  }
-  .availability-periods {
-    grid-column: 1 / -1;
-    padding-left: 32px;
-  }
-  .availability-row > .btn {
-    align-self: start;
-    min-height: 44px;
-    padding-inline: 10px;
   }
   .settings-data-row {
     align-items: flex-start;

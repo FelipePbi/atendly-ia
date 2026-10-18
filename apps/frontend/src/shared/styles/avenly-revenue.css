@@ -187,12 +187,22 @@
 .revenue-stat {
   min-width: 0;
   padding: 12px 14px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--at-color-primary-tint-strong);
   border-radius: var(--at-radius-sm);
-  background: var(--surface-interactive);
+  background: var(--at-color-primary-tint);
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+/* Cada número numa linha só (pedido de 2026-10-18): rótulo, valor e o
+   "confirmados pela frente" nunca quebram; se faltar espaço, reticências. */
+.revenue-stat dt,
+.revenue-stat dd,
+.revenue-stat-sub {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 @media (max-width: 519.98px) {
   .revenue-stat {
@@ -212,7 +222,7 @@
   }
 }
 .revenue-stat dt {
-  color: var(--muted);
+  color: var(--at-color-primary-ink);
   font-size: 12px;
   font-weight: 600;
 }

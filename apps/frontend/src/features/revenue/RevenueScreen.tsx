@@ -347,7 +347,7 @@ function SummaryCard({
       )}
       <dl className="revenue-stats">
         <div className="revenue-stat">
-          <dt>Atendimentos concluídos</dt>
+          <dt title="Atendimentos concluídos">Concluídos</dt>
           <dd>{billed.count}</dd>
         </div>
         <div className="revenue-stat">

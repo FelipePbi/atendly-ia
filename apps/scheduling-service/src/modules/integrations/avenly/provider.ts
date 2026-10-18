@@ -19,6 +19,7 @@ import {
   type CalendarProvider,
   type CalendarServiceDefinition,
   type CancelCalendarAppointmentInput,
+  type ChangeAppointmentDurationInput,
   computeAgreementTotal,
   type CreateCalendarAppointmentInput,
   type CreateCalendarHoldInput,
@@ -48,6 +49,11 @@ import {
   AvenlyServiceService,
   maxServiceBuffer,
 } from "../../services/avenly-service-service.js";
+import {
+  applyServiceDurations,
+  assertServiceDuration,
+  totalDuration,
+} from "../../services/service-durations.js";
 
 export const appointmentInclude = {
   customer: true,
@@ -73,6 +79,7 @@ export function toAvenlyAppointment(
     serviceId: item.serviceId,
     name: item.serviceNameSnapshot,
     durationMinutes: item.durationMinutesSnapshot,
+    defaultDurationMinutes: item.defaultDurationMinutesSnapshot,
     priceType: item.priceTypeSnapshot,
     price: item.priceSnapshot === null ? null : Number(item.priceSnapshot),
   }));
@@ -212,15 +219,19 @@ export class AvenlyCalendarProvider implements CalendarProvider {
 
     return runCalendarWrite(this.prisma, async (transaction) => {
       await lockCalendarDays(transaction, this.tenantId, [input.date]);
+      // Duracao ajustada por servico (D-207): so a profissional ajusta; o
+      // item grava a duracao combinada e, ao lado, o padrao do catalogo.
       const services = manual
         ? []
-        : await new AvenlyServiceService(
-            transaction,
-            this.tenantId,
-          ).requireActive(input.serviceIds);
-      const durationMinutes =
-        manual?.durationMinutes ??
-        services.reduce((total, service) => total + service.durationMinutes, 0);
+        : applyServiceDurations(
+            await new AvenlyServiceService(
+              transaction,
+              this.tenantId,
+            ).requireActive(input.serviceIds),
+            input.serviceDurations,
+            input.source ?? "AI",
+          );
+      const durationMinutes = manual?.durationMinutes ?? totalDuration(services);
       // Buffer externo do conjunto proposto (Goal009): o maior antes/depois
       // entre os servicos — buffers intermediarios de multi-servico nunca
       // sao somados. Manual sem servico ocupa sem buffer.
@@ -289,6 +300,7 @@ export class AvenlyCalendarProvider implements CalendarProvider {
             create: services.map((service) => ({
               serviceNameSnapshot: service.name,
               durationMinutesSnapshot: service.durationMinutes,
+              defaultDurationMinutesSnapshot: service.defaultDurationMinutes,
               priceTypeSnapshot: service.priceType,
               priceSnapshot: service.price,
               service: {
@@ -567,6 +579,128 @@ export class AvenlyCalendarProvider implements CalendarProvider {
         notifyCustomer: input.notifyCustomer === true,
       });
       return this.commitAppointment(transaction, cancelled, commit);
+    });
+  }
+
+  /**
+   * Ajuste da duracao dos servicos de um atendimento ja marcado (D-207).
+   *
+   * O inicio fica; o fim passa a ser o inicio mais a soma das duracoes. Quando
+   * o atendimento cresce, o intervalo inteiro passa pela mesma validacao da
+   * remarcacao para o mesmo horario — disponibilidade, grade, antecedencia e
+   * ocupacao, excluindo o proprio atendimento —, e o encaixe humano com
+   * motivo e a unica saida para uma recusa. Encurtar so libera tempo dentro do
+   * intervalo que ele ja ocupava, entao nao e revalidado: um atendimento
+   * encaixado no passado nao fica preso ao encaixe so para diminuir.
+   *
+   * Nao e alteracao que o cliente precise saber: o lembrete e o aviso falam
+   * do dia, da hora de inicio e dos servicos, e nenhum deles muda. Por isso a
+   * versao notificavel nao sobe e nenhuma intencao de envio e recalculada —
+   * os lembretes ja agendados continuam valendo, e nada sai para o cliente.
+   */
+  async changeAppointmentDuration(
+    input: ChangeAppointmentDurationInput,
+    commit?: CalendarMutationCommit<CalendarAppointment>,
+  ): Promise<CalendarAppointment> {
+    const source = input.source ?? "AI";
+    if (source !== "USER") {
+      throw new AppError(
+        "SERVICE_DURATION_OVERRIDE_NOT_ALLOWED",
+        "Only a human (source USER) can change a service duration for an appointment.",
+        403,
+      );
+    }
+    const overrideReason = resolveOverlapOverride(input);
+    const current = await this.requireAppointment(input.appointmentId);
+    const currentDate = this.localDate(current.startAt);
+
+    return runCalendarWrite(this.prisma, async (transaction) => {
+      await lockCalendarDays(transaction, this.tenantId, [currentDate]);
+      const persisted = await transaction.appointment.findUnique({
+        where: {
+          tenantId_id: { tenantId: this.tenantId, id: input.appointmentId },
+        },
+        include: appointmentInclude,
+      });
+      if (!persisted) appointmentNotFound();
+      const persistedDate = this.localDate(persisted.startAt);
+      if (persistedDate !== currentDate) {
+        await lockCalendarDays(transaction, this.tenantId, [persistedDate]);
+      }
+      assertCanChangeDuration(persisted);
+      const durations = resolveItemDurations(persisted, input.services);
+      const durationMinutes = [...durations.values()].reduce(
+        (total, value) => total + value,
+        0,
+      );
+      const before = this.toAppointment(persisted);
+      const unchanged =
+        durationMinutes === before.durationMinutes &&
+        persisted.items.every(
+          (item) => item.durationMinutesSnapshot === durations.get(item.id),
+        );
+      if (unchanged) {
+        return this.commitAppointment(transaction, persisted, commit);
+      }
+
+      const local = instantToLocalDateTime(persisted.startAt, this.timeZone);
+      const grows = durationMinutes > before.durationMinutes;
+      const endAt =
+        grows && !overrideReason
+          ? (
+              await new AvenlyAvailability(
+                transaction,
+                this.tenantId,
+                this.timeZone,
+              ).assertAvailable({
+                date: local.date,
+                startTime: local.time,
+                durationMinutes,
+                // O buffer e o snapshot da confirmacao, como na remarcacao.
+                bufferBeforeMinutes: persisted.bufferBeforeMinutesSnapshot,
+                bufferAfterMinutes: persisted.bufferAfterMinutesSnapshot,
+                excludeAppointmentId: persisted.id,
+              })
+            ).endAt
+          : addMinutes(persisted.startAt, durationMinutes);
+
+      for (const item of persisted.items) {
+        const next = durations.get(item.id);
+        if (next === undefined || next === item.durationMinutesSnapshot) {
+          continue;
+        }
+        await transaction.appointmentItem.updateMany({
+          where: { tenantId: this.tenantId, id: item.id },
+          data: { durationMinutesSnapshot: next },
+        });
+      }
+      // Sem `appointmentVersionWrite`: o fim mudou, mas o cliente so fica
+      // sabendo de dia, inicio e servicos (D-207).
+      const updated = await transaction.appointment.update({
+        where: {
+          tenantId_id: { tenantId: this.tenantId, id: persisted.id },
+        },
+        data: { endAt },
+        include: appointmentInclude,
+      });
+      const after = this.toAppointment(updated);
+      await recordAppointmentEvent(transaction, this.tenantId, updated.id, {
+        type: "DURATION_CHANGED",
+        source,
+        actor: this.userId,
+        reason: overrideReason,
+        before: durationOf(before),
+        after: durationOf(after),
+      });
+      if (overrideReason) {
+        await recordAppointmentEvent(transaction, this.tenantId, updated.id, {
+          type: "OVERLAP_OVERRIDE",
+          source,
+          actor: this.userId,
+          reason: overrideReason,
+        });
+      }
+      return this.commitAppointment(transaction, updated, commit);
     });
   }
 
@@ -899,6 +1033,99 @@ function assertCanReschedule(appointment: AppointmentRecord): void {
       { status: appointment.status },
     );
   }
+}
+
+/**
+ * So um atendimento `CONFIRMED` tem a duracao ajustada (D-207), como na
+ * remarcacao; e so o que tem servico do catalogo — o manual sem servico tem
+ * a duracao propria, fora deste ajuste.
+ */
+function assertCanChangeDuration(appointment: AppointmentRecord): void {
+  if (appointment.status === "CANCELLED") {
+    throw new AppError(
+      "APPOINTMENT_CANCELLED",
+      "Cancelled appointment cannot have its duration changed.",
+      409,
+    );
+  }
+  if (appointment.status !== "CONFIRMED") {
+    throw new AppError(
+      "APPOINTMENT_DURATION_CHANGE_INVALID",
+      `Appointment with status ${appointment.status} cannot have its duration changed.`,
+      409,
+      { status: appointment.status },
+    );
+  }
+  if (appointment.items.length === 0) {
+    throw new AppError(
+      "APPOINTMENT_WITHOUT_SERVICES",
+      "Only an appointment with catalog services can have its service durations changed.",
+      409,
+    );
+  }
+}
+
+/**
+ * Duracao nova de cada item, por id do item. Todo servico do atendimento vem
+ * na lista, uma vez, e nenhum de fora: o pedido descreve o atendimento
+ * inteiro, nunca uma parte que deixaria um item sem duracao conhecida.
+ */
+function resolveItemDurations(
+  appointment: AppointmentRecord,
+  services: Array<{ serviceId: string; durationMinutes: number }>,
+): Map<string, number> {
+  const byService = new Map<string, number>();
+  for (const service of services) {
+    if (byService.has(service.serviceId)) {
+      throw new AppError(
+        "SERVICE_DURATION_DUPLICATED",
+        "A service duration was given more than once.",
+        400,
+        { serviceId: service.serviceId },
+      );
+    }
+    assertServiceDuration(service.durationMinutes);
+    byService.set(service.serviceId, service.durationMinutes);
+  }
+  const itemServices = new Set(appointment.items.map((item) => item.serviceId));
+  const mismatch =
+    services.find((service) => !itemServices.has(service.serviceId)) ??
+    appointment.items.find((item) => !byService.has(item.serviceId));
+  if (mismatch) {
+    throw new AppError(
+      "SERVICE_DURATION_SERVICE_MISMATCH",
+      "Every service of the appointment, and only them, needs a duration.",
+      400,
+      { serviceId: mismatch.serviceId },
+    );
+  }
+  return new Map(
+    appointment.items.map((item) => [
+      item.id,
+      byService.get(item.serviceId) as number,
+    ]),
+  );
+}
+
+/** Antes/depois do ajuste de duracao: total, fim e cada servico. */
+function durationOf(appointment: CalendarAppointment): {
+  durationMinutes: number;
+  endTime: string;
+  services: Array<{
+    serviceId: string;
+    name: string;
+    durationMinutes: number | null;
+  }>;
+} {
+  return {
+    durationMinutes: appointment.durationMinutes,
+    endTime: appointment.endTime,
+    services: appointment.services.map((service) => ({
+      serviceId: service.serviceId,
+      name: service.name,
+      durationMinutes: service.durationMinutes,
+    })),
+  };
 }
 
 /** Antes/depois de um evento de horario: so o que a remarcacao muda. */

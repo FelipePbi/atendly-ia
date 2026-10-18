@@ -13,6 +13,7 @@ import {
   type CustomerList,
   type SeriesOccurrencePreview,
   type Service,
+  type ServiceDurationInput,
   type ServiceList,
 } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
@@ -81,6 +82,7 @@ import {
   RepeatFields,
   RepeatReviewSheet,
 } from "./RepeatReview";
+import { ServiceDurationStepper } from "./ServiceDurationStepper";
 import {
   type ConflictAvailability,
   ConflictGlyph,
@@ -130,6 +132,12 @@ export function AppointmentForm({
     recalledCustomers,
   );
   const [serviceIds, setServiceIds] = useState<string[]>([]);
+  // Duração ajustada só para este atendimento (D-207), por serviço; quem
+  // não está aqui usa o padrão do catálogo. "Ajustar duração" abre a lista.
+  const [durationOverrides, setDurationOverrides] = useState<
+    Record<string, number>
+  >({});
+  const [durationsOpen, setDurationsOpen] = useState(false);
   // Serviços trazidos de "Ver outros serviços": ficam à vista dali em diante.
   const [promotedIds, setPromotedIds] = useState<string[]>([]);
   const [moreServicesOpen, setMoreServicesOpen] = useState(false);
@@ -272,8 +280,17 @@ export function AppointmentForm({
   }, []);
 
   // A disponibilidade é consultada para o **conjunto** escolhido, não para o
-  // primeiro serviço: é a duração somada que precisa caber no horário.
+  // primeiro serviço: é a duração somada que precisa caber no horário — com
+  // a duração ajustada deste atendimento, quando houver (D-207).
   const serviceKey = serviceIds.join(",");
+  const serviceDurations: ServiceDurationInput[] = serviceIds.flatMap((id) =>
+    durationOverrides[id] === undefined
+      ? []
+      : [{ durationMinutes: durationOverrides[id], serviceId: id }],
+  );
+  const durationKey = serviceDurations
+    .map((item) => `${item.serviceId}:${item.durationMinutes}`)
+    .join(",");
   useEffect(() => {
     if (!serviceKey || !date || !calendar?.capabilities.createAppointments) {
       return;
@@ -282,6 +299,12 @@ export function AppointmentForm({
     getProductServices()
       .calendar.getAvailability(
         {
+          serviceDurations: durationKey
+            ? durationKey.split(",").map((pair) => {
+                const [serviceId = "", minutes = "0"] = pair.split(":");
+                return { durationMinutes: Number(minutes), serviceId };
+              })
+            : undefined,
           serviceIds: serviceKey.split(","),
           startDate: date,
           days: 1,
@@ -305,7 +328,7 @@ export function AppointmentForm({
         if (!controller.signal.aborted) setSlotsLoading(false);
       });
     return () => controller.abort();
-  }, [calendar, date, serviceKey]);
+  }, [calendar, date, durationKey, serviceKey]);
 
   const colors = serviceColorMap(services?.items);
   const selectableServices = (services?.items ?? []).filter(
@@ -331,10 +354,17 @@ export function AppointmentForm({
   const selectedServices = selectableServices.filter((item) =>
     serviceIds.includes(item.id),
   );
+  const minutesFor = (item: Service) =>
+    durationOverrides[item.id] ?? item.durationMinutes ?? 0;
   const servicesMinutes = selectedServices.reduce(
-    (sum, item) => sum + (item.durationMinutes ?? 0),
+    (sum, item) => sum + minutesFor(item),
     0,
   );
+  const adjustedCount = selectedServices.filter(
+    (item) => minutesFor(item) !== item.durationMinutes,
+  ).length;
+  const durationsShown =
+    !other && selectedServices.length > 0 && (durationsOpen || adjustedCount > 0);
   const otherMinutes = Number.parseInt(otherDuration, 10);
   const otherReady =
     otherTitle.trim().length > 0 &&
@@ -535,6 +565,9 @@ export function AppointmentForm({
           firstStartTime: startTime,
           intervalDays,
           occurrenceCount: repeatCount,
+          serviceDurations: serviceDurations.length
+            ? serviceDurations
+            : undefined,
           serviceIds,
         });
       seriesHoldsRef.current = result
@@ -592,6 +625,24 @@ export function AppointmentForm({
     setOther(false);
     setServiceIds(next);
     setSlotsLoading(next.length > 0);
+    // O ajuste é do serviço neste atendimento: desmarcar o serviço o desfaz.
+    if (!next.includes(service.id) && service.id in durationOverrides) {
+      setDurationOverrides(({ [service.id]: _removed, ...rest }) => rest);
+    }
+  }
+
+  /** Duração nova de um serviço (D-207): o horário escolhido é refeito. */
+  function changeDuration(service: Service, minutes: number) {
+    resetSlotChoice();
+    setSlots([]);
+    setSlotsLoading(true);
+    setError(null);
+    setDurationOverrides((current) => {
+      const { [service.id]: _previous, ...rest } = current;
+      return minutes === service.durationMinutes
+        ? rest
+        : { ...rest, [service.id]: minutes };
+    });
   }
 
   function chooseOtherService(service: Service) {
@@ -636,6 +687,9 @@ export function AppointmentForm({
       await hold.reserve({
         customerId: selectedCustomer?.id,
         date,
+        serviceDurations: serviceDurations.length
+          ? serviceDurations
+          : undefined,
         serviceIds,
         startTime: time,
       });
@@ -693,6 +747,8 @@ export function AppointmentForm({
         holdId: other ? undefined : (hold.holdId ?? undefined),
         overlapOverride: overlapReason ? true : undefined,
         overlapOverrideReason: overlapReason,
+        serviceDurations:
+          !other && serviceDurations.length ? serviceDurations : undefined,
         serviceIds: other ? [] : serviceIds,
         startTime,
         title: other ? otherTitle.trim() : undefined,
@@ -885,6 +941,60 @@ export function AppointmentForm({
                           </>
                         )}
                       </p>
+                    )}
+                    {!other &&
+                      selectedServices.length > 0 &&
+                      !durationsShown && (
+                        <button
+                          aria-controls="agenda-new-durations"
+                          aria-expanded={false}
+                          className="agenda-new-note-button agenda-duration-open"
+                          onClick={() => {
+                            setDurationsOpen(true);
+                            pendingFocusRef.current = () =>
+                              document
+                                .getElementById("agenda-new-durations")
+                                ?.querySelector<HTMLInputElement>("input")
+                                ?.focus();
+                          }}
+                          type="button"
+                        >
+                          <Icon name="clock" />
+                          Ajustar duração
+                        </button>
+                      )}
+                    {durationsShown && (
+                      <div
+                        aria-labelledby="agenda-new-durations-title"
+                        className={clsx(
+                          "agenda-duration-list",
+                          !reducedMotion && "motion-enter",
+                        )}
+                        id="agenda-new-durations"
+                        role="group"
+                      >
+                        <span
+                          className="agenda-duration-heading"
+                          id="agenda-new-durations-title"
+                        >
+                          Duração neste atendimento
+                        </span>
+                        {selectedServices.map((item) => (
+                          <ServiceDurationStepper
+                            color={colors.get(item.id)}
+                            defaultMinutes={item.durationMinutes}
+                            disabled={busy}
+                            key={item.id}
+                            name={item.name}
+                            onChange={(minutes) => changeDuration(item, minutes)}
+                            value={minutesFor(item)}
+                          />
+                        ))}
+                        <p className="agenda-duration-hint">
+                          Vale só para este agendamento. O serviço continua
+                          com a duração de sempre.
+                        </p>
+                      </div>
                     )}
                     {other && (
                       <div className="agenda-new-other">

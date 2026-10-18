@@ -41,6 +41,19 @@ const overlapOverrideShape = {
   overlapOverride: z.boolean().optional(),
   overlapOverrideReason: z.string().trim().min(1).max(500).optional(),
 };
+/**
+ * Duração de um serviço ajustada só para este atendimento (D-207): o padrão
+ * do catálogo continua o mesmo. Só estas rotas, que falam pela profissional,
+ * carregam o ajuste; a IA marca sempre com o padrão, e o Scheduling recusa o
+ * ajuste vindo dela.
+ */
+const serviceDurationSchema = z.object({
+  serviceId: z.string().trim().min(1).max(128),
+  durationMinutes: z.number().int().min(1).max(1_440),
+});
+const serviceDurationsShape = {
+  serviceDurations: z.array(serviceDurationSchema).max(10).optional(),
+};
 
 const appointmentBodySchema = z
   .object({
@@ -50,6 +63,7 @@ const appointmentBodySchema = z
     serviceIds: z.array(z.string().trim().min(1).max(128)).max(10).default([]),
     title: z.string().trim().min(1).max(200).optional(),
     durationMinutes: z.number().int().min(1).max(1_440).optional(),
+    ...serviceDurationsShape,
     date: dateSchema,
     startTime: timeSchema,
     customerId: z.string().trim().min(1).max(128).optional(),
@@ -87,6 +101,15 @@ const rescheduleSchema = z.object({
   ...overlapOverrideShape,
   ...notifyCustomerShape,
 });
+/**
+ * Ajuste da duração depois de marcado (D-207): todo serviço do atendimento,
+ * uma vez. Sem `notifyCustomer`: o início não muda, e o cliente não recebe
+ * aviso por causa disso.
+ */
+const durationSchema = z.object({
+  services: z.array(serviceDurationSchema).min(1).max(10),
+  ...overlapOverrideShape,
+});
 const cancelSchema = z.object({
   // Motivo do cancelamento (Goal008): vai para o evento e para o comentário
   // do atendimento. `comments` continua aceito como o nome anterior do mesmo
@@ -97,6 +120,7 @@ const cancelSchema = z.object({
 });
 const holdBodySchema = z.object({
   serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
+  ...serviceDurationsShape,
   date: dateSchema,
   startTime: timeSchema,
   stepMinutes: z.number().int().min(1).max(180).default(30),
@@ -116,6 +140,12 @@ const availabilityQuerySchema = z.object({
       .map((item) => item.trim())
       .filter(Boolean),
   ),
+  // `servico:minutos,servico:minutos` (D-207), repassado como está: quem
+  // valida cada par é o Scheduling.
+  serviceDurations: z
+    .string()
+    .regex(/^[^:,\s]{1,128}:\d{1,4}(,[^:,\s]{1,128}:\d{1,4}){0,9}$/u)
+    .optional(),
   startDate: dateSchema,
   days: z.coerce.number().int().min(1).max(60).default(14),
   maxSlots: z.coerce.number().int().min(1).max(100).default(20),
@@ -183,6 +213,7 @@ const blockSeriesEditSchema = z.object({
 // --- Serie de atendimento (Goal009) ---------------------------------------
 const seriesPreviewSchema = z.object({
   serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
+  ...serviceDurationsShape,
   occurrenceCount: z.number().int().min(1).max(365),
   intervalDays: z.number().int().positive().max(3_650).optional(),
   firstDate: dateSchema,
@@ -290,6 +321,23 @@ export async function registerV1CalendarRoutes(
           internalContext(request),
           id,
           { ...parseBody(rescheduleSchema, request.body), source: "USER" },
+          idempotencyKey(request),
+        ),
+      );
+    },
+  );
+
+  app.post(
+    "/v1/appointments/:id/duration",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      return dataResponse(
+        request,
+        await scheduling.changeAppointmentDuration(
+          internalContext(request),
+          id,
+          { ...parseBody(durationSchema, request.body), source: "USER" },
           idempotencyKey(request),
         ),
       );

@@ -51,6 +51,7 @@ import {
   serviceColorMap,
   serviceNames,
 } from "./occupancy";
+import { appointmentServiceDurations } from "./ServiceDurationStepper";
 import type { ConflictAvailability } from "./SlotConflictNotice";
 import { holdNotice } from "./SlotPicker";
 
@@ -190,6 +191,9 @@ export function RescheduleFlow({
     getProductServices()
       .calendar.getAvailability(
         {
+          // O tamanho combinado deste atendimento, não o do catálogo (D-207):
+          // a remarcação mantém a duração, e o hold precisa cobri-la.
+          serviceDurations: appointmentServiceDurations(appointment),
           serviceIds: appointment.services.map((service) => service.serviceId),
           startDate: date,
           days: 1,
@@ -248,6 +252,7 @@ export function RescheduleFlow({
       await hold.reserve({
         customerId: appointment.customerId ?? undefined,
         date,
+        serviceDurations: appointmentServiceDurations(appointment),
         serviceIds: appointment.services.map((service) => service.serviceId),
         startTime: time,
       });

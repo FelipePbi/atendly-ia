@@ -22,6 +22,11 @@ import {
   AvenlyServiceService,
   maxServiceBuffer,
 } from "../services/avenly-service-service.js";
+import {
+  adjustedServiceDurations,
+  applyServiceDurations,
+  totalDuration,
+} from "../services/service-durations.js";
 
 /**
  * Hold: ocupacao temporaria de um horario enquanto ele esta em confirmacao
@@ -48,6 +53,7 @@ interface AppointmentHoldRow {
   endAt: Date;
   proposedServiceIds: unknown;
   proposedDurationMinutes: number;
+  proposedServiceDurations?: unknown;
   proposedBufferBeforeMinutes: number;
   proposedBufferAfterMinutes: number;
   customerId: string | null;
@@ -188,14 +194,17 @@ export class AvenlyAppointmentHoldService {
     const source = input.source ?? "AI";
     return runCalendarWrite(this.prisma, async (transaction) => {
       await lockCalendarDays(transaction, this.tenantId, [input.date]);
-      const services = await new AvenlyServiceService(
-        transaction,
-        this.tenantId,
-      ).requireActive(input.serviceIds);
-      const durationMinutes = services.reduce(
-        (total, service) => total + service.durationMinutes,
-        0,
+      // Duracao ajustada por servico (D-207): o hold segura o intervalo do
+      // tamanho que a profissional pediu, e guarda os ajustes para a serie.
+      const services = applyServiceDurations(
+        await new AvenlyServiceService(transaction, this.tenantId).requireActive(
+          input.serviceIds,
+        ),
+        input.serviceDurations,
+        source,
       );
+      const durationMinutes = totalDuration(services);
+      const serviceDurations = adjustedServiceDurations(services);
       // Buffer externo do conjunto proposto (Goal009): mesma semantica da
       // confirmacao — maior antes/depois entre os servicos propostos, nunca
       // somados.
@@ -220,6 +229,12 @@ export class AvenlyAppointmentHoldService {
           endAt: slot.endAt,
           proposedServiceIds: services.map((service) => service.id),
           proposedDurationMinutes: durationMinutes,
+          ...(serviceDurations
+            ? {
+                proposedServiceDurations:
+                  serviceDurations as unknown as Prisma.InputJsonValue,
+              }
+            : {}),
           proposedBufferBeforeMinutes: bufferBeforeMinutes,
           proposedBufferAfterMinutes: bufferAfterMinutes,
           customerId: input.customerId ?? null,

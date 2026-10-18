@@ -460,7 +460,14 @@ export const appointmentSchema = z.object({
     z.object({
       serviceId: z.string().min(1),
       name: z.string(),
+      // Duração combinada deste serviço neste atendimento (D-207).
       durationMinutes: z.number().int().positive().nullable(),
+      // Padrão do catálogo quando o serviço entrou no atendimento (D-207):
+      // diferente de `durationMinutes` quando a duração foi ajustada só para
+      // este atendimento. Opcional: resposta anterior — e o replay de
+      // idempotência — continua decodável; ausente ou nulo é "padrão
+      // desconhecido", nunca "ajustado".
+      defaultDurationMinutes: z.number().int().positive().nullable().optional(),
       priceType: z.enum(["FIXED", "STARTING_AT", "ON_REQUEST", "NOT_INFORMED"]),
       price: z.number().nonnegative().nullable(),
     }),
@@ -599,6 +606,8 @@ export const appointmentEventSchema = z.object({
     "PRESENCE_CONFIRMED",
     "HOLD_CONSUMED",
     "OVERLAP_OVERRIDE",
+    // Duração dos serviços ajustada depois de marcado (D-207).
+    "DURATION_CHANGED",
   ]),
   source: z.enum(["AI", "USER", "SYSTEM", "INTEGRATION"]),
   actor: z.string().nullable(),

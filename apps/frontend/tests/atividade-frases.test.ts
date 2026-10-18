@@ -56,6 +56,25 @@ describe("frases do registro de atividade", () => {
     expect(changeLines(rescheduled)).toEqual([]);
   });
 
+  it("duração ajustada depois de marcado: a frase e a linha Duração antes → depois (D-207)", () => {
+    const changed = entry({
+      action: "appointment.duration_changed",
+      changes: [{ field: "durationMinutes", before: 40, after: 60 }],
+      details: {
+        customerName: "Ana",
+        services: ["Corte"],
+        startsAt: "2026-10-20T14:00",
+        endsAt: "2026-10-20T15:00",
+      },
+    });
+    expect(activitySentence(changed)).toBe(
+      "Você mudou a duração do atendimento de Ana de 20/10 às 14:00",
+    );
+    expect(lines(changed)).toEqual([
+      { label: "Duração", before: "40 min", after: "1 h" },
+    ]);
+  });
+
   it("remarcação para outro dia mostra as duas datas", () => {
     expect(
       activitySentence(
@@ -183,6 +202,7 @@ describe("frases do registro de atividade", () => {
     const actions = [
       "appointment.created",
       "appointment.rescheduled",
+      "appointment.duration_changed",
       "appointment.cancelled",
       "appointment.completed",
       "appointment.no_show",

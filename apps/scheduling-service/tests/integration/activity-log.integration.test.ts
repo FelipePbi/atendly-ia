@@ -354,6 +354,47 @@ describeWithDatabase("activity log against PostgreSQL", () => {
     ]);
   });
 
+  it("registra a duração ajustada depois de marcado, com o padrão ao lado (D-207)", async () => {
+    const date = nextWeek();
+    const appointment = await post(tenantA, "/internal/appointments", {
+      serviceIds: [serviceId],
+      serviceDurations: [{ serviceId, durationMinutes: 45 }],
+      date,
+      startTime: "14:00",
+      customerName: "Carla",
+    });
+    expect(appointment).toMatchObject({
+      endTime: "14:45",
+      services: [
+        expect.objectContaining({
+          durationMinutes: 45,
+          defaultDurationMinutes: 30,
+        }),
+      ],
+    });
+    const changed = await post(
+      tenantA,
+      `/internal/appointments/${appointment.id}/duration`,
+      { services: [{ serviceId, durationMinutes: 60 }] },
+    );
+    expect(changed).toMatchObject({ startTime: "14:00", endTime: "15:00" });
+
+    const { items } = await readActivity(tenantA);
+    expect(
+      items.find((item) => item.action === "appointment.duration_changed"),
+    ).toMatchObject({
+      actorType: "USER",
+      entityId: appointment.id,
+      changes: [{ field: "durationMinutes", before: 45, after: 60 }],
+      details: expect.objectContaining({ endsAt: `${date}T15:00` }),
+    });
+    const row = await prisma.appointment.findUniqueOrThrow({
+      where: { tenantId_id: { tenantId: tenantA, id: appointment.id } },
+    });
+    // Alteração que o cliente não precisa saber: a versão notificável fica.
+    expect(row.notifiableVersion).toBe(1);
+  });
+
   it("registra a mudança da grade semanal dia a dia", async () => {
     await post(
       tenantA,

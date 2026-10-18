@@ -26,6 +26,7 @@ export const ACTIVITY_ACTIONS_BY_KIND: Record<ActivityKind, readonly string[]> =
   ],
   CHANGED: [
     "appointment.rescheduled",
+    "appointment.duration_changed",
     "appointment.completed",
     "appointment.no_show",
     "appointment.final_value_set",

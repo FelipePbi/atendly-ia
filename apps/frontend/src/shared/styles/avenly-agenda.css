@@ -5069,3 +5069,192 @@ button.agenda-new-hint:focus-visible {
     justify-self: start;
   }
 }
+
+/* Duração do serviço neste atendimento (D-207): − 40 min +, no passo de 5
+   minutos do "Duração" do formulário de serviço, com o padrão ao lado
+   quando difere. Serve à criação (dentro de Serviços) e ao "Ajustar
+   duração" do detalhe. */
+.agenda-duration-open {
+  align-self: flex-start;
+}
+.agenda-duration-list {
+  display: grid;
+  gap: 12px;
+}
+.agenda-duration-heading {
+  color: var(--at-color-ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.agenda-duration-row {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+.agenda-duration-name {
+  min-width: 0;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.agenda-duration-title {
+  overflow-wrap: anywhere;
+}
+.agenda-duration-default {
+  color: var(--at-color-ink-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+.agenda-duration-controls {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.agenda-duration-control {
+  height: 44px;
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.agenda-duration-step {
+  width: 44px;
+  padding: 0;
+  border: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--fg-soft);
+  font: 400 20px/1 var(--font-body);
+  cursor: pointer;
+}
+.agenda-duration-step:first-child {
+  border-right: 1px solid var(--border);
+}
+.agenda-duration-step:last-child {
+  border-left: 1px solid var(--border);
+  color: var(--accent);
+}
+.agenda-duration-step:disabled {
+  color: var(--disabled-fg);
+  cursor: not-allowed;
+}
+.agenda-duration-step:focus-visible {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: -3px;
+}
+.agenda-duration-value {
+  min-width: 76px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.agenda-duration-input {
+  width: 3.5ch;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: 500 17px/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  appearance: textfield;
+}
+.agenda-duration-input::-webkit-inner-spin-button,
+.agenda-duration-input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+.agenda-duration-input:focus-visible {
+  border-radius: 4px;
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 2px;
+}
+.agenda-duration-unit {
+  color: var(--fg-soft);
+  font-size: 13px;
+  font-weight: 500;
+}
+.agenda-duration-reset {
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: 600 14px/1.25 var(--font-body);
+  cursor: pointer;
+}
+.agenda-duration-reset:disabled {
+  color: var(--disabled-fg);
+  cursor: not-allowed;
+}
+.agenda-duration-reset:focus-visible {
+  border-radius: 4px;
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 2px;
+}
+.agenda-duration-hint {
+  margin: 0;
+  color: var(--at-color-ink-muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.agenda-duration-dialog {
+  display: grid;
+  gap: 16px;
+}
+.agenda-duration-dialog .modal-actions {
+  margin-top: 0;
+}
+.agenda-duration-summary {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.agenda-duration-summary > span {
+  color: var(--at-color-ink-muted);
+  font-size: 13px;
+}
+.agenda-duration-summary strong {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.agenda-duration-summary small {
+  margin-left: 8px;
+  color: var(--at-color-ink-soft);
+  font-size: 13px;
+  font-weight: 500;
+}
+.agenda-appt-service.is-adjusted {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.agenda-appt-service-adjusted {
+  flex-basis: 100%;
+  padding-left: 16px;
+  color: var(--at-color-ink-muted);
+  font-size: 13px;
+  line-height: 1.3;
+}
+.agenda-appt-adjust {
+  margin-top: 4px;
+  align-self: flex-start;
+}

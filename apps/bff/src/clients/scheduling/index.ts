@@ -162,6 +162,9 @@ const appointmentSchema = z.object({
       serviceId: z.string(),
       name: z.string(),
       durationMinutes: z.number().int().positive().nullable(),
+      // Padrao do catalogo quando o item nasceu (D-207); default nulo para o
+      // Scheduling anterior e para replay de idempotencia.
+      defaultDurationMinutes: z.number().int().positive().nullable().default(null),
       priceType: priceTypeSchema,
       price: z.number().nonnegative().nullable(),
     }),
@@ -220,6 +223,7 @@ const appointmentEventSchema = z.object({
     "PRESENCE_CONFIRMED",
     "HOLD_CONSUMED",
     "OVERLAP_OVERRIDE",
+    "DURATION_CHANGED",
   ]),
   source: z.enum(["AI", "USER", "SYSTEM", "INTEGRATION"]),
   actor: z.string().nullable(),
@@ -887,6 +891,26 @@ export class SchedulingClient {
       context,
       "POST",
       `/internal/appointments/${encodeURIComponent(id)}/reschedule`,
+      input,
+      appointmentSchema,
+      idempotencyKey,
+    );
+  }
+
+  /**
+   * Ajuste da duracao dos servicos de um atendimento ja marcado (D-207). Pode
+   * ocupar tempo novo, entao exige `Idempotency-Key`, como remarcar.
+   */
+  async changeAppointmentDuration(
+    context: InternalRequestContext,
+    id: string,
+    input: unknown,
+    idempotencyKey: string,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      `/internal/appointments/${encodeURIComponent(id)}/duration`,
       input,
       appointmentSchema,
       idempotencyKey,

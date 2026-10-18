@@ -26,6 +26,15 @@ export interface ListAppointmentsQuery {
   startDate: string;
 }
 
+/**
+ * Duração de um serviço ajustada só para este atendimento (D-207): o padrão
+ * do catálogo não muda. Serviço que não aparece usa o padrão.
+ */
+export interface ServiceDurationInput {
+  durationMinutes: number;
+  serviceId: string;
+}
+
 export interface CreateAppointmentInput {
   comments?: string;
   /** Pessoa já resolvida; alternativa a `customerName`/`customerPhone`. */
@@ -42,9 +51,18 @@ export interface CreateAppointmentInput {
   overlapOverrideReason?: string;
   /** Vazio só no atendimento manual excepcional, que exige `title`. */
   serviceIds: string[];
+  /** Duração ajustada de algum serviço para este atendimento (D-207). */
+  serviceDurations?: ServiceDurationInput[];
   startTime: string;
   stepMinutes?: number;
   title?: string;
+}
+
+/** Ajuste da duração depois de marcado (D-207): todo serviço do atendimento. */
+export interface ChangeAppointmentDurationInput {
+  overlapOverride?: boolean;
+  overlapOverrideReason?: string;
+  services: ServiceDurationInput[];
 }
 
 export interface RescheduleAppointmentInput {
@@ -63,6 +81,7 @@ export interface CreateHoldInput {
   customerId?: string;
   date: string;
   serviceIds: string[];
+  serviceDurations?: ServiceDurationInput[];
   startTime: string;
   stepMinutes?: number;
 }
@@ -71,6 +90,7 @@ export interface AvailabilityQuery {
   days?: number;
   maxSlots?: number;
   serviceIds: string[];
+  serviceDurations?: ServiceDurationInput[];
   startDate: string;
   stepMinutes?: number;
 }
@@ -137,6 +157,7 @@ export interface PreviewAppointmentSeriesInput {
   intervalDays?: number;
   occurrenceCount: number;
   serviceIds: string[];
+  serviceDurations?: ServiceDurationInput[];
 }
 
 export interface ConfirmAppointmentSeriesInput {
@@ -208,6 +229,26 @@ export class BffCalendarService {
       schema: routeSchema<Appointment>(
         "POST",
         "/v1/appointments/:id/reschedule",
+      ),
+      signal,
+    });
+  }
+
+  /** Ajuste da duração depois de marcado (D-207): pode ocupar tempo novo. */
+  changeAppointmentDuration(
+    id: string,
+    input: ChangeAppointmentDurationInput,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      body: input,
+      headers: { "idempotency-key": idempotencyKey },
+      method: "POST",
+      path: `/v1/appointments/${encodeURIComponent(id)}/duration`,
+      schema: routeSchema<Appointment>(
+        "POST",
+        "/v1/appointments/:id/duration",
       ),
       signal,
     });
@@ -363,7 +404,15 @@ export class BffCalendarService {
   getAvailability(query: AvailabilityQuery, signal?: AbortSignal) {
     return this.http.request({
       path: "/v1/availability",
-      query: { ...query, serviceIds: query.serviceIds.join(",") },
+      query: {
+        ...query,
+        serviceDurations: query.serviceDurations?.length
+          ? query.serviceDurations
+              .map((item) => `${item.serviceId}:${item.durationMinutes}`)
+              .join(",")
+          : undefined,
+        serviceIds: query.serviceIds.join(","),
+      },
       schema: routeSchema<AvailabilitySlot[]>("GET", "/v1/availability"),
       signal,
     });

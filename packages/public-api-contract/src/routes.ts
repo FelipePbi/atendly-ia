@@ -125,6 +125,7 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
   { method: "POST", pathPattern: "/v1/appointments", schema: appointmentSchema },
   { method: "POST", pathPattern: "/v1/appointments/:id/reschedule", schema: appointmentSchema },
   { method: "POST", pathPattern: "/v1/appointments/:id/cancel", schema: appointmentSchema },
+  { method: "POST", pathPattern: "/v1/appointments/:id/duration", schema: appointmentSchema },
   { method: "POST", pathPattern: "/v1/appointments/:id/complete", schema: appointmentLifecycleSchema },
   { method: "POST", pathPattern: "/v1/appointments/:id/no-show", schema: appointmentLifecycleSchema },
   { method: "POST", pathPattern: "/v1/appointments/:id/final-value", schema: appointmentLifecycleSchema },

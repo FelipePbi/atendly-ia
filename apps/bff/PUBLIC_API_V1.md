@@ -13,7 +13,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Onboarding | `GET /v1/onboarding`; `PATCH /v1/onboarding`; `POST /v1/onboarding/complete` |
 | Home | `GET /v1/dashboard`; `GET /v1/status` (Goal014) |
 | Conversas | `GET /v1/conversations`; `GET /v1/conversations/:id`; `GET /v1/conversations/:id/messages`; `GET /v1/conversations/:id/events` (Goal070); `GET /v1/conversations/ignored-contacts` (Goal139); `GET /v1/conversations/unread-summary` (D-195); `POST /v1/conversations/:id/read` (D-195); `POST /v1/conversations/:id/messages`; `POST /v1/conversations/:id/takeover`; `POST /v1/conversations/:id/release`; `POST /v1/conversations/:id/resolve`; `PUT /v1/conversations/:id/category`; `PUT /v1/conversations/:id/ignore`; `POST /v1/conversations/:id/suggestions` (Goal012) |
-| Agendamentos | `GET /v1/appointments`; `GET /v1/appointments/:id`; `POST /v1/appointments`; `POST /v1/appointments/:id/reschedule`; `POST /v1/appointments/:id/cancel` |
+| Agendamentos | `GET /v1/appointments`; `GET /v1/appointments/:id`; `POST /v1/appointments`; `POST /v1/appointments/:id/reschedule`; `POST /v1/appointments/:id/duration`; `POST /v1/appointments/:id/cancel` |
 | Ciclo de vida do atendimento | `POST /v1/appointments/:id/complete`; `POST /v1/appointments/:id/no-show`; `POST /v1/appointments/:id/final-value`; `POST /v1/appointments/:id/presence`; `GET /v1/appointments/:id/events`; `GET /v1/appointments/:id/notifications` (Goal021) |
 | Reserva temporária (hold) | `POST /v1/holds`; `GET /v1/holds`; `DELETE /v1/holds/:id` |
 | Série de atendimento (Goal009) | `POST /v1/appointments/series/preview`; `POST /v1/appointments/series/confirm` |
@@ -284,6 +284,18 @@ Holds só existem na Agenda Avenly, a única agenda operacional (Goal027).
 
 `serviceIds` pode vir vazio **apenas** para o atendimento manual excepcional sem serviço cadastrado, que exige `title` e `durationMinutes`. Ele nasce sem itens e, por consequência da regra única do acordo, sem total (`totalPriceType: NONE`) — nada de preço fabricado. Pela IA, é recusado com `403 MANUAL_APPOINTMENT_NOT_ALLOWED`.
 
+### Duração do serviço por atendimento (D-207)
+
+Um serviço que leva 40 min por padrão pode levar 60 num atendimento específico. O ajuste vale só para aquele atendimento: o catálogo não muda.
+
+- **Na criação:** `POST /v1/appointments`, `POST /v1/holds` e `POST /v1/appointments/series/preview` aceitam `serviceDurations: [{ serviceId, durationMinutes }]` (opcional, até 10, `durationMinutes` inteiro de 1 a 1440), só para serviços do próprio `serviceIds`; o serviço que não aparece usa o padrão do catálogo. `GET /v1/availability` aceita o mesmo ajuste como `serviceDurations=servico:minutos,servico:minutos`, e procura horários do tamanho ajustado. O hold guarda o ajuste, e a confirmação da série cria cada item com ele. A confirmação com `holdId` precisa do mesmo ajuste do hold: um intervalo maior do que o reservado responde `409 APPOINTMENT_HOLD_EXPIRED` (`SLOT_MISMATCH`).
+- **Depois de marcado:** `POST /v1/appointments/:id/duration` com `{ "services": [{ serviceId, durationMinutes }], "overlapOverride"?, "overlapOverrideReason"? }` e `Idempotency-Key`. Todo serviço do atendimento vem na lista, uma vez, e nenhum de fora (`400 SERVICE_DURATION_SERVICE_MISMATCH`). O início fica; o fim passa a ser o início mais a soma. Aumentar passa pela mesma validação da remarcação para o mesmo horário (expediente, grade, antecedência e ocupação, fora o próprio atendimento): recusa é `409 SLOT_UNAVAILABLE`, e o encaixe com motivo é a saída, como na remarcação. Diminuir não ocupa tempo novo e não é revalidado. Só atendimento `CONFIRMED` com serviço do catálogo: cancelado responde `409 APPOINTMENT_CANCELLED`, concluído ou falta `409 APPOINTMENT_DURATION_CHANGE_INVALID`, manual sem serviço `409 APPOINTMENT_WITHOUT_SERVICES`. Pedir a duração que já está gravada não é um segundo efeito.
+- **Resposta:** cada item de `services` traz `durationMinutes` (a duração deste atendimento) e `defaultDurationMinutes` (o padrão do catálogo quando o serviço entrou no atendimento; `null` quando desconhecido ou em resposta anterior). Diferentes, a duração foi ajustada.
+- **Cliente:** o ajuste depois de marcado não avisa o cliente e não mexe nos lembretes — o lembrete fala do dia, da hora de início e dos serviços, e nenhum deles muda. A rota não tem `notifyCustomer`.
+- **IA:** marca sempre com o padrão do catálogo. Ajuste vindo de origem `AI` é recusado com `403 SERVICE_DURATION_OVERRIDE_NOT_ALLOWED`.
+
+O histórico ganha o evento `DURATION_CHANGED` (`before`/`after` com `durationMinutes`, `endTime` e a duração de cada serviço), e a Atividade, `appointment.duration_changed` com a linha `durationMinutes` antes e depois (a duração total).
+
 ### Ciclo de vida: conclusão, falta, presença e valor final
 
 | Rota | Corpo | Efeito |
@@ -322,7 +334,7 @@ Conclusão automática: o Scheduling marca `COMPLETED` com origem `AUTO` os aten
 
 | Campo | Valores |
 | --- | --- |
-| `type` | `CREATED`, `RESCHEDULED`, `CANCELLED`, `COMPLETED`, `NO_SHOW`, `FINAL_VALUE_SET`, `PRESENCE_CONFIRMED`, `HOLD_CONSUMED`, `OVERLAP_OVERRIDE` |
+| `type` | `CREATED`, `RESCHEDULED`, `CANCELLED`, `COMPLETED`, `NO_SHOW`, `FINAL_VALUE_SET`, `PRESENCE_CONFIRMED`, `HOLD_CONSUMED`, `OVERLAP_OVERRIDE`, `DURATION_CHANGED` (D-207) |
 | `source` | `AI`, `USER`, `SYSTEM`, `INTEGRATION` |
 | `actor`, `reason` | quem fez e por quê (`null` para a conclusão automática) |
 | `before`, `after` | horário, status e valores antes/depois |

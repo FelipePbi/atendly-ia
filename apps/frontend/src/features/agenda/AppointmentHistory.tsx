@@ -14,7 +14,7 @@ import {
   recalledAppointmentHistory,
   rememberAppointmentHistory,
 } from "./agendaMemory";
-import { requestError } from "./occupancy";
+import { formatDuration, requestError } from "./occupancy";
 
 /**
  * `occurredAt` é o início da transação: eventos gravados juntos compartilham
@@ -44,7 +44,27 @@ const EVENT_VERBS: Record<AppointmentEvent["type"], string> = {
   PRESENCE_CONFIRMED: "Presença confirmada",
   HOLD_CONSUMED: "Reserva consumida",
   OVERLAP_OVERRIDE: "Sobreposição autorizada",
+  DURATION_CHANGED: "Duração alterada",
 };
+
+/**
+ * "40 min → 1 h" do ajuste de duração (D-207), lido do antes/depois do
+ * evento; sem os dois números, a linha não aparece.
+ */
+function durationChange(event: AppointmentEvent): string | null {
+  if (event.type !== "DURATION_CHANGED") return null;
+  const minutes = (value: unknown) => {
+    const field =
+      value && typeof value === "object"
+        ? (value as { durationMinutes?: unknown }).durationMinutes
+        : undefined;
+    return typeof field === "number" ? field : null;
+  };
+  const before = minutes(event.before);
+  const after = minutes(event.after);
+  if (before === null || after === null) return null;
+  return `${formatDuration(before)} → ${formatDuration(after)}`;
+}
 
 /**
  * Autoria do evento: a IA aparece como IA; quem agiu pela equipe aparece
@@ -192,6 +212,11 @@ export function AppointmentHistory({
                 event={event}
               />
             </span>
+            {durationChange(event) && (
+              <span className="agenda-appt-history-reason">
+                {durationChange(event)}
+              </span>
+            )}
             {event.reason && (
               <span className="agenda-appt-history-reason">
                 Motivo: {event.reason}

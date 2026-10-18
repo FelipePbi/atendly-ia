@@ -107,6 +107,10 @@ enum AppointmentEventType {
   PRESENCE_CONFIRMED
   HOLD_CONSUMED
   OVERLAP_OVERRIDE
+  /// Duracao dos servicos ajustada depois de marcado (D-207): o inicio fica,
+  /// o fim muda. `before`/`after` trazem a duracao total, o fim e a duracao
+  /// de cada servico.
+  DURATION_CHANGED
 }
 
 /// Origem do evento (Goal008): quem/o que disparou a mutacao.
@@ -720,6 +724,12 @@ model AppointmentItem {
   /// Ausente quando o item nao tem duracao propria conhecida (Goal007);
   /// nunca preenchida com a duracao total do atendimento.
   durationMinutesSnapshot Int?
+  /// Duracao padrao do servico no catalogo quando o item nasceu (D-207).
+  /// `durationMinutesSnapshot` e a duracao combinada **deste** atendimento e
+  /// pode diferir do padrao ("60 min · padrao 40 min"); esta coluna so serve
+  /// para mostrar a diferenca sem reler o catalogo, que pode ter mudado
+  /// depois. Nula quando o padrao nao e conhecido (item sem duracao propria).
+  defaultDurationMinutesSnapshot Int?
   priceTypeSnapshot       PriceType
   priceSnapshot           Decimal?  @db.Decimal(12, 2)
   createdAt               DateTime  @default(now())
@@ -746,6 +756,11 @@ model AppointmentHold {
   /// relacional/snapshot do `AppointmentItem`, que e permanente.
   proposedServiceIds      Json
   proposedDurationMinutes Int
+  /// Duracao ajustada por servico (D-207), `[{ serviceId, durationMinutes }]`,
+  /// so dos servicos que a profissional ajustou; nula quando todos usam o
+  /// padrao do catalogo. A serie de atendimento le daqui a duracao de cada
+  /// item que nasce do hold.
+  proposedServiceDurations Json?
   /// Buffers propostos (Goal009): o maior `bufferBeforeMinutes`/
   /// `bufferAfterMinutes` entre os servicos propostos, na mesma semantica do
   /// snapshot do atendimento. Viram o snapshot definitivo se o hold for

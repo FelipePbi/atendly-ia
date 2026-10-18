@@ -1,4 +1,5 @@
 import type { Prisma } from "../../generated/prisma/client.js";
+import type { ServiceDurationOverride } from "../services/service-durations.js";
 
 export type ServicePriceType =
   "FIXED" | "STARTING_AT" | "ON_REQUEST" | "NOT_INFORMED";
@@ -34,6 +35,12 @@ export interface CalendarAppointmentServiceItem {
   name: string;
   /** Ausente quando o item nao tem duracao propria conhecida. */
   durationMinutes: number | null;
+  /**
+   * Padrao do catalogo quando o item nasceu (D-207). Difere de
+   * `durationMinutes` quando a duracao foi ajustada para este atendimento;
+   * nulo quando nao e conhecido.
+   */
+  defaultDurationMinutes: number | null;
   priceType: ServicePriceType;
   price: number | null;
 }
@@ -133,6 +140,8 @@ export interface ListAppointmentsInput {
 
 export interface GetAvailabilityInput {
   serviceIds: string[];
+  /** Duracao ajustada de algum servico do conjunto (D-207); so a interface manda. */
+  serviceDurations?: ServiceDurationOverride[];
   startDate: string;
   days: number;
   /**
@@ -186,6 +195,8 @@ export type CalendarHoldStatus = "ACTIVE" | "CONSUMED" | "RELEASED" | "EXPIRED";
 export interface CreateCalendarHoldInput {
   source?: "AI" | "USER";
   serviceIds: string[];
+  /** Duracao ajustada de algum servico (D-207); so `source: USER`. */
+  serviceDurations?: ServiceDurationOverride[];
   date: string;
   startTime: string;
   /** Ignorado pela Agenda Avenly (Goal009): a granularidade e sempre a do negocio. */
@@ -212,6 +223,11 @@ export interface CreateCalendarAppointmentInput
    * atendimento nasce sem `AppointmentItem` e sem total.
    */
   serviceIds: string[];
+  /**
+   * Duracao ajustada de algum servico para este atendimento (D-207); so
+   * `source: USER`. Servico fora da lista usa o padrao do catalogo.
+   */
+  serviceDurations?: ServiceDurationOverride[];
   /** Titulo do atendimento manual excepcional; exigido quando nao ha servico. */
   title?: string;
   /** Duracao do atendimento manual excepcional; exigida quando nao ha servico. */
@@ -248,6 +264,20 @@ export interface RescheduleCalendarAppointmentInput
   date: string;
   startTime: string;
   stepMinutes: number;
+  idempotencyKey: string;
+}
+
+/**
+ * Ajuste da duracao dos servicos de um atendimento ja marcado (D-207): o
+ * inicio fica, o fim passa a ser o inicio mais a soma das duracoes. Todo
+ * servico do atendimento vem na lista, uma vez. Crescer passa pela mesma
+ * validacao de disponibilidade da remarcacao (com o encaixe humano como
+ * saida); encurtar nunca ocupa tempo novo e nao e revalidado.
+ */
+export interface ChangeAppointmentDurationInput extends OverlapOverrideInput {
+  source?: "AI" | "USER";
+  appointmentId: string;
+  services: ServiceDurationOverride[];
   idempotencyKey: string;
 }
 
@@ -313,6 +343,10 @@ export interface CalendarProvider {
   ): Promise<CalendarAppointment>;
   cancelAppointment(
     input: CancelCalendarAppointmentInput,
+    commit?: CalendarMutationCommit<CalendarAppointment>,
+  ): Promise<CalendarAppointment>;
+  changeAppointmentDuration(
+    input: ChangeAppointmentDurationInput,
     commit?: CalendarMutationCommit<CalendarAppointment>,
   ): Promise<CalendarAppointment>;
   /**

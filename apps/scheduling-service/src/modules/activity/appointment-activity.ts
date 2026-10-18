@@ -28,6 +28,7 @@ const ACTION_BY_EVENT: Partial<Record<AppointmentEventType, string>> = {
   NO_SHOW: "appointment.no_show",
   FINAL_VALUE_SET: "appointment.final_value_set",
   PRESENCE_CONFIRMED: "appointment.presence_confirmed",
+  DURATION_CHANGED: "appointment.duration_changed",
 };
 
 export interface AppointmentActivityEvent {
@@ -125,6 +126,18 @@ function changesFor(event: AppointmentActivityEvent): ActivityChange[] {
           field: "status",
           before: typeof before === "string" ? before : null,
           after: typeof after === "string" ? after : null,
+        },
+      ];
+    }
+    case "DURATION_CHANGED": {
+      // A duracao total do atendimento (D-207): "Duracao: 40 min → 1 h".
+      const before = field(event.before, "durationMinutes");
+      const after = field(event.after, "durationMinutes");
+      return [
+        {
+          field: "durationMinutes",
+          before: typeof before === "number" ? before : null,
+          after: typeof after === "number" ? after : null,
         },
       ];
     }

@@ -24,6 +24,7 @@ import type {
   CalendarMutationEffect,
   CalendarProvider,
   CancelCalendarAppointmentInput,
+  ChangeAppointmentDurationInput,
   CreateCalendarAppointmentInput,
   CreateCalendarHoldInput,
   GetAvailabilityInput,
@@ -54,6 +55,9 @@ const calendarAppointmentSchema: z.ZodType<CalendarAppointment> = z.object({
       serviceId: z.string(),
       name: z.string(),
       durationMinutes: z.number().nullable(),
+      // D-207. Default nulo: resultado idempotente gravado antes continua
+      // decodavel no replay.
+      defaultDurationMinutes: z.number().nullable().default(null),
       priceType: z
         .enum(["FIXED", "STARTING_AT", "ON_REQUEST", "NOT_INFORMED"])
         .default("FIXED"),
@@ -335,6 +339,22 @@ export class CalendarService {
       "CANCEL_APPOINTMENT",
       input,
       (provider, commit) => provider.cancelAppointment(input, commit),
+    );
+  }
+
+  /**
+   * Ajuste da duracao de um atendimento ja marcado (D-207). Pode ocupar tempo
+   * novo, entao passa pela mesma idempotencia da remarcacao.
+   */
+  async changeAppointmentDuration(
+    context: CalendarRequestContext,
+    input: ChangeAppointmentDurationInput,
+  ) {
+    return this.mutateAppointment(
+      context,
+      "CHANGE_APPOINTMENT_DURATION",
+      input,
+      (provider, commit) => provider.changeAppointmentDuration(input, commit),
     );
   }
 

@@ -185,6 +185,8 @@ Data e horário ficam num quadro só (Seletores-de-Data-e-Hora.dc.html, "No form
 
 Serviços mostra os 5 mais usados — os que aparecem em mais atendimentos não cancelados dos últimos 90 dias; no empate, ou sem atendimentos, a ordem do catálogo —, mais "Ver outros serviços" (folha com os demais e busca por nome) e "Outro, sem cadastro".
 
+Com serviço escolhido, "Ajustar duração" (D-207) abre "Duração neste atendimento": uma linha por serviço com − valor + em passos de 5 minutos (5 min a 12 h), o padrão ao lado quando difere ("padrão 40 min") e "Usar padrão". O total, os horários livres, a reserva, o fim no resumo e a repetição usam a duração ajustada; mudar a duração refaz a escolha do horário. Vale só para este agendamento.
+
 Criar, remarcar e cancelar não mostram a barra da Agenda (Dia/Semana/Mês, setas e "+ Novo"): só a barra do próprio fluxo.
 
 Repetir (D-171): quantos atendimentos (2 a 12) e o intervalo, com o do serviço sugerido. O botão vira "Revisar N agendamentos" e abre a lista de tudo o que será criado, com as datas com conflito ou sem horário em destaque e a opção de pular a data, antes de "Confirmar N agendamentos". Não existe mais tela separada de série de atendimentos.
@@ -199,6 +201,8 @@ Repetir (D-171): quantos atendimentos (2 a 12) e o intervalo, com o do serviço 
 - ações;
 - abrir conversa;
 - histórico de alterações.
+
+Serviço com duração ajustada mostra "Duração ajustada neste agendamento · padrão 40 min" (D-207). Em agendamento confirmado com serviço do catálogo, "Ajustar duração" abre um modal centralizado com o mesmo − valor + por serviço e o horário novo (início – fim). Aumentar sobre outro compromisso ou fora do expediente mostra o mesmo aviso de recusa da criação, com "Motivo do encaixe" e "Encaixar mesmo assim"; salvo, o fim muda no detalhe e na Agenda, o histórico registra "Duração alterada" (40 min → 1 h) e a cliente não é avisada.
 
 ## Conversas
 

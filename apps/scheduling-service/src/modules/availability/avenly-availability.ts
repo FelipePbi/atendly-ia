@@ -20,6 +20,10 @@ import {
   AvenlyServiceService,
   maxServiceBuffer,
 } from "../services/avenly-service-service.js";
+import {
+  applyServiceDurations,
+  totalDuration,
+} from "../services/service-durations.js";
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -52,16 +56,19 @@ export class AvenlyAvailability {
   async getAvailableSlots(
     input: GetAvailabilityInput,
   ): Promise<AvailableSlot[]> {
-    const services = await new AvenlyServiceService(
-      this.database,
-      this.tenantId,
-    ).requireActive(input.serviceIds);
+    // Consulta, nao escrita: a duracao ajustada (D-207) so muda o tamanho do
+    // intervalo procurado, entao nao ha origem a conferir aqui — quem grava
+    // (hold e confirmacao) e que recusa o ajuste vindo da IA.
+    const services = applyServiceDurations(
+      await new AvenlyServiceService(this.database, this.tenantId).requireActive(
+        input.serviceIds,
+      ),
+      input.serviceDurations,
+      "USER",
+    );
     return this.findSlots({
       ...input,
-      durationMinutes: services.reduce(
-        (total, service) => total + service.durationMinutes,
-        0,
-      ),
+      durationMinutes: totalDuration(services),
       bufferBeforeMinutes: maxServiceBuffer(services, "bufferBeforeMinutes"),
       bufferAfterMinutes: maxServiceBuffer(services, "bufferAfterMinutes"),
     });

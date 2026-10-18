@@ -2,7 +2,13 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
   type Appointment,
@@ -22,6 +28,7 @@ import { Skeleton, StatePanel } from "@/shared/ui/States";
 
 import { appointmentBackHref, appointmentFlowHref } from "./agendaLinks";
 import {
+  forgetAgendaChanges,
   recalledAppointment,
   recalledCalendar,
   recalledCustomerSummary,
@@ -31,6 +38,10 @@ import {
   rememberCustomerSummary,
   rememberServiceColors,
 } from "./agendaMemory";
+import {
+  AppointmentDurationDialog,
+  canAdjustDuration,
+} from "./AppointmentDurationDialog";
 import { AppointmentFlowShell, formatMoney } from "./AppointmentFlowShell";
 import { AppointmentHistory } from "./AppointmentHistory";
 import { AppointmentReminder, useLifecycleMenu } from "./LifecycleActions";
@@ -44,6 +55,7 @@ import {
   serviceColorMap,
   statusLabel,
 } from "./occupancy";
+import { defaultDurationNote } from "./ServiceDurationStepper";
 
 /** Os eixos do ciclo do atendimento gravados por uma ação do "•••". */
 export function withLifecycle(
@@ -94,6 +106,8 @@ export function useAppointmentDetail(
   options: {
     calendar?: CalendarState | null;
     onLifecycle?: (lifecycle: AppointmentLifecycle) => void;
+    /** O atendimento inteiro mudou no lugar (duração ajustada, D-207). */
+    onAppointment?: (appointment: Appointment) => void;
     /** A rota: o calendário que a Agenda já leu nesta aba vale antes da leitura. */
     remembered?: boolean;
     /**
@@ -277,7 +291,25 @@ export function useAppointmentDetail(
     onUpdated: applyLifecycle,
   });
 
+  /**
+   * O atendimento salvo por uma ação do detalhe (a duração, D-207): entra no
+   * lugar, o histórico relê, e o que a Agenda lembrava deixa de valer — o
+   * bloco na grade precisa do fim novo.
+   */
+  function applyAppointment(updated: Appointment) {
+    forgetAgendaChanges();
+    rememberAppointment(updated);
+    setLoaded((state) =>
+      state?.id === updated.id
+        ? { ...state, appointment: updated, fresh: true }
+        : state,
+    );
+    setHistoryReload((value) => value + 1);
+    options.onAppointment?.(updated);
+  }
+
   return {
+    applyAppointment,
     appointment,
     calendar,
     error,
@@ -357,7 +389,9 @@ export function AppointmentDetailBody({
   returnTo?: string;
 }) {
   const {
+    applyAppointment,
     appointment,
+    calendar,
     error,
     historyReload,
     lifecycle,
@@ -366,6 +400,8 @@ export function AppointmentDetailBody({
     serviceColors,
     writable,
   } = detail;
+  const [durationOpen, setDurationOpen] = useState(false);
+  const closeDuration = useCallback(() => setDurationOpen(false), []);
   // O corpo que chega depois do esqueleto entra com um fade curto; o que já
   // veio preenchido (D-167) e as revalidações trocam sem animação.
   const [afterSkeleton, setAfterSkeleton] = useState(loading);
@@ -399,8 +435,25 @@ export function AppointmentDetailBody({
             />
             <AppointmentServices
               appointment={appointment}
+              onAdjustDuration={
+                writable && lifecycleAvailable && canAdjustDuration(appointment)
+                  ? () => setDurationOpen(true)
+                  : undefined
+              }
               serviceColors={serviceColors}
             />
+            {durationOpen && (
+              <AppointmentDurationDialog
+                appointment={appointment}
+                onClose={closeDuration}
+                onSaved={(updated) => {
+                  setDurationOpen(false);
+                  applyAppointment(updated);
+                }}
+                serviceColors={serviceColors}
+                timezone={calendar?.timezone}
+              />
+            )}
           </div>
           <div className="agenda-appt-side">
             {lifecycleAvailable && (
@@ -634,9 +687,12 @@ function AppointmentCustomer({ appointment }: { appointment: Appointment }) {
 
 function AppointmentServices({
   appointment,
+  onAdjustDuration,
   serviceColors,
 }: {
   appointment: Appointment;
+  /** "Ajustar duração" (D-207); ausente quando o atendimento não permite. */
+  onAdjustDuration?: () => void;
   serviceColors: ServiceColorMap;
 }) {
   const colors = appointmentServiceColors(appointment, serviceColors);
@@ -657,36 +713,63 @@ function AppointmentServices({
           </span>
         </div>
       ) : (
-        appointment.services.map((service, index) => (
-          <div
-            className="agenda-appt-service"
-            key={`${service.serviceId}-${index}`}
-          >
-            <span className="agenda-appt-service-name">
-              <span
-                aria-hidden="true"
-                className="agenda-appt-service-dot"
-                {...swatchProps(colors[index])}
-              />
-              {service.name}
-            </span>
-            <span className="agenda-appt-service-meta">
-              {[
-                service.durationMinutes
-                  ? formatDuration(service.durationMinutes)
-                  : "",
-                servicePriceLabel(service),
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </span>
-          </div>
-        ))
+        appointment.services.map((service, index) => {
+          // "1 h · padrão 40 min": a duração deste atendimento difere da do
+          // catálogo quando o serviço entrou nele (D-207).
+          const defaultNote = defaultDurationNote(
+            service.durationMinutes,
+            service.defaultDurationMinutes,
+          );
+          return (
+            <div
+              className={clsx(
+                "agenda-appt-service",
+                defaultNote && "is-adjusted",
+              )}
+              key={`${service.serviceId}-${index}`}
+            >
+              <span className="agenda-appt-service-name">
+                <span
+                  aria-hidden="true"
+                  className="agenda-appt-service-dot"
+                  {...swatchProps(colors[index])}
+                />
+                {service.name}
+              </span>
+              <span className="agenda-appt-service-meta">
+                {[
+                  service.durationMinutes
+                    ? formatDuration(service.durationMinutes)
+                    : "",
+                  servicePriceLabel(service),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+              {defaultNote && (
+                <span className="agenda-appt-service-adjusted">
+                  Duração ajustada neste agendamento · {defaultNote}
+                </span>
+              )}
+            </div>
+          );
+        })
       )}
       <div className="agenda-appt-total">
         <span>Total</span>
         <strong>{total}</strong>
       </div>
+      {onAdjustDuration && (
+        <button
+          aria-haspopup="dialog"
+          className="agenda-new-note-button agenda-appt-adjust"
+          onClick={onAdjustDuration}
+          type="button"
+        >
+          <Icon name="clock" />
+          Ajustar duração
+        </button>
+      )}
       {appointment.finalValue !== null && (
         <div className="agenda-appt-total">
           <span>Valor final</span>

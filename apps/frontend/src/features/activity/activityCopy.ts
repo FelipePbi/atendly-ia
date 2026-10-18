@@ -634,6 +634,9 @@ export function activitySentence(entry: ActivityEntry): string {
       return `${who} marcou ${person}${at}${services ? ` · ${services}` : ""}`;
     case "appointment.rescheduled":
       return `${who} remarcou ${person}${rescheduleSpan(entry)}`;
+    case "appointment.duration_changed":
+      // O antes → depois da duração fica na linha embaixo (D-207).
+      return `${who} mudou a duração do atendimento de ${person}${on}`;
     case "appointment.cancelled":
       return `${who} cancelou o horário de ${person}${on}`;
     case "appointment.completed":

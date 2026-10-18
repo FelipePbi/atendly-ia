@@ -36,10 +36,35 @@ const availabilityQuerySchema = z.object({
     parseServiceIds,
     z.array(z.string().trim().min(1).max(128)).min(1).max(10),
   ),
+  // `servico:minutos,servico:minutos` (D-207): a duracao ajustada de algum
+  // servico do conjunto muda o tamanho do intervalo procurado.
+  serviceDurations: z.preprocess(
+    parseServiceDurations,
+    z.array(serviceDurationSchemaForQuery()).max(10).optional(),
+  ),
   startDate: dateSchema,
   days: z.coerce.number().int().min(1).max(60).default(14),
   maxSlots: z.coerce.number().int().min(1).max(100).default(20),
 });
+
+function serviceDurationSchemaForQuery() {
+  return z.object({
+    serviceId: z.string().trim().min(1).max(128),
+    durationMinutes: z.number().int().min(1).max(1_440),
+  });
+}
+
+function parseServiceDurations(value: unknown): unknown {
+  if (value === undefined || value === "") return undefined;
+  if (typeof value !== "string") return value;
+  return value.split(",").map((pair) => {
+    const [serviceId, minutes] = pair.split(":");
+    return {
+      serviceId: serviceId ?? "",
+      durationMinutes: Number(minutes),
+    };
+  });
+}
 
 function parseServiceIds(value: unknown): string[] {
   if (typeof value === "string" || typeof value === "number") {
@@ -62,6 +87,18 @@ const overlapOverrideShape = {
   overlapOverride: z.boolean().optional(),
   overlapOverrideReason: z.string().trim().min(1).max(500).optional(),
 };
+/**
+ * Duracao ajustada por servico (D-207). A rota so transporta: quem recusa o
+ * ajuste vindo da IA, o servico fora do conjunto e a duracao invalida e o
+ * provider, num lugar so.
+ */
+const serviceDurationSchema = z.object({
+  serviceId: z.string().trim().min(1).max(128),
+  durationMinutes: z.number().int().min(1).max(1_440),
+});
+const serviceDurationsShape = {
+  serviceDurations: z.array(serviceDurationSchema).max(10).optional(),
+};
 
 const createAppointmentBodySchema = z
   .object({
@@ -74,6 +111,7 @@ const createAppointmentBodySchema = z
     title: z.string().trim().min(1).max(200).optional(),
     /** Duração do atendimento manual excepcional. */
     durationMinutes: z.number().int().min(1).max(1_440).optional(),
+    ...serviceDurationsShape,
     date: dateSchema,
     startTime: timeSchema,
     // Ou a pessoa já foi resolvida (`customerId`), ou o cadastro nasce na
@@ -111,6 +149,11 @@ const rescheduleBodySchema = z.object({
   ...overlapOverrideShape,
   ...notifyCustomerShape,
 });
+const durationBodySchema = z.object({
+  source: z.enum(["AI", "USER"]).optional(),
+  services: z.array(serviceDurationSchema).min(1).max(10),
+  ...overlapOverrideShape,
+});
 const cancelBodySchema = z.object({
   source: z.enum(["AI", "USER"]).optional(),
   comments: z.string().trim().max(2_000).optional(),
@@ -123,6 +166,7 @@ const cancelBodySchema = z.object({
 const createHoldBodySchema = z.object({
   source: z.enum(["AI", "USER"]).optional(),
   serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
+  ...serviceDurationsShape,
   date: dateSchema,
   startTime: timeSchema,
   stepMinutes: z.number().int().min(1).max(180).default(30),
@@ -134,6 +178,7 @@ const createHoldBodySchema = z.object({
 // --- Serie de atendimento (Goal009) ---------------------------------------
 const seriesPreviewBodySchema = z.object({
   serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
+  ...serviceDurationsShape,
   occurrenceCount: z.number().int().min(1).max(365),
   intervalDays: z.number().int().positive().max(3_650).optional(),
   firstDate: dateSchema,
@@ -232,6 +277,25 @@ export async function registerCalendarRoutes(
       const body = parse(rescheduleBodySchema, request.body);
       return {
         data: await calendarService().rescheduleAppointment(context, {
+          appointmentId: params.id,
+          ...body,
+          source: callerSource(context.caller),
+          idempotencyKey: idempotencyKey(request),
+        }),
+        requestId: request.id,
+      };
+    },
+  );
+
+  app.post(
+    "/internal/appointments/:id/duration",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      const params = parse(idParamsSchema, request.params);
+      const body = parse(durationBodySchema, request.body);
+      return {
+        data: await calendarService().changeAppointmentDuration(context, {
           appointmentId: params.id,
           ...body,
           source: callerSource(context.caller),

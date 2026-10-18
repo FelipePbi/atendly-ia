@@ -504,6 +504,14 @@ export function AgendaBoard({
     );
   }
 
+  /** O atendimento inteiro mudou no painel (duração ajustada, D-207): o
+   *  bloco da grade ganha o fim novo sem recarregar a janela. */
+  function appointmentReplaced(updated: Appointment) {
+    setAppointments((current) =>
+      current.map((item) => (item.id === updated.id ? updated : item)),
+    );
+  }
+
   /**
    * O Dia e a Semana compartilham a mesma janela lida (a semana inteira,
    * para a faixa ter pontos). Navegar dentro dela não precisa recarregar —
@@ -850,6 +858,7 @@ export function AgendaBoard({
                           hasAvailability === false &&
                           entriesForDate(entries, isoDate(cursor)).length === 0
                         }
+                        onReplaced={appointmentReplaced}
                         onUpdated={appointmentUpdated}
                         returnTo={agendaDayHref(isoDate(cursor))}
                       />
@@ -946,6 +955,7 @@ function DayDetailPanel({
   appointmentId,
   calendar,
   closedDay,
+  onReplaced,
   onUpdated,
   returnTo,
   seed,
@@ -961,6 +971,7 @@ function DayDetailPanel({
   returnTo: string;
   /** Dia vazio em que o negócio não atende (quadro A2): não há o que selecionar. */
   closedDay: boolean;
+  onReplaced: (appointment: Appointment) => void;
   onUpdated: (appointmentId: string, lifecycle: AppointmentLifecycle) => void;
 }) {
   if (!appointmentId) {
@@ -987,6 +998,7 @@ function DayDetailPanel({
       <DayAppointmentDetail
         appointmentId={appointmentId}
         calendar={calendar}
+        onReplaced={onReplaced}
         onUpdated={(lifecycle) => onUpdated(appointmentId, lifecycle)}
         seed={seed}
         returnTo={returnTo}
@@ -999,6 +1011,7 @@ function DayDetailPanel({
 function DayAppointmentDetail({
   appointmentId,
   calendar,
+  onReplaced,
   onUpdated,
   returnTo,
   seed,
@@ -1006,6 +1019,7 @@ function DayAppointmentDetail({
 }: {
   appointmentId: string;
   calendar: CalendarState;
+  onReplaced: (appointment: Appointment) => void;
   onUpdated: (lifecycle: AppointmentLifecycle) => void;
   returnTo: string;
   seed: Appointment | null;
@@ -1017,6 +1031,7 @@ function DayAppointmentDetail({
     calendar,
     seed,
     serviceColors,
+    onAppointment: onReplaced,
     onLifecycle: onUpdated,
   });
   return (

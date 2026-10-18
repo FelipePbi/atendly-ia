@@ -155,6 +155,16 @@ Exemplo:
 
 A duração operacional é a soma das durações dos serviços. Não há entidade de combo comercial no MVP.
 
+## Duração ajustada por atendimento
+
+A duração de cada serviço vem do catálogo, mas o profissional pode ajustá-la para um atendimento específico — por exemplo, um serviço de 40 min que leva 60 para uma cliente em caso especial (D-207). O ajuste vale só para aquele atendimento; o catálogo não muda.
+
+- Na criação manual, cada serviço escolhido mostra a duração padrão e pode ser ajustado de 5 em 5 minutos; os horários livres, a reserva e o fim do atendimento usam a duração ajustada.
+- Depois de marcado, o profissional pode ajustar a duração no detalhe do agendamento. O início fica e o fim muda. Aumentar passa pela mesma validação da remarcação, com a sobreposição manual como saída; diminuir não precisa de validação.
+- O agendamento mostra a duração ajustada com o padrão ao lado (ex.: "1 h · padrão 40 min"), e a Agenda desenha o tamanho real.
+- O cliente não é avisado por um ajuste de duração: o dia e a hora de início não mudam, e o lembrete continua o mesmo.
+- A IA marca sempre com a duração padrão do catálogo; ela não ajusta duração.
+
 ## Buffer
 
 Serviços podem possuir intervalos de preparação/recuperação antes e depois. Em um atendimento com vários serviços, os buffers intermediários não devem ser somados entre cada serviço; aplica-se o comportamento externo definido para o atendimento.

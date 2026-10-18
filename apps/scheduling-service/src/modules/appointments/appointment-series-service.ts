@@ -35,6 +35,11 @@ import {
 } from "../integrations/avenly/provider.js";
 import { recomputeAppointmentIntentsWithin } from "../reminders/notification-intent-service.js";
 import { AvenlyServiceService } from "../services/avenly-service-service.js";
+import {
+  applyServiceDurations,
+  type ServiceDurationOverride,
+  toServiceDurations,
+} from "../services/service-durations.js";
 import { recordAppointmentEvent } from "./appointment-event-service.js";
 
 /**
@@ -59,6 +64,8 @@ export interface SeriesOccurrencePreview {
 
 export interface PreviewSeriesInput {
   serviceIds: string[];
+  /** Duracao ajustada por servico (D-207); vale para toda ocorrencia. */
+  serviceDurations?: ServiceDurationOverride[];
   occurrenceCount: number;
   intervalDays?: number;
   firstDate: string;
@@ -107,6 +114,9 @@ export class AvenlyAppointmentSeriesService {
       this.prisma,
       this.tenantId,
     ).requireActive(input.serviceIds);
+    // Valida o ajuste uma vez, antes de procurar qualquer ocorrencia: a IA
+    // nao ajusta duracao, e servico fora do conjunto e recusado aqui (D-207).
+    applyServiceDurations(services, input.serviceDurations, input.source);
     const intervalDays = this.resolveIntervalDays(input, services);
     const windowDays = env.APPOINTMENT_SERIES_ADJUST_WINDOW_DAYS;
     const holds = new AvenlyAppointmentHoldService(
@@ -120,6 +130,7 @@ export class AvenlyAppointmentSeriesService {
       const requestedDate = addDays(input.firstDate, index * intervalDays);
       const found = await this.findNearestSlot({
         serviceIds: input.serviceIds,
+        serviceDurations: input.serviceDurations,
         requestedDate,
         requestedTime: input.firstStartTime,
         windowDays,
@@ -140,6 +151,7 @@ export class AvenlyAppointmentSeriesService {
       const hold = await holds.createHold({
         source: input.source,
         serviceIds: input.serviceIds,
+        serviceDurations: input.serviceDurations,
         date: found.date,
         startTime: found.startTime,
         customerId: input.customerId,
@@ -271,10 +283,17 @@ export class AvenlyAppointmentSeriesService {
                 false,
               );
             }
-            const services = await new AvenlyServiceService(
-              transaction,
-              this.tenantId,
-            ).requireActive(toServiceIds(hold.proposedServiceIds));
+            // A duracao de cada item sai do hold (D-207): o ajuste feito na
+            // revisao vale para todas as ocorrencias, e o intervalo do hold ja
+            // foi medido com ele.
+            const services = applyServiceDurations(
+              await new AvenlyServiceService(
+                transaction,
+                this.tenantId,
+              ).requireActive(toServiceIds(hold.proposedServiceIds)),
+              toServiceDurations(hold.proposedServiceDurations),
+              "USER",
+            );
             const slot = await new AvenlyAvailability(
               transaction,
               this.tenantId,
@@ -312,6 +331,8 @@ export class AvenlyAppointmentSeriesService {
                   create: services.map((service) => ({
                     serviceNameSnapshot: service.name,
                     durationMinutesSnapshot: service.durationMinutes,
+                    defaultDurationMinutesSnapshot:
+                      service.defaultDurationMinutes,
                     priceTypeSnapshot: service.priceType,
                     priceSnapshot: service.price,
                     service: {
@@ -456,6 +477,7 @@ export class AvenlyAppointmentSeriesService {
         this.timeZone,
       ).getAvailableSlots({
         serviceIds: input.serviceIds,
+        serviceDurations: toServiceDurations(hold.proposedServiceDurations),
         startDate: date,
         days: 1,
         maxSlots: 3,
@@ -498,6 +520,7 @@ export class AvenlyAppointmentSeriesService {
    */
   private async findNearestSlot(input: {
     serviceIds: string[];
+    serviceDurations?: ServiceDurationOverride[];
     requestedDate: string;
     requestedTime: string;
     windowDays: number;
@@ -511,6 +534,7 @@ export class AvenlyAppointmentSeriesService {
       const date = addDays(input.requestedDate, offset);
       const slots = await availability.getAvailableSlots({
         serviceIds: input.serviceIds,
+        serviceDurations: input.serviceDurations,
         startDate: date,
         days: 1,
         maxSlots: 500,
@@ -520,6 +544,7 @@ export class AvenlyAppointmentSeriesService {
     }
     const sameDaySlots = await availability.getAvailableSlots({
       serviceIds: input.serviceIds,
+      serviceDurations: input.serviceDurations,
       startDate: input.requestedDate,
       days: 1,
       maxSlots: 500,

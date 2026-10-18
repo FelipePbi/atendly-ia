@@ -647,6 +647,9 @@ describe("remarcar", () => {
     expect(createHold.mock.calls[0][0]).toEqual({
       customerId: "cus-ana",
       date: ISO_TODAY,
+      // A remarcação reserva o tamanho combinado do atendimento, não o do
+      // catálogo (D-207).
+      serviceDurations: [{ durationMinutes: 60, serviceId: "svc-corte" }],
       serviceIds: ["svc-corte"],
       startTime: "10:00",
     });

@@ -921,3 +921,43 @@ model ActivityLog {
 
   @@index([tenantId, occurredAt(sort: Desc), sequence(sort: Desc)])
 }
+
+/// Convite de retorno enviado a uma cliente (D-202).
+///
+/// O Scheduling e o dono da rodada; aqui fica so o que a conversa precisa
+/// saber quando a cliente responde: a rotina (`RENEWAL` ou `WINBACK`), o
+/// servico, a data esperada de volta, o incentivo prometido e os horarios
+/// oferecidos. Referencias ao Scheduling (alvo, rodada, cliente) sao por id e
+/// tenant, sem FK entre bancos.
+model ReturnInvitation {
+  id             String    @id @default(cuid())
+  tenantId       String
+  channelId      String
+  conversationId String
+  targetId       String
+  campaignId     String
+  customerId     String
+  /// `RENEWAL` ou `WINBACK`.
+  kind           String
+  serviceName    String?
+  /// Data esperada de volta, local (`YYYY-MM-DD`); nula no Resgate.
+  expectedDate   String?
+  incentive      String?
+  /// `[{ date, time }]` locais oferecidos na mensagem.
+  offeredSlots   Json?
+  /// Horarios de costume da cliente no envio (`{ weekdays, bandStart, bandEnd }`).
+  habit          Json?
+  sentAt         DateTime
+  followUpSentAt DateTime?
+  /// Primeira mensagem da cliente depois do envio.
+  repliedAt      DateTime?
+  /// `DECLINED` ou `STOPPED`, registrado pela IA na conversa.
+  answer         String?
+  answeredAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  @@unique([tenantId, targetId])
+  @@index([tenantId, conversationId, sentAt])
+  @@index([repliedAt, sentAt])
+}

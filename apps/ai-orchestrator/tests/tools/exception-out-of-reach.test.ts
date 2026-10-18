@@ -148,6 +148,7 @@ const VALID_ARGS: Record<string, Record<string, unknown>> = {
   },
   cancel_appointment: { action: "prepare", appointmentId: appointment.id },
   confirm_appointment_presence: { appointmentId: appointment.id },
+  answer_return_invitation: { answer: "DECLINED" },
   request_human_handoff: { reason: "cliente pediu um encaixe" },
 };
 

@@ -57,6 +57,7 @@ const ACCESSOR = {
   ChannelConnection: "channelConnection",
   AiTenantConfig: "aiTenantConfig",
   ActivityLog: "activityLog",
+  ReturnInvitation: "returnInvitation",
 } as const satisfies Record<(typeof TENANT_PURGE_TABLES)[number], string>;
 
 describe.skipIf(!databaseUrl)("tenant purge against PostgreSQL", () => {

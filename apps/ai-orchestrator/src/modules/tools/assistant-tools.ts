@@ -368,6 +368,9 @@ const rescheduleAppointmentSchema = z
 const confirmPresenceSchema = z
   .object({ appointmentId: z.string().min(1) })
   .strict();
+const answerReturnInvitationSchema = z
+  .object({ answer: z.enum(["DECLINED", "STOPPED"]) })
+  .strict();
 const handoffSchema = z
   .object({
     reason: z.string().min(3),
@@ -731,6 +734,16 @@ export class AssistantToolRegistry {
           description:
             "Registra que a cliente confirmou presenca em resposta ao lembrete. Use somente quando a resposta for um sim claro para a pergunta de confirmacao do lembrete. Resposta negativa, duvidosa ou ambigua nunca chama esta tool: pergunte o que a cliente prefere. Confirmar presenca nao confirma, nao conclui, nao cancela e nao remarca nada.",
           schema: confirmPresenceSchema,
+        },
+      ),
+      tool(
+        (args) =>
+          this.run(context, () => this.answerReturnInvitation(args, context)),
+        {
+          name: "answer_return_invitation",
+          description:
+            "Registra a resposta da cliente a um convite de retorno enviado nesta conversa. answer=DECLINED quando ela recusa (nao quero, agora nao, parei de fazer): ela fica 90 dias sem convite. answer=STOPPED quando ela pede para nao receber mais mensagens (pare, nao me mande mais): nao recebe mais convites ate a profissional liberar. Nunca use para quem quer marcar ou so pediu outro horario.",
+          schema: answerReturnInvitationSchema,
         },
       ),
       tool(
@@ -1659,6 +1672,52 @@ export class AssistantToolRegistry {
       completedAt: confirmation.completedAt,
       noShowAt: confirmation.noShowAt,
       appointment: this.presentAppointment(appointment),
+    };
+  }
+
+  /**
+   * Recusa ou pedido para parar (D-202). O convite e o desta conversa — a
+   * tool nao recebe cliente nem rodada do modelo — e o bloqueio e decidido no
+   * dono da agenda. Repetir a mesma resposta nao muda nada.
+   */
+  private async answerReturnInvitation(
+    args: z.infer<typeof answerReturnInvitationSchema>,
+    context: ToolExecutionContext,
+  ) {
+    const invitation = await this.prisma.returnInvitation.findFirst({
+      where: {
+        tenantId: context.tenantId,
+        conversationId: context.conversationId,
+        sentAt: { gte: new Date(this.now().getTime() - 21 * 86_400_000) },
+      },
+      orderBy: { sentAt: "desc" },
+    });
+    if (!invitation || !this.scheduling.reportReturnAnswer) {
+      return {
+        ok: false,
+        code: "RETURN_INVITATION_NOT_FOUND",
+        error:
+          "Nao ha convite de retorno recente nesta conversa. Siga a conversa normalmente, sem registrar nada.",
+      };
+    }
+    if (invitation.answer === "STOPPED" || invitation.answer === args.answer) {
+      return { recorded: true, answer: invitation.answer };
+    }
+    const status = await this.scheduling.reportReturnAnswer(
+      context.tenantId,
+      invitation.targetId,
+      args.answer,
+      schedulingContext(context),
+    );
+    await this.prisma.returnInvitation.update({
+      where: { id: invitation.id },
+      data: { answer: args.answer, answeredAt: this.now() },
+    });
+    return {
+      recorded: true,
+      answer: args.answer,
+      permanent: status.permanent,
+      blockedUntil: status.blockedUntil,
     };
   }
 

@@ -14,6 +14,11 @@ import {
 } from "../tenant-config/business-context.js";
 import { buildAudioPrompt } from "./audio.js";
 import { buildCustomerMemoryPrompt } from "./customer-memory.js";
+import {
+  buildReturnInvitationPrompt,
+  type ReturnInvitationPromptItem,
+  STABLE_RETURN_INVITATION_SAMPLE,
+} from "./customer-return.js";
 import { buildHandoffPrompt } from "./handoff.js";
 import { buildKnowledgePrompt } from "./knowledge.js";
 import { buildPresencePrompt } from "./presence.js";
@@ -56,6 +61,11 @@ export interface BuildSystemPromptInput {
    * a secao.
    */
   serviceInstructions?: ServiceInstructionPromptItem[];
+  /**
+   * Convite de retorno enviado a esta cliente (D-202), quando ha um recente
+   * e sem resposta de recusa. Ausente, o prompt nao ganha a secao.
+   */
+  returnInvitation?: ReturnInvitationPromptItem | null;
   /** Ausente equivale a `"assistant"`, o turno de conversa de sempre. */
   mode?: SystemPromptMode;
 }
@@ -150,8 +160,13 @@ const MAIN_RULES = [
  * entao a saudacao chega como a primeira mensagem. Na mesma rodada, a secao
  * de agenda ganhou: perguntar qual horario quando a cliente nao escolheu
  * entre varios, e nunca dizer reservado/agendado antes de action=confirm.
+ *
+ * v12 (D-202): o template ganhou a secao do convite de retorno, entregue so
+ * na conversa com convite recente: rotina, servico, data esperada, horarios
+ * oferecidos, horarios de costume, o incentivo prometido (nenhum outro) e o
+ * registro de recusa ou pedido para parar por `answer_return_invitation`.
  */
-const PROMPT_TEMPLATE_VERSION = "v11";
+const PROMPT_TEMPLATE_VERSION = "v12";
 
 /**
  * Amostra fixa, nunca usada no prompt real: existe so para que o hash em
@@ -242,6 +257,7 @@ function buildStablePromptContent(style: AiConversationStyle): string {
     ...buildServiceInstructionsPrompt([STABLE_SERVICE_INSTRUCTION_SAMPLE]),
     ...buildCustomerMemoryPrompt([]),
     ...buildCustomerMemoryPrompt(STABLE_CUSTOMER_MEMORY_SAMPLE),
+    ...buildReturnInvitationPrompt(STABLE_RETURN_INVITATION_SAMPLE),
     buildAiTonePromptSection({ aiEnabled: true, tone: style }),
     ...buildHandoffPrompt(),
     ...buildResponsePrompt(),
@@ -403,6 +419,7 @@ export function buildSystemPrompt(input: unknown): BuiltSystemPrompt {
     "",
     ...buildCustomerMemoryPrompt(args.customerMemory ?? []),
     "",
+    ...withBlankLine(buildReturnInvitationPrompt(args.returnInvitation ?? null)),
     buildAiTonePromptSection(aiSettings),
     "",
     ...buildHandoffPrompt(),
@@ -422,6 +439,11 @@ export function buildSystemPrompt(input: unknown): BuiltSystemPrompt {
   return { text, version };
 }
 
+/** Secao opcional: sem conteudo, nem a linha em branco entra. */
+function withBlankLine(lines: string[]): string[] {
+  return lines.length > 0 ? [...lines, ""] : [];
+}
+
 function isPromptInput(value: unknown): value is BuildSystemPromptInput {
   return (
     typeof value === "object" &&
@@ -434,6 +456,7 @@ function isPromptInput(value: unknown): value is BuildSystemPromptInput {
       "retrievedKnowledge" in value ||
       "customerMemory" in value ||
       "serviceInstructions" in value ||
+      "returnInvitation" in value ||
       "mode" in value)
   );
 }

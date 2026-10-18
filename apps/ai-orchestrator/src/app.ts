@@ -9,6 +9,8 @@ import { AppError, toErrorMessage } from "./lib/errors.js";
 import { redactSensitive } from "./lib/redact.js";
 import { ChannelConnectionService } from "./modules/channel/ChannelConnectionService.js";
 import { registerEvolutionWebhookRoutes } from "./modules/channel/routes/evolutionWebhook.routes.js";
+import { ReturnDeliveryService } from "./modules/customer-return/ReturnDeliveryService.js";
+import { ReturnDeliveryWorker } from "./modules/customer-return/ReturnDeliveryWorker.js";
 import { createPostgresGraphCheckpointer } from "./modules/graph/checkpointer.js";
 import { InboundEventDispatcher } from "./modules/inbox/InboundEventDispatcher.js";
 import {
@@ -114,6 +116,25 @@ export async function buildApp() {
     app.log,
   );
 
+  // Retorno de clientes (D-202): terceiro loop, mesmo desenho. O dono da
+  // agenda decide quem e quando; aqui so se entrega e liquida.
+  const customerReturn = new ReturnDeliveryWorker(
+    prisma,
+    scheduling,
+    new ReturnDeliveryService({
+      prisma,
+      settlement: scheduling,
+      sessions: new SessionService(prisma),
+      logger: app.log,
+    }),
+    {
+      pollIntervalMs: env.RETURN_DELIVERY_POLL_INTERVAL_MS,
+      leaseTtlSeconds: env.RETURN_DELIVERY_LEASE_SECONDS,
+      tenantLimit: env.RETURN_DELIVERY_TENANT_LIMIT,
+    },
+    app.log,
+  );
+
   await registerEvolutionWebhookRoutes(app, prisma, {
     inbox,
     onEventStored: () => worker.nudge(),
@@ -122,6 +143,7 @@ export async function buildApp() {
 
   if (env.INBOX_WORKER_ENABLED) worker.start();
   if (env.NOTIFICATION_DELIVERY_ENABLED) notifications.start();
+  if (env.RETURN_DELIVERY_ENABLED) customerReturn.start();
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {
@@ -145,6 +167,7 @@ export async function buildApp() {
   app.addHook("onClose", async () => {
     await worker.stop();
     await notifications.stop();
+    await customerReturn.stop();
     await graphCheckpointer.end();
     await prisma.$disconnect();
   });

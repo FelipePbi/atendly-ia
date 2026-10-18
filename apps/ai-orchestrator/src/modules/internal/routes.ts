@@ -55,6 +55,7 @@ import {
   markConversationRead,
   unreadSummary,
 } from "../conversations/unread.js";
+import { returnContactExclusions } from "../customer-return/return-eligibility.js";
 import {
   type ConversationAwaitingHuman,
   listConversationsAwaitingHuman,
@@ -232,6 +233,10 @@ const ignoreContactByPhoneSchema = z.object({
 });
 
 // Goal139: leitura dos contatos ignorados do canal ativo.
+// Retorno de clientes (D-202): telefones da lista pre-selecionada.
+const returnEligibilityBodySchema = z.object({
+  phones: z.array(z.string().trim().min(1).max(40)).max(1_000),
+});
 const ignoredContactsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(100),
   offset: z.coerce.number().int().min(0).default(0),
@@ -1334,6 +1339,17 @@ export async function registerInternalRoutes(
       total,
       limit: query.limit,
       offset: query.offset,
+    });
+  });
+
+  // Quem a lista do retorno deixa de fora pelo lado da IA (D-202): contato
+  // ignorado e conversa pessoal. Leitura de conversas, mesmo escopo da lista
+  // de ignorados acima.
+  app.post("/internal/contacts/return-eligibility", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const body = parseOrThrow(returnEligibilityBodySchema, request.body ?? {});
+    return internalData(request, {
+      excluded: await returnContactExclusions(prisma, tenantId, body.phones),
     });
   });
 
@@ -2451,6 +2467,11 @@ export function requiredScope(request: FastifyRequest): InternalScope {
   // conversa, so que sem conversa aberta ainda: mesmo escopo de escrita.
   if (path === "/internal/contacts/ignore" && method === "PUT") {
     return "conversations:write";
+  }
+  // Quem o retorno deixa de fora (D-202) e leitura de conversas, mesmo
+  // sendo POST: a lista de telefones vai no corpo, nunca na URL.
+  if (path === "/internal/contacts/return-eligibility" && method === "POST") {
+    return "conversations:read";
   }
   // Ler quem a IA nunca responde (Goal139) e leitura de conversas.
   if (path === "/internal/contacts/ignored" && method === "GET") {

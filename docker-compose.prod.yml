@@ -107,9 +107,10 @@ services:
       # Vazia, a IA responde todo contato. Com números (dígitos com DDI,
       # separados por vírgula), só eles recebem resposta.
       AI_REPLY_ONLY_PHONES: ${AI_REPLY_ONLY_PHONES:-}
-      # Caminho de mensagem e de lembrete: explícitos, não default.
+      # Caminho de mensagem, de lembrete e de retorno: explícitos, não default.
       INBOX_WORKER_ENABLED: "true"
       NOTIFICATION_DELIVERY_ENABLED: "true"
+      RETURN_DELIVERY_ENABLED: "true"
     depends_on:
       postgres:
         condition: service_healthy

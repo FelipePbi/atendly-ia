@@ -149,6 +149,13 @@ const envSchema = z.object({
   // Lease pedido ao dono. Folgado em relacao ao envio de texto, para que uma
   // entrega lenta nao seja recuperada por outra varredura no meio do caminho.
   NOTIFICATION_DELIVERY_LEASE_SECONDS: intEnv(120),
+  // Retorno de clientes (D-202): mesmo desenho do loop de lembretes. Varrer a
+  // cada minuto basta: o ritmo da rodada e de minutos entre envios, e a
+  // passada tambem marca as respostas dos convites.
+  RETURN_DELIVERY_ENABLED: boolEnv(true),
+  RETURN_DELIVERY_POLL_INTERVAL_MS: intEnv(60_000),
+  RETURN_DELIVERY_LEASE_SECONDS: intEnv(120),
+  RETURN_DELIVERY_TENANT_LIMIT: intEnv(50),
   // Timeout do envio: sem ele o transporte fica pendurado e o estado da saida
   // nunca sai de PENDING.
   EVOLUTION_SEND_TIMEOUT_MS: intEnv(15000),

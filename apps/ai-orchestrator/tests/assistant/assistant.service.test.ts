@@ -7,6 +7,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { PrismaClient } from "../../src/generated/prisma/client.js";
 import { ACTIVATION_TEST_NOTICE } from "../../src/modules/activation-test/ActivationTestService.js";
+import { composeReturnText } from "../../src/modules/customer-return/return-message.js";
+import type { ReturnFacts } from "../../src/modules/customer-return/return-types.js";
 import {
   AssistantService,
   PRODUCT_OWN_TEXTS,
@@ -1395,9 +1397,11 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
   // (`input.text`) deixaram de chamar `sendText`; os dois agora entregam o
   // texto ao despachante, cujo único sítio é uma parte de
   // `splitAiReplyIntoParts(reply.text)` — texto em trânsito de `reply`.
-  it("descobre os seis sítios de sendText de apps/ai-orchestrator/src, com resíduo zero", () => {
+  // 6 → 7 (D-202): a mensagem de retorno de clientes sai pelo
+  // `ReturnDeliveryService`, composta por `composeReturnText`, como o lembrete.
+  it("descobre os sete sítios de sendText de apps/ai-orchestrator/src, com resíduo zero", () => {
     const sites = discoverSendTextSites(aiOrchestratorSrcPath);
-    expect(sites).toHaveLength(6);
+    expect(sites).toHaveLength(7);
     const counts = {
       port_declaration: sites.filter((s) => s.category === "port_declaration")
         .length,
@@ -1420,14 +1424,14 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
     expect(counts).toEqual({
       port_declaration: 1,
       adapter_implementation: 1,
-      composed_by_named_module: 1,
+      composed_by_named_module: 2,
       assistant_decision_text: 0,
       text_in_transit_named_origin: 2,
       person_typed_text: 1,
     });
   });
 
-  it("classifica cada um dos seis sítios reais na categoria e origem esperadas", () => {
+  it("classifica cada um dos sete sítios reais na categoria e origem esperadas", () => {
     const sites = discoverSendTextSites(aiOrchestratorSrcPath).map((site) => ({
       file: site.filePath.replace(/\\/g, "/").split("/ai-orchestrator/src/")[1],
       line: site.line,
@@ -1469,11 +1473,18 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
           origin: "message",
         },
         {
+          file: "modules/customer-return/ReturnDeliveryService.ts",
+          line: 300,
+          category: "composed_by_composeReturnText",
+          origin: undefined,
+        },
+        {
           file: "modules/internal/routes.ts",
           // Deslocada pelo registro de atividade (D-176) e pela mídia com link
-          // vencido da CDN e pelas rotas do modo sandbox (D-199); a linha é o
-          // número real, não um valor escolhido.
-          line: 975,
+          // vencido da CDN, pelas rotas do modo sandbox (D-199) e pelo schema
+          // da lista do retorno (D-202); a linha é o número real, não um
+          // valor escolhido.
+          line: 980,
           category: "person_typed_text",
           origin: undefined,
         },
@@ -1576,19 +1587,26 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
     );
   });
 
-  it("a categoria que nomeia o compositor liga a sítio real a texto verificado: `NotificationDeliveryService.ts` compõe com composeNotificationText, e o conjunto que ele produz está em VERIFIED_CLIENT_TEXTS", () => {
+  it("a categoria que nomeia o compositor liga a sítio real a texto verificado: `NotificationDeliveryService.ts` compõe com composeNotificationText e `ReturnDeliveryService.ts` com composeReturnText (D-202), e o conjunto que cada um produz está em VERIFIED_CLIENT_TEXTS", () => {
     const sites = discoverSendTextSites(aiOrchestratorSrcPath);
     const composedSites = sites.filter((site) =>
       site.category.startsWith("composed_by_"),
     );
-    expect(composedSites).toHaveLength(1);
-    expect(composedSites[0].category).toBe(
+    expect(composedSites.map((site) => site.category).sort()).toEqual([
       "composed_by_composeNotificationText",
-    );
+      "composed_by_composeReturnText",
+    ]);
     expect(NOTIFICATION_MESSAGE_TEXTS.size).toBeGreaterThan(0);
     for (const text of NOTIFICATION_MESSAGE_TEXTS) {
       expect(VERIFIED_CLIENT_TEXTS).toContain(text);
     }
+    expect(RETURN_MESSAGE_TEXTS.size).toBeGreaterThan(0);
+    for (const text of RETURN_MESSAGE_TEXTS) {
+      expect(VERIFIED_CLIENT_TEXTS).toContain(text);
+    }
+    expect(resolveVerifiedComposers()).toEqual(
+      new Set(["composeNotificationText", "composeReturnText"]),
+    );
   });
 
   it("controle negativo: chamada de identificador solto (`sendText({...})` sem receptor) é sítio classificado, não declaração de porta", () => {
@@ -2184,10 +2202,69 @@ for (const overrides of FACTUAL_LINE_SCENARIOS) {
   }
 }
 
-/** PRODUCT_OWN_TEXTS mais os textos de notification-message.ts (Goal039 / WU-02). */
+/**
+ * Os textos que `customer-return/return-message.ts` produz (D-202), obtidos
+ * executando `composeReturnText` sobre fatos declarados aqui — Renovação com
+ * e sem horário livre, Resgate com e sem incentivo, lembrete único das duas
+ * rotinas, com e sem nome, nos três estilos.
+ */
+function returnFacts(overrides: Partial<ReturnFacts> = {}): ReturnFacts {
+  return {
+    kind: "RENEWAL",
+    followUp: false,
+    customerId: "customer-a",
+    customerName: "Ana Souza",
+    customerPhone: "5511999999999",
+    serviceName: "Corte",
+    timezone: "America/Sao_Paulo",
+    today: "2026-10-19",
+    expectedDate: "2026-10-22",
+    intervalDays: 30,
+    intervalSource: "SERVICE",
+    lastVisitDate: "2026-09-22",
+    daysSinceLastVisit: 27,
+    offeredSlots: [
+      { date: "2026-10-23", time: "17:30" },
+      { date: "2026-10-24", time: "18:00" },
+    ],
+    habit: null,
+    incentive: null,
+    messageTemplate: null,
+    ...overrides,
+  };
+}
+const RETURN_MESSAGE_TEXTS = new Set<string>();
+for (const style of AI_CONVERSATION_STYLES) {
+  for (const customerName of ["Ana Souza", null] as const) {
+    for (const overrides of [
+      {},
+      { offeredSlots: [] },
+      { kind: "WINBACK", expectedDate: null, offeredSlots: [] },
+      {
+        kind: "WINBACK",
+        expectedDate: null,
+        offeredSlots: [],
+        incentive: "10% de desconto",
+      },
+      { followUp: true },
+      { kind: "WINBACK", followUp: true, incentive: "10% de desconto" },
+    ] as Array<Partial<ReturnFacts>>) {
+      const text = composeReturnText({
+        style,
+        facts: returnFacts({ customerName, ...overrides }),
+      });
+      for (const block of splitComposedBlocks(text)) {
+        RETURN_MESSAGE_TEXTS.add(block);
+      }
+    }
+  }
+}
+
+/** PRODUCT_OWN_TEXTS mais os textos de notification-message.ts (Goal039 / WU-02) e de return-message.ts (D-202). */
 const VERIFIED_CLIENT_TEXTS = [
   ...PRODUCT_OWN_TEXTS,
   ...NOTIFICATION_MESSAGE_TEXTS,
+  ...RETURN_MESSAGE_TEXTS,
 ];
 
 /**
@@ -2202,6 +2279,7 @@ const VERIFIED_CLIENT_TEXTS = [
 function resolveVerifiedComposers(): Set<string> {
   const producedByComposer = new Map<string, ReadonlySet<string>>([
     ["composeNotificationText", NOTIFICATION_MESSAGE_TEXTS],
+    ["composeReturnText", RETURN_MESSAGE_TEXTS],
   ]);
   const verified = new Set<string>();
   for (const site of discoverSendTextSites(aiOrchestratorSrcPath)) {
@@ -2567,7 +2645,8 @@ describe("todo egresso HTTP fora da porta do canal é enumerado com resíduo zer
         // Goal142 (WU-02) a leitura dos dependentes e `includeDependents`; a
         // linha e o numero real, computado pelo AST, nao um valor escolhido.
         // O D-197 somou o campo `messageExample` aos fatos da notificacao.
-        line: 908,
+        // Deslocada pelos metodos do retorno de clientes (D-202).
+        line: 1002,
         category: "env_var_SCHEDULING_SERVICE_BASE_URL",
       },
       {
@@ -6288,13 +6367,13 @@ describe("Goal046 / WU-04 — o conjunto de categorias de recusa é conferido co
 });
 
 describe("Goal046 / WU-04 — a árvore real produz os números desta rodada, e as invariantes de reconhecimento não são vácuas", () => {
-  it("1 superfície, 4 ligações resolvidas, 12 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — os mesmos números da baseline do Goal045, exceto o de arquivos varridos pela resolução de instanciação e o de rotas: com o modelo AgendaViewPreference do Goal073 gerado em apps/bff/src/generated/prisma, o modelo HumanTakeover do Goal074 gerado em apps/ai-orchestrator/src/generated/prisma modules/prompts/service-instructions.ts do Goal078, lib/calendar-source.ts do Goal109, lib/whatsapp-contacts.ts do BFF, o registro de atividade (D-176: modules/activity/ e o modelo ActivityLog gerado nas duas árvores, clients/activity-source.ts do BFF) modules/whatsapp/contact-photo.ts do BFF, o faturamento (D-177: modules/revenue/routes.ts do BFF) o que a IA fez no faturamento (D-178: modules/conversations/inbound-hours.ts da IA e modules/revenue/missed-messages.ts do BFF), o modelo AppearancePreference da aparência por conta (D-181) gerado em apps/bff/src/generated/prisma as conversas não lidas (D-195: modules/conversations/unread.ts da IA) e o modo sandbox (D-199: os três arquivos de modules/sandbox/ da IA), elas somam hoje 230 arquivos .ts (130 em apps/ai-orchestrator/src, com modules/outbox/ai-reply-dispatch.ts do despacho em partes de 2026-10-11, 100 em apps/bff/src), a 11ª rota é o GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) e a 12ª é o POST /user/avatar da foto de perfil da cliente (2026-10-15) — o número computado pelo AST (230) prevalece sobre qualquer contagem anterior capturada antes desse arquivo existir na árvore", () => {
+  it("1 superfície, 4 ligações resolvidas, 12 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — os mesmos números da baseline do Goal045, exceto o de arquivos varridos pela resolução de instanciação e o de rotas: com o modelo AgendaViewPreference do Goal073 gerado em apps/bff/src/generated/prisma, o modelo HumanTakeover do Goal074 gerado em apps/ai-orchestrator/src/generated/prisma modules/prompts/service-instructions.ts do Goal078, lib/calendar-source.ts do Goal109, lib/whatsapp-contacts.ts do BFF, o registro de atividade (D-176: modules/activity/ e o modelo ActivityLog gerado nas duas árvores, clients/activity-source.ts do BFF) modules/whatsapp/contact-photo.ts do BFF, o faturamento (D-177: modules/revenue/routes.ts do BFF) o que a IA fez no faturamento (D-178: modules/conversations/inbound-hours.ts da IA e modules/revenue/missed-messages.ts do BFF), o modelo AppearancePreference da aparência por conta (D-181) gerado em apps/bff/src/generated/prisma as conversas não lidas (D-195: modules/conversations/unread.ts da IA) o modo sandbox (D-199: os três arquivos de modules/sandbox/ da IA) e o retorno de clientes (D-202: os seis arquivos de modules/customer-return/ e modules/prompts/customer-return.ts da IA, o modelo ReturnInvitation gerado e modules/customer-return/routes.ts do BFF), elas somam hoje 239 arquivos .ts (138 em apps/ai-orchestrator/src, com modules/outbox/ai-reply-dispatch.ts do despacho em partes de 2026-10-11, 101 em apps/bff/src), a 11ª rota é o GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) e a 12ª é o POST /user/avatar da foto de perfil da cliente (2026-10-15) — o número computado pelo AST (239) prevalece sobre qualquer contagem anterior capturada antes desse arquivo existir na árvore", () => {
     const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
 
     expect(internalClientSurfaces).toHaveLength(1);
     expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
-    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(230);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(239);
     expect(requests).toHaveLength(12);
     expect(nonGoBoundInstantiations).toHaveLength(2);
     expect(nonTransportMemberCalls).toHaveLength(0);
@@ -11971,20 +12050,20 @@ describe("Goal047 / WU-04 (§5) — as categorias de recusa deste caminho existe
   });
 });
 
-describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta rodada, e as 54 ocorrências de this.http. são classificadas sem recusa alguma", () => {
-  it("1 superfície, 4 ligações, 230 arquivos varridos, 12 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal, exceto o de arquivos varridos, pelo modelo AgendaViewPreference do Goal073, pelo modelo HumanTakeover do Goal074, por modules/prompts/service-instructions.ts do Goal078, por lib/calendar-source.ts do Goal109, por lib/whatsapp-contacts.ts do BFF, por modules/outbox/ai-reply-dispatch.ts (2026-10-11), pelo registro de atividade (D-176), por modules/whatsapp/contact-photo.ts do BFF (2026-10-15), pelo faturamento (D-177), pelo que a IA fez no faturamento (D-178), pelo modelo AppearancePreference (D-181), pelas conversas não lidas (D-195) e pelo modo sandbox (D-199), e o de rotas, pelo GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) e pelo POST /user/avatar da foto de perfil da cliente (2026-10-15)", () => {
+describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta rodada, e as 55 ocorrências de this.http. são classificadas sem recusa alguma", () => {
+  it("1 superfície, 4 ligações, 239 arquivos varridos, 12 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal, exceto o de arquivos varridos, pelo modelo AgendaViewPreference do Goal073, pelo modelo HumanTakeover do Goal074, por modules/prompts/service-instructions.ts do Goal078, por lib/calendar-source.ts do Goal109, por lib/whatsapp-contacts.ts do BFF, por modules/outbox/ai-reply-dispatch.ts (2026-10-11), pelo registro de atividade (D-176), por modules/whatsapp/contact-photo.ts do BFF (2026-10-15), pelo faturamento (D-177), pelo que a IA fez no faturamento (D-178), pelo modelo AppearancePreference (D-181), pelas conversas não lidas (D-195), pelo modo sandbox (D-199) e pelo retorno de clientes (D-202), e o de rotas, pelo GET /user/contacts da Evolution para os contatos do WhatsApp (validação de 2026-10-11) e pelo POST /user/avatar da foto de perfil da cliente (2026-10-15)", () => {
     const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
 
     expect(internalClientSurfaces).toHaveLength(1);
     expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
-    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(230);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(239);
     expect(requests).toHaveLength(12);
     expect(nonGoBoundInstantiations).toHaveLength(2);
     expect(nonTransportMemberCalls).toHaveLength(0);
   });
 
-  it("as 54 ocorrências de this.http. em apps/bff/src/clients/ — as 46 do Goal047, o this.http.request de EvolutionClient.getContacts (GET /user/contacts, validação de 2026-10-11), o de EvolutionClient.getAvatarUrl (POST /user/avatar, foto de perfil da cliente, 2026-10-15) o do registro de atividade no cliente do AI Orchestrator (D-176) o das mensagens por hora no mesmo cliente (D-178) os dois das conversas não lidas no mesmo cliente (D-195: resumo e marcação de leitura) e os dois do modo sandbox no mesmo cliente (D-199: leitura e gravação) — estão todas na forma direta this.http.<membro>(, sem exceção, e a leitura completa não lança recusa alguma sobre a árvore real", () => {
+  it("as 55 ocorrências de this.http. em apps/bff/src/clients/ — as 46 do Goal047, o this.http.request de EvolutionClient.getContacts (GET /user/contacts, validação de 2026-10-11), o de EvolutionClient.getAvatarUrl (POST /user/avatar, foto de perfil da cliente, 2026-10-15) o do registro de atividade no cliente do AI Orchestrator (D-176) o das mensagens por hora no mesmo cliente (D-178) os dois das conversas não lidas no mesmo cliente (D-195: resumo e marcação de leitura) os dois do modo sandbox no mesmo cliente (D-199: leitura e gravação) e o de quem a lista do retorno deixa de fora, no mesmo cliente (D-202) — estão todas na forma direta this.http.<membro>(, sem exceção, e a leitura completa não lança recusa alguma sobre a árvore real", () => {
     const clientsRoot = join(bffSrcPath, "clients");
     const files = listTypeScriptSources(clientsRoot);
     let totalOccurrences = 0;
@@ -11994,8 +12073,8 @@ describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta roda
       totalOccurrences += (source.match(/\bthis\.http\./gu) ?? []).length;
       totalDirectCalls += (source.match(/\bthis\.http\.[A-Za-z_$][\w$]*\(/gu) ?? []).length;
     }
-    expect(totalOccurrences).toBe(54);
-    expect(totalDirectCalls).toBe(54);
+    expect(totalOccurrences).toBe(55);
+    expect(totalDirectCalls).toBe(55);
     expect(() =>
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath),
     ).not.toThrow();

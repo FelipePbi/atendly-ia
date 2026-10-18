@@ -503,11 +503,13 @@ describe("D-199: todo envio a cliente passa pelo sandbox", () => {
       "modules/activation-test/ActivationTestReplySender.ts",
       "modules/channel/inbound-processor-factory.ts",
       "modules/channel/platform/PlatformWhatsAppSender.ts",
+      "modules/customer-return/ReturnDeliveryService.ts",
       "modules/internal/routes.ts",
       "modules/reminders/NotificationDeliveryService.ts",
     ]);
     for (const customerSender of [
       "modules/channel/inbound-processor-factory.ts",
+      "modules/customer-return/ReturnDeliveryService.ts",
       "modules/internal/routes.ts",
       "modules/reminders/NotificationDeliveryService.ts",
     ]) {

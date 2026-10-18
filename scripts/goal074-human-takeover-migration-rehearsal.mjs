@@ -133,6 +133,16 @@ const AI_SANDBOX_MIGRATION_SQL = path.join(
   "migration.sql",
 );
 
+const RETURN_INVITATION_MIGRATION_SQL = path.join(
+  repositoryRoot,
+  "apps",
+  "ai-orchestrator",
+  "prisma",
+  "migrations",
+  "20261018160000_return_invitation",
+  "migration.sql",
+);
+
 function refuse(message) {
   console.error(`goal074:human-takeover-migration-rehearsal REFUSED — ${message}`);
   process.exit(2);
@@ -734,6 +744,58 @@ async function alignAiDurabilityTargetWithAiSandbox(target) {
   }
 }
 
+/**
+ * Leva o banco de durabilidade da IA a tabela `ReturnInvitation` (retorno de
+ * clientes, D-202). O turno da IA le o convite recente da conversa antes de
+ * montar o prompt; sem a tabela a leitura falha (e o turno segue sem a
+ * secao), mas a suite de persistencia precisa ver o mesmo esquema da
+ * producao. O DDL usa `IF NOT EXISTS`, entao reaplicar nao muda nada.
+ */
+async function alignAiDurabilityTargetWithReturnInvitation(target) {
+  const database = decodeURIComponent(
+    target.maintenance.pathname.replace(/^\//u, ""),
+  );
+  const durability = new URL(target.maintenance.href);
+  durability.pathname = `/${database}_goal004`;
+
+  const client = new Client({ connectionString: durability.href });
+  try {
+    await client.connect();
+  } catch {
+    console.log(
+      "durability target not provisioned yet — skipping the ReturnInvitation table",
+    );
+    return;
+  }
+  try {
+    const invitationTable = await client.query(
+      `SELECT to_regclass('"ReturnInvitation"') AS present`,
+    );
+    if (invitationTable.rows[0].present) {
+      console.log(
+        `durability target already has the ReturnInvitation table: ${database}_goal004`,
+      );
+      return;
+    }
+    const applied = await applyMigrationFile(
+      client,
+      RETURN_INVITATION_MIGRATION_SQL,
+    );
+    if (applied !== true) {
+      console.error(
+        `goal074:human-takeover-migration-rehearsal FAILED — durability target table failed applying ${RETURN_INVITATION_MIGRATION_SQL}: ${applied}`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    console.log(
+      `durability target aligned with the ReturnInvitation table: ${database}_goal004`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
 export async function main() {
   const target = rehearsalTarget(process.env);
 
@@ -746,6 +808,7 @@ export async function main() {
   await alignAiDurabilityTargetWithActivityLog(target);
   await alignAiDurabilityTargetWithConversationOwnerRead(target);
   await alignAiDurabilityTargetWithAiSandbox(target);
+  await alignAiDurabilityTargetWithReturnInvitation(target);
 
   if (process.exitCode) {
     console.error(

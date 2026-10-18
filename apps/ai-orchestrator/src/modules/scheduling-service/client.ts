@@ -7,6 +7,15 @@ import {
   CALLER_ID,
   deriveInternalToken,
 } from "../../lib/internal-credentials.js";
+import {
+  type ClaimedReturnTarget,
+  type CustomerReturnStatus,
+  customerReturnStatusSchema,
+  returnClaimResultSchema,
+  returnReplySchema,
+  returnSettlementSchema,
+  type SettleReturnTargetInput,
+} from "../customer-return/return-types.js";
 import type { BusinessContext } from "../tenant-config/business-context.js";
 import type {
   AppointmentPresenceConfirmation,
@@ -303,6 +312,17 @@ export interface SchedulingGateway {
     businessContext: BusinessContext,
     context?: SchedulingRequestContext,
   ): Promise<SchedulingAppointment[]>;
+  /**
+   * Recusa ou pedido para parar a mensagem de retorno (D-202). Opcional na
+   * porta: dubles anteriores nao o implementam, e sem ele a tool responde
+   * que nao ha como registrar.
+   */
+  reportReturnAnswer?(
+    tenantId: string,
+    targetId: string,
+    answer: "DECLINED" | "STOPPED",
+    context?: SchedulingRequestContext,
+  ): Promise<CustomerReturnStatus>;
   findCustomerCandidatesByPhone(
     phone: string,
     context?: SchedulingRequestContext,
@@ -832,6 +852,80 @@ export class SchedulingClient implements SchedulingGateway {
       },
     );
     return settled.intent;
+  }
+
+  // --- Retorno de clientes (D-202) -----------------------------------------
+  // Mesmo desenho das intencoes de lembrete: a reivindicacao atravessa
+  // negocios, a liquidacao e o relato de resposta voltam a ser por negocio.
+
+  async claimReturnTargets(
+    input: { owner: string; leaseTtlSeconds: number; tenantLimit: number },
+    context: SchedulingRequestContext,
+  ): Promise<ClaimedReturnTarget[]> {
+    const result = await this.request(
+      "/internal/customer-return/claim",
+      returnClaimResultSchema,
+      { method: "POST", context, body: input },
+    );
+    return result.claimed;
+  }
+
+  async settleReturnTarget(input: SettleReturnTargetInput): Promise<void> {
+    await this.request(
+      `/internal/customer-return/targets/${encodeURIComponent(input.targetId)}/settle`,
+      returnSettlementSchema,
+      {
+        method: "POST",
+        context: {
+          tenantId: input.tenantId,
+          userId: CALLER_ID,
+          requestId: `return-settle-${input.targetId}`,
+        },
+        body: {
+          leaseToken: input.leaseToken,
+          outcome: input.outcome,
+          reason: input.reason ?? null,
+          messageBody: input.messageBody ?? null,
+        },
+      },
+    );
+  }
+
+  async reportReturnReply(tenantId: string, targetId: string): Promise<void> {
+    await this.request(
+      `/internal/customer-return/targets/${encodeURIComponent(targetId)}/replied`,
+      returnReplySchema,
+      {
+        method: "POST",
+        context: {
+          tenantId,
+          userId: CALLER_ID,
+          requestId: `return-reply-${targetId}`,
+        },
+        body: {},
+      },
+    );
+  }
+
+  async reportReturnAnswer(
+    tenantId: string,
+    targetId: string,
+    answer: "DECLINED" | "STOPPED",
+    context?: SchedulingRequestContext,
+  ): Promise<CustomerReturnStatus> {
+    return this.request(
+      `/internal/customer-return/targets/${encodeURIComponent(targetId)}/answer`,
+      customerReturnStatusSchema,
+      {
+        method: "POST",
+        context: context ?? {
+          tenantId,
+          userId: CALLER_ID,
+          requestId: `return-answer-${targetId}`,
+        },
+        body: { answer },
+      },
+    );
   }
 
   /**

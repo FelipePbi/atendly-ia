@@ -14,6 +14,7 @@ import {
 } from "../../lib/errors.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
 import type { RecordedInboundText } from "../channel/InboundMessageProcessor.js";
+import { returnInvitationPromptItem } from "../customer-return/return-invitation.js";
 import { deriveTurnId } from "../graph/graph-state.js";
 import {
   audioNotUnderstoodReply,
@@ -51,6 +52,7 @@ import {
   type ModelToolResult,
   type ModelTurn,
 } from "../model/model-provider.js";
+import type { ReturnInvitationPromptItem } from "../prompts/customer-return.js";
 import type { ServiceInstructionPromptItem } from "../prompts/service-instructions.js";
 import { buildStyleGreeting } from "../prompts/style.js";
 import { buildSystemPrompt, farewellForNow } from "../prompts/system.js";
@@ -793,6 +795,10 @@ export class AssistantService {
       retrievedKnowledge: input.retrievedKnowledge,
       customerMemory: input.customerMemory,
       serviceInstructions: input.serviceInstructions,
+      returnInvitation: await this.loadReturnInvitation(
+        conversation.tenantId,
+        conversation.id,
+      ),
     });
 
     return {
@@ -1497,6 +1503,10 @@ export class AssistantService {
         input.tenantId,
         conversation.contactId,
       ),
+      returnInvitation: await this.loadReturnInvitation(
+        input.tenantId,
+        input.conversationId,
+      ),
       mode: "suggestion",
     });
 
@@ -1615,6 +1625,38 @@ export class AssistantService {
         "Suggestion knowledge retrieval failed",
       );
       return [];
+    }
+  }
+
+  /**
+   * Convite de retorno recente desta conversa (D-202): o mais novo enviado
+   * nos ultimos 21 dias e ainda sem recusa nem pedido para parar. Falha da
+   * leitura nao derruba o turno: o prompt segue sem a secao.
+   */
+  private async loadReturnInvitation(
+    tenantId: string,
+    conversationId: string,
+  ): Promise<ReturnInvitationPromptItem | null> {
+    // Duble de teste sem a tabela: sem convite, sem aviso.
+    if (!(this.prisma as Partial<PrismaClient>).returnInvitation) return null;
+    try {
+      const invitation = await this.prisma.returnInvitation.findFirst({
+        where: {
+          tenantId,
+          conversationId,
+          answer: null,
+          sentAt: { gte: new Date(Date.now() - 21 * 86_400_000) },
+        },
+        orderBy: { sentAt: "desc" },
+      });
+      if (!invitation) return null;
+      return returnInvitationPromptItem(invitation);
+    } catch (error) {
+      this.logger.warn(
+        { tenantId, conversationId, err: toErrorMessage(error) },
+        "Return invitation load failed",
+      );
+      return null;
     }
   }
 

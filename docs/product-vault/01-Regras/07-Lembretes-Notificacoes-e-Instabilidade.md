@@ -42,6 +42,7 @@ O exemplo é referência de tom, nunca fonte de fato:
 - com a confirmação habilitada, a pergunta de confirmação (na voz do estilo da IA) entra no fim;
 - data, horário ou valor escritos à mão e campos desconhecidos são recusados ao salvar;
 - "Restaurar padrão" volta à mensagem pelo estilo da IA. O aviso de alteração não usa o exemplo.
+- em várias mensagens curtas ([[../../migration/DECISIONS#D-208|D-208]], o padrão), cada linha do exemplo é uma mensagem, o texto inicial tem uma ideia por linha e a prévia mostra um balão por mensagem.
 
 Preço é configurável:
 

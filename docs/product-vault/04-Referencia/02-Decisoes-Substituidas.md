@@ -9,6 +9,10 @@ status: referencia
 
 Este documento evita que decisões antigas reapareçam durante design ou implementação.
 
+## Resposta em partes como uma mensagem só na inbox
+
+Substituída em 2026-10-19 ([[../../migration/DECISIONS#D-208|D-208]]). A regra de 2026-10-11 dizia que, na inbox, a resposta da IA dividida continuava um balão só, e que lembretes e avisos nunca eram divididos. Agora toda mensagem composta pela plataforma pode sair em partes (escolha do negócio), e a conversa do app mostra um balão por parte.
+
 ## Minha Agenda como integração contínua
 
 **Substituída.**

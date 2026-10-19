@@ -47,7 +47,7 @@ Nos dois casos a profissional escolhe para quem a mensagem vai e aprova. A parti
    - último atendimento;
    - um resumo dos horários de costume, por exemplo "costuma vir sex ou sáb, depois das 17h".
 2. A profissional desmarca quem não quer chamar.
-3. Ela vê a mensagem que vai sair, com os campos preenchidos, e pode editar o texto-base.
+3. Ela vê a mensagem que vai sair, com os campos preenchidos, e pode editar o texto-base. Em cada cliente, "Ver mensagem" abre um celular com a conversa como aquela cliente vai recebê-la, chegando mensagem a mensagem, como a IA envia ([[../../migration/DECISIONS#D-208|D-208]]).
 4. Ao tocar em **Aprovar**, a seleção vira uma **rodada de envios**. Nada sai de uma vez.
 
 ### Rodada de envios (fila)

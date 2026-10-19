@@ -88,7 +88,7 @@ O Início mostra o dinheiro por trás de cada número, na mesma ordem de leitura
 
 **Painel do dia** (padrão):
 
-- logo abaixo da faixa da IA, um painel no tom claro da cor de destaque (acompanha o tema escolhido e o escuro, como as barras e destaques de faturamento) com o faturado de hoje em número grande, "N de M atendimentos", a variação contra **ontem a esta hora** e o total do dia se tudo confirmar, numa barra do que já entrou e do que ainda vem; abaixo, dois indicadores que dividem a largura em partes iguais: "A entrar" (confirmados pela frente) e "Pela IA" (marcado pela IA, faturado e a entrar, com a parte do dia). O ticket médio do quadro saiu a pedido do usuário (D-201); ele continua na tela Faturamento;
+- logo abaixo da faixa da IA, um painel no tom claro da cor de destaque (acompanha o tema escolhido e o escuro, como as barras e destaques de faturamento) com o faturado de hoje em número grande, "N de M atendimentos", a variação contra **ontem a esta hora** e o total do dia se tudo confirmar, numa barra do que já entrou e do que ainda vem; abaixo, dois indicadores que dividem a largura em partes iguais: "A entrar" (confirmados pela frente) e "Pela IA" (marcado pela IA, faturado e a entrar, com a parte do dia). O ticket médio do quadro saiu a pedido do usuário (D-201);
 - no celular, **Hoje** e **Semana** alternam de verdade (a escolha fica lembrada); a semana mostra o faturado, a variação contra a semana passada até o mesmo dia e hora, uma coluna por dia (o faturado embaixo, o a entrar em cima, o valor escrito e "hoje" no dia corrente), "A entrar" e "Pela IA". O rodapé do painel é o mês, que abre o Faturamento;
 - no tablet e no desktop o painel abre em três zonas lado a lado — hoje, semana e mês — sem alternar nada; entre 768 e 1023 px o mês desce para baixo das outras duas;
 - abaixo do painel: no celular e no tablet, só os **Próximos** atendimentos; no desktop, a agenda de hoje inteira, com os concluídos rebaixados e o marcador "agora". No tablet e no desktop, ao lado, o bloco **O que a IA fez por você** da semana, com a manchete "A IA marcou R$ X dos seus R$ Y nesta semana." e os destaques de [[#Faturamento]]; no desktop também "Desde que você começou…".
@@ -342,7 +342,7 @@ Resumo:
 
 - **Faturado** em destaque, com a linha "Atendimentos concluídos, pelo preço combinado ou pelo valor final que você registrou.";
 - comparação com o período anterior de mesmo tamanho ("+12% que setembro", "−8% que ontem", "Igual a 2025"); com o período ainda correndo, compara o mesmo trecho até a mesma hora de agora e diz qual ("Comparando 1 a 16 de outubro com 1 a 16 de setembro, até as 15:00."); sem faturamento no anterior, só "Setembro não teve faturamento para comparar";
-- atendimentos concluídos, ticket médio e **Previsto** (confirmados pela frente), separado do faturado;
+- atendimentos concluídos e **Previsto** (confirmados pela frente), lado a lado e separados do faturado;
 - "N atendimentos concluídos sem valor (sob consulta, “a partir de” ou sem preço). Registre o valor final no atendimento para ele entrar aqui.", só quando houver; o aviso inteiro é clicável ("Ver qual" / "Ver quais") e abre a lista desses atendimentos ([[../../migration/DECISIONS#D-179|D-179]]).
 
 Gráficos:

@@ -324,8 +324,27 @@ function composeFollowUp(facts: ReturnFacts, voice: ReturnVoice): string[] {
 export function defaultReturnTemplate(
   kind: "RENEWAL" | "WINBACK",
   style: AiConversationStyle,
+  delivery: AiMessageDelivery = "SINGLE",
 ): string {
   const voice = VOICES[style];
+  // Em várias mensagens (D-208), cada linha é uma mensagem: o texto-base sai
+  // com uma ideia por linha, como a mensagem padrão.
+  if (delivery === "PARTS") {
+    if (kind === "RENEWAL") {
+      return [
+        ...voice.greeting("{nome}"),
+        "Está chegando a hora do seu atendimento de {servico}, {quando}.",
+        voice.reserve,
+        "Tenho {horarios}.",
+      ].join("\n");
+    }
+    return [
+      ...voice.greeting("{nome}"),
+      voice.missYou,
+      voice.incentive("{incentivo}"),
+      voice.askSlot,
+    ].join("\n");
+  }
   if (kind === "RENEWAL") {
     return [
       voice.greeting("{nome}").join(" "),

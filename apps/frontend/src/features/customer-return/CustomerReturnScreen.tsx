@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import {
+  type AiMessageDelivery,
   type AiTone,
   BffHttpError,
   RETURN_WINBACK_DAY_OPTIONS,
@@ -17,9 +18,14 @@ import {
 import { Icon } from "@/shared/icons/Icon";
 import { PushedBar } from "@/shared/layout/PushedBar";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import {
+  messageBubbles,
+  resolveMessageDelivery,
+} from "@/shared/messages/messageParts";
 import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { BrandLoader } from "@/shared/ui/Brand";
+import { ChatPhone, MessageBubbles } from "@/shared/ui/ChatPhone";
 import { Dialog } from "@/shared/ui/Dialog";
 import { StatePanel } from "@/shared/ui/States";
 import { showToast } from "@/shared/ui/toastBus";
@@ -34,7 +40,7 @@ import {
   shortDate,
   windowLabel,
 } from "./returnCopy";
-import { composeReturnText, type ReturnFacts } from "./returnMessage";
+import { composeReturnParts, type ReturnFacts } from "./returnMessage";
 import { ReturnMessageEditor } from "./ReturnMessageEditor";
 
 type Week = "this" | "next";
@@ -48,6 +54,10 @@ type Week = "this" | "next";
  */
 export function CustomerReturnScreen() {
   const [tone, setTone] = useState<AiTone>("BALANCED");
+  // Como a IA envia (D-208) e o nome do negócio, para a prévia e o celular.
+  const [delivery, setDelivery] = useState<AiMessageDelivery>("PARTS");
+  const [businessName, setBusinessName] = useState<string | null>(null);
+  const [phoneFor, setPhoneFor] = useState<ReturnCandidate | null>(null);
   const [kind, setKind] = useState<ReturnKind>("RENEWAL");
   const [week, setWeek] = useState<Week>("this");
   const [days, setDays] = useState<number | null>(null);
@@ -74,7 +84,11 @@ export function CustomerReturnScreen() {
     // Estilo da IA só para a prévia: sem ele, vale o Equilibrado.
     getProductServices()
       .settings.get(controller.signal)
-      .then((state) => setTone(state.ai.tone ?? "BALANCED"))
+      .then((state) => {
+        setTone(state.ai.tone ?? "BALANCED");
+        setDelivery(resolveMessageDelivery(state.ai.messageDelivery));
+        setBusinessName(state.business?.name?.trim() || null);
+      })
       .catch(() => undefined);
     return () => controller.abort();
   }, []);
@@ -222,16 +236,33 @@ export function CustomerReturnScreen() {
 
   const preview = useMemo(
     () =>
-      previewText({
+      previewBubbles({
         candidate: selected[0] ?? candidates[0] ?? null,
+        delivery,
         incentive,
         kind,
         template,
         today: list?.today ?? null,
         tone,
       }),
-    [selected, candidates, incentive, kind, template, list, tone],
+    [selected, candidates, delivery, incentive, kind, template, list, tone],
   );
+  const phoneBubbles = useMemo(
+    () =>
+      phoneFor
+        ? previewBubbles({
+            candidate: phoneFor,
+            delivery,
+            incentive,
+            kind,
+            template,
+            today: list?.today ?? null,
+            tone,
+          })
+        : [],
+    [phoneFor, delivery, incentive, kind, template, list, tone],
+  );
+  const closePhone = useCallback(() => setPhoneFor(null), []);
 
   return (
     <div className="page return-page">
@@ -383,6 +414,7 @@ export function CustomerReturnScreen() {
                     candidate={candidate}
                     checked={!unchecked.has(candidate.customerId)}
                     key={candidate.customerId}
+                    onPreview={() => setPhoneFor(candidate)}
                     onToggle={() => toggle(candidate.customerId)}
                     today={list.today}
                   />
@@ -413,7 +445,11 @@ export function CustomerReturnScreen() {
                 Editar mensagem
               </button>
             </div>
-            <div className="return-message-bubble">{preview}</div>
+            <MessageBubbles
+              bubbleClassName="return-message-bubble"
+              bubbles={preview}
+              label={`${preview.length} mensagens, nesta ordem`}
+            />
             <p className="return-message-note">
               {kind === "RENEWAL"
                 ? "Cada cliente recebe o próprio nome, serviço e dois horários livres da sua agenda no momento do envio, perto dos dias e horários de costume dela."
@@ -461,6 +497,29 @@ export function CustomerReturnScreen() {
         <ReturnCampaigns version={campaignsVersion} />
       </div>
 
+      <Dialog
+        eyebrow="Exemplo"
+        onClose={closePhone}
+        open={phoneFor !== null}
+        title={`Como a IA chama ${firstName(phoneFor?.name) ?? "a cliente"}`}
+      >
+        <div className="return-phone">
+          <ChatPhone
+            bubbles={phoneBubbles}
+            businessName={businessName ?? "Seu negócio"}
+            time={settings?.windowStart ?? "10:00"}
+          />
+          <p className="return-message-note">
+            {kind === "RENEWAL"
+              ? "Os dois horários são um exemplo nos dias e horários de costume dela; no envio, saem livres da sua agenda."
+              : "Quando ela responder, a IA oferece horários perto dos de costume dela."}{" "}
+            {delivery === "PARTS"
+              ? "Chega em várias mensagens curtas, como em Configurações › IA."
+              : "Chega numa mensagem só, como em Configurações › IA."}
+          </p>
+        </div>
+      </Dialog>
+
       {settings && editing && (
         <ReturnMessageEditor
           kind={kind}
@@ -470,6 +529,7 @@ export function CustomerReturnScreen() {
             setEditing(false);
           }}
           open={editing}
+          delivery={delivery}
           settings={settings}
           tone={tone}
         />
@@ -514,18 +574,21 @@ function firstName(name: string | null | undefined): string | null {
 function CandidateRow({
   candidate,
   checked,
+  onPreview,
   onToggle,
   today,
 }: {
   candidate: ReturnCandidate;
   checked: boolean;
+  onPreview: () => void;
   onToggle: () => void;
   today: string;
 }) {
   const habit = habitLabel(candidate.habit);
   const interval = intervalSourceLabel(candidate);
+  const name = candidate.name?.trim() || "Cliente sem nome";
   return (
-    <li>
+    <li className="return-candidate-item">
       <label className={clsx("return-candidate", checked && "is-checked")}>
         <input
           checked={checked}
@@ -537,7 +600,7 @@ function CandidateRow({
           {checked && <Icon name="check" />}
         </span>
         <span className="return-candidate-copy">
-          <strong>{candidate.name?.trim() || "Cliente sem nome"}</strong>
+          <strong>{name}</strong>
           <span className="return-candidate-detail">
             {candidateDetail(candidate, today)}
           </span>
@@ -548,6 +611,16 @@ function CandidateRow({
           {habit && <span className="return-candidate-habit">{habit}</span>}
         </span>
       </label>
+      {/* Fora do rótulo: abrir o exemplo não marca nem desmarca a cliente. */}
+      <button
+        aria-label={`Ver a mensagem para ${name}`}
+        className="return-candidate-preview"
+        onClick={onPreview}
+        type="button"
+      >
+        <Icon name="eye" />
+        <span className="return-candidate-preview-label">Ver mensagem</span>
+      </button>
     </li>
   );
 }
@@ -609,18 +682,20 @@ function NotFittingChoice({
 }
 
 /**
- * Prévia da primeira cliente marcada. Os dois horários da Renovação saem da
- * agenda só no envio; aqui eles são um exemplo nos dias e na faixa de
- * costume dela, e a nota da tela diz isso.
+ * Prévia de uma cliente, um balão por mensagem (D-208), pelo mesmo código
+ * de composição do envio. Os dois horários da Renovação saem da agenda só no
+ * envio; aqui eles são um exemplo nos dias e na faixa de costume dela, e a
+ * nota da tela diz isso.
  */
-function previewText(input: {
+export function previewBubbles(input: {
   candidate: ReturnCandidate | null;
+  delivery: AiMessageDelivery;
   incentive: string | null;
   kind: ReturnKind;
   template: string | null;
   today: string | null;
   tone: AiTone;
-}): string {
+}): string[] {
   const today = input.today ?? new Date().toISOString().slice(0, 10);
   const candidate = input.candidate;
   const facts: ReturnFacts = {
@@ -640,7 +715,10 @@ function previewText(input: {
     incentive: input.incentive,
     messageTemplate: input.template,
   };
-  return composeReturnText({ style: input.tone, facts });
+  return messageBubbles(
+    composeReturnParts({ style: input.tone, facts, delivery: input.delivery }),
+    input.delivery,
+  );
 }
 
 function addDays(date: string, amount: number): string {

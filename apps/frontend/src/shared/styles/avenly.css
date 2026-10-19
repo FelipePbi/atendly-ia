@@ -9515,3 +9515,166 @@ main#main-content:focus-visible {
     visibility: hidden;
   }
 }
+
+/* --- Mensagens em várias partes (D-208) -------------------------------------
+   `MessageBubbles`: as prévias mostram um balão por mensagem, em ordem.
+   `ChatPhone`: a tela de celular com a conversa como a cliente a vê. Só
+   `transform` e `opacity` animam; com menos movimento, só a opacidade. */
+.message-parts {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  list-style: none;
+}
+.chat-phone-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.chat-phone {
+  width: min(300px, 100%);
+  height: min(440px, 62vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 6px solid var(--at-color-border-strong);
+  border-radius: 30px;
+  background: var(--at-color-surface-sunken);
+  box-sizing: border-box;
+}
+.chat-phone-header {
+  padding: 12px 14px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--at-color-on-primary);
+  background: var(--at-color-primary);
+}
+.chat-phone-avatar {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--at-color-primary);
+  background: var(--at-color-on-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+.chat-phone-contact {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.chat-phone-contact strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-phone-status {
+  font-size: 12px;
+  opacity: 0.85;
+}
+.chat-phone-body {
+  flex: 1;
+  min-height: 0;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  overflow-y: auto;
+}
+/* As mensagens assentam embaixo, como no WhatsApp, sem `justify-content:
+   flex-end`, que esconderia o topo sem rolagem quando elas não cabem. */
+.chat-phone-body > :first-child {
+  margin-top: auto;
+}
+.chat-phone-bubble {
+  max-width: 86%;
+  padding: 7px 10px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--at-color-border);
+  border-radius: 4px 12px 12px 12px;
+  color: var(--at-color-ink);
+  background: var(--at-color-surface);
+  animation: chat-phone-in 240ms var(--ease, ease-out) both;
+}
+.chat-phone-text {
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.chat-phone-time {
+  align-self: flex-end;
+  color: var(--at-color-ink-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.chat-phone-typing {
+  padding: 10px 12px;
+  display: inline-flex;
+  gap: 4px;
+  border: 1px solid var(--at-color-border);
+  border-radius: 4px 12px 12px 12px;
+  background: var(--at-color-surface);
+  animation: chat-phone-in 200ms var(--ease, ease-out) both;
+}
+.chat-phone-typing span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--at-color-ink-muted);
+  animation: chat-phone-dot 1s ease-in-out infinite;
+}
+.chat-phone-typing span:nth-child(2) {
+  animation-delay: 160ms;
+}
+.chat-phone-typing span:nth-child(3) {
+  animation-delay: 320ms;
+}
+.chat-phone-replay {
+  min-width: 120px;
+}
+@keyframes chat-phone-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes chat-phone-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes chat-phone-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-phone-bubble {
+    animation-name: chat-phone-fade;
+  }
+}

@@ -356,3 +356,25 @@ describe("em várias mensagens curtas (D-208)", () => {
     ]);
   });
 });
+
+describe("texto-base inicial em várias mensagens (D-208)", () => {
+  it("uma ideia por linha, e cada linha é uma mensagem", () => {
+    const template = defaultReturnTemplate("RENEWAL", "BALANCED", "PARTS");
+    expect(
+      composeReturnParts({
+        style: "BALANCED",
+        delivery: "PARTS",
+        facts: renewal({ messageTemplate: template }),
+      }),
+    ).toEqual([
+      "Oi, Adriana!",
+      "Tudo bem?",
+      "Está chegando a hora do seu atendimento de Manutenção 5D, na quinta-feira.",
+      "Quer que eu já reserve um horário?",
+      "Tenho sexta às 17h30 ou sábado às 18h.",
+    ]);
+    expect(defaultReturnTemplate("RENEWAL", "BALANCED")).toBe(
+      defaultReturnTemplate("RENEWAL", "BALANCED", "SINGLE"),
+    );
+  });
+});

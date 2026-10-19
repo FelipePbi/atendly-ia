@@ -97,10 +97,20 @@ function remindersFixture(
 }
 
 function settingsFixture(
-  overrides: { tone?: AiTone | null; timezone?: string } = {},
+  overrides: {
+    tone?: AiTone | null;
+    timezone?: string;
+    messageDelivery?: "PARTS" | "SINGLE";
+  } = {},
 ): SettingsState {
   return {
-    ai: { enabled: false, tone: overrides.tone ?? null },
+    ai: {
+      enabled: false,
+      tone: overrides.tone ?? null,
+      ...(overrides.messageDelivery
+        ? { messageDelivery: overrides.messageDelivery }
+        : {}),
+    },
     availability: null,
     business: overrides.timezone
       ? ({ timezone: overrides.timezone } as unknown as SettingsState["business"])
@@ -433,7 +443,7 @@ describe("salvar", () => {
 
 describe("a prévia", () => {
   test("estilo equilibrado quando a IA não tem tom, sem serviço, dia seguinte", async () => {
-    renderSection();
+    renderSection(settingsFixture({ messageDelivery: "SINGLE" }));
 
     await screen.findByText("Lembrete 1 · quanto tempo antes");
     expect(
@@ -450,12 +460,32 @@ describe("a prévia", () => {
     ["BALANCED", "Oi, Ana! Tudo bem?"],
     ["CASUAL", "Oii, Ana! Tudo bem? 😊"],
   ] as const)("estilo %s", async (tone, greeting) => {
-    renderSection(settingsFixture({ tone }));
+    renderSection(settingsFixture({ tone, messageDelivery: "SINGLE" }));
 
     await screen.findByText("Lembrete 1 · quanto tempo antes");
     expect(
       preview().querySelector(".reminders-preview-bubble")?.textContent,
     ).toMatch(new RegExp(`^${greeting.replace(/[.?!]/g, "\\$&")}\\n\\n`));
+  });
+
+  // D-208: em várias mensagens (o padrão), um balão por mensagem, em ordem.
+  test("em várias mensagens, a prévia mostra um balão por mensagem", async () => {
+    renderSection();
+
+    await screen.findByText("Lembrete 1 · quanto tempo antes");
+    const list = within(preview()).getByRole("list", {
+      name: "4 mensagens, nesta ordem",
+    });
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual([
+      "Oi, Ana!",
+      "Tudo bem?",
+      "Passando para lembrar do seu atendimento na quarta-feira, 07/10, às 15h30.",
+      "Qualquer coisa, é só me chamar!",
+    ]);
   });
 
   test("a confirmação troca o fecho da mensagem antes de salvar", async () => {

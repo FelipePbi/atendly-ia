@@ -3,6 +3,7 @@
 import { useCallback, useId, useState } from "react";
 
 import {
+  type AiMessageDelivery,
   type AiTone,
   RETURN_INCENTIVE_MAX_LENGTH,
   RETURN_MESSAGE_MAX_LENGTH,
@@ -36,6 +37,7 @@ export function returnMessageIssueCopy(issue: ReturnMessageIssue): string {
  * No Resgate, o incentivo fica junto, porque é o que a mensagem promete.
  */
 export function ReturnMessageEditor({
+  delivery = "PARTS",
   kind,
   onClose,
   onSaved,
@@ -43,6 +45,8 @@ export function ReturnMessageEditor({
   settings,
   tone,
 }: {
+  /** Como a IA envia (D-208): em partes, cada linha vira uma mensagem. */
+  delivery?: AiMessageDelivery;
   kind: ReturnKind;
   onClose: () => void;
   onSaved: (settings: ReturnSettings) => void;
@@ -56,7 +60,7 @@ export function ReturnMessageEditor({
   const incentiveId = useId();
   const saved =
     kind === "RENEWAL" ? settings.renewalMessage : settings.winbackMessage;
-  const fallback = defaultReturnTemplate(kind, tone);
+  const fallback = defaultReturnTemplate(kind, tone, delivery);
   const [text, setText] = useState(saved ?? fallback);
   const [incentive, setIncentive] = useState(settings.winbackIncentive ?? "");
   const [busy, setBusy] = useState(false);
@@ -146,6 +150,14 @@ export function ReturnMessageEditor({
             {kind === "RENEWAL"
               ? " Os horários livres entram sempre, mesmo que o texto não os cite."
               : " O incentivo entra sempre, mesmo que o texto não o cite."}
+            {delivery === "PARTS" && (
+              <>
+                {" "}
+                <span className="reminders-example-hint">
+                  Cada linha vira uma mensagem.
+                </span>
+              </>
+            )}
           </small>
           {issue && (
             <small className="return-editor-issue" id={issueId} role="alert">

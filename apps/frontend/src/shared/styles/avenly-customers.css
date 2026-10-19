@@ -2884,3 +2884,59 @@
     flex-wrap: wrap;
   }
 }
+
+/* Exemplo da mensagem por cliente (D-208): o botão fica fora do rótulo da
+   cliente, por cima do cartão, para abrir o celular sem marcar nem
+   desmarcar. No celular só o ícone; com espaço, ícone e texto. */
+.return-candidate-item {
+  position: relative;
+}
+.return-candidate-item .return-candidate {
+  padding-right: 56px;
+}
+.return-candidate-preview {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--at-color-primary-ink);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.return-candidate-preview:hover {
+  border-color: var(--border-strong);
+}
+.return-candidate-preview:focus-visible {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 2px;
+}
+.return-candidate-preview .icon {
+  width: 18px;
+  height: 18px;
+}
+.return-candidate-preview-label {
+  display: none;
+}
+.return-phone {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+@media (min-width: 480px) {
+  .return-candidate-item .return-candidate {
+    padding-right: 150px;
+  }
+  .return-candidate-preview-label {
+    display: inline;
+  }
+}

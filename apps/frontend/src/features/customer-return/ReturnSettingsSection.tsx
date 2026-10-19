@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useId, useState } from "react";
 
 import {
+  type AiMessageDelivery,
   type AiTone,
   RETURN_DAILY_LIMIT_MAX,
   RETURN_INCENTIVE_MAX_LENGTH,
@@ -40,7 +41,14 @@ const LEAD_OPTIONS = [1, 2, 3, 4, 5];
  * rotina. Vale para as próximas rodadas: a que já está correndo guarda as
  * regras do dia em que foi aprovada.
  */
-export function ReturnSettingsSection({ tone }: { tone: AiTone }) {
+export function ReturnSettingsSection({
+  delivery = "PARTS",
+  tone,
+}: {
+  /** Como a IA envia (D-208): o texto-base inicial e o aviso do editor. */
+  delivery?: AiMessageDelivery;
+  tone: AiTone;
+}) {
   const limitId = useId();
   const windowLabelId = useId();
   const startId = useId();
@@ -425,6 +433,7 @@ export function ReturnSettingsSection({ tone }: { tone: AiTone }) {
             setEditing(null);
           }}
           open
+          delivery={delivery}
           settings={settings}
           tone={tone}
         />

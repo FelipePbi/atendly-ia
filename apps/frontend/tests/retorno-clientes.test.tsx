@@ -56,10 +56,20 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       setCustomerBlocked,
     },
     settings: {
-      get: async () => ({ ai: { enabled: true, tone: "BALANCED" } }),
+      get: async () => ({
+        ai: aiSettings,
+        business: { name: "Studio Bela" },
+      }),
     },
   }),
 }));
+// Como a IA envia (D-208); cada teste pode trocar.
+let aiSettings: {
+  enabled: boolean;
+  tone: "BALANCED";
+  messageDelivery?: "PARTS" | "SINGLE";
+} = { enabled: true, tone: "BALANCED" };
+
 vi.mock("@/shared/ui/toastBus", () => ({
   showToast: (...args: unknown[]) => {
     showToast(...args);
@@ -292,12 +302,17 @@ describe("Retorno de clientes › Renovação", () => {
   test("a mensagem que vai sair usa o nome, o serviço e o prazo da primeira marcada", async () => {
     renderScreen();
     await screen.findByText("Adriana Souza");
-    const bubble = document.querySelector(".return-message-bubble");
-    expect(bubble?.textContent).toContain("Oi, Adriana! Tudo bem?");
-    expect(bubble?.textContent).toContain(
+    // Em várias mensagens (D-208, o padrão): um balão por mensagem, em ordem.
+    const bubbles = [
+      ...document.querySelectorAll(".return-message .return-message-bubble"),
+    ].map((bubble) => bubble.textContent);
+    expect(bubbles.slice(0, 4)).toEqual([
+      "Oi, Adriana!",
+      "Tudo bem?",
       "Seu atendimento de Manutenção 5D completa 15 dias no sábado.",
-    );
-    expect(bubble?.textContent).toMatch(/Tenho .+ ou .+\./u);
+      "Quer que eu já reserve um horário?",
+    ]);
+    expect(bubbles[4]).toMatch(/^Tenho .+ ou .+\.$/u);
   });
 
   test("desmarcar tira da rodada; aprovar simula o ritmo e aprova só as marcadas", async () => {
@@ -425,8 +440,10 @@ describe("Retorno de clientes › Resgate", () => {
       "true",
     );
     expect(screen.getByText("“hidratação de brinde na volta”")).toBeVisible();
-    const bubble = document.querySelector(".return-message-bubble");
-    expect(bubble?.textContent).toContain(
+    const bubbles = [
+      ...document.querySelectorAll(".return-message .return-message-bubble"),
+    ].map((bubble) => bubble.textContent);
+    expect(bubbles).toContain(
       "Pra sua volta, tenho uma condição especial: hidratação de brinde na volta.",
     );
     expect(screen.getByText(/Última vez há 3 meses/u)).toBeVisible();
@@ -500,5 +517,97 @@ describe("Perfil › mensagens de retorno", () => {
         name: "Não enviar mensagens de retorno",
       }),
     ).toBeVisible();
+  });
+});
+
+// D-208 — o exemplo por cliente: um celular com a conversa como ela recebe.
+describe("Retorno de clientes › ver a mensagem de cada cliente", () => {
+  function stubReducedMotion(reduce: boolean) {
+    vi.stubGlobal(
+      "matchMedia",
+      (query: string) =>
+        ({
+          matches: reduce && query.includes("prefers-reduced-motion"),
+          media: query,
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+          addListener: () => undefined,
+          removeListener: () => undefined,
+          onchange: null,
+          dispatchEvent: () => false,
+        }) as unknown as MediaQueryList,
+    );
+  }
+
+  function phoneBubbles(dialog: HTMLElement): string[] {
+    return within(within(dialog).getByRole("log"))
+      .queryAllByText(/./u, { selector: ".chat-phone-text" })
+      .map((node) => node.textContent ?? "");
+  }
+
+  test("abre o celular com a mensagem daquela cliente, sem marcar nem desmarcar", async () => {
+    stubReducedMotion(true);
+    const user = userEvent.setup();
+    const { container } = renderScreen();
+    await screen.findByText("Adriana Souza");
+    const adriana = screen.getByRole("checkbox", { name: /Adriana/u });
+    expect(adriana).toBeChecked();
+
+    await user.click(
+      screen.getByRole("button", { name: "Ver a mensagem para Adriana Souza" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Como a IA chama Adriana",
+    });
+    expect(adriana).toBeChecked();
+    expect(within(dialog).getByText("Studio Bela")).toBeVisible();
+    const bubbles = phoneBubbles(dialog);
+    expect(bubbles.slice(0, 4)).toEqual([
+      "Oi, Adriana!",
+      "Tudo bem?",
+      "Seu atendimento de Manutenção 5D completa 15 dias no sábado.",
+      "Quer que eu já reserve um horário?",
+    ]);
+    expect(bubbles[4]).toMatch(/^Tenho .+ ou .+\.$/u);
+    // Menos movimento: tudo de uma vez, sem "digitando…".
+    expect(within(dialog).queryByText("digitando…")).toBeNull();
+    await expectNoA11yViolations(container);
+    vi.unstubAllGlobals();
+  });
+
+  test("cada cliente recebe a dela: o celular da Bia fala com a Bia", async () => {
+    stubReducedMotion(true);
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByText("Adriana Souza");
+
+    await user.click(
+      screen.getByRole("button", { name: /^Ver a mensagem para Bia/u }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: /^Como a IA chama Bia/u,
+    });
+    expect(phoneBubbles(dialog)[0]).toMatch(/^Oi, Bia/u);
+    await user.click(within(dialog).getByRole("button", { name: "Fechar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    vi.unstubAllGlobals();
+  });
+
+  test("numa mensagem só, o celular mostra um balão", async () => {
+    stubReducedMotion(true);
+    aiSettings = { enabled: true, tone: "BALANCED", messageDelivery: "SINGLE" };
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByText("Adriana Souza");
+
+    await user.click(
+      screen.getByRole("button", { name: "Ver a mensagem para Adriana Souza" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(phoneBubbles(dialog)).toHaveLength(1));
+    expect(phoneBubbles(dialog)[0]).toMatch(/^Oi, Adriana! Tudo bem\?\n\n/u);
+    aiSettings = { enabled: true, tone: "BALANCED" };
+    vi.unstubAllGlobals();
   });
 });

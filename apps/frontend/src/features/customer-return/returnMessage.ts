@@ -1,4 +1,4 @@
-import type { AiTone } from "@/data";
+import type { AiMessageDelivery, AiTone } from "@/data";
 
 /** Os fatos que a mensagem usa, no recorte da prévia da tela. */
 export interface ReturnFacts {
@@ -32,7 +32,8 @@ export interface ReturnFacts {
  */
 
 interface ReturnVoice {
-  greeting(name: string | null): string;
+  /** Saudação em partes (D-208): a abertura e o "tudo bem?" do estilo. */
+  greeting(name: string | null): string[];
   shortGreeting(name: string | null): string;
   /** Renovacao com horarios: pergunta antes de oferecer. */
   reserve: string;
@@ -45,7 +46,7 @@ interface ReturnVoice {
 
 const VOICES: Record<AiTone, ReturnVoice> = {
   PROFESSIONAL: {
-    greeting: (name) => (name ? `Olá, ${name}.` : "Olá."),
+    greeting: (name) => [name ? `Olá, ${name}.` : "Olá."],
     shortGreeting: (name) => (name ? `Olá, ${name}.` : "Olá."),
     reserve: "Gostaria que eu reservasse um horário?",
     askSlot: "Posso verificar um horário para você?",
@@ -54,7 +55,7 @@ const VOICES: Record<AiTone, ReturnVoice> = {
       `Para o seu retorno, há uma condição especial: ${text}.`,
   },
   BALANCED: {
-    greeting: (name) => (name ? `Oi, ${name}! Tudo bem?` : "Oi! Tudo bem?"),
+    greeting: (name) => [name ? `Oi, ${name}!` : "Oi!", "Tudo bem?"],
     shortGreeting: (name) => (name ? `Oi, ${name}!` : "Oi!"),
     reserve: "Quer que eu já reserve um horário?",
     askSlot: "Quer que eu veja um horário pra você?",
@@ -62,8 +63,7 @@ const VOICES: Record<AiTone, ReturnVoice> = {
     incentive: (text) => `Pra sua volta, tenho uma condição especial: ${text}.`,
   },
   CASUAL: {
-    greeting: (name) =>
-      name ? `Oii, ${name}! Tudo bem? 😊` : "Oii! Tudo bem? 😊",
+    greeting: (name) => [name ? `Oii, ${name}!` : "Oii!", "Tudo bem? 😊"],
     shortGreeting: (name) => (name ? `Oii, ${name}! 😊` : "Oii! 😊"),
     reserve: "Quer que eu já deixe reservado? 💛",
     askSlot: "Quer que eu veja um horário pra você? 💛",
@@ -255,7 +255,7 @@ function composeFromTemplate(
   template: string,
   facts: ReturnFacts,
   voice: ReturnVoice,
-): string | null {
+): string[] | null {
   const fields = new Set<TemplateField>();
   for (const match of template.matchAll(TEMPLATE_FIELD)) {
     if (!isTemplateField(match[1])) return null;
@@ -301,11 +301,11 @@ function composeFromTemplate(
   if (incentive && !fields.has("incentivo")) {
     blocks.push(voice.incentive(incentive));
   }
-  return blocks.length > 0 ? blocks.join("\n\n") : null;
+  return blocks.length > 0 ? blocks : null;
 }
 
 /** Lembrete unico, curto, sem horario novo e sem texto-base. */
-function composeFollowUp(facts: ReturnFacts, voice: ReturnVoice): string {
+function composeFollowUp(facts: ReturnFacts, voice: ReturnVoice): string[] {
   const name = firstName(facts.customerName);
   const incentive = incentiveText(facts.incentive);
   const blocks = [voice.shortGreeting(name)];
@@ -319,7 +319,7 @@ function composeFollowUp(facts: ReturnFacts, voice: ReturnVoice): string {
     blocks.push(voice.incentive(incentive));
   }
   blocks.push(voice.askSlot);
-  return blocks.join("\n\n");
+  return blocks;
 }
 
 /**
@@ -329,26 +329,51 @@ function composeFollowUp(facts: ReturnFacts, voice: ReturnVoice): string {
 export function defaultReturnTemplate(
   kind: "RENEWAL" | "WINBACK",
   style: AiTone,
+  delivery: AiMessageDelivery = "SINGLE",
 ): string {
   const voice = VOICES[style];
+  // Em várias mensagens (D-208), cada linha é uma mensagem: o texto-base sai
+  // com uma ideia por linha, como a mensagem padrão.
+  if (delivery === "PARTS") {
+    if (kind === "RENEWAL") {
+      return [
+        ...voice.greeting("{nome}"),
+        "Está chegando a hora do seu atendimento de {servico}, {quando}.",
+        voice.reserve,
+        "Tenho {horarios}.",
+      ].join("\n");
+    }
+    return [
+      ...voice.greeting("{nome}"),
+      voice.missYou,
+      voice.incentive("{incentivo}"),
+      voice.askSlot,
+    ].join("\n");
+  }
   if (kind === "RENEWAL") {
     return [
-      voice.greeting("{nome}"),
+      voice.greeting("{nome}").join(" "),
       `Está chegando a hora do seu atendimento de {servico}, {quando}. ${voice.reserve} Tenho {horarios}.`,
     ].join("\n\n");
   }
   return [
-    voice.greeting("{nome}"),
+    voice.greeting("{nome}").join(" "),
     voice.missYou,
     voice.incentive("{incentivo}"),
     voice.askSlot,
   ].join("\n\n");
 }
 
-export function composeReturnText(input: {
+/**
+ * As partes da mensagem de retorno, em ordem (D-208). Em `PARTS` a saudação
+ * sai em duas partes e a Renovação separa o fato, a pergunta e os horários;
+ * em `SINGLE` as partes são as de antes.
+ */
+export function composeReturnParts(input: {
   style: AiTone;
   facts: ReturnFacts;
-}): string {
+  delivery?: AiMessageDelivery;
+}): string[] {
   const voice = VOICES[input.style];
   const facts = input.facts;
   if (facts.followUp) return composeFollowUp(facts, voice);
@@ -359,23 +384,37 @@ export function composeReturnText(input: {
     if (custom !== null) return custom;
   }
 
-  const blocks = [voice.greeting(firstName(facts.customerName))];
+  const single = input.delivery === "SINGLE";
+  const greeting = voice.greeting(firstName(facts.customerName));
+  const blocks = single ? [greeting.join(" ")] : [...greeting];
+  const sentences: string[] = [];
   if (facts.kind === "RENEWAL") {
-    const factual = returnFactualLines(facts).join(" ");
     const slots = slotsPhrase(facts.today, facts.offeredSlots);
-    blocks.push(
-      [factual, slots ? `${voice.reserve} Tenho ${slots}.` : voice.askSlot]
-        .filter((part) => part.length > 0)
-        .join(" "),
+    sentences.push(
+      ...returnFactualLines(facts),
+      ...(slots ? [voice.reserve, `Tenho ${slots}.`] : [voice.askSlot]),
     );
-  } else {
-    const incentive = incentiveText(facts.incentive);
-    blocks.push(
-      [voice.missYou, incentive ? voice.incentive(incentive) : ""]
-        .filter((part) => part.length > 0)
-        .join(" "),
-    );
-    blocks.push(voice.askSlot);
+    if (single) {
+      blocks.push(sentences.join(" "));
+      return blocks;
+    }
+    return [...blocks, ...sentences];
   }
-  return blocks.join("\n\n");
+  const incentive = incentiveText(facts.incentive);
+  const reconnect = [
+    voice.missYou,
+    incentive ? voice.incentive(incentive) : "",
+  ].filter((part) => part.length > 0);
+  if (single) blocks.push(reconnect.join(" "));
+  else blocks.push(...reconnect);
+  blocks.push(voice.askSlot);
+  return blocks;
+}
+
+export function composeReturnText(input: {
+  style: AiTone;
+  facts: ReturnFacts;
+  delivery?: AiMessageDelivery;
+}): string {
+  return composeReturnParts(input).join("\n\n");
 }

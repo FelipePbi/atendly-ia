@@ -13,14 +13,16 @@ import {
   type SettingsState,
 } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
+import { resolveMessageDelivery } from "@/shared/messages/messageParts";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { MessageBubbles } from "@/shared/ui/ChatPhone";
 import { Skeleton } from "@/shared/ui/States";
 import { showToast } from "@/shared/ui/toastBus";
 
 import {
   defaultReminderMessageExample,
+  reminderPreviewBubbles,
   type ReminderPreviewService,
-  reminderPreviewText,
 } from "./reminderPreview";
 
 const LEAD_PRESETS_MINUTES = [2_880, 1_440, 720, 120];
@@ -132,7 +134,9 @@ export function ReminderSettingsSection({
   if (error || !settings) return null;
 
   const tone = businessSettings.ai.tone;
-  const defaultExample = defaultReminderMessageExample(tone);
+  // Em várias mensagens ou numa só, como a IA envia (D-208).
+  const delivery = resolveMessageDelivery(businessSettings.ai.messageDelivery);
+  const defaultExample = defaultReminderMessageExample(tone, delivery);
   const exampleText = messageExample ?? defaultExample;
   const exampleIssue =
     messageExample === null
@@ -209,8 +213,9 @@ export function ReminderSettingsSection({
     }
   }
 
-  const preview = reminderPreviewText({
+  const preview = reminderPreviewBubbles({
     confirmationEnabled,
+    delivery,
     messageExample,
     now,
     pricePolicy,
@@ -349,6 +354,14 @@ export function ReminderSettingsSection({
                     sempre certos, de cada agendamento: use {"{nome}"},{" "}
                     {"{servico}"}, {"{data}"} e {"{hora}"} onde quiser que
                     apareçam. A confirmação e o valor seguem as opções acima.
+                    {delivery === "PARTS" && (
+                      <>
+                        {" "}
+                        <span className="reminders-example-hint">
+                          Cada linha vira uma mensagem.
+                        </span>
+                      </>
+                    )}
                   </small>
                   {exampleIssue && (
                     <small
@@ -378,7 +391,11 @@ export function ReminderSettingsSection({
                   </div>
                 </div>
               )}
-              <div className="reminders-preview-bubble">{preview}</div>
+              <MessageBubbles
+                bubbleClassName="reminders-preview-bubble"
+                bubbles={preview}
+                label={`${preview.length} mensagens, nesta ordem`}
+              />
               <span className="reminders-preview-note">
                 {pricePolicy === "WHEN_FIXED"
                   ? "Endereço só se ela perguntar. Com o valor quando o serviço tem preço fixo."

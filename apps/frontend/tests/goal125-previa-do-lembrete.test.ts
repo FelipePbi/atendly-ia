@@ -91,6 +91,7 @@ describe("Goal125 — prévia do lembrete", () => {
       composeReminderPreviewText({
         style: pair.style,
         facts: facts(pair.facts),
+        delivery: "SINGLE",
       }),
     ).toBe(pair.text);
   });

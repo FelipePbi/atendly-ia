@@ -47,7 +47,13 @@ function renewal(overrides: Partial<ReturnFacts> = {}): ReturnFacts {
 
 describe("prévia igual à mensagem da IA", () => {
   it("Renovação no estilo Equilibrado", () => {
-    expect(composeReturnText({ style: "BALANCED", facts: renewal() })).toBe(
+    expect(
+      composeReturnText({
+        style: "BALANCED",
+        facts: renewal(),
+        delivery: "SINGLE",
+      }),
+    ).toBe(
       [
         "Oi, Adriana! Tudo bem?",
         "Seu atendimento de Manutenção 5D completa 15 dias na quinta-feira. Quer que eu já reserve um horário? Tenho sexta às 17h30 ou sábado às 18h.",
@@ -67,6 +73,7 @@ describe("prévia igual à mensagem da IA", () => {
           offeredSlots: [],
           incentive: "10% de desconto em qualquer serviço até o fim do mês.",
         }),
+        delivery: "SINGLE",
       }),
     ).toBe(
       [

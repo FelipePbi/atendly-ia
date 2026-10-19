@@ -1,4 +1,5 @@
-import type { AiTone, ReminderPricePolicy } from "@/data";
+import type { AiMessageDelivery, AiTone, ReminderPricePolicy } from "@/data";
+import { messageBubbles } from "@/shared/messages/messageParts";
 
 /**
  * Cópia deliberada das frases de
@@ -8,25 +9,25 @@ import type { AiTone, ReminderPricePolicy } from "@/data";
  */
 
 interface Voice {
-  greeting(customerName: string | null): string;
+  /** Saudação em partes (D-208): a abertura e o "tudo bem?" do estilo. */
+  greeting(customerName: string | null): string[];
   confirmation: string;
   closing: string;
 }
 
 const VOICES: Record<AiTone, Voice> = {
   PROFESSIONAL: {
-    greeting: (name) => (name ? `Olá, ${name}.` : "Olá."),
+    greeting: (name) => [name ? `Olá, ${name}.` : "Olá."],
     confirmation: "Pode confirmar sua presença respondendo sim ou não?",
     closing: "Fico à disposição.",
   },
   BALANCED: {
-    greeting: (name) => (name ? `Oi, ${name}! Tudo bem?` : "Oi! Tudo bem?"),
+    greeting: (name) => [name ? `Oi, ${name}!` : "Oi!", "Tudo bem?"],
     confirmation: "Você confirma sua presença? É só responder sim ou não.",
     closing: "Qualquer coisa, é só me chamar!",
   },
   CASUAL: {
-    greeting: (name) =>
-      name ? `Oii, ${name}! Tudo bem? 😊` : "Oii! Tudo bem? 😊",
+    greeting: (name) => [name ? `Oii, ${name}!` : "Oii!", "Tudo bem? 😊"],
     confirmation: "Confirma pra mim? Pode responder sim ou não 💛",
     closing: "Qualquer coisa me chama por aqui 💛",
   },
@@ -143,7 +144,7 @@ function composeFromExample(
   example: string,
   facts: ReminderPreviewFacts,
   voice: Voice,
-): string | null {
+): string[] | null {
   const fields = new Set<ExampleField>();
   for (const match of example.matchAll(EXAMPLE_FIELD)) {
     const field = match[1];
@@ -186,7 +187,7 @@ function composeFromExample(
     blocks.splice(Math.min(1, blocks.length), 0, ...factual);
   }
   if (facts.confirmationRequested) blocks.push(voice.confirmation);
-  return blocks.join("\n\n");
+  return blocks;
 }
 
 /**
@@ -194,18 +195,31 @@ function composeFromExample(
  * frase padrão, com os campos no lugar dos dados. A pergunta de confirmação
  * e o valor ficam de fora porque entram sozinhos, pelas opções da tela.
  */
-export function defaultReminderMessageExample(tone: AiTone | null): string {
+export function defaultReminderMessageExample(
+  tone: AiTone | null,
+  delivery: AiMessageDelivery = "SINGLE",
+): string {
   const voice = VOICES[tone ?? "BALANCED"];
-  return [
-    voice.greeting("{nome}"),
-    "Passando para lembrar do seu atendimento de {servico} {data}, às {hora}.",
-  ].join("\n\n");
+  const fact =
+    "Passando para lembrar do seu atendimento de {servico} {data}, às {hora}.";
+  // Em várias mensagens (D-208), cada linha é uma mensagem: a saudação e o
+  // "tudo bem?" ficam em linhas próprias, como no lembrete padrão.
+  if (delivery === "PARTS") {
+    return [...voice.greeting("{nome}"), fact].join("\n");
+  }
+  return [voice.greeting("{nome}").join(" "), fact].join("\n\n");
 }
 
-export function composeReminderPreviewText(input: {
+/**
+ * As partes do lembrete, em ordem (D-208): em `PARTS` a saudação sai em duas
+ * ("Oi, Ana!" e "Tudo bem?"); em `SINGLE`, numa só. No exemplo da
+ * profissional, cada linha é uma parte.
+ */
+export function composeReminderPreviewParts(input: {
   style: AiTone;
   facts: ReminderPreviewFacts;
-}): string {
+  delivery?: AiMessageDelivery;
+}): string[] {
   const { facts } = input;
   const voice = VOICES[input.style];
   const example = facts.messageExample?.trim();
@@ -213,8 +227,9 @@ export function composeReminderPreviewText(input: {
     const custom = composeFromExample(example, facts, voice);
     if (custom !== null) return custom;
   }
+  const greeting = voice.greeting(facts.customerName?.trim() || null);
   const blocks = [
-    voice.greeting(facts.customerName?.trim() || null),
+    ...(input.delivery === "SINGLE" ? [greeting.join(" ")] : greeting),
     ...factualLines(facts),
   ];
   if (facts.confirmationRequested) {
@@ -222,7 +237,15 @@ export function composeReminderPreviewText(input: {
   } else if (voice.closing) {
     blocks.push(voice.closing);
   }
-  return blocks.join("\n\n");
+  return blocks;
+}
+
+export function composeReminderPreviewText(input: {
+  style: AiTone;
+  facts: ReminderPreviewFacts;
+  delivery?: AiMessageDelivery;
+}): string {
+  return composeReminderPreviewParts(input).join("\n\n");
 }
 
 /** Dia seguinte ao de `now` no fuso do negócio, como `AAAA-MM-DD`. */
@@ -251,8 +274,16 @@ export interface ReminderPreviewService {
   price: number | null;
 }
 
-export function reminderPreviewText({
+export function reminderPreviewText(
+  input: Parameters<typeof reminderPreviewBubbles>[0],
+): string {
+  return reminderPreviewBubbles({ ...input, delivery: "SINGLE" })[0] ?? "";
+}
+
+/** Os balões do lembrete como a cliente os recebe (D-208). */
+export function reminderPreviewBubbles({
   confirmationEnabled,
+  delivery = "PARTS",
   messageExample = null,
   now,
   pricePolicy,
@@ -261,13 +292,14 @@ export function reminderPreviewText({
   tone,
 }: {
   confirmationEnabled: boolean;
+  delivery?: AiMessageDelivery;
   messageExample?: string | null;
   now: Date;
   pricePolicy: ReminderPricePolicy;
   services: readonly ReminderPreviewService[];
   timeZone: string;
   tone: AiTone | null;
-}): string {
+}): string[] {
   const service = services.find((entry) => entry.active) ?? null;
   const price =
     pricePolicy === "WHEN_FIXED" &&
@@ -276,8 +308,9 @@ export function reminderPreviewText({
     service.price !== null
       ? service.price
       : null;
-  return composeReminderPreviewText({
+  const parts = composeReminderPreviewParts({
     style: tone ?? "BALANCED",
+    delivery,
     facts: {
       customerName: "Ana",
       subject: service?.name ?? null,
@@ -288,4 +321,5 @@ export function reminderPreviewText({
       messageExample,
     },
   });
+  return messageBubbles(parts, delivery);
 }

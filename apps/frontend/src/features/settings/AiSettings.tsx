@@ -5,6 +5,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 
 import {
   type ActivationTestRun,
+  type AiMessageDelivery,
   type AiTone,
   BffHttpError,
   type SettingsState,
@@ -18,13 +19,19 @@ import {
   readFinishedActivationTest,
   startActivationTest,
 } from "@/features/activation-test/ActivationTestPanels";
+import { composeReturnParts } from "@/features/customer-return/returnMessage";
 import {
   segmentExamples,
   toneExamples,
 } from "@/features/onboarding/segmentExamples";
 import { Icon } from "@/shared/icons/Icon";
+import {
+  messageBubbles,
+  resolveMessageDelivery,
+} from "@/shared/messages/messageParts";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { useOptionalSystemStatus } from "@/shared/runtime/systemStatus";
+import { MessageBubbles } from "@/shared/ui/ChatPhone";
 import { Dialog } from "@/shared/ui/Dialog";
 import { Skeleton } from "@/shared/ui/States";
 import { showToast } from "@/shared/ui/toastBus";
@@ -88,6 +95,9 @@ export function AiSettings({
   const enabled = enabledSetting && !whatsappDown;
   const savedTone: AiTone = settings.ai.tone ?? "BALANCED";
   const [tone, setTone] = useState<AiTone>(savedTone);
+  const savedDelivery = resolveMessageDelivery(settings.ai.messageDelivery);
+  const [delivery, setDelivery] = useState<AiMessageDelivery>(savedDelivery);
+  const [deliveryMessage, setDeliveryMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [activationMessage, setActivationMessage] = useState<string | null>(
@@ -182,6 +192,33 @@ export function AiSettings({
       setTone(savedTone);
       if (!(await refusedForMissingTest(error))) {
         setMessage("Não foi possível salvar o estilo.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Como as mensagens saem (D-208). Leva o ligado e o estilo **gravados**:
+   * trocar o envio nunca liga, desliga nem muda o estilo da IA.
+   */
+  async function chooseDelivery(next: AiMessageDelivery) {
+    if (next === delivery) return;
+    setDelivery(next);
+    setBusy(true);
+    setDeliveryMessage(null);
+    try {
+      const state = await getProductServices().settings.updateAi({
+        enabled: enabledSetting,
+        tone: savedTone,
+        messageDelivery: next,
+      });
+      onSaved(state);
+      showToast("Envio das mensagens salvo.");
+    } catch (error) {
+      setDelivery(savedDelivery);
+      if (!(await refusedForMissingTest(error))) {
+        setDeliveryMessage("Não foi possível salvar o envio das mensagens.");
       }
     } finally {
       setBusy(false);
@@ -431,6 +468,14 @@ export function AiSettings({
             </p>
           )}
         </div>
+        <DeliverySection
+          busy={busy}
+          delivery={delivery}
+          message={deliveryMessage}
+          onChoose={(next) => void chooseDelivery(next)}
+          serviceName={serviceName}
+          tone={tone}
+        />
         <AppointmentNoticeRow />
         <AiSandboxSection />
         <div className="ai-contract">
@@ -547,12 +592,14 @@ function ToneOption({
   checked,
   example,
   label,
+  name = "ai-tone",
   onChoose,
 }: {
   busy: boolean;
   checked: boolean;
   example: string;
   label: string;
+  name?: string;
   onChoose: () => void;
 }) {
   return (
@@ -561,7 +608,7 @@ function ToneOption({
         checked={checked}
         className="ai-tone-input"
         disabled={busy}
-        name="ai-tone"
+        name={name}
         type="radio"
         onChange={onChoose}
       />
@@ -573,6 +620,132 @@ function ToneOption({
         <span className="ai-tone-example">{example}</span>
       </span>
     </label>
+  );
+}
+
+const DELIVERY_OPTIONS: Array<{
+  description: string;
+  label: string;
+  value: AiMessageDelivery;
+}> = [
+  {
+    label: "Em várias mensagens curtas",
+    description:
+      "Como uma pessoa digitando: uma ideia por mensagem, com “digitando…” antes de cada uma.",
+    value: "PARTS",
+  },
+  {
+    label: "Em uma mensagem só",
+    description: "Tudo junto, num bloco.",
+    value: "SINGLE",
+  },
+];
+
+/** Hoje e daqui a `days` dias, local, como `AAAA-MM-DD`. */
+function localDate(days = 0): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * Exemplo do envio (D-208): a mensagem de retorno de uma cliente, composta
+ * pelo mesmo código da prévia do retorno, no estilo escolhido e com o
+ * primeiro serviço do negócio. Muda ao vivo com a opção marcada.
+ */
+export function deliveryExampleBubbles(input: {
+  delivery: AiMessageDelivery;
+  serviceName: string | null;
+  tone: AiTone;
+}): string[] {
+  const parts = composeReturnParts({
+    style: input.tone,
+    delivery: input.delivery,
+    facts: {
+      kind: "RENEWAL",
+      followUp: false,
+      customerName: "Ana",
+      serviceName: input.serviceName,
+      today: localDate(),
+      expectedDate: localDate(),
+      intervalDays: 15,
+      daysSinceLastVisit: 15,
+      offeredSlots: [
+        { date: localDate(1), time: "10:00" },
+        { date: localDate(3), time: "15:00" },
+      ],
+      incentive: null,
+      messageTemplate: null,
+    },
+  });
+  return messageBubbles(parts, input.delivery);
+}
+
+function DeliverySection({
+  busy,
+  delivery,
+  message,
+  onChoose,
+  serviceName,
+  tone,
+}: {
+  busy: boolean;
+  delivery: AiMessageDelivery;
+  message: string | null;
+  onChoose: (next: AiMessageDelivery) => void;
+  serviceName: string | null;
+  tone: AiTone;
+}) {
+  const labelId = useId();
+  const helpId = useId();
+  const previewId = useId();
+  const bubbles = deliveryExampleBubbles({ delivery, serviceName, tone });
+  return (
+    <div className="ai-delivery">
+      <span className="ai-tone-label" id={labelId}>
+        Como a IA envia as mensagens
+      </span>
+      <div
+        aria-describedby={helpId}
+        aria-labelledby={labelId}
+        className="ai-tone-options"
+        role="radiogroup"
+      >
+        {DELIVERY_OPTIONS.map((option) => (
+          <ToneOption
+            busy={busy}
+            checked={delivery === option.value}
+            example={option.description}
+            key={option.value}
+            label={option.label}
+            name="ai-delivery"
+            onChoose={() => onChoose(option.value)}
+          />
+        ))}
+      </div>
+      <p className="ai-delivery-help" id={helpId}>
+        Vale para as respostas da IA, lembretes, confirmações de presença,
+        avisos de alteração e mensagens de retorno. O que você digita no app
+        sai exatamente como você escreveu.
+      </p>
+      <section aria-labelledby={previewId} className="ai-delivery-preview">
+        <span className="ai-delivery-preview-title" id={previewId}>
+          Exemplo de como chega para a cliente
+        </span>
+        <MessageBubbles
+          bubbleClassName="ai-delivery-bubble"
+          bubbles={bubbles}
+          label={`${bubbles.length} mensagens, nesta ordem`}
+        />
+      </section>
+      {message && (
+        <p className="ai-state-message" role="status">
+          {message}
+        </p>
+      )}
+    </div>
   );
 }
 

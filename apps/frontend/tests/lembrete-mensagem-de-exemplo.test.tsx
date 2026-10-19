@@ -128,16 +128,21 @@ describe("composição pela mensagem de exemplo (mesmos textos do ai-orchestrato
 
   test("o texto inicial do editor, aplicado, é o lembrete padrão", () => {
     for (const style of ["PROFESSIONAL", "BALANCED", "CASUAL"] as const) {
-      const sample = facts({ confirmationRequested: true });
-      expect(
-        composeReminderPreviewText({
-          style,
-          facts: {
-            ...sample,
-            messageExample: defaultReminderMessageExample(style),
-          },
-        }),
-      ).toBe(composeReminderPreviewText({ style, facts: sample }));
+      // Nos dois modos de envio (D-208): em partes, o texto inicial tem uma
+      // ideia por linha e cada linha é uma mensagem, como o padrão.
+      for (const delivery of ["PARTS", "SINGLE"] as const) {
+        const sample = facts({ confirmationRequested: true });
+        expect(
+          composeReminderPreviewText({
+            style,
+            delivery,
+            facts: {
+              ...sample,
+              messageExample: defaultReminderMessageExample(style, delivery),
+            },
+          }),
+        ).toBe(composeReminderPreviewText({ style, delivery, facts: sample }));
+      }
     }
   });
 });
@@ -154,9 +159,12 @@ function remindersFixture(
   };
 }
 
-function settingsFixture(tone: AiTone = "CASUAL"): SettingsState {
+function settingsFixture(
+  tone: AiTone = "CASUAL",
+  messageDelivery: "PARTS" | "SINGLE" = "SINGLE",
+): SettingsState {
   return {
-    ai: { enabled: false, tone },
+    ai: { enabled: false, tone, messageDelivery },
     availability: null,
     business: null,
     calendar: {
@@ -241,6 +249,44 @@ describe("editar a mensagem", () => {
     expect(
       within(preview()).getByText(/Lembre de vir sem rímel/),
     ).toBeVisible();
+  });
+
+  // D-208: em várias mensagens, cada linha da profissional é uma mensagem.
+  test("em várias mensagens, o editor avisa que cada linha vira uma mensagem e a prévia mostra um balão por linha", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <ReminderSettingsSection settings={settingsFixture("CASUAL", "PARTS")} />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Editar mensagem" }),
+    );
+    const field = screen.getByLabelText("Sua mensagem de exemplo");
+    expect(field).toHaveValue(
+      "Oii, {nome}!\nTudo bem? 😊\nPassando para lembrar do seu atendimento de {servico} {data}, às {hora}.",
+    );
+    expect(field).toHaveAccessibleDescription(
+      /Cada linha vira uma mensagem\./,
+    );
+
+    await user.clear(field);
+    await user.type(
+      field,
+      "Oiii {{nome}!{Enter}Tudo bem?{Enter}Lembre de vir sem rímel 😉",
+    );
+    const list = within(preview()).getByRole("list");
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual([
+      "Oiii Ana!",
+      "Passando para lembrar do seu atendimento de Aplicação 5D na segunda-feira, 19/10, às 15h30.",
+      "Tudo bem?",
+      "Lembre de vir sem rímel 😉",
+      "Confirma pra mim? Pode responder sim ou não 💛",
+    ]);
+    await expectNoA11yViolations(container);
   });
 
   test("'Restaurar padrão' volta ao padrão e grava null", async () => {

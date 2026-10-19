@@ -200,6 +200,7 @@ const FIELD_LABELS: Record<string, string> = {
   messageExample: "Mensagem de exemplo",
   enabled: "IA",
   tone: "Estilo da IA",
+  messageDelivery: "Envio das mensagens",
   category: "Categoria",
   modalities: "Atendimento",
   address: "Endereço",
@@ -334,6 +335,11 @@ export function formatChangeValue(
     return plain(value ? "Ligada" : "Desligada");
   }
   if (field === "active") return plain(value ? "Ativo" : "Arquivado");
+  if (field === "messageDelivery" && typeof value === "string") {
+    return plain(
+      value === "SINGLE" ? "Em uma mensagem só" : "Em várias mensagens curtas",
+    );
+  }
   if (field === "dailyLimit" && typeof value === "number") {
     return plain(`${value} por dia`);
   }
@@ -742,7 +748,9 @@ export function activitySentence(entry: ActivityEntry): string {
     case "settings.ai_updated":
       return entry.changes.some((change) => change.field === "tone")
         ? `${who} mudou o estilo da IA`
-        : `${who} alterou a IA`;
+        : entry.changes.some((change) => change.field === "messageDelivery")
+          ? `${who} mudou como a IA envia as mensagens`
+          : `${who} alterou a IA`;
     case "settings.ai_sandbox_enabled":
       return `${who} ligou o modo sandbox`;
     case "settings.ai_sandbox_disabled":

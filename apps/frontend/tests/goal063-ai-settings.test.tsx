@@ -450,3 +450,98 @@ describe("WhatsApp desconectado pausa a IA na tela (pedido de 2026-10-16)", () =
     expect(screen.getByRole("button", { name: "Pausar" })).toBeVisible();
   });
 });
+
+// D-208 — "Como a IA envia as mensagens": duas opções, a prévia em balões
+// muda ao vivo com a escolha, e salvar leva o ligado e o estilo gravados.
+describe("Como a IA envia as mensagens (D-208)", () => {
+  function deliveryGroup() {
+    return screen.getByRole("radiogroup", {
+      name: "Como a IA envia as mensagens",
+    });
+  }
+  function previewRegion() {
+    return screen.getByRole("region", {
+      name: "Exemplo de como chega para a cliente",
+    });
+  }
+
+  test("sem escolha gravada, vale várias mensagens curtas, com um balão por mensagem", async () => {
+    const { container } = renderAi(settingsFixture());
+
+    const group = deliveryGroup();
+    expect(
+      within(group).getByRole("radio", { name: /^Em várias mensagens curtas/ }),
+    ).toBeChecked();
+    expect(
+      within(group).getByRole("radio", { name: /^Em uma mensagem só/ }),
+    ).not.toBeChecked();
+    expect(group).toHaveAccessibleDescription(
+      /lembretes, confirmações de presença, avisos de alteração e mensagens de retorno/,
+    );
+    const items = within(previewRegion()).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Oi, Ana!",
+      "Tudo bem?",
+      "Seu último atendimento completa 15 dias hoje.",
+      "Quer que eu já reserve um horário?",
+      expect.stringMatching(/^Tenho amanhã às 10h ou .+ às 15h\.$/u),
+    ]);
+    await waitFor(() =>
+      expect(getNotificationPreferences).toHaveBeenCalled(),
+    );
+    await expectNoA11yViolations(container);
+  });
+
+  test("escolher uma mensagem só grava, avisa e mostra um balão", async () => {
+    const user = userEvent.setup();
+    const saved = settingsFixture({
+      enabled: true,
+      tone: "CASUAL",
+      messageDelivery: "SINGLE",
+    });
+    updateAi.mockResolvedValue(saved);
+    const { onSaved } = renderAi(
+      settingsFixture({ enabled: true, tone: "CASUAL" }),
+    );
+
+    await user.click(
+      within(deliveryGroup()).getByRole("radio", {
+        name: /^Em uma mensagem só/,
+      }),
+    );
+
+    await waitFor(() =>
+      expect(updateAi).toHaveBeenCalledWith({
+        enabled: true,
+        tone: "CASUAL",
+        messageDelivery: "SINGLE",
+      }),
+    );
+    expect(onSaved).toHaveBeenCalledWith(saved);
+    expect(within(previewRegion()).queryByRole("list")).toBeNull();
+    expect(previewRegion()).toHaveTextContent(
+      /Oii, Ana! Tudo bem\? 😊\s+Seu último atendimento completa 15 dias hoje\./u,
+    );
+  });
+
+  test("falha ao gravar volta à escolha anterior com a mensagem de erro", async () => {
+    const user = userEvent.setup();
+    updateAi.mockRejectedValue(new Error("falhou"));
+    renderAi(settingsFixture({ enabled: false, tone: "BALANCED" }));
+
+    await user.click(
+      within(deliveryGroup()).getByRole("radio", {
+        name: /^Em uma mensagem só/,
+      }),
+    );
+
+    expect(
+      await screen.findByText("Não foi possível salvar o envio das mensagens."),
+    ).toBeVisible();
+    expect(
+      within(deliveryGroup()).getByRole("radio", {
+        name: /^Em várias mensagens curtas/,
+      }),
+    ).toBeChecked();
+  });
+});

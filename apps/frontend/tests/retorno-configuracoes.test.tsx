@@ -114,7 +114,7 @@ describe("Configurações › Retorno de clientes", () => {
 
   test("texto-base com campo desconhecido é recusado; o válido salva com toast", async () => {
     const user = userEvent.setup();
-    render(<ReturnSettingsSection tone="BALANCED" />);
+    render(<ReturnSettingsSection delivery="SINGLE" tone="BALANCED" />);
     await screen.findByLabelText("Mensagens por dia");
     await user.click(
       screen.getByRole("button", { name: "Mensagem da Renovação" }),
@@ -145,5 +145,29 @@ describe("Configurações › Retorno de clientes", () => {
       }),
     );
     expect(showToast).toHaveBeenCalledWith("Mensagem salva.");
+  });
+
+  // D-208: em várias mensagens, o texto-base tem uma ideia por linha e o
+  // editor avisa que cada linha vira uma mensagem.
+  test("em várias mensagens, o texto-base inicial tem uma mensagem por linha", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<ReturnSettingsSection tone="BALANCED" />);
+    await screen.findByLabelText("Mensagens por dia");
+    await user.click(
+      screen.getByRole("button", { name: "Mensagem da Renovação" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Mensagem da Renovação",
+    });
+    const field = within(dialog).getByLabelText("Texto-base");
+    expect((field as HTMLTextAreaElement).value.split("\n")).toEqual([
+      "Oi, {nome}!",
+      "Tudo bem?",
+      "Está chegando a hora do seu atendimento de {servico}, {quando}.",
+      "Quer que eu já reserve um horário?",
+      "Tenho {horarios}.",
+    ]);
+    expect(field).toHaveAccessibleDescription(/Cada linha vira uma mensagem\./u);
+    await expectNoA11yViolations(container);
   });
 });

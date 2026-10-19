@@ -2,6 +2,7 @@ import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import type {
   AgendaInitialView,
   AgendaViewPreference,
+  AiMessageDelivery,
   AiSandboxSettings,
   AiSandboxSettingsInput,
   AiTone,
@@ -30,6 +31,8 @@ export interface BusinessSettingsInput {
 export interface AiSettingsInput {
   enabled: boolean;
   tone: AiTone;
+  /** Como as mensagens saem (D-208). Ausente preserva o gravado. */
+  messageDelivery?: AiMessageDelivery;
 }
 
 export interface AvailabilitySettingsInput {

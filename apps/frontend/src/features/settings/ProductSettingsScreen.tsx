@@ -9,6 +9,7 @@ import { ReminderSettingsSection } from "@/features/reminders/ReminderSettingsSe
 import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
+import { resolveMessageDelivery } from "@/shared/messages/messageParts";
 import { useDeferredLoading } from "@/shared/motion/useDeferredLoading";
 import { BrandLoader } from "@/shared/ui/Brand";
 
@@ -207,7 +208,10 @@ function SettingsSection({
   if (scenario === "customer-return")
     return (
       <SettingsPage title="Retorno de clientes">
-        <ReturnSettingsSection tone={settings.ai.tone ?? "BALANCED"} />
+        <ReturnSettingsSection
+          delivery={resolveMessageDelivery(settings.ai.messageDelivery)}
+          tone={settings.ai.tone ?? "BALANCED"}
+        />
       </SettingsPage>
     );
   if (scenario === "account") return <AccountSettings />;

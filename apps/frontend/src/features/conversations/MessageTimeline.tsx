@@ -483,6 +483,7 @@ export function MessageBubble({
   const meta = ai ? `IA · ${time}` : outgoing ? `Você · ${time}` : time;
   const deliveryState = message.deliveryState;
   const attachmentKind = message.attachment?.kind;
+  const parts = message.parts;
   return (
     <div
       className={clsx(
@@ -496,22 +497,32 @@ export function MessageBubble({
         attachmentKind === "STICKER" && "is-sticker",
       )}
     >
-      <div className="message-bubble">
-        {/* Legenda da imagem vem depois dela, como no WhatsApp. */}
-        {message.body && attachmentKind !== "IMAGE" && (
-          <span className="message-text">{message.body}</span>
-        )}
-        {message.attachment && (
-          <MessageAttachmentView
-            attachment={message.attachment}
-            conversationId={conversationId}
-            messageId={message.id}
-          />
-        )}
-        {message.body && attachmentKind === "IMAGE" && (
-          <span className="message-text message-caption">{message.body}</span>
-        )}
-      </div>
+      {/* Mensagem da plataforma em várias partes (D-208): um balão por
+          mensagem do WhatsApp, em ordem, como a cliente recebeu. */}
+      {parts && parts.length > 1 && !message.attachment ? (
+        parts.map((part, index) => (
+          <div className="message-bubble" key={index}>
+            <span className="message-text">{part}</span>
+          </div>
+        ))
+      ) : (
+        <div className="message-bubble">
+          {/* Legenda da imagem vem depois dela, como no WhatsApp. */}
+          {message.body && attachmentKind !== "IMAGE" && (
+            <span className="message-text">{message.body}</span>
+          )}
+          {message.attachment && (
+            <MessageAttachmentView
+              attachment={message.attachment}
+              conversationId={conversationId}
+              messageId={message.id}
+            />
+          )}
+          {message.body && attachmentKind === "IMAGE" && (
+            <span className="message-text message-caption">{message.body}</span>
+          )}
+        </div>
+      )}
       <span className="message-meta">
         {ai && <span aria-hidden="true" className="message-meta-dot" />}
         {outgoing && !ai && (

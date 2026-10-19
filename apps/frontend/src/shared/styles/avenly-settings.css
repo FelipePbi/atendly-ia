@@ -4748,3 +4748,49 @@ html.vt-settings-swap::view-transition-new(settings-panel) {
   background: var(--at-color-danger-tint);
   font-size: 14px;
 }
+
+/* Como a IA envia as mensagens (D-208). */
+.ai-delivery {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-delivery-help {
+  margin: 0;
+  color: var(--at-color-ink-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.ai-delivery-preview {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--at-color-border);
+  border-radius: 14px;
+  background: var(--at-color-surface-sunken);
+}
+.ai-delivery-preview-title {
+  color: var(--at-color-ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.ai-delivery-bubble {
+  max-width: 92%;
+  padding: 8px 12px;
+  border: 1px solid var(--at-color-border);
+  border-radius: 4px 14px 14px 14px;
+  color: var(--at-color-ink);
+  background: var(--at-color-surface);
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.reminders-example-hint {
+  color: var(--at-color-primary-ink);
+  font-size: 12px;
+  font-weight: 600;
+}

@@ -32,6 +32,9 @@ export const businessContextProjectionStatusSchema = z.enum([
 // Descontraída. O BFF aceita os dois valores antigos como alias de entrada
 // mas nunca os devolve — o schema de leitura só precisa do vocabulário novo.
 export const aiToneSchema = z.enum(["PROFESSIONAL", "BALANCED", "CASUAL"]);
+// Como a plataforma envia ao cliente o que ela compõe (D-208): em várias
+// mensagens curtas, em sequência (`PARTS`, padrão), ou numa mensagem só.
+export const aiMessageDeliverySchema = z.enum(["PARTS", "SINGLE"]);
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
@@ -232,6 +235,9 @@ export const settingsStateSchema = z.object({
     // Instante da pausa humana (Goal117). Opcional e anulável: resposta
     // anterior a este Goal continua válida sem o campo.
     pausedAt: isoDateTimeSchema.nullable().optional(),
+    // Como as mensagens saem (D-208). Opcional: resposta anterior a esta
+    // opção continua válida, e ausente vale `PARTS`.
+    messageDelivery: aiMessageDeliverySchema.optional(),
   }),
   calendar: calendarStateSchema,
   availability: availabilitySettingsSchema.nullable(),
@@ -813,6 +819,10 @@ export const messageSchema = z.object({
   deliveryDetail: z.string().nullish().optional(),
   kind: messageKindSchema.nullish().optional(),
   attachment: messageAttachmentSchema.nullish().optional(),
+  // Mensagem da plataforma enviada em várias partes (D-208): o texto de cada
+  // mensagem do WhatsApp, em ordem — um balão por parte. Nulo ou ausente:
+  // saiu inteira, um balão com `body`.
+  parts: z.array(z.string()).nullish().optional(),
 });
 
 export const sessionCategorySchema = z.enum([
@@ -1608,6 +1618,7 @@ export type ConversationSuggestions = z.infer<
 >;
 
 export type AiTone = z.infer<typeof aiToneSchema>;
+export type AiMessageDelivery = z.infer<typeof aiMessageDeliverySchema>;
 export type BusinessModality = z.infer<typeof businessModalitySchema>;
 export type BusinessAddressParts = z.infer<typeof businessAddressPartsSchema>;
 export type WhatsappContact = z.infer<typeof whatsappContactSchema>;

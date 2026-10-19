@@ -39,6 +39,13 @@ enum AiTone {
   LIGHT_CLOSE
 }
 
+/// Como a plataforma envia ao cliente o que ela compoe (D-208): em varias
+/// mensagens curtas (`PARTS`, padrao de todo negocio) ou em uma so.
+enum AiMessageDelivery {
+  PARTS
+  SINGLE
+}
+
 enum TenantRole {
   OWNER
 }
@@ -235,6 +242,9 @@ model AiSettings {
   /// (ligar, autoativacao, troca de canal, exclusao de conta) grava nulo. Nulo
   /// tambem e "pausa anterior a este Goal": nenhum instante e inventado.
   pausedAt         DateTime?
+  /// Como as mensagens da plataforma saem (D-208). Projetado para a IA junto
+  /// com o estilo, em `AiTenantConfig.messageDelivery`.
+  messageDelivery  AiMessageDelivery @default(PARTS)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 

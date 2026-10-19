@@ -1,4 +1,5 @@
 import {
+  aiMessageDeliverySchema,
   aiSandboxSettingsInputSchema,
   reminderMessageExampleInputSchema,
 } from "@avenly-ia/public-api-contract";
@@ -67,6 +68,8 @@ const aiSchema = z.object({
   // Os tres estilos do produto e os dois valores antigos como alias
   // declarado (Goal011); a resposta sempre devolve o vocabulario novo.
   tone: aiConversationStyleSchema,
+  // Como as mensagens saem (D-208). Ausente preserva o gravado.
+  messageDelivery: aiMessageDeliverySchema.optional(),
 });
 // --- Lembretes e confirmacao de presenca (Goal021, WU-009, G-27) -----------
 // So humano: a IA nunca configura lembrete, no mesmo padrao de disponibilidade
@@ -307,26 +310,40 @@ export async function registerV1SettingsRoutes(
         : pausing
           ? { pausedAt: new Date() }
           : {};
+      const deliveryWrite = body.messageDelivery
+        ? { messageDelivery: body.messageDelivery }
+        : {};
       const upsertArgs = {
         where: { tenantId: tenant.tenantId },
         create: {
           tenantId: tenant.tenantId,
           enabled: body.enabled,
           tone: body.tone,
+          ...deliveryWrite,
           ...(activatedByRunId ? { activatedByRunId } : {}),
           ...pausedAtWrite,
         },
         update: {
           enabled: body.enabled,
           tone: body.tone,
+          ...deliveryWrite,
           ...(activatedByRunId ? { activatedByRunId } : {}),
           ...pausedAtWrite,
         },
       };
+      const currentDelivery = current?.messageDelivery ?? "PARTS";
       const aiChanges = diffFields(
-        { enabled: current?.enabled ?? false, tone: current?.tone ?? null },
-        { enabled: body.enabled, tone: body.tone },
-        ["enabled", "tone"],
+        {
+          enabled: current?.enabled ?? false,
+          tone: current?.tone ?? null,
+          messageDelivery: currentDelivery,
+        },
+        {
+          enabled: body.enabled,
+          tone: body.tone,
+          messageDelivery: body.messageDelivery ?? currentDelivery,
+        },
+        ["enabled", "tone", "messageDelivery"],
       );
       const aiAction = activating
         ? "settings.ai_enabled"
@@ -664,6 +681,8 @@ async function settingsState(
       enabled: Boolean(aiSettings?.enabled),
       tone: normalizeStoredAiConversationStyle(aiSettings?.tone),
       pausedAt: aiSettings?.pausedAt?.toISOString() ?? null,
+      // D-208: sem linha, em varias partes, como o default da coluna.
+      messageDelivery: aiSettings?.messageDelivery ?? "PARTS",
     },
     calendar: {
       ...calendar,
@@ -714,6 +733,7 @@ async function syncAi(
       enabled: settings.enabled,
       tone: resolveAiConversationStyle(settings.tone),
       businessContext: businessContextPayload(businessProfile),
+      messageDelivery: settings.messageDelivery,
     });
     if (
       businessProfile.businessContextProjectedVersion !==

@@ -54,6 +54,8 @@ const messageSchema = z.object({
   deliveryDetail: z.string().nullish().optional(),
   kind: messageKindSchema.nullish().optional(),
   attachment: messageAttachmentSchema.nullish().optional(),
+  // Partes da mensagem enviada em varias mensagens (D-208), uma por balao.
+  parts: z.array(z.string()).nullish().optional(),
 });
 
 const sessionCategorySchema = z.enum([

@@ -642,6 +642,8 @@ Desligar (`enabled: false`, "Pausar") só grava `activatedByRunId` — da execu�
 
 **A hora da pausa (Goal117/WU-01).** `GET /v1/settings` e a resposta de `PATCH /v1/settings/ai` trazem `ai.pausedAt`: instante ISO-8601 da última pausa humana, ou `null`. O campo é opcional e anulável no contrato — resposta sem ele continua válida. Persiste em `AiSettings.pausedAt` (coluna anulável, sem default e sem backfill). Só a passagem ligada → desligada de `PATCH /v1/settings/ai` grava o instante; salvar só o estilo com a IA já desligada não o muda. Toda outra escrita que muda `enabled` grava `null`: ligar por `PATCH`, autoativação por teste novo, desligamento por troca de canal e desligamento pela exclusão de conta. `null` também vale para pausas anteriores a este Goal: nenhum instante é inventado.
 
+**Como a IA envia as mensagens (D-208).** `GET /v1/settings` e a resposta de `PATCH /v1/settings/ai` trazem `ai.messageDelivery`: `PARTS` (em várias mensagens curtas, em sequência, com o "digitando…" antes de cada uma — o padrão de todo negócio, inclusive dos que já existiam) ou `SINGLE` (em uma mensagem só). `PATCH /v1/settings/ai` aceita `messageDelivery` opcional: ausente preserva o gravado, valor fora dos dois é `400`. Persiste em `AiSettings.messageDelivery` e é projetado para a IA junto com o estilo; a IA aplica a escolha em toda mensagem que a plataforma compõe para o cliente (resposta da IA, lembrete, confirmação de presença, aviso de alteração, retorno de clientes e o lembrete do retorno). Mensagem digitada pela profissional nunca é dividida. Mudar a escolha registra `settings.ai_updated` com a linha `messageDelivery` (antes → depois). O campo é opcional no contrato: resposta sem ele vale `PARTS`.
+
 **O teste real fora do onboarding (Goal063, U-11).** As rotas `GET/POST /v1/activation-test` e `POST /v1/activation-test/restart` não mudam e nunca olharam o onboarding. O que muda é quem as oferece: além do onboarding, Configurações › IA oferece o mesmo teste **enquanto a IA não está ativa** — sem prova válida e com WhatsApp conectado. Com a IA ativa a tela não mostra entrada para o teste, e o BFF continua recusando com `ACTIVATION_TEST_AI_ALREADY_ACTIVE`. Um teste novo bem-sucedido depois de uma pausa continua ligando a IA pela reconciliação, como antes. O cliente trata `409 AI_ACTIVATION_TEST_REQUIRED` relendo o estado (`GET /v1/settings` e `GET /v1/activation-test`), nunca como erro genérico. O onboarding só é concluído (`POST /v1/onboarding/complete`) pela ação que sai dele, depois da etapa do teste; a regra é do cliente e não muda a rota.
 
 **Limites.** IA ligada antes do Goal063 sem teste continua ligada: não há regra retroativa nem migration. Salvar só o estilo com a IA já ligada nunca é recusado por falta de teste. Que o teste envia e recebe mensagem de verdade não é provado por teste automatizado, porque o número oficial da Avenly não existe no ambiente de migração (D-035); essa conferência humana **não foi feita** pelo Goal063.
@@ -728,6 +730,8 @@ O DTO de mensagem de `GET /v1/conversations/:id/messages`, `POST /v1/conversatio
 | --- | --- | --- |
 | `deliveryState` | `PENDING`, `SENT`, `FAILED`, `UNKNOWN`, `null` | estado da tentativa de saída |
 | `deliveryDetail` | texto curto ou `null` | motivo, quando o estado não é `SENT` |
+
+**Partes (D-208).** Mensagem da plataforma enviada em várias mensagens curtas traz `parts`: o texto de cada mensagem do WhatsApp, em ordem — o app mostra um balão por parte. `body` continua o texto completo (as partes separadas por linha em branco). `parts` nulo ou ausente: a mensagem saiu inteira, um balão com `body`. O estado de entrega é da mensagem toda: `SENT` só depois da última parte.
 
 Os campos são opcionais e podem vir `null`: mensagem recebida (`INBOUND`) não tem entrega, e mensagens gravadas antes desta versão ficaram sem estado ou como `UNKNOWN` pelo backfill. Consumidores devem tratar ausência como "sem informação", nunca como sucesso.
 
@@ -1059,7 +1063,7 @@ Cancelar sempre cancela os lembretes pendentes do horário anterior, com `notify
 
 ## Modo sandbox da IA (D-199)
 
-Para testar sem afetar clientes. Ligado, as mensagens que iriam para o WhatsApp de quem **não** está na lista de exceções — resposta da IA (em todas as partes, com o "digitando…" junto), mensagem da profissional pelo app, lembrete e aviso de alteração do agendamento — são gravadas e mostradas como enviadas (`deliveryState: "SENT"`), mas não saem. A entrada, a IA, a agenda e os lembretes seguem funcionando. Os números da lista recebem de verdade.
+Para testar sem afetar clientes. Ligado, as mensagens que iriam para o WhatsApp de quem **não** está na lista de exceções — resposta da IA, lembrete, aviso de alteração e retorno de clientes (em todas as partes, com o "digitando…" junto; o sandbox decide parte a parte, D-208), mensagem da profissional pelo app — são gravadas e mostradas como enviadas (`deliveryState: "SENT"`), mas não saem. A entrada, a IA, a agenda e os lembretes seguem funcionando. Os números da lista recebem de verdade.
 
 Quem bloqueia é a IA, no transporte, e não esta rota nem a tela: o estado mora na IA (`AiTenantConfig`) e o BFF só valida, repassa e registra a atividade.
 

@@ -26,7 +26,9 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import PlatformLayout from "@/app/(platform)/layout";
 import { AppShell } from "@/shared/layout/AppShell";
+import { useShellConfig } from "@/shared/layout/ShellConfig";
 
 const navigation = vi.hoisted(() => ({ pathname: "/clientes" }));
 // Estável como o router do App Router: a casca não reinscreve o ouvinte.
@@ -189,6 +191,59 @@ describe("trocar de seção pelo menu anima a área de conteúdo", () => {
   });
 });
 
+function RevenueStandIn() {
+  useShellConfig({ active: "faturamento", title: "Faturamento" });
+  return <p>Faturamento</p>;
+}
+
+function HomeStandIn() {
+  useShellConfig({ active: "inicio", module: "dashboard", title: "Início" });
+  return <p>Início</p>;
+}
+
+describe("a barra fica montada na troca de seção (D-209)", () => {
+  test("do Faturamento para o Início, a barra é o mesmo elemento e nunca sai do DOM", () => {
+    goTo("/faturamento");
+    const { rerender } = render(
+      <PlatformLayout>
+        <RevenueStandIn />
+      </PlatformLayout>,
+    );
+    const before = screen.getAllByRole("navigation", {
+      name: "Navegação principal",
+    });
+    // Barra lateral e barra inferior (as duas existem no DOM; o CSS escolhe).
+    expect(before).toHaveLength(2);
+    const removed: Node[] = [];
+    const observer = new MutationObserver((records) => {
+      for (const record of records) removed.push(...record.removedNodes);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    cleanups.push(() => observer.disconnect());
+
+    goTo("/inicio");
+    rerender(
+      <PlatformLayout>
+        <HomeStandIn />
+      </PlatformLayout>,
+    );
+    observer.takeRecords().forEach((record) => {
+      removed.push(...record.removedNodes);
+    });
+
+    const after = screen.getAllByRole("navigation", {
+      name: "Navegação principal",
+    });
+    expect(after).toEqual(before);
+    expect(
+      removed.some((node) => before.some((nav) => node.contains(nav))),
+    ).toBe(false);
+    expect(
+      within(after[1]).getByRole("link", { name: "Início" }),
+    ).toHaveAttribute("aria-current", "page");
+  });
+});
+
 describe("o CSS da transição entre seções", () => {
   const css = readFileSync(
     path.join(__dirname, "../src/shared/styles/avenly-motion.css"),
@@ -217,6 +272,43 @@ describe("o CSS da transição entre seções", () => {
         "html.vt-section #main-content *:not(.shell-status-banner, .shell-sandbox-chip)",
       ),
     ).toMatch(/view-transition-name:\s*none !important/);
+  });
+
+  test("a área de conteúdo é recortada acima da barra inferior (D-209)", () => {
+    // A foto de `#main-content` é a do elemento inteiro, mais alta que a
+    // janela, e o grupo nomeado é desenhado acima do root, onde a barra
+    // está. Recortado na janela menos a barra, o conteúdo nunca a cobre.
+    const clip = "html:has(.app-frame > nav)::view-transition-group(app-main) {";
+    const phone = css
+      .split("@media (max-width: 1099px) {")
+      .slice(1)
+      .find((rest) => rest.includes(clip));
+    expect(phone, "media de até 1099 px").toBeDefined();
+    expect(body(phone ?? "", clip)).toMatch(
+      /height:\s*calc\(100dvh - 65px - env\(safe-area-inset-bottom\)\);\s*overflow:\s*clip/,
+    );
+    const wide = css
+      .split("@media (min-width: 768px) and (max-width: 1099px) {")
+      .slice(1)
+      .find((rest) => rest.includes(clip));
+    expect(wide, "media de 768 a 1099 px").toBeDefined();
+    expect(body(wide ?? "", clip)).toMatch(
+      /height:\s*calc\(100dvh - 81px - env\(safe-area-inset-bottom\)\)/,
+    );
+    // As alturas são as da barra em `avenly.css`.
+    const shell = readFileSync(
+      path.join(__dirname, "../src/shared/styles/avenly.css"),
+      "utf8",
+    );
+    expect(shell).toMatch(
+      /@media \(max-width: 1099px\) \{[\s\S]*?:where\(\.app-frame > nav\) \{[^}]*height: calc\(65px \+ env\(safe-area-inset-bottom\)\)/,
+    );
+    expect(shell).toMatch(
+      /@media \(min-width: 768px\) and \(max-width: 1099px\) \{[\s\S]*?:where\(\.app-frame > nav\) \{\s*height: calc\(81px \+ env\(safe-area-inset-bottom\)\)/,
+    );
+    // Dar nome à barra não serve: o WebKit desenha vazia a foto nova de um
+    // elemento fixo.
+    expect(css).not.toMatch(/\.app-frame > nav\s*\{[^}]*view-transition-name/);
   });
 
   test("com movimento reduzido, a tela antiga aparece e a troca é só fade", () => {

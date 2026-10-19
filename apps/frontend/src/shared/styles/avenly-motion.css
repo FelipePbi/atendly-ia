@@ -369,6 +369,27 @@ html.vt-section #main-content *:not(.shell-status-banner, .shell-sandbox-chip) {
     var(--at-ease-standard) both;
   mix-blend-mode: normal;
 }
+/* A barra inferior fica por cima da troca de seção (D-209). Ela vai na foto
+   do root, e todo grupo nomeado é desenhado acima do root; a foto de
+   `#main-content` é a do elemento inteiro, mais alta que a janela quando a
+   tela rola, e passava por cima da barra fixa: a barra "sumia e voltava" ao
+   sair do Faturamento e a lista de Conversas aparecia sobre o menu (vídeos
+   de 2026-10-19). O grupo do conteúdo é recortado na altura da janela menos
+   a barra, as mesmas medidas de `.app-frame > nav` em `avenly.css`. Dar
+   nome próprio à barra não serve: o WebKit desenha vazia a foto nova de um
+   elemento fixo, e a barra sumia a transição inteira. Sem a barra (tela
+   empurrada, a partir de 1100 px), nada é recortado. */
+@media (max-width: 1099px) {
+  html:has(.app-frame > nav)::view-transition-group(app-main) {
+    height: calc(100dvh - 65px - env(safe-area-inset-bottom));
+    overflow: clip;
+  }
+}
+@media (min-width: 768px) and (max-width: 1099px) {
+  html:has(.app-frame > nav)::view-transition-group(app-main) {
+    height: calc(100dvh - 81px - env(safe-area-inset-bottom));
+  }
+}
 @keyframes motion-section-out {
   from {
     opacity: 1;

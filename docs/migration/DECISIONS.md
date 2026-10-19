@@ -8307,3 +8307,17 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Consequências:** lembretes e mensagens de retorno passam a chegar em 3 a 5 mensagens no padrão. A regra de 2026-10-11 "na inbox a resposta continua uma mensagem só" é substituída: a conversa mostra os balões. Se o transporte falhar no meio de um lembrete, as partes já enviadas ficaram com a cliente e a intenção fica `FAILED`, sem reenvio (a mesma garantia de nunca mandar duas vezes). Sem banco de integração nesta máquina, os ensaios de migração (`goal074-human-takeover-migration-rehearsal.mjs`, registrado) e as suítes com Postgres não rodaram aqui.
 
 **Revisar se:** o produto quiser retomar um lembrete interrompido no meio, deixar a profissional escolher o modo por tipo de mensagem, ou a IA passar a escrever pensando em partes (prompt).
+
+## D-209 — A barra inferior fica por cima da troca de seção: o conteúdo é recortado acima dela
+
+**Status:** ACCEPTED em 2026-10-19, por dois relatos do usuário: "Ao navegar do menu de Faturamento para outro, parece que a barra do menu some e depois aparece" e "Quando estou na lista de conversas e troco pra outra tela, o sistema mostra o chat sobreposto no menu por um leve momento" (vídeos de 2026-10-19, no tablet). Correção de comportamento, fora do IA Loop. Complementa o item 5 de D-173 (transição `section`).
+
+**Contexto:** na troca de seção só a área de conteúdo tem nome (`app-main`); a barra inferior vai na foto do root. O navegador desenha todo grupo nomeado acima do root, e a foto de `#main-content` é a do elemento inteiro, mais alta que a janela quando a tela rola: enquanto a tela que sai sumia (e a nova entrava), o conteúdo era desenhado por cima da barra fixa. A barra nunca saiu do DOM nem ficou invisível (medido quadro a quadro); o que se via era o conteúdo por cima dela. Aparecia no Faturamento e na lista de Conversas porque o conteúdo delas passa por baixo da barra, com cartões e linhas opacos; também acontecia ao entrar no Início.
+
+**Decisão:** abaixo de 1100 px, com a barra na tela, o grupo `app-main` é recortado na altura da janela menos a barra (`calc(100dvh - 65px - env(safe-area-inset-bottom))`, 81 px de 768 a 1099 px, as mesmas medidas de `.app-frame > nav`), com `overflow: clip`. A área de conteúdo continua com o fade e a subida de antes, só acima da barra; a barra fica parada e inteira, já com o destino novo marcado. Sem a barra (tela empurrada, a partir de 1100 px), nada muda. Prova: `tests/transicao-entre-secoes.test.tsx` (o recorte nas duas faixas, e a barra é o mesmo elemento do Faturamento para o Início).
+
+**Alternativas:** dar nome próprio à barra e ao `+` para virarem grupos acima do conteúdo (rejeitado: corrige no Chromium, mas o WebKit desenha vazia a foto nova de um elemento fixo e a barra sumia a transição inteira — o Chrome do iOS é WebKit); mostrar a foto antiga da barra (rejeitado: o destino tocado só acenderia no fim da transição).
+
+**Consequências:** o botão `+`, que fica acima da barra, continua na foto do root e ainda é coberto pelo fade do conteúdo durante a troca, como antes. O recorte parte do topo do grupo, que é o topo da tela nova (a navegação volta a página ao topo).
+
+**Revisar se:** a barra mudar de altura (o recorte repete as medidas), ou o WebKit passar a desenhar a foto nova de elementos fixos — aí a barra e o `+` podem ganhar nome próprio.

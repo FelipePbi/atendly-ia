@@ -627,14 +627,15 @@ function resolveBlockScopedComposerName(
 }
 
 /**
- * Divisor da resposta da IA em várias mensagens (decisão de produto
- * 2026-10-11). Não cria texto: cada parte é um pedaço do texto que entrou.
+ * Divisor da mensagem em várias partes (decisão de produto 2026-10-11, D-208).
+ * Não cria texto: cada parte é um pedaço do texto que entrou; o segundo
+ * argumento (o layout) só decide onde cortar.
  */
-export const AI_REPLY_SPLITTER = "splitAiReplyIntoParts";
+export const AI_REPLY_SPLITTER = "splitMessageIntoParts";
 
 /**
  * Origem do texto quando o `text:` do envio é `<partes>[<índice>]` e, no mesmo
- * bloco de função do sítio, `const <partes> = splitAiReplyIntoParts(<origem>.text)`.
+ * bloco de função do sítio, `const <partes> = splitMessageIntoParts(<origem>.text, ...)`.
  * A parte continua sendo texto em trânsito da `<origem>` — o divisor só corta,
  * não compõe —, então a cadeia segue pela mesma origem. `undefined` se não houver.
  */
@@ -646,7 +647,7 @@ function resolveBlockScopedSplitOrigin(
   const blockStart = findEnclosingFunctionBodyStart(source, beforeIndex);
   const scope = source.slice(blockStart, beforeIndex);
   const pattern = new RegExp(
-    `\\bconst\\s+${identifier}\\s*=\\s*${AI_REPLY_SPLITTER}\\s*\\(\\s*([A-Za-z_$][\\w$]*)\\.text\\s*\\)`,
+    `\\bconst\\s+${identifier}\\s*=\\s*${AI_REPLY_SPLITTER}\\s*\\(\\s*([A-Za-z_$][\\w$]*)\\.text\\s*[,)]`,
     "g",
   );
   let match: RegExpExecArray | null;

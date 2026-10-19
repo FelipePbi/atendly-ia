@@ -92,9 +92,30 @@ export const aiConversationStyleSchema = z
     return style;
   });
 
+/**
+ * Como as mensagens que a plataforma compoe chegam ao cliente (D-208): em
+ * varias mensagens curtas (`PARTS`, padrao) ou em uma mensagem so (`SINGLE`).
+ * Muda so o envio, nunca o que a mensagem diz.
+ */
+export const AI_MESSAGE_DELIVERIES = ["PARTS", "SINGLE"] as const;
+
+export type AiMessageDelivery = (typeof AI_MESSAGE_DELIVERIES)[number];
+
+export const DEFAULT_AI_MESSAGE_DELIVERY: AiMessageDelivery = "PARTS";
+
+/** Leitura tolerante: ausente ou desconhecido fica no padrao (`PARTS`). */
+export function resolveAiMessageDelivery(value: unknown): AiMessageDelivery {
+  return value === "SINGLE" ? "SINGLE" : DEFAULT_AI_MESSAGE_DELIVERY;
+}
+
+export const aiMessageDeliverySchema = z.enum(AI_MESSAGE_DELIVERIES);
+
 export const aiSettingsSchema = z.object({
   aiEnabled: z.boolean().default(true),
   tone: aiConversationStyleSchema,
+  // Opcional no tipo: quem monta configuracao sem ela (payload antigo,
+  // dubles) fica no padrao. `normalizeAiSettings` sempre a preenche.
+  messageDelivery: aiMessageDeliverySchema.optional(),
 });
 
 export type AiTenantSettings = z.infer<typeof aiSettingsSchema>;
@@ -102,6 +123,7 @@ export type AiTenantSettings = z.infer<typeof aiSettingsSchema>;
 export const DEFAULT_AI_SETTINGS: AiTenantSettings = {
   aiEnabled: true,
   tone: DEFAULT_AI_CONVERSATION_STYLE,
+  messageDelivery: DEFAULT_AI_MESSAGE_DELIVERY,
 };
 
 export function normalizeAiSettings(value: unknown): AiTenantSettings {
@@ -117,5 +139,6 @@ export function normalizeAiSettings(value: unknown): AiTenantSettings {
     // Leitura tolerante de proposito: estilo ilegivel nao pode desligar a IA
     // nem derrubar o turno. A recusa acontece na entrada.
     tone: resolveAiConversationStyle(source.tone),
+    messageDelivery: resolveAiMessageDelivery(source.messageDelivery),
   };
 }

@@ -238,6 +238,51 @@ describe("InboundMessageProcessor", () => {
     expect(subject.handoff.pauseForHuman).not.toHaveBeenCalled();
   });
 
+  // D-208: lembrete, aviso e retorno tambem saem em partes. O eco de cada
+  // parte (`<correlationId>-p<n>`) e da ultima, que chega antes de a linha
+  // ser marcada enviada, e saida da plataforma: nunca "Você atendendo".
+  it.each([
+    "notify:appointment-a:REMINDER:FIRST:v3-p2",
+    "notify:appointment-a:REMINDER:FIRST:v3",
+    "return:target-a:initial-p1",
+    "ai-0b6f6c1e-1111-4222-8333-944455556666-p1",
+  ])(
+    "o eco da parte %s nao vira atendimento humano",
+    async (messageId) => {
+      const { createFakePrisma } = await import(
+        "../session/support/fake-prisma.js"
+      );
+      const { HandoffService } = await import(
+        "../../src/modules/handoff/HandoffService.js"
+      );
+      const { store, prisma } = createFakePrisma();
+      const scope = { tenantId: "tenant-1", channelId: "channel-1" };
+      await store.message.create({
+        data: {
+          ...scope,
+          direction: "OUTBOUND",
+          correlationId: messageId.replace(/-p\d+$/u, ""),
+          externalMessageId: null,
+        },
+      });
+      const real = new HandoffService(prisma, scope);
+      const subject = buildSubject();
+      subject.handoff.isBotOutboundMessage.mockImplementation((id: string) =>
+        real.isBotOutboundMessage(id),
+      );
+
+      await expect(
+        subject.processor.handleInboundMessage(
+          baseMessage({ fromMe: true, messageId, text: "Tudo bem?" }),
+        ),
+      ).resolves.toMatchObject({ action: "ignored_bot_outbound" });
+      expect(subject.handoff.pauseForHuman).not.toHaveBeenCalled();
+      expect(
+        subject.automation.recordManualOutboundText,
+      ).not.toHaveBeenCalled();
+    },
+  );
+
   it("processes fromMe self-chat messages when self-chat testing is enabled", async () => {
     const original = env.EVOLUTION_ALLOW_SELF_CHAT;
     env.EVOLUTION_ALLOW_SELF_CHAT = true;

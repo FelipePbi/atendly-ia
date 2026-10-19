@@ -143,6 +143,16 @@ const RETURN_INVITATION_MIGRATION_SQL = path.join(
   "migration.sql",
 );
 
+const MESSAGE_PARTS_MIGRATION_SQL = path.join(
+  repositoryRoot,
+  "apps",
+  "ai-orchestrator",
+  "prisma",
+  "migrations",
+  "20261019120000_message_parts",
+  "migration.sql",
+);
+
 function refuse(message) {
   console.error(`goal074:human-takeover-migration-rehearsal REFUSED — ${message}`);
   process.exit(2);
@@ -796,6 +806,58 @@ async function alignAiDurabilityTargetWithReturnInvitation(target) {
   }
 }
 
+/**
+ * Leva o banco de durabilidade da IA as colunas das mensagens em partes
+ * (D-208): `AiTenantConfig.messageDelivery` e `Message.bodyParts`. O turno
+ * da IA le o modo de envio e grava as partes da resposta; sem as colunas a
+ * suite de persistencia nao veria o esquema da producao. O DDL e idempotente
+ * (tipo criado so se faltar, `IF NOT EXISTS` em cada coluna).
+ */
+async function alignAiDurabilityTargetWithMessageParts(target) {
+  const database = decodeURIComponent(
+    target.maintenance.pathname.replace(/^\//u, ""),
+  );
+  const durability = new URL(target.maintenance.href);
+  durability.pathname = `/${database}_goal004`;
+
+  const client = new Client({ connectionString: durability.href });
+  try {
+    await client.connect();
+  } catch {
+    console.log(
+      "durability target not provisioned yet — skipping the message parts columns",
+    );
+    return;
+  }
+  try {
+    const configTable = await client.query(
+      `SELECT to_regclass('"AiTenantConfig"') AS present`,
+    );
+    if (!configTable.rows[0].present) {
+      console.log(
+        "durability target has no AiTenantConfig table yet — skipping the message parts columns",
+      );
+      return;
+    }
+    const applied = await applyMigrationFile(
+      client,
+      MESSAGE_PARTS_MIGRATION_SQL,
+    );
+    if (applied !== true) {
+      console.error(
+        `goal074:human-takeover-migration-rehearsal FAILED — durability target columns failed applying ${MESSAGE_PARTS_MIGRATION_SQL}: ${applied}`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    console.log(
+      `durability target aligned with the message parts columns: ${database}_goal004`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
 export async function main() {
   const target = rehearsalTarget(process.env);
 
@@ -809,6 +871,7 @@ export async function main() {
   await alignAiDurabilityTargetWithConversationOwnerRead(target);
   await alignAiDurabilityTargetWithAiSandbox(target);
   await alignAiDurabilityTargetWithReturnInvitation(target);
+  await alignAiDurabilityTargetWithMessageParts(target);
 
   if (process.exitCode) {
     console.error(

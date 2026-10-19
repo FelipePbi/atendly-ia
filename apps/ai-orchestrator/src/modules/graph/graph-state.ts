@@ -9,9 +9,13 @@ import type {
   ModelResponse,
   ModelToolResult,
 } from "../model/model-provider.js";
+import type { MessageLayout } from "../outbox/message-dispatch.js";
 import type { ServiceInstructionPromptItem } from "../prompts/service-instructions.js";
 import type { SessionSnapshot } from "../session/SessionService.js";
-import type { AiConversationStyle } from "../tenant-config/ai-settings.js";
+import type {
+  AiConversationStyle,
+  AiMessageDelivery,
+} from "../tenant-config/ai-settings.js";
 
 /**
  * Identidade do turno de entrada.
@@ -50,6 +54,8 @@ export interface GraphTenantConfig {
   aiEnabled: boolean;
   tone: AiConversationStyle;
   promptVersion: string;
+  /** Como a resposta sai (D-208). Ausente no estado anterior: em partes. */
+  messageDelivery?: AiMessageDelivery;
 }
 
 export interface GraphCustomerContext {
@@ -87,6 +93,11 @@ export interface GraphResponse {
   messageRecordId?: string;
   /** Operation-id estavel da saida, emitido antes de chamar o transporte. */
   correlationId?: string;
+  /**
+   * Como a resposta e dividida no envio (D-208), decidido quando a linha foi
+   * gravada com as partes. Ausente: vem da configuracao do negocio.
+   */
+  layout?: MessageLayout;
   providerMessageId?: string;
   rawPayload?: unknown;
 }

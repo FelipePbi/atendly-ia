@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  composeNotificationParts,
   composeNotificationText,
   notificationFactualLines,
 } from "../../src/modules/reminders/notification-message.js";
@@ -221,9 +222,96 @@ describe("notification message templates", () => {
         composeNotificationText({
           style: pair.style,
           facts: facts({ time: "15:30", ...pair.overrides }),
+          delivery: "SINGLE",
         }),
       ).toBe(pair.text);
     }
+  });
+
+  // D-208: em varias mensagens, a saudacao se divide e cada frase e uma
+  // parte. As mesmas partes estao em
+  // apps/frontend/tests/message-parts-preview.test.ts. Mude os dois lados.
+  it("em partes: saudacao, tudo bem, fato, valor e pergunta, cada um uma mensagem", () => {
+    const pairs: Array<{
+      style: "PROFESSIONAL" | "BALANCED" | "CASUAL";
+      overrides: Partial<NotificationFacts>;
+      parts: string[];
+    }> = [
+      {
+        style: "BALANCED",
+        overrides: { price: 120, confirmationRequested: true },
+        parts: [
+          "Oi, Ana!",
+          "Tudo bem?",
+          "Passando para lembrar do seu atendimento de Corte na quarta-feira, 16/09, às 15h30.",
+          "Valor: R$ 120,00.",
+          "Você confirma sua presença? É só responder sim ou não.",
+        ],
+      },
+      {
+        style: "CASUAL",
+        overrides: { services: [], confirmationRequested: true },
+        parts: [
+          "Oii, Ana!",
+          "Tudo bem? 😊",
+          "Passando para lembrar do seu atendimento na quarta-feira, 16/09, às 15h30.",
+          "Confirma pra mim? Pode responder sim ou não 💛",
+        ],
+      },
+      {
+        style: "PROFESSIONAL",
+        overrides: {},
+        parts: [
+          "Olá, Ana.",
+          "Passando para lembrar do seu atendimento de Corte na quarta-feira, 16/09, às 15h30.",
+          "Fico à disposição.",
+        ],
+      },
+      {
+        style: "BALANCED",
+        overrides: { customerName: null },
+        parts: [
+          "Oi!",
+          "Tudo bem?",
+          "Passando para lembrar do seu atendimento de Corte na quarta-feira, 16/09, às 15h30.",
+          "Qualquer coisa, é só me chamar!",
+        ],
+      },
+    ];
+    for (const pair of pairs) {
+      const input = {
+        style: pair.style,
+        facts: facts({ time: "15:30", ...pair.overrides }),
+        delivery: "PARTS" as const,
+      };
+      expect(composeNotificationParts(input)).toEqual(pair.parts);
+      expect(composeNotificationText(input)).toBe(pair.parts.join("\n\n"));
+      // Dividir nao muda fato: a frase do atendimento e a mesma da mensagem so.
+      expect(
+        composeNotificationText({ ...input, delivery: "SINGLE" }),
+      ).toContain(pair.parts.find((part) => part.startsWith("Passando"))!);
+    }
+  });
+
+  it("mensagem de exemplo em partes: cada linha da profissional e uma mensagem", () => {
+    const parts = composeNotificationParts({
+      style: "CASUAL",
+      delivery: "PARTS",
+      facts: facts({
+        time: "15:30",
+        price: 50,
+        confirmationRequested: true,
+        messageExample:
+          "Oiii {nome}!\nTudo bem?\nSeu horário de {servico} é {data} às {hora} 💛",
+      }),
+    });
+    expect(parts).toEqual([
+      "Oiii Ana!",
+      "Tudo bem?",
+      "Seu horário de Corte é na quarta-feira, 16/09 às 15h30 💛",
+      "Valor: R$ 50,00.",
+      "Confirma pra mim? Pode responder sim ou não 💛",
+    ]);
   });
 
   it("asks for presence only when the reminder requests confirmation", () => {

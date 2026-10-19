@@ -1,5 +1,6 @@
 import type { AssistantService } from "../assistant/assistant.service.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
+import type { MessageLayout } from "../outbox/message-dispatch.js";
 import type { TenantExecutionContext } from "../tenant-config/tenant-execution-context.js";
 import type {
   ActivationTestReplyDelivery,
@@ -221,6 +222,7 @@ export class ActivationTestAiDriver implements ActivationTestAiPort {
       conversationId: string;
       messageRecordId: string;
       text: string;
+      layout?: MessageLayout;
       correlationId?: string;
     },
   ): Promise<ActivationTestReplyDelivery | undefined> {
@@ -231,6 +233,7 @@ export class ActivationTestAiDriver implements ActivationTestAiPort {
       conversationId: reply.conversationId,
       messageRecordId: reply.messageRecordId,
       text: reply.text,
+      layout: reply.layout,
       correlationId: reply.correlationId ?? reply.messageRecordId,
       // O destino e o numero da plataforma porque e ele que faz o papel de
       // cliente nesta conversa. Nao ha aqui destino livre.

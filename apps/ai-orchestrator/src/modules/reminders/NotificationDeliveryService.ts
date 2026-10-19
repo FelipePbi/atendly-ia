@@ -13,6 +13,12 @@ import {
   resolveContactKeyForPhone,
 } from "../channel/conversation-resolution.js";
 import type { WhatsAppProvider } from "../channel/ports/WhatsAppProvider.js";
+import {
+  composedMessageLayout,
+  dispatchMessage,
+  type MessagePartProgressPort,
+  storedBodyParts,
+} from "../outbox/message-dispatch.js";
 import { classifySendFailure } from "../outbox/outbox-policy.js";
 import { OutboxStore } from "../outbox/OutboxStore.js";
 import { type SandboxGate, tenantSandboxGate } from "../sandbox/SandboxGate.js";
@@ -102,6 +108,10 @@ export interface NotificationDeliveryDeps {
   sessions: Pick<GraphSessionPort, "resolveContext">;
   channels?: Pick<ChannelConnectionService, "resolveChannelCredential">;
   outbox?: Pick<OutboxStore, "markSent" | "markUndelivered">;
+  /** Progresso do envio em partes (D-208); padrao e o outbox real. */
+  progress?: MessagePartProgressPort;
+  /** Espera entre partes; trocavel so em teste. */
+  sleep?: (ms: number) => Promise<void>;
   providerFactory?: NotificationProviderFactory;
   logger?: DiagnosticLogger;
 }
@@ -129,6 +139,8 @@ export class NotificationDeliveryService {
     "resolveChannelCredential"
   >;
   private readonly outbox: Pick<OutboxStore, "markSent" | "markUndelivered">;
+  private readonly progress?: MessagePartProgressPort;
+  private readonly sleep?: (ms: number) => Promise<void>;
   private readonly providerFactory: NotificationProviderFactory;
   private readonly logger: DiagnosticLogger;
 
@@ -139,8 +151,10 @@ export class NotificationDeliveryService {
     this.channels =
       deps.channels ??
       new ChannelConnectionService(deps.prisma as unknown as PrismaClient);
-    this.outbox =
-      deps.outbox ?? new OutboxStore(deps.prisma as unknown as PrismaClient);
+    const store = new OutboxStore(deps.prisma as unknown as PrismaClient);
+    this.outbox = deps.outbox ?? store;
+    this.progress = deps.progress ?? (deps.outbox ? undefined : store);
+    this.sleep = deps.sleep;
     this.providerFactory = deps.providerFactory ?? defaultProviderFactory;
     this.logger = deps.logger ?? noopDiagnosticLogger;
   }
@@ -275,9 +289,14 @@ export class NotificationDeliveryService {
       };
     }
 
+    // Em partes ou numa mensagem so, conforme o negocio (D-208). As partes
+    // ficam gravadas com a saida: a conversa do app mostra um balao por parte.
+    const delivery = aiSettings.messageDelivery ?? "PARTS";
+    const layout = composedMessageLayout(delivery);
     const text = composeNotificationText({
       style: aiSettings.tone,
       facts: intent.facts,
+      delivery,
     });
 
     // 5. A saida existe **antes** do transporte, em `PENDING`. Ela nunca e
@@ -296,6 +315,7 @@ export class NotificationDeliveryService {
           source: "AI",
           role: "assistant",
           body: text,
+          bodyParts: storedBodyParts(text, layout),
           deliveryState: "PENDING",
           deliveryUpdatedAt: new Date(),
         },
@@ -337,14 +357,27 @@ export class NotificationDeliveryService {
           logger: this.logger,
         }),
       });
-      const sent = await provider.sendText({
-        to: externalContactId,
-        text,
-        correlationId: intent.correlationId,
-      });
+      // Cada parte passa pelo sandbox e sai com `<correlationId>-p<n>`; a
+      // ultima leva o `correlationId` da intencao. A liquidacao (e o aviso ao
+      // dono que nasce dela) acontece uma vez, depois da ultima parte.
+      const sent = await dispatchMessage(
+        provider,
+        {
+          to: externalContactId,
+          text,
+          layout,
+          correlationId: intent.correlationId,
+          messageRecordId,
+        },
+        { progress: this.progress, sleep: this.sleep, typeFirstPart: true },
+      );
+      if (sent.status === "stopped") {
+        // Sem `shouldStop` aqui; o ramo existe para o tipo ficar fechado.
+        throw new Error(`notification dispatch stopped: ${sent.reason}`);
+      }
       await this.outbox.markSent({
         messageRecordId,
-        providerMessageId: sent.messageId ?? intent.correlationId,
+        providerMessageId: sent.providerMessageId ?? intent.correlationId,
         rawPayload: sent.raw,
       });
       this.logger.info(

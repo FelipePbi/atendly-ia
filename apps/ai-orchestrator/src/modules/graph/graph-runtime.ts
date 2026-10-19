@@ -1,7 +1,10 @@
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { resolveChannelConversation } from "../channel/conversation-resolution.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
-import { resolveAiConversationStyle } from "../tenant-config/ai-settings.js";
+import {
+  resolveAiConversationStyle,
+  resolveAiMessageDelivery,
+} from "../tenant-config/ai-settings.js";
 import type {
   GraphConversationContext,
   GraphTenantConfig,
@@ -73,6 +76,11 @@ export class PrismaGraphRuntime implements GraphRuntimePort {
           config?.tone ?? message.aiSettings?.tone,
         ),
         promptVersion: config?.promptVersion ?? "scheduling_v1.0.0",
+        // Como a resposta sai (D-208): banco vence o payload; sem nenhum dos
+        // dois, em varias partes.
+        messageDelivery: resolveAiMessageDelivery(
+          config?.messageDelivery ?? message.aiSettings?.messageDelivery,
+        ),
       },
     };
   }

@@ -68,9 +68,11 @@ interface StoredMessage {
   source: string | null;
   role: string;
   body: string;
+  bodyParts?: string[];
   deliveryState: string | null;
   deliveryDetail: string | null;
   deliveryAttempts: number;
+  deliveryPartsSent?: number;
 }
 
 interface HarnessOptions {
@@ -78,9 +80,14 @@ interface HarnessOptions {
   credentialProvisioned?: boolean;
   aiEnabled?: boolean;
   tone?: string;
+  /** Como as mensagens saem (D-208). Nesta suite, uma so, salvo pedido. */
+  messageDelivery?: "PARTS" | "SINGLE";
   ignored?: boolean;
   humanHandling?: boolean;
-  send?: () => Promise<{ messageId?: string; raw: unknown }>;
+  send?: (input: {
+    text: string;
+    correlationId?: string;
+  }) => Promise<{ messageId?: string; raw: unknown }>;
   settle?: NotificationSettlementPort["settleNotificationIntent"];
   seedMessages?: StoredMessage[];
   /** Modo sandbox (D-199); `"unreadable"` faz a leitura falhar. */
@@ -135,6 +142,7 @@ function harness(options: HarnessOptions = {}) {
           enabled: options.aiEnabled ?? true,
           tone: options.tone ?? "BALANCED",
           settings: {},
+          messageDelivery: options.messageDelivery ?? "SINGLE",
         };
       },
     },
@@ -257,10 +265,22 @@ function harness(options: HarnessOptions = {}) {
   // real, e o gate operacional deste Goal continua declarado.
   const send =
     options.send ?? (async () => ({ messageId: "wa-1", raw: { ok: true } }));
-  const sendText = vi.fn(async () => {
-    trace.push("provider.sendText");
-    return send();
-  });
+  const sendText = vi.fn(
+    async (input: {
+      text: string;
+      correlationId?: string;
+      typingDelayMs?: number;
+    }) => {
+      trace.push("provider.sendText");
+      return send(input);
+    },
+  );
+  const recordPartsSent = vi.fn(
+    async (input: { messageRecordId: string; partsSent: number }) => {
+      const message = messages.get(input.messageRecordId);
+      if (message) message.deliveryPartsSent = input.partsSent;
+    },
+  );
 
   const settleNotificationIntent = vi.fn(
     options.settle ?? (async () => ({ applied: true })),
@@ -282,12 +302,18 @@ function harness(options: HarnessOptions = {}) {
       },
     },
     outbox,
+    progress: {
+      readPartsSent: async (id) => messages.get(id)?.deliveryPartsSent ?? 0,
+      recordPartsSent,
+    },
+    // Sem espera real entre as partes (D-208).
+    sleep: async () => undefined,
     // Como o adapter do canal (D-199): o gate do sandbox que a entrega
     // passa decide antes do transporte duble.
     providerFactory: ({ sandbox }) => ({
       sendText: async (input) =>
         (await sandbox.intercept(input)) ??
-        ((await (sendText as () => Promise<unknown>)()) as never),
+        ((await sendText(input)) as never),
     }),
   });
 
@@ -298,6 +324,7 @@ function harness(options: HarnessOptions = {}) {
     outbox,
     sessions,
     sendText,
+    recordPartsSent,
     settleNotificationIntent,
     prisma,
   };
@@ -713,5 +740,118 @@ describe("modo sandbox (D-199) no lembrete e no aviso de alteracao", () => {
       detail: "sandbox_state_unavailable",
     });
     expect(world.outbox.markSent).not.toHaveBeenCalled();
+  });
+});
+
+describe("lembrete em varias mensagens curtas (D-208)", () => {
+  it("envia cada parte em ordem, com digitando, ids -p<n> e a ultima com o correlationId", async () => {
+    const world = harness({ messageDelivery: "PARTS" });
+
+    const outcome = await world.service.deliver(
+      intent({ facts: facts({ price: 80 }) }),
+    );
+
+    const sent = world.sendText.mock.calls.map(([input]) => input);
+    expect(sent.map((input) => input.text)).toEqual([
+      "Oi, Ana!",
+      "Tudo bem?",
+      "Passando para lembrar do seu atendimento de Corte na quarta-feira, 16/09, às 14h30.",
+      "Valor: R$ 80,00.",
+      "Você confirma sua presença? É só responder sim ou não.",
+    ]);
+    expect(sent.map((input) => input.correlationId)).toEqual([
+      `${CORRELATION_ID}-p1`,
+      `${CORRELATION_ID}-p2`,
+      `${CORRELATION_ID}-p3`,
+      `${CORRELATION_ID}-p4`,
+      CORRELATION_ID,
+    ]);
+    // Mensagem composta tem "digitando…" ja na primeira parte.
+    for (const input of sent) expect(input.typingDelayMs).toBeGreaterThan(0);
+
+    const [message] = [...world.messages.values()];
+    expect(message.bodyParts).toEqual(sent.map((input) => input.text));
+    expect(message.body).toBe(sent.map((input) => input.text).join("\n\n"));
+    expect(message.deliveryPartsSent).toBe(5);
+    // Liquidacao (e o aviso ao dono que nasce dela) uma vez so, no fim.
+    expect(world.outbox.markSent).toHaveBeenCalledTimes(1);
+    expect(world.settleNotificationIntent).toHaveBeenCalledTimes(1);
+    expect(outcome.outcome).toBe("SENT");
+  });
+
+  it("aviso de alteracao em partes: o fato e a mesma frase de uma mensagem so", async () => {
+    const changeFacts = facts({
+      kind: "CHANGE_NOTICE",
+      confirmationRequested: false,
+    });
+    const parts = harness({ messageDelivery: "PARTS" });
+    await parts.service.deliver(
+      intent({ kind: "CHANGE_NOTICE", facts: changeFacts }),
+    );
+    const single = harness({ messageDelivery: "SINGLE" });
+    await single.service.deliver(
+      intent({ kind: "CHANGE_NOTICE", facts: changeFacts }),
+    );
+
+    const partTexts = parts.sendText.mock.calls.map(([input]) => input.text);
+    expect(partTexts).toEqual([
+      "Oi, Ana!",
+      "Tudo bem?",
+      "Seu atendimento de Corte foi alterado e agora está marcado na quarta-feira, 16/09, às 14h30.",
+      "Qualquer coisa, é só me chamar!",
+    ]);
+    expect(single.sendText).toHaveBeenCalledTimes(1);
+    const [singleInput] = single.sendText.mock.calls[0];
+    expect(singleInput.text).toContain(partTexts[2]);
+    expect(singleInput.typingDelayMs).toBeUndefined();
+    const [singleRow] = [...single.messages.values()];
+    expect(singleRow.bodyParts).toEqual([]);
+  });
+
+  it("sandbox decide parte a parte: cliente fora das excecoes nao recebe nenhuma", async () => {
+    const world = harness({
+      messageDelivery: "PARTS",
+      sandbox: { enabled: true, exceptionPhones: [] },
+    });
+
+    const outcome = await world.service.deliver(intent());
+
+    expect(world.sendText).not.toHaveBeenCalled();
+    expect(outcome.outcome).toBe("SENT");
+    expect(world.recordPartsSent).toHaveBeenCalledTimes(4);
+    expect(world.outbox.markSent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerMessageId: `sandbox-${CORRELATION_ID}`,
+      }),
+    );
+  });
+
+  it("falha no meio: as partes enviadas ficam contadas e a nova reivindicacao nao reenvia nenhuma", async () => {
+    const first = harness({
+      messageDelivery: "PARTS",
+      send: async (input) => {
+        if (input.correlationId === `${CORRELATION_ID}-p3`) {
+          throw new AppError("Evolution Go send failed with HTTP 500", {
+            statusCode: 500,
+            code: "EVOLUTION_SEND_FAILED",
+          });
+        }
+        return { messageId: input.correlationId, raw: null };
+      },
+    });
+    const failed = await first.service.deliver(intent());
+    expect(failed.outcome).toBe("FAILED");
+    expect(first.sendText).toHaveBeenCalledTimes(3);
+    const [row] = [...first.messages.values()];
+    expect(row.deliveryPartsSent).toBe(2);
+    expect(first.outbox.markSent).not.toHaveBeenCalled();
+
+    const second = harness({
+      messageDelivery: "PARTS",
+      seedMessages: [...first.messages.values()],
+    });
+    const again = await second.service.deliver(intent());
+    expect(second.sendText).not.toHaveBeenCalled();
+    expect(again.deduplicated).toBe(true);
   });
 });

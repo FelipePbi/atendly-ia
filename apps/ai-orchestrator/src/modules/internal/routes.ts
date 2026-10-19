@@ -116,6 +116,7 @@ import {
 import {
   AI_CONVERSATION_STYLES,
   aiConversationStyleSchema,
+  aiMessageDeliverySchema,
   LEGACY_AI_CONVERSATION_STYLE_ALIASES,
   UNKNOWN_AI_CONVERSATION_STYLE_CODE,
 } from "../tenant-config/ai-settings.js";
@@ -145,6 +146,9 @@ const aiTenantConfigSchema = z.object({
   enabled: z.boolean(),
   tone: aiConversationStyleSchema,
   businessContext: businessContextSchema,
+  // Como as mensagens saem (D-208). Ausente (BFF anterior a esta opcao)
+  // preserva o que esta gravado.
+  messageDelivery: aiMessageDeliverySchema.optional(),
 });
 
 const conversationParamsSchema = z.object({
@@ -633,6 +637,7 @@ export async function registerInternalRoutes(
       tone: parsed.data.tone,
       promptVersion: env.AI_PROMPT_VERSION,
       businessContext: normalizeBusinessContext(parsed.data.businessContext),
+      messageDelivery: parsed.data.messageDelivery,
     });
     return reply.send({
       ok: true,
@@ -641,6 +646,7 @@ export async function registerInternalRoutes(
         enabled: config.enabled,
         tone: config.tone,
         promptVersion: config.promptVersion,
+        messageDelivery: config.messageDelivery,
       },
     });
   });
@@ -660,6 +666,7 @@ export async function registerInternalRoutes(
         tone: true,
         promptVersion: true,
         sandboxEnabled: true,
+        messageDelivery: true,
       },
     });
     return internalData(
@@ -671,6 +678,7 @@ export async function registerInternalRoutes(
             promptVersion: config.promptVersion,
             // D-199: o aviso da casca le daqui, no mesmo `GET /v1/status`.
             sandboxEnabled: config.sandboxEnabled,
+            messageDelivery: config.messageDelivery,
           }
         : null,
     );
@@ -2208,6 +2216,7 @@ function messageDto(message: {
   kind?: MessageKindValue;
   deliveryState?: "PENDING" | "SENT" | "FAILED" | "UNKNOWN" | null;
   deliveryDetail?: string | null;
+  bodyParts?: string[];
   attachments?: MessageDtoAttachment[];
   /**
    * Payload bruto do provedor. Quando veio na leitura, decide se a mídia
@@ -2230,6 +2239,12 @@ function messageDto(message: {
     // campo como opcional.
     deliveryState: message.deliveryState ?? null,
     deliveryDetail: message.deliveryDetail ?? null,
+    // Mensagem da plataforma enviada em varias partes (D-208): uma por balao,
+    // em ordem. Nulo quando saiu inteira (e em todo o estoque anterior).
+    parts:
+      message.bodyParts && message.bodyParts.length > 1
+        ? message.bodyParts
+        : null,
     attachment: attachment
       ? {
           kind: attachment.kind,

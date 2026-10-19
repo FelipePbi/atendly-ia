@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   absencePhrase,
+  composeReturnParts,
   composeReturnText,
   defaultReturnTemplate,
   relativeDay,
@@ -85,7 +86,13 @@ describe("datas em palavras", () => {
 
 describe("Renovação", () => {
   it("prazo do serviço, dois horários reais e o primeiro nome", () => {
-    expect(composeReturnText({ style: "BALANCED", facts: renewal() })).toBe(
+    expect(
+      composeReturnText({
+        style: "BALANCED",
+        facts: renewal(),
+        delivery: "SINGLE",
+      }),
+    ).toBe(
       [
         "Oi, Adriana! Tudo bem?",
         "Seu atendimento de Manutenção 5D completa 15 dias na quinta-feira. Quer que eu já reserve um horário? Tenho sexta às 17h30 ou sábado às 18h.",
@@ -123,7 +130,9 @@ describe("Renovação", () => {
 
 describe("Resgate", () => {
   it("leve, de saudade, com o incentivo da profissional e sem horários", () => {
-    expect(composeReturnText({ style: "CASUAL", facts: winback() })).toBe(
+    expect(
+      composeReturnText({ style: "CASUAL", facts: winback(), delivery: "SINGLE" }),
+    ).toBe(
       [
         "Oii, Joice! Tudo bem? 😊",
         "Faz um tempinho que você não aparece por aqui 💕 Pra sua volta, tenho uma condição especial: 10% de desconto em qualquer serviço até o fim do mês 💛",
@@ -182,7 +191,7 @@ describe("texto-base da profissional", () => {
       style: "BALANCED",
       facts: renewal({ messageTemplate: "Oi {apelido}" }),
     });
-    expect(unknown.startsWith("Oi, Adriana! Tudo bem?")).toBe(true);
+    expect(unknown.startsWith("Oi, Adriana!\n\nTudo bem?")).toBe(true);
     const noSlots = composeReturnText({
       style: "BALANCED",
       facts: renewal({ offeredSlots: [], messageTemplate: "Tenho {horarios}" }),
@@ -235,5 +244,115 @@ describe("texto-base inicial do editor", () => {
         "Está chegando a hora do seu atendimento de Manutenção 5D, na quinta-feira. Quer que eu já reserve um horário? Tenho sexta às 17h30 ou sábado às 18h.",
       ].join("\n\n"),
     );
+  });
+});
+
+// D-208: em varias mensagens curtas. As mesmas partes estao em
+// apps/frontend/tests/message-parts-preview.test.ts; mude os dois lados.
+describe("em várias mensagens curtas (D-208)", () => {
+  it("Renovação: saudação, tudo bem, o fato, a pergunta e os horários, cada um uma mensagem", () => {
+    const parts = composeReturnParts({
+      style: "BALANCED",
+      facts: renewal(),
+      delivery: "PARTS",
+    });
+    expect(parts).toEqual([
+      "Oi, Adriana!",
+      "Tudo bem?",
+      "Seu atendimento de Manutenção 5D completa 15 dias na quinta-feira.",
+      "Quer que eu já reserve um horário?",
+      "Tenho sexta às 17h30 ou sábado às 18h.",
+    ]);
+    // Mesmas frases da mensagem só: dividir não muda fato.
+    const single = composeReturnText({
+      style: "BALANCED",
+      facts: renewal(),
+      delivery: "SINGLE",
+    });
+    for (const part of parts) expect(single).toContain(part);
+    expect(composeReturnText({ style: "BALANCED", facts: renewal() })).toBe(
+      parts.join("\n\n"),
+    );
+  });
+
+  it("Renovação sem horário livre: pergunta aberta como última parte", () => {
+    expect(
+      composeReturnParts({
+        style: "CASUAL",
+        facts: renewal({ offeredSlots: [] }),
+        delivery: "PARTS",
+      }),
+    ).toEqual([
+      "Oii, Adriana!",
+      "Tudo bem? 😊",
+      "Seu atendimento de Manutenção 5D completa 15 dias na quinta-feira.",
+      "Quer que eu veja um horário pra você? 💛",
+    ]);
+  });
+
+  it("Resgate com incentivo: a saudade e a condição em mensagens separadas", () => {
+    expect(
+      composeReturnParts({
+        style: "BALANCED",
+        facts: winback(),
+        delivery: "PARTS",
+      }),
+    ).toEqual([
+      "Oi, Joice!",
+      "Tudo bem?",
+      "Faz um tempinho que você não aparece por aqui.",
+      "Pra sua volta, tenho uma condição especial: 10% de desconto em qualquer serviço até o fim do mês.",
+      "Quer que eu veja um horário pra você?",
+    ]);
+  });
+
+  it("Resgate sem incentivo e profissional: sem condição nenhuma", () => {
+    expect(
+      composeReturnParts({
+        style: "PROFESSIONAL",
+        facts: winback({ incentive: null }),
+        delivery: "PARTS",
+      }),
+    ).toEqual([
+      "Olá, Joice.",
+      "Faz algum tempo desde o seu último atendimento por aqui.",
+      "Posso verificar um horário para você?",
+    ]);
+  });
+
+  it("lembrete único: as mesmas três partes nos dois modos", () => {
+    const facts = renewal({ followUp: true });
+    const parts = composeReturnParts({
+      style: "BALANCED",
+      facts,
+      delivery: "PARTS",
+    });
+    expect(parts).toEqual([
+      "Oi, Adriana!",
+      "Passando só pra saber se você quer marcar o seu atendimento de Manutenção 5D.",
+      "Quer que eu veja um horário pra você?",
+    ]);
+    expect(
+      composeReturnParts({ style: "BALANCED", facts, delivery: "SINGLE" }),
+    ).toEqual(parts);
+  });
+
+  it("texto-base da profissional: cada linha é uma mensagem, e o que a rodada promete vem depois", () => {
+    expect(
+      composeReturnParts({
+        style: "CASUAL",
+        delivery: "PARTS",
+        facts: renewal({
+          messageTemplate:
+            "Oiii {nome}\nTudo bem?\nVi aqui que a {servico} completa 15 dias {quando}\nVamos marcar pra essa semana?",
+        }),
+      }),
+    ).toEqual([
+      "Oiii Adriana",
+      "Tudo bem?",
+      "Vi aqui que a Manutenção 5D completa 15 dias na quinta-feira",
+      "Vamos marcar pra essa semana?",
+      "Tenho sexta às 17h30 ou sábado às 18h.",
+    ]);
   });
 });

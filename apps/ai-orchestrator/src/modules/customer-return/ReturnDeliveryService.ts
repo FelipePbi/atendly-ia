@@ -13,6 +13,12 @@ import {
   resolveContactKeyForPhone,
 } from "../channel/conversation-resolution.js";
 import { replyAllowedForPhone } from "../graph/message-graph.js";
+import {
+  composedMessageLayout,
+  dispatchMessage,
+  type MessagePartProgressPort,
+  storedBodyParts,
+} from "../outbox/message-dispatch.js";
 import { classifySendFailure } from "../outbox/outbox-policy.js";
 import { OutboxStore } from "../outbox/OutboxStore.js";
 import type { NotificationProviderFactory } from "../reminders/NotificationDeliveryService.js";
@@ -73,6 +79,10 @@ export interface ReturnDeliveryDeps {
   sessions: Pick<GraphSessionPort, "resolveContext">;
   channels?: Pick<ChannelConnectionService, "resolveChannelCredential">;
   outbox?: Pick<OutboxStore, "markSent" | "markUndelivered">;
+  /** Progresso do envio em partes (D-208); padrao e o outbox real. */
+  progress?: MessagePartProgressPort;
+  /** Espera entre partes; trocavel so em teste. */
+  sleep?: (ms: number) => Promise<void>;
   providerFactory?: NotificationProviderFactory;
   logger?: DiagnosticLogger;
   /** Lista de validacao local; so o teste troca. */
@@ -116,6 +126,8 @@ export class ReturnDeliveryService {
     "resolveChannelCredential"
   >;
   private readonly outbox: Pick<OutboxStore, "markSent" | "markUndelivered">;
+  private readonly progress?: MessagePartProgressPort;
+  private readonly sleep?: (ms: number) => Promise<void>;
   private readonly providerFactory: NotificationProviderFactory;
   private readonly logger: DiagnosticLogger;
   private readonly replyAllowList?: string;
@@ -127,8 +139,10 @@ export class ReturnDeliveryService {
     this.channels =
       deps.channels ??
       new ChannelConnectionService(deps.prisma as unknown as PrismaClient);
-    this.outbox =
-      deps.outbox ?? new OutboxStore(deps.prisma as unknown as PrismaClient);
+    const store = new OutboxStore(deps.prisma as unknown as PrismaClient);
+    this.outbox = deps.outbox ?? store;
+    this.progress = deps.progress ?? (deps.outbox ? undefined : store);
+    this.sleep = deps.sleep;
     this.providerFactory = deps.providerFactory ?? defaultProviderFactory;
     this.logger = deps.logger ?? noopDiagnosticLogger;
     this.replyAllowList = deps.replyAllowList;
@@ -240,9 +254,13 @@ export class ReturnDeliveryService {
       };
     }
 
+    // Em partes ou numa mensagem so, conforme o negocio (D-208).
+    const delivery = aiSettings.messageDelivery ?? "PARTS";
+    const layout = composedMessageLayout(delivery);
     const text = composeReturnText({
       style: aiSettings.tone,
       facts: target.facts,
+      delivery,
     });
 
     let messageRecordId: string;
@@ -259,6 +277,7 @@ export class ReturnDeliveryService {
           source: "AI",
           role: "assistant",
           body: text,
+          bodyParts: storedBodyParts(text, layout),
           deliveryState: "PENDING",
           deliveryUpdatedAt: new Date(),
         },
@@ -297,14 +316,26 @@ export class ReturnDeliveryService {
           logger: this.logger,
         }),
       });
-      const sent = await provider.sendText({
-        to: externalContactId,
-        text,
-        correlationId: target.correlationId,
-      });
+      // Cada parte passa pelo sandbox e sai com `<correlationId>-p<n>`; o
+      // convite e a liquidacao acontecem uma vez, depois da ultima parte.
+      const sent = await dispatchMessage(
+        provider,
+        {
+          to: externalContactId,
+          text,
+          layout,
+          correlationId: target.correlationId,
+          messageRecordId,
+        },
+        { progress: this.progress, sleep: this.sleep, typeFirstPart: true },
+      );
+      if (sent.status === "stopped") {
+        // Sem `shouldStop` aqui; o ramo existe para o tipo ficar fechado.
+        throw new Error(`return dispatch stopped: ${sent.reason}`);
+      }
       await this.outbox.markSent({
         messageRecordId,
-        providerMessageId: sent.messageId ?? target.correlationId,
+        providerMessageId: sent.providerMessageId ?? target.correlationId,
         rawPayload: sent.raw,
       });
       await this.recordInvitation(target, {

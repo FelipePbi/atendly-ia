@@ -24,6 +24,7 @@ export interface TenantExecutionConfigRow {
   enabled?: boolean | null;
   tone?: unknown;
   settings?: unknown;
+  messageDelivery?: unknown;
 }
 
 /**
@@ -45,6 +46,8 @@ export function tenantExecutionContextFrom(
       // Estilo legado gravado antes do Goal011 sai daqui ja no vocabulario
       // novo; tenant sem configuracao sai no equilibrado.
       tone: config?.tone,
+      // Como as mensagens saem (D-208); sem linha, em varias partes.
+      messageDelivery: config?.messageDelivery,
     }),
   };
 }
@@ -56,7 +59,12 @@ export async function loadTenantExecutionContext(
 ): Promise<TenantExecutionContext> {
   const config = await prisma.aiTenantConfig.findUnique({
     where: { tenantId },
-    select: { enabled: true, tone: true, settings: true },
+    select: {
+      enabled: true,
+      tone: true,
+      settings: true,
+      messageDelivery: true,
+    },
   });
   return tenantExecutionContextFrom(config);
 }

@@ -174,8 +174,13 @@ function splitTernary(
   };
 }
 
+/**
+ * Saudação: `(name) => (name ? `...` : "...")` ou, em partes (D-208),
+ * `(name) => [name ? `...` : "...", "..."]` — a abertura com e sem nome e,
+ * opcional, o "tudo bem?" como literal sem interpolação.
+ */
 const GREETING_TERNARY_PATTERN =
-  /^\(name\)\s*=>\s*\(?\s*name\s*\?\s*`(?:[^`\\]|\\.)*`\s*:\s*"(?:[^"\\]|\\.)*"\s*\)?$/;
+  /^\(name\)\s*=>\s*(?:\(?\s*name\s*\?\s*`(?:[^`\\]|\\.)*`\s*:\s*"(?:[^"\\]|\\.)*"\s*\)?|\[\s*name\s*\?\s*`(?:[^`\\]|\\.)*`\s*:\s*"(?:[^"\\]|\\.)*"\s*(?:,\s*"(?:[^"\\]|\\.)*"\s*)?,?\s*\])$/;
 const STATIC_LITERAL_PATTERN = /^"(?:[^"\\]|\\.)*"$/;
 const TEMPLATE_LITERAL_PATTERN = /^`(?:[^`\\]|\\.)*`$/;
 

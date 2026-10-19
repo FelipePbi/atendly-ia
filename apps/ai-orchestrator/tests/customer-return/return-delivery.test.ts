@@ -74,7 +74,9 @@ interface StoredMessage {
   source: string | null;
   role: string;
   body: string;
+  bodyParts?: string[];
   deliveryState: string | null;
+  deliveryPartsSent?: number;
   createdAt: Date;
 }
 
@@ -87,7 +89,12 @@ interface HarnessOptions {
   existingConversations?: string[];
   seedMessages?: StoredMessage[];
   replyAllowList?: string;
-  send?: () => Promise<{ messageId?: string; raw: unknown }>;
+  /** Como as mensagens saem (D-208). Nesta suite, uma so, salvo pedido. */
+  messageDelivery?: "PARTS" | "SINGLE";
+  send?: (input: {
+    text: string;
+    correlationId?: string;
+  }) => Promise<{ messageId?: string; raw: unknown }>;
 }
 
 function harness(options: HarnessOptions = {}) {
@@ -126,6 +133,7 @@ function harness(options: HarnessOptions = {}) {
           enabled: options.aiEnabled ?? true,
           tone: "BALANCED",
           settings: {},
+          messageDelivery: options.messageDelivery ?? "SINGLE",
         };
       },
     },
@@ -216,10 +224,17 @@ function harness(options: HarnessOptions = {}) {
   };
   const send =
     options.send ?? (async () => ({ messageId: "wa-1", raw: { ok: true } }));
-  const sendText = vi.fn(async (input: { to: string; text: string }) => {
-    trace.push(`send:${input.to}`);
-    return send();
-  });
+  const sendText = vi.fn(
+    async (input: {
+      to: string;
+      text: string;
+      correlationId?: string;
+      typingDelayMs?: number;
+    }) => {
+      trace.push(`send:${input.to}`);
+      return send(input);
+    },
+  );
   const settled: SettleReturnTargetInput[] = [];
   const service = new ReturnDeliveryService({
     prisma: prisma as never,
@@ -249,6 +264,16 @@ function harness(options: HarnessOptions = {}) {
         (await sandbox.intercept(input)) ?? ((await sendText(input)) as never),
     }),
     replyAllowList: options.replyAllowList ?? "",
+    progress: {
+      readPartsSent: async (id) =>
+        messages.find((m) => m.id === id)?.deliveryPartsSent ?? 0,
+      recordPartsSent: async (input) => {
+        const message = messages.find((m) => m.id === input.messageRecordId);
+        if (message) message.deliveryPartsSent = input.partsSent;
+      },
+    },
+    // Sem espera real entre as partes (D-208).
+    sleep: async () => undefined,
   });
   return { service, messages, trace, sendText, settled, invitations };
 }
@@ -461,5 +486,108 @@ describe("respostas aos convites", () => {
     expect(updates).toEqual([
       { id: "invitation-a", repliedAt: new Date("2026-10-16T09:00:00.000Z") },
     ]);
+  });
+});
+
+describe("retorno em várias mensagens curtas (D-208)", () => {
+  it("Renovação sai em partes, em ordem, com ids -p<n>; convite e liquidação uma vez", async () => {
+    const world = harness({
+      existingConversations: ["555596936463"],
+      messageDelivery: "PARTS",
+      send: async (input) => ({ messageId: input.correlationId, raw: null }),
+    });
+
+    const outcome = await world.service.deliver(target());
+
+    const sent = world.sendText.mock.calls.map(([input]) => input);
+    expect(sent.map((input) => input.text)).toEqual([
+      "Oi, Adriana!",
+      "Tudo bem?",
+      "Seu atendimento de Manutenção 5D completa 15 dias na quinta-feira.",
+      "Quer que eu já reserve um horário?",
+      expect.stringMatching(/^Tenho /u),
+    ]);
+    expect(sent.map((input) => input.correlationId)).toEqual([
+      `${CORRELATION_ID}-p1`,
+      `${CORRELATION_ID}-p2`,
+      `${CORRELATION_ID}-p3`,
+      `${CORRELATION_ID}-p4`,
+      CORRELATION_ID,
+    ]);
+    for (const input of sent) expect(input.typingDelayMs).toBeGreaterThan(0);
+    expect(world.messages[0].bodyParts).toEqual(sent.map((i) => i.text));
+    expect(world.messages[0].deliveryState).toBe("SENT");
+    expect(outcome.outcome).toBe("SENT");
+    expect(world.settled).toHaveLength(1);
+    expect(world.invitations).toHaveLength(1);
+  });
+
+  it("Resgate com incentivo e lembrete único também saem em partes", async () => {
+    const winback = harness({ messageDelivery: "PARTS" });
+    await winback.service.deliver(
+      target({
+        facts: facts({
+          kind: "WINBACK",
+          expectedDate: null,
+          intervalDays: null,
+          offeredSlots: [],
+          incentive: "10% de desconto",
+        }),
+      }),
+    );
+    expect(winback.sendText.mock.calls.map(([input]) => input.text)).toEqual([
+      "Oi, Adriana!",
+      "Tudo bem?",
+      "Faz um tempinho que você não aparece por aqui.",
+      "Pra sua volta, tenho uma condição especial: 10% de desconto.",
+      "Quer que eu veja um horário pra você?",
+    ]);
+
+    const followUp = harness({ messageDelivery: "PARTS" });
+    await followUp.service.deliver(
+      target({
+        leaseKind: "FOLLOW_UP",
+        correlationId: "return:target-a:followup",
+        facts: facts({ followUp: true }),
+      }),
+    );
+    expect(followUp.sendText).toHaveBeenCalledTimes(3);
+  });
+
+  it("sandbox decide parte a parte: nenhuma parte sai para quem não é exceção", async () => {
+    const world = harness({
+      messageDelivery: "PARTS",
+      sandbox: { enabled: true, exceptionPhones: [] },
+    });
+    const outcome = await world.service.deliver(target());
+    expect(world.sendText).not.toHaveBeenCalled();
+    expect(outcome.outcome).toBe("SENT");
+    expect(world.messages[0].deliveryPartsSent).toBe(5);
+  });
+
+  it("queda no meio: a nova reivindicação não reenvia nenhuma parte", async () => {
+    const first = harness({
+      messageDelivery: "PARTS",
+      send: async (input) => {
+        if (input.correlationId === `${CORRELATION_ID}-p2`) {
+          throw new AppError("Evolution Go send timed out.", {
+            statusCode: 504,
+            code: "EVOLUTION_SEND_TIMEOUT",
+          });
+        }
+        return { messageId: input.correlationId, raw: null };
+      },
+    });
+    const failed = await first.service.deliver(target());
+    expect(failed.outcome).toBe("FAILED");
+    expect(first.messages[0].deliveryPartsSent).toBe(1);
+
+    const second = harness({
+      messageDelivery: "PARTS",
+      seedMessages: first.messages,
+    });
+    const again = await second.service.deliver(target());
+    expect(second.sendText).not.toHaveBeenCalled();
+    expect(again.deduplicated).toBe(true);
   });
 });

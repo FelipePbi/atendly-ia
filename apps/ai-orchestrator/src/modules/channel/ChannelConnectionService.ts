@@ -7,6 +7,7 @@ import {
 import { AppError } from "../../lib/errors.js";
 import type {
   AiConversationStyle,
+  AiMessageDelivery,
   AiTenantSettings,
 } from "../tenant-config/ai-settings.js";
 import type { BusinessContext } from "../tenant-config/business-context.js";
@@ -36,6 +37,8 @@ export interface UpdateAiTenantConfigInput {
   tone: AiConversationStyle;
   promptVersion: string;
   businessContext: BusinessContext;
+  /** Como as mensagens saem (D-208). Ausente preserva o gravado. */
+  messageDelivery?: AiMessageDelivery;
 }
 
 export class ChannelConnectionService {
@@ -138,6 +141,9 @@ export class ChannelConnectionService {
         tone: input.tone,
         promptVersion: input.promptVersion,
         settings: input.businessContext,
+        ...(input.messageDelivery
+          ? { messageDelivery: input.messageDelivery }
+          : {}),
       },
       create: {
         tenantId: input.tenantId,
@@ -145,6 +151,9 @@ export class ChannelConnectionService {
         tone: input.tone,
         promptVersion: input.promptVersion,
         settings: input.businessContext,
+        ...(input.messageDelivery
+          ? { messageDelivery: input.messageDelivery }
+          : {}),
       },
     });
   }

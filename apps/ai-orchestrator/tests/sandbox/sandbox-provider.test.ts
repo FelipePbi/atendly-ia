@@ -13,7 +13,7 @@ const [
   { env },
   { AppError },
   { EvolutionProvider },
-  { dispatchAiReply },
+  { dispatchMessage },
   { classifySendFailure },
   { isSandboxException, normalizeSandboxPhone },
   { SandboxGate, tenantSandboxGate },
@@ -27,7 +27,7 @@ const [
   import("../../src/config/env.js"),
   import("../../src/lib/errors.js"),
   import("../../src/modules/channel/adapters/evolution/EvolutionProvider.js"),
-  import("../../src/modules/outbox/ai-reply-dispatch.js"),
+  import("../../src/modules/outbox/message-dispatch.js"),
   import("../../src/modules/outbox/outbox-policy.js"),
   import("../../src/modules/sandbox/sandbox-phone.js"),
   import("../../src/modules/sandbox/SandboxGate.js"),
@@ -283,7 +283,7 @@ describe("D-199: as travas globais continuam valendo para a excecao", () => {
 
 describe("D-199: resposta da IA em partes", () => {
   it("todas as partes sao suprimidas e a linha fica com o id sandbox da ultima", async () => {
-    const outcome = await dispatchAiReply(
+    const outcome = await dispatchMessage(
       gated(sandbox()),
       {
         to: CUSTOMER,

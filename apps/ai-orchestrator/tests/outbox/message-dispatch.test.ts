@@ -2,15 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SendTextInput } from "../../src/modules/channel/ports/WhatsAppProvider.js";
 import {
-  AI_REPLY_MAX_PARTS,
-  AI_REPLY_PART_GAP_MS,
+  MESSAGE_MAX_PARTS,
+  MESSAGE_PART_GAP_MS,
   typingDelayFor,
-  type AiReplyPartProgressPort,
-  aiReplyCorrelationIdOf,
-  aiReplyPartMessageId,
-  dispatchAiReply,
+  type MessagePartProgressPort,
+  messageCorrelationIdOf,
+  messagePartId,
+  aiReplyLayout,
+  composedMessageLayout,
+  dispatchMessage,
   splitAiReplyIntoParts,
-} from "../../src/modules/outbox/ai-reply-dispatch.js";
+  splitMessageIntoParts,
+  storedBodyParts,
+} from "../../src/modules/outbox/message-dispatch.js";
 
 describe("splitAiReplyIntoParts", () => {
   it("separa a abertura curta e os paragrafos do exemplo da decisao", () => {
@@ -102,10 +106,18 @@ describe("splitAiReplyIntoParts", () => {
     expect(splitAiReplyIntoParts("   \n\n ")).toEqual([]);
   });
 
-  it(`limita a ${AI_REPLY_MAX_PARTS} partes juntando o excedente na ultima`, () => {
-    const parts = splitAiReplyIntoParts("Oi! Um.\n\nDois.\n\nTres.\n\nQuatro.\n\nCinco.");
-    expect(parts).toHaveLength(AI_REPLY_MAX_PARTS);
-    expect(parts).toEqual(["Oi!", "Um.", "Dois.", "Tres.\n\nQuatro.\n\nCinco."]);
+  it(`limita a ${MESSAGE_MAX_PARTS} partes juntando o excedente na ultima`, () => {
+    const parts = splitAiReplyIntoParts(
+      "Oi! Um.\n\nDois.\n\nTres.\n\nQuatro.\n\nCinco.\n\nSeis.",
+    );
+    expect(parts).toHaveLength(MESSAGE_MAX_PARTS);
+    expect(parts).toEqual([
+      "Oi!",
+      "Um.",
+      "Dois.",
+      "Tres.",
+      "Quatro.\n\nCinco.\n\nSeis.",
+    ]);
   });
 
   it("nao inventa texto: as partes sao o texto original", () => {
@@ -117,18 +129,18 @@ describe("splitAiReplyIntoParts", () => {
 
 describe("ids de transporte das partes", () => {
   it("a ultima parte leva o correlationId; as anteriores, sufixo -p<n>", () => {
-    expect(aiReplyPartMessageId("ai-abc", 0, 3)).toBe("ai-abc-p1");
-    expect(aiReplyPartMessageId("ai-abc", 1, 3)).toBe("ai-abc-p2");
-    expect(aiReplyPartMessageId("ai-abc", 2, 3)).toBe("ai-abc");
-    expect(aiReplyPartMessageId("ai-abc", 0, 1)).toBe("ai-abc");
-    expect(aiReplyCorrelationIdOf("ai-abc-p2")).toBe("ai-abc");
-    expect(aiReplyCorrelationIdOf("ai-abc")).toBe("ai-abc");
+    expect(messagePartId("ai-abc", 0, 3)).toBe("ai-abc-p1");
+    expect(messagePartId("ai-abc", 1, 3)).toBe("ai-abc-p2");
+    expect(messagePartId("ai-abc", 2, 3)).toBe("ai-abc");
+    expect(messagePartId("ai-abc", 0, 1)).toBe("ai-abc");
+    expect(messageCorrelationIdOf("ai-abc-p2")).toBe("ai-abc");
+    expect(messageCorrelationIdOf("ai-abc")).toBe("ai-abc");
   });
 });
 
 function memoryProgress(initial = 0) {
   const state = { partsSent: initial };
-  const port: AiReplyPartProgressPort = {
+  const port: MessagePartProgressPort = {
     readPartsSent: vi.fn(async () => state.partsSent),
     recordPartsSent: vi.fn(async ({ partsSent }) => {
       state.partsSent = partsSent;
@@ -147,7 +159,7 @@ const reply = {
   requestId: "req-1",
 };
 
-describe("dispatchAiReply", () => {
+describe("dispatchMessage", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -165,7 +177,7 @@ describe("dispatchAiReply", () => {
     };
     const { port, state } = memoryProgress();
 
-    const pending = dispatchAiReply(provider, reply, { progress: port });
+    const pending = dispatchMessage(provider, reply, { progress: port });
     await vi.runAllTimersAsync();
     const outcome = await pending;
 
@@ -184,10 +196,10 @@ describe("dispatchAiReply", () => {
     expect(sentAt[2].input.quotedParticipant).toBeUndefined();
     for (let index = 1; index < sentAt.length; index += 1) {
       expect(sentAt[index].at - sentAt[index - 1].at).toBeGreaterThanOrEqual(
-        AI_REPLY_PART_GAP_MS,
+        MESSAGE_PART_GAP_MS,
       );
     }
-    expect(AI_REPLY_PART_GAP_MS).toBeGreaterThanOrEqual(1000);
+    expect(MESSAGE_PART_GAP_MS).toBeGreaterThanOrEqual(1000);
     // "digitando…" so nas partes depois da primeira, proporcional ao texto.
     expect(sentAt[0].input.typingDelayMs).toBeUndefined();
     for (const item of sentAt.slice(1)) {
@@ -218,11 +230,11 @@ describe("dispatchAiReply", () => {
       }),
     };
     let settled = false;
-    const pending = dispatchAiReply(provider, reply).then((outcome) => {
+    const pending = dispatchMessage(provider, reply).then((outcome) => {
       settled = true;
       return outcome;
     });
-    await vi.advanceTimersByTimeAsync(AI_REPLY_PART_GAP_MS * 2);
+    await vi.advanceTimersByTimeAsync(MESSAGE_PART_GAP_MS * 2);
     expect(provider.sendText).toHaveBeenCalledTimes(3);
     expect(settled).toBe(false);
     releaseLast();
@@ -235,7 +247,7 @@ describe("dispatchAiReply", () => {
     };
     const { port } = memoryProgress();
     const sleep = vi.fn(async () => undefined);
-    const outcome = await dispatchAiReply(
+    const outcome = await dispatchMessage(
       provider,
       { ...reply, text: "A Aplicação 5D custa R$ 190 💖" },
       { progress: port, sleep },
@@ -270,14 +282,14 @@ describe("dispatchAiReply", () => {
     };
     const { port, state } = memoryProgress();
 
-    const first = dispatchAiReply(provider, reply, { progress: port });
+    const first = dispatchMessage(provider, reply, { progress: port });
     const firstResult = first.catch((error: unknown) => error);
     await vi.runAllTimersAsync();
     await expect(firstResult).resolves.toMatchObject({ code: "ECONNREFUSED" });
     expect(delivered).toEqual(["Oi!"]);
     expect(state.partsSent).toBe(1);
 
-    const retry = dispatchAiReply(provider, reply, { progress: port });
+    const retry = dispatchMessage(provider, reply, { progress: port });
     await vi.runAllTimersAsync();
     await expect(retry).resolves.toMatchObject({ status: "sent", partsSent: 3 });
     expect(delivered).toEqual([
@@ -294,7 +306,7 @@ describe("dispatchAiReply", () => {
   it("retry com todas as partes ja enviadas nao envia nada", async () => {
     const provider = { sendText: vi.fn() };
     const { port } = memoryProgress(3);
-    const outcome = await dispatchAiReply(provider, reply, { progress: port });
+    const outcome = await dispatchMessage(provider, reply, { progress: port });
     expect(provider.sendText).not.toHaveBeenCalled();
     expect(outcome).toMatchObject({ status: "sent", providerMessageId: "ai-row-1" });
   });
@@ -311,7 +323,7 @@ describe("dispatchAiReply", () => {
       .fn<() => Promise<string | null>>()
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce("human_handling");
-    const pending = dispatchAiReply(provider, reply, { shouldStop });
+    const pending = dispatchMessage(provider, reply, { shouldStop });
     await vi.runAllTimersAsync();
     await expect(pending).resolves.toEqual({
       status: "stopped",
@@ -348,6 +360,127 @@ describe("eco das partes no canal", () => {
     await expect(handoff.isBotOutboundMessage("3EB0HUMANO")).resolves.toBe(false);
     await expect(
       handoff.isBotOutboundMessage("ai-ffffffff-1111-4222-8333-944455556666-p1"),
+    ).resolves.toBe(false);
+  });
+});
+
+describe("partes conforme o layout (D-208)", () => {
+  it("a configuracao do negocio escolhe o layout", () => {
+    expect(aiReplyLayout("PARTS")).toBe("AI_REPLY");
+    expect(aiReplyLayout("SINGLE")).toBe("SINGLE");
+    expect(composedMessageLayout("PARTS")).toBe("BLOCKS");
+    expect(composedMessageLayout("SINGLE")).toBe("SINGLE");
+  });
+
+  it("BLOCKS: cada parte composta separada por linha em branco e uma mensagem, sem mais cortes", () => {
+    const text =
+      "Oi, Ana!\n\nTudo bem?\n\nSeu atendimento de Cílios completa 15 dias hoje.\n\nQuer que eu já reserve um horário?\n\nTenho amanhã às 9h ou sexta às 17h30.";
+    expect(splitMessageIntoParts(text, "BLOCKS")).toEqual([
+      "Oi, Ana!",
+      "Tudo bem?",
+      "Seu atendimento de Cílios completa 15 dias hoje.",
+      "Quer que eu já reserve um horário?",
+      "Tenho amanhã às 9h ou sexta às 17h30.",
+    ]);
+  });
+
+  it("BLOCKS: teto de 5, o excedente junta na ultima sem perder texto", () => {
+    const parts = splitMessageIntoParts("A\n\nB\n\nC\n\nD\n\nE\n\nF\n\nG", "BLOCKS");
+    expect(parts).toEqual(["A", "B", "C", "D", "E\n\nF\n\nG"]);
+    expect(parts.join("\n\n")).toBe("A\n\nB\n\nC\n\nD\n\nE\n\nF\n\nG");
+  });
+
+  it("SINGLE: o texto inteiro numa mensagem so, nem a abertura se separa", () => {
+    const text = "Oi! A Aplicação 5D custa R$ 190 💖\n\nPosso agendar?";
+    expect(splitMessageIntoParts(text, "SINGLE")).toEqual([text]);
+    expect(storedBodyParts(text, "SINGLE")).toEqual([]);
+    expect(storedBodyParts(text, "AI_REPLY")).toEqual([
+      "Oi!",
+      "A Aplicação 5D custa R$ 190 💖",
+      "Posso agendar?",
+    ]);
+    expect(storedBodyParts("Só uma frase.", "BLOCKS")).toEqual([]);
+  });
+
+  it("SINGLE no despacho: uma chamada, o id da linha e nada de digitando", async () => {
+    const provider = {
+      sendText: vi.fn(async (input: SendTextInput) => ({
+        provider: "evolution-go" as const,
+        messageId: input.correlationId,
+        raw: null,
+      })),
+    };
+    await dispatchMessage(
+      provider,
+      { ...reply, layout: "SINGLE" },
+      { typeFirstPart: true },
+    );
+    expect(provider.sendText).toHaveBeenCalledTimes(1);
+    const [input] = provider.sendText.mock.calls[0];
+    expect(input.text).toBe(reply.text);
+    expect(input.correlationId).toBe("ai-row-1");
+    expect(input.typingDelayMs).toBeUndefined();
+  });
+
+  it("mensagem composta: digitando ja na primeira parte, proporcional e limitado", async () => {
+    const provider = {
+      sendText: vi.fn(async (input: SendTextInput) => ({
+        provider: "evolution-go" as const,
+        messageId: input.correlationId,
+        raw: null,
+      })),
+    };
+    await dispatchMessage(
+      provider,
+      {
+        to: "5511999999999",
+        text: "Oi!\n\n" + "x".repeat(300),
+        layout: "BLOCKS",
+        correlationId: "notify:a:REMINDER:FIRST:v1",
+      },
+      { typeFirstPart: true, sleep: async () => undefined },
+    );
+    const delays = provider.sendText.mock.calls.map(
+      ([input]) => input.typingDelayMs,
+    );
+    expect(delays).toEqual([800, 2000]);
+    expect(
+      provider.sendText.mock.calls.map(([input]) => input.correlationId),
+    ).toEqual(["notify:a:REMINDER:FIRST:v1-p1", "notify:a:REMINDER:FIRST:v1"]);
+  });
+});
+
+describe("eco de cada esquema de id (D-208)", () => {
+  it.each([
+    ["resposta da IA", "ai-0b6f6c1e-1111-4222-8333-944455556666"],
+    ["lembrete", "notify:appointment-a:REMINDER:FIRST:v3"],
+    ["aviso de alteracao", "notify:appointment-a:CHANGE_NOTICE:NONE:v4"],
+    ["retorno", "return:target-a:initial"],
+    ["lembrete do retorno", "return:target-a:followup"],
+  ])("%s: toda parte e a ultima sao saida da plataforma, nunca atividade manual", async (_label, correlationId) => {
+    const { createFakePrisma } = await import("../session/support/fake-prisma.js");
+    const { HandoffService } = await import("../../src/modules/handoff/HandoffService.js");
+    const { store, prisma } = createFakePrisma();
+    const scope = { tenantId: "tenant-1", channelId: "channel-1" };
+    await store.message.create({
+      data: {
+        ...scope,
+        direction: "OUTBOUND",
+        correlationId,
+        externalMessageId: null,
+      },
+    });
+    const handoff = new HandoffService(prisma, scope);
+    for (const index of [0, 1, 2, 3, 4]) {
+      await expect(
+        handoff.isBotOutboundMessage(messagePartId(correlationId, index, 5)),
+      ).resolves.toBe(true);
+    }
+    await expect(handoff.isBotOutboundMessage("3EB0A1B2C3D4E5F6")).resolves.toBe(
+      false,
+    );
+    await expect(
+      handoff.isBotOutboundMessage(`${correlationId}x-p1`),
     ).resolves.toBe(false);
   });
 });

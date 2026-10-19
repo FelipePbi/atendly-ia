@@ -52,7 +52,15 @@ describe("estilo de conversa: vocabulario e alias legado", () => {
     expect(normalizeAiSettings(undefined)).toEqual({
       aiEnabled: true,
       tone: "BALANCED",
+      // Como as mensagens saem (D-208): sem configuracao, em varias partes.
+      messageDelivery: "PARTS",
     });
+    expect(
+      normalizeAiSettings({ messageDelivery: "SINGLE" }).messageDelivery,
+    ).toBe("SINGLE");
+    expect(
+      normalizeAiSettings({ messageDelivery: "OUTRO" }).messageDelivery,
+    ).toBe("PARTS");
   });
 
   it("recusa valor desconhecido com erro proprio, e nao com validacao generica", () => {

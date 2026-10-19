@@ -1,5 +1,5 @@
 import type { PrismaClient } from "../../generated/prisma/client.js";
-import type { AiReplyPartProgressPort } from "./ai-reply-dispatch.js";
+import type { MessagePartProgressPort } from "./message-dispatch.js";
 import type { MessageDeliveryState } from "./outbox-policy.js";
 
 export interface OutboxRecord {
@@ -38,10 +38,10 @@ export interface OutboxPort {
  * apaga a tentativa — `unknown` é um estado, não um motivo para esquecer que a
  * mensagem pode ter sido entregue.
  */
-export class OutboxStore implements OutboxPort, AiReplyPartProgressPort {
+export class OutboxStore implements OutboxPort, MessagePartProgressPort {
   constructor(private readonly prisma: PrismaClient) {}
 
-  /** Partes da resposta da IA ja enviadas (despacho em varias mensagens). */
+  /** Partes da mensagem ja enviadas (despacho em varias mensagens, D-208). */
   async readPartsSent(messageRecordId: string): Promise<number> {
     const message = await this.prisma.message.findUnique({
       where: { id: messageRecordId },

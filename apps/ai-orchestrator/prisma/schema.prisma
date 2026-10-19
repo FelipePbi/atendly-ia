@@ -112,6 +112,16 @@ enum AiTone {
   LIGHT_CLOSE
 }
 
+/// Como a plataforma envia ao cliente o que ela compoe (D-208): em varias
+/// mensagens curtas, em sequencia, como uma pessoa digitando (`PARTS`, padrao
+/// de todo negocio), ou em uma mensagem so (`SINGLE`). Vale para a resposta
+/// da IA, lembrete, confirmacao de presenca, aviso de alteracao e retorno de
+/// clientes. Mensagem digitada pela profissional nunca e dividida.
+enum AiMessageDelivery {
+  PARTS
+  SINGLE
+}
+
 enum KnowledgeDocumentType {
   FAQ
   GUIDANCE
@@ -446,6 +456,11 @@ model Message {
   /// partes ja sairam. A linha continua uma so (texto completo) e so vira SENT
   /// depois da ultima parte; o retry retoma daqui sem reenviar parte enviada.
   deliveryPartsSent Int                   @default(0)
+  /// Partes em que a saida foi enviada (D-208), na ordem: cada uma e uma
+  /// mensagem do WhatsApp e um balao na conversa do app. Vazio e mensagem de
+  /// uma parte so (e todo o estoque anterior). `body` continua o texto
+  /// completo, que o historico da IA le.
+  bodyParts         String[]              @default([])
 
   channel      ChannelConnection   @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
   conversation Conversation        @relation(fields: [tenantId, channelId, conversationId], references: [tenantId, channelId, id], onDelete: Cascade)
@@ -622,6 +637,9 @@ model AiTenantConfig {
   /// Excecoes que recebem de verdade: 55 + DDD + numero, so digitos.
   sandboxExceptionPhones String[]  @default([])
   sandboxUpdatedAt       DateTime?
+  /// Como as mensagens compostas pela plataforma saem (D-208). Projetado do
+  /// BFF (`AiSettings.messageDelivery`) junto com o estilo.
+  messageDelivery        AiMessageDelivery @default(PARTS)
 }
 
 model KnowledgeDocument {

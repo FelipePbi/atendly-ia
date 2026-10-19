@@ -6,9 +6,9 @@ import { InboundMessageProcessor } from "../../src/modules/channel/InboundMessag
 import type { GraphRuntimePort } from "../../src/modules/graph/graph-runtime.js";
 import type { OutboundGate } from "../../src/modules/graph/message-graph.js";
 import {
-  AI_REPLY_PART_GAP_MS,
-  type AiReplyPartProgressPort,
-} from "../../src/modules/outbox/ai-reply-dispatch.js";
+  MESSAGE_PART_GAP_MS,
+  type MessagePartProgressPort,
+} from "../../src/modules/outbox/message-dispatch.js";
 
 function baseMessage(
   overrides: Partial<ChannelInboundMessage> = {},
@@ -36,7 +36,7 @@ function baseMessage(
 function buildSubject(
   options: {
     outboundGate?: OutboundGate;
-    replyDispatch?: { progress?: AiReplyPartProgressPort; sleep?: (ms: number) => Promise<void> };
+    replyDispatch?: { progress?: MessagePartProgressPort; sleep?: (ms: number) => Promise<void> };
   } = {},
 ) {
   let inboundCounter = 0;
@@ -247,7 +247,7 @@ describe("resposta da IA em varias mensagens (2026-10-11)", () => {
 
   function memoryProgress() {
     const state = { partsSent: 0 };
-    const progress: AiReplyPartProgressPort = {
+    const progress: MessagePartProgressPort = {
       readPartsSent: async () => state.partsSent,
       recordPartsSent: async ({ partsSent }) => {
         state.partsSent = partsSent;
@@ -280,7 +280,7 @@ describe("resposta da IA em varias mensagens (2026-10-11)", () => {
       "mark:SENT",
     ]);
     expect(sleep).toHaveBeenCalledTimes(2);
-    expect(sleep).toHaveBeenCalledWith(AI_REPLY_PART_GAP_MS);
+    expect(sleep).toHaveBeenCalledWith(MESSAGE_PART_GAP_MS);
     expect(subject.provider.sendText.mock.calls[0][0]).toMatchObject({
       quotedMessageId: "message-1",
       correlationId: "ai-operation-1-p1",

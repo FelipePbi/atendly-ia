@@ -9,10 +9,11 @@ import { EvolutionProvider } from "../channel/adapters/evolution/EvolutionProvid
 import { ChannelConnectionService } from "../channel/ChannelConnectionService.js";
 import type { WhatsAppProvider } from "../channel/ports/WhatsAppProvider.js";
 import {
-  type AiReplyDispatchOutcome,
-  type AiReplyPartProgressPort,
-  dispatchAiReply,
-} from "../outbox/ai-reply-dispatch.js";
+  dispatchMessage,
+  type MessageDispatchOutcome,
+  type MessageLayout,
+  type MessagePartProgressPort,
+} from "../outbox/message-dispatch.js";
 import { classifySendFailure } from "../outbox/outbox-policy.js";
 import { OutboxStore } from "../outbox/OutboxStore.js";
 
@@ -40,6 +41,11 @@ export interface ActivationTestReplyInput {
   /** Linha que a IA ja gravou (`Message`), em `PENDING`, esperando o envio. */
   messageRecordId: string;
   text: string;
+  /**
+   * Como a resposta sai (D-208): em partes ou inteira, conforme o negocio.
+   * Ausente, em partes (`AI_REPLY`).
+   */
+  layout?: MessageLayout;
   correlationId: string;
   /** Destino: o numero da plataforma, que e o cliente simulado da conversa. */
   to: string;
@@ -84,7 +90,7 @@ const defaultProviderFactory: TenantProviderFactory = (input) =>
 export class TenantChannelReplySender implements ActivationTestReplyPort {
   private readonly channels: ChannelConnectionService;
   private readonly outbox: Pick<OutboxStore, "markSent" | "markUndelivered">;
-  private readonly progress?: AiReplyPartProgressPort;
+  private readonly progress?: MessagePartProgressPort;
   private readonly sleep?: (ms: number) => Promise<void>;
 
   constructor(
@@ -95,7 +101,7 @@ export class TenantChannelReplySender implements ActivationTestReplyPort {
       channels?: ChannelConnectionService;
       outbox?: Pick<OutboxStore, "markSent" | "markUndelivered">;
       /** Progresso do despacho em partes; padrao e o outbox real. */
-      progress?: AiReplyPartProgressPort;
+      progress?: MessagePartProgressPort;
       sleep?: (ms: number) => Promise<void>;
     } = {},
   ) {
@@ -117,7 +123,7 @@ export class TenantChannelReplySender implements ActivationTestReplyPort {
   async sendAiReply(
     input: ActivationTestReplyInput,
   ): Promise<ActivationTestReplyDelivery> {
-    let sent: AiReplyDispatchOutcome;
+    let sent: MessageDispatchOutcome;
     try {
       const provider = await this.tenantProvider(input);
       this.logger.info(
@@ -130,9 +136,10 @@ export class TenantChannelReplySender implements ActivationTestReplyPort {
         },
         "Activation test sending the AI reply through the tenant channel",
       );
-      // Mesmo despacho da resposta da IA no produto: varias mensagens curtas,
-      // linha unica, SENT so depois da ultima parte (2026-10-11).
-      sent = await dispatchAiReply(provider, input, {
+      // Mesmo despacho da resposta da IA no produto: varias mensagens curtas
+      // ou uma so, conforme o negocio (D-208), linha unica, SENT so depois da
+      // ultima parte.
+      sent = await dispatchMessage(provider, input, {
         progress: this.progress,
         sleep: this.sleep,
       });

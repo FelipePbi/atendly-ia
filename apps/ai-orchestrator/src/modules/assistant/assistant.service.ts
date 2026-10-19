@@ -52,6 +52,11 @@ import {
   type ModelToolResult,
   type ModelTurn,
 } from "../model/model-provider.js";
+import {
+  aiReplyLayout,
+  type MessageLayout,
+  storedBodyParts,
+} from "../outbox/message-dispatch.js";
 import type { ReturnInvitationPromptItem } from "../prompts/customer-return.js";
 import type { ServiceInstructionPromptItem } from "../prompts/service-instructions.js";
 import { buildStyleGreeting } from "../prompts/style.js";
@@ -59,6 +64,7 @@ import { buildSystemPrompt, farewellForNow } from "../prompts/system.js";
 import type { CategorySuggestionPort } from "../session/SessionService.js";
 import {
   AI_CONVERSATION_STYLES,
+  type AiMessageDelivery,
   type AiTenantSettings,
   normalizeAiSettings,
   resolveAiConversationStyle,
@@ -110,6 +116,8 @@ export interface AssistantReply {
   messageRecordId: string;
   /** Operation-id da tentativa de saida, ja persistido com estado PENDING. */
   correlationId?: string;
+  /** Como a resposta e dividida no envio (D-208), gravado com a linha. */
+  layout?: MessageLayout;
   /**
    * A IA decidiu parar sem responder: o contato nao e cliente (ver
    * `isSilentPause`). Nao existe linha de saida; `text` e
@@ -163,6 +171,11 @@ export interface AssistantGraphSession {
   phone: string;
   customerName?: string | null;
   businessContext: BusinessContext;
+  /**
+   * Como a resposta sai (D-208). Ausente na sessao anterior a esta opcao:
+   * em varias partes.
+   */
+  messageDelivery?: AiMessageDelivery;
   instructions: string;
   /** Versao do prompt efetivamente montado para este turno, ver `derivePromptVersion`. */
   promptVersion: string;
@@ -814,6 +827,7 @@ export class AssistantService {
       phone,
       customerName,
       businessContext,
+      messageDelivery: aiSettings.messageDelivery,
       instructions: prompt.text,
       promptVersion: prompt.version,
       input: chronologicalMessages,
@@ -1211,7 +1225,9 @@ export class AssistantService {
     );
     // A saida existe antes de qualquer chamada ao transporte, com
     // `correlationId` estavel: e ele que viaja como id da mensagem no envio e
-    // que o recibo do Go reconcilia depois.
+    // que o recibo do Go reconcilia depois. As partes (D-208) ficam gravadas
+    // com ela: e o que a conversa do app mostra como baloes.
+    const layout = aiReplyLayout(session.messageDelivery ?? "PARTS");
     const assistantMessage = await this.prisma.message.create({
       data: {
         tenantId: session.tenantId,
@@ -1221,6 +1237,7 @@ export class AssistantService {
         source: "AI",
         role: "assistant",
         body: text,
+        bodyParts: storedBodyParts(text, layout),
         correlationId: `ai-${randomUUID()}`,
         deliveryState: "PENDING",
         deliveryUpdatedAt: new Date(),
@@ -1241,6 +1258,7 @@ export class AssistantService {
       conversationId: session.conversationId,
       messageRecordId: assistantMessage.id,
       correlationId: assistantMessage.correlationId ?? undefined,
+      layout,
     };
   }
 

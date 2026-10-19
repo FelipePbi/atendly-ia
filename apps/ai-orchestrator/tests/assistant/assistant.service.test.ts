@@ -1399,9 +1399,14 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
   // `splitAiReplyIntoParts(reply.text)` — texto em trânsito de `reply`.
   // 6 → 7 (D-206): a mensagem de retorno de clientes sai pelo
   // `ReturnDeliveryService`, composta por `composeReturnText`, como o lembrete.
-  it("descobre os sete sítios de sendText de apps/ai-orchestrator/src, com resíduo zero", () => {
+  // 7 → 5 (D-208): lembrete, aviso e retorno também saem em partes, pelo
+  // mesmo despachante da resposta da IA (`dispatchMessage`, em
+  // modules/outbox/message-dispatch.ts). Os dois sítios compostos deixaram de
+  // chamar `sendText`: viraram chamadores do despachante, e a cadeia de
+  // trânsito os classifica pelo compositor (ver abaixo).
+  it("descobre os cinco sítios de sendText de apps/ai-orchestrator/src, com resíduo zero", () => {
     const sites = discoverSendTextSites(aiOrchestratorSrcPath);
-    expect(sites).toHaveLength(7);
+    expect(sites).toHaveLength(5);
     const counts = {
       port_declaration: sites.filter((s) => s.category === "port_declaration")
         .length,
@@ -1424,14 +1429,14 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
     expect(counts).toEqual({
       port_declaration: 1,
       adapter_implementation: 1,
-      composed_by_named_module: 2,
+      composed_by_named_module: 0,
       assistant_decision_text: 0,
       text_in_transit_named_origin: 2,
       person_typed_text: 1,
     });
   });
 
-  it("classifica cada um dos sete sítios reais na categoria e origem esperadas", () => {
+  it("classifica cada um dos cinco sítios reais na categoria e origem esperadas", () => {
     const sites = discoverSendTextSites(aiOrchestratorSrcPath).map((site) => ({
       file: site.filePath.replace(/\\/g, "/").split("/ai-orchestrator/src/")[1],
       line: site.line,
@@ -1454,17 +1459,11 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
           origin: undefined,
         },
         {
-          file: "modules/outbox/ai-reply-dispatch.ts",
-          line: 225,
+          // D-208: o despachante de toda mensagem composta pela plataforma.
+          file: "modules/outbox/message-dispatch.ts",
+          line: 320,
           category: "text_in_transit_named_origin",
-          origin: "reply",
-        },
-        {
-          file: "modules/reminders/NotificationDeliveryService.ts",
-          // Deslocada pelo gate do modo sandbox (D-199).
-          line: 340,
-          category: "composed_by_composeNotificationText",
-          origin: undefined,
+          origin: "message",
         },
         {
           file: "modules/channel/platform/PlatformWhatsAppSender.ts",
@@ -1473,18 +1472,12 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
           origin: "message",
         },
         {
-          file: "modules/customer-return/ReturnDeliveryService.ts",
-          line: 300,
-          category: "composed_by_composeReturnText",
-          origin: undefined,
-        },
-        {
           file: "modules/internal/routes.ts",
           // Deslocada pelo registro de atividade (D-176) e pela mídia com link
           // vencido da CDN, pelas rotas do modo sandbox (D-199) e pelo schema
-          // da lista do retorno (D-206); a linha é o número real, não um
-          // valor escolhido.
-          line: 980,
+          // da lista do retorno (D-206) e pelo modo de envio (D-208); a linha
+          // é o número real, não um valor escolhido.
+          line: 988,
           category: "person_typed_text",
           origin: undefined,
         },
@@ -1587,14 +1580,29 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
     );
   });
 
-  it("a categoria que nomeia o compositor liga a sítio real a texto verificado: `NotificationDeliveryService.ts` compõe com composeNotificationText e `ReturnDeliveryService.ts` com composeReturnText (D-206), e o conjunto que cada um produz está em VERIFIED_CLIENT_TEXTS", () => {
-    const sites = discoverSendTextSites(aiOrchestratorSrcPath);
-    const composedSites = sites.filter((site) =>
-      site.category.startsWith("composed_by_"),
-    );
-    expect(composedSites.map((site) => site.category).sort()).toEqual([
-      "composed_by_composeNotificationText",
-      "composed_by_composeReturnText",
+  it("a categoria que nomeia o compositor liga o chamador real a texto verificado: `NotificationDeliveryService.ts` compõe com composeNotificationText e `ReturnDeliveryService.ts` com composeReturnText (D-206), entregam ao despachante em partes (D-208), e o conjunto que cada um produz está em VERIFIED_CLIENT_TEXTS", () => {
+    const composedCallers = discoverSendTextTransitChains(
+      aiOrchestratorSrcPath,
+      resolveVerifiedComposers(),
+    )
+      .flatMap((chain) => chain.callers)
+      .filter((caller) => caller.category.startsWith("composed_by_"));
+    expect(
+      composedCallers
+        .map((caller) => [
+          caller.filePath.replace(/\\/g, "/").split("/ai-orchestrator/src/")[1],
+          caller.category,
+        ])
+        .sort(),
+    ).toEqual([
+      [
+        "modules/customer-return/ReturnDeliveryService.ts",
+        "composed_by_composeReturnText",
+      ],
+      [
+        "modules/reminders/NotificationDeliveryService.ts",
+        "composed_by_composeNotificationText",
+      ],
     ]);
     expect(NOTIFICATION_MESSAGE_TEXTS.size).toBeGreaterThan(0);
     for (const text of NOTIFICATION_MESSAGE_TEXTS) {
@@ -1801,7 +1809,7 @@ describe("a cadeia de trânsito é seguida até o chamador, elo a elo (Goal040 /
   const at = (filePath: string, line: number): string =>
     `${filePath.replace(/\\/g, "/").split("/ai-orchestrator/src/")[1]}:${line}`;
 
-  it("segue as duas cadeias sobre apps/ai-orchestrator/src e computa exatamente um chamador em cada, com resíduo zero", () => {
+  it("segue as duas cadeias sobre apps/ai-orchestrator/src e computa os chamadores de cada uma, com resíduo zero", () => {
     const chains = discoverSendTextTransitChains(
       aiOrchestratorSrcPath,
       resolveVerifiedComposers(),
@@ -1841,20 +1849,34 @@ describe("a cadeia de trânsito é seguida até o chamador, elo a elo (Goal040 /
         ],
       },
       {
-        site: "modules/outbox/ai-reply-dispatch.ts:225",
-        siteOrigin: "reply",
-        transitFunction: "dispatchAiReply",
+        // D-208: o mesmo despachante leva o lembrete/aviso e o retorno,
+        // compostos na hora por compositor verificado.
+        site: "modules/outbox/message-dispatch.ts:320",
+        siteOrigin: "message",
+        transitFunction: "dispatchMessage",
         callers: [
           {
-            at: "modules/activation-test/ActivationTestReplySender.ts:135",
+            at: "modules/activation-test/ActivationTestReplySender.ts:142",
             callerFunction: "sendAiReply",
             category: "text_in_transit_named_origin",
             origin: "input",
           },
           {
-            at: "modules/graph/message-graph.ts:1338",
+            at: "modules/customer-return/ReturnDeliveryService.ts:321",
+            callerFunction: "resolveOutcome",
+            category: "composed_by_composeReturnText",
+            origin: undefined,
+          },
+          {
+            at: "modules/graph/message-graph.ts:1340",
             callerFunction: "sendResponse",
             category: "assistant_decision_text",
+            origin: undefined,
+          },
+          {
+            at: "modules/reminders/NotificationDeliveryService.ts:363",
+            callerFunction: "resolveOutcome",
+            category: "composed_by_composeNotificationText",
             origin: undefined,
           },
         ],
@@ -1879,20 +1901,29 @@ describe("a cadeia de trânsito é seguida até o chamador, elo a elo (Goal040 /
       ]),
     );
     expect(excluded).toEqual({
-      // Primeiro elo da cadeia da resposta da IA (2026-10-11): a implementação
-      // de `dispatchAiReply` e os dois imports que a nomeiam.
-      dispatchAiReply: [
+      // Primeiro elo da cadeia das mensagens da plataforma (2026-10-11,
+      // D-208): a implementação de `dispatchMessage` e os quatro imports que
+      // a nomeiam.
+      dispatchMessage: [
         {
-          at: "modules/activation-test/ActivationTestReplySender.ts:14",
+          at: "modules/activation-test/ActivationTestReplySender.ts:12",
           reason: "type_or_string_reference",
         },
         {
-          at: "modules/graph/message-graph.ts:42",
+          at: "modules/customer-return/ReturnDeliveryService.ts:18",
           reason: "type_or_string_reference",
         },
         {
-          at: "modules/outbox/ai-reply-dispatch.ts:193",
+          at: "modules/graph/message-graph.ts:41",
+          reason: "type_or_string_reference",
+        },
+        {
+          at: "modules/outbox/message-dispatch.ts:280",
           reason: "port_declaration_or_implementation",
+        },
+        {
+          at: "modules/reminders/NotificationDeliveryService.ts:18",
+          reason: "type_or_string_reference",
         },
       ],
       sendToTenantUnderTest: [
@@ -2173,28 +2204,35 @@ const FACTUAL_LINE_SCENARIOS: Array<Partial<NotificationFacts>> = [
  * frases factuais das seis formas de {@link FACTUAL_LINE_SCENARIOS}.
  */
 const NOTIFICATION_MESSAGE_TEXTS = new Set<string>();
-for (const style of AI_CONVERSATION_STYLES) {
-  for (const customerName of ["Ana", null] as const) {
-    const facts = notificationFacts({
-      customerName,
-      confirmationRequested: false,
-    });
-    const text = composeNotificationText({ style, facts });
-    const blocks = splitComposedBlocks(text);
-    NOTIFICATION_MESSAGE_TEXTS.add(blocks[0]); // saudação
-    NOTIFICATION_MESSAGE_TEXTS.add(blocks[blocks.length - 1]); // fechamento
-    for (const line of notificationFactualLines(facts)) {
-      NOTIFICATION_MESSAGE_TEXTS.add(line);
+// Os dois modos de envio (D-208): em partes, a saudação vira duas partes
+// ("Oi, Ana!" e "Tudo bem?"); numa mensagem só, uma.
+for (const delivery of ["PARTS", "SINGLE"] as const) {
+  for (const style of AI_CONVERSATION_STYLES) {
+    for (const customerName of ["Ana", null] as const) {
+      const facts = notificationFacts({
+        customerName,
+        confirmationRequested: false,
+      });
+      const text = composeNotificationText({ style, facts, delivery });
+      const factual = notificationFactualLines(facts);
+      for (const block of splitComposedBlocks(text)) {
+        // saudação, "tudo bem?" e fechamento; as frases com fato vêm abaixo.
+        if (!factual.includes(block)) NOTIFICATION_MESSAGE_TEXTS.add(block);
+      }
+      for (const line of factual) {
+        NOTIFICATION_MESSAGE_TEXTS.add(line);
+      }
     }
+    const confirmationText = composeNotificationText({
+      style,
+      facts: notificationFacts({ confirmationRequested: true }),
+      delivery,
+    });
+    const confirmationBlocks = splitComposedBlocks(confirmationText);
+    NOTIFICATION_MESSAGE_TEXTS.add(
+      confirmationBlocks[confirmationBlocks.length - 1],
+    ); // pedido de confirmação
   }
-  const confirmationText = composeNotificationText({
-    style,
-    facts: notificationFacts({ confirmationRequested: true }),
-  });
-  const confirmationBlocks = splitComposedBlocks(confirmationText);
-  NOTIFICATION_MESSAGE_TEXTS.add(
-    confirmationBlocks[confirmationBlocks.length - 1],
-  ); // pedido de confirmação
 }
 for (const overrides of FACTUAL_LINE_SCENARIOS) {
   for (const line of notificationFactualLines(notificationFacts(overrides))) {
@@ -2234,6 +2272,7 @@ function returnFacts(overrides: Partial<ReturnFacts> = {}): ReturnFacts {
   };
 }
 const RETURN_MESSAGE_TEXTS = new Set<string>();
+for (const delivery of ["PARTS", "SINGLE"] as const)
 for (const style of AI_CONVERSATION_STYLES) {
   for (const customerName of ["Ana Souza", null] as const) {
     for (const overrides of [
@@ -2252,6 +2291,7 @@ for (const style of AI_CONVERSATION_STYLES) {
       const text = composeReturnText({
         style,
         facts: returnFacts({ customerName, ...overrides }),
+        delivery,
       });
       for (const block of splitComposedBlocks(text)) {
         RETURN_MESSAGE_TEXTS.add(block);
@@ -2281,12 +2321,12 @@ function resolveVerifiedComposers(): Set<string> {
     ["composeNotificationText", NOTIFICATION_MESSAGE_TEXTS],
     ["composeReturnText", RETURN_MESSAGE_TEXTS],
   ]);
+  // Desde D-208 os compositores aparecem como chamadores do despachante em
+  // partes, nao como sitio de `sendText`: o conjunto verificado sai de
+  // executar cada um, e quem compoe com outro nome continua residuo.
   const verified = new Set<string>();
-  for (const site of discoverSendTextSites(aiOrchestratorSrcPath)) {
-    if (!site.category.startsWith("composed_by_")) continue;
-    const composer = site.category.slice("composed_by_".length);
-    const produced = producedByComposer.get(composer);
-    if (!produced || produced.size === 0) continue;
+  for (const [composer, produced] of producedByComposer) {
+    if (produced.size === 0) continue;
     if ([...produced].every((text) => VERIFIED_CLIENT_TEXTS.includes(text))) {
       verified.add(composer);
     }
@@ -2826,7 +2866,8 @@ describe("a cadeia de trânsito é seguida transitivamente até a raiz de cada r
     expect(secondLinks).toHaveLength(6);
     expect(secondLinks).toEqual([
       {
-        at: "modules/activation-test/ActivationTestAiDriver.ts:228",
+        // 228 → 230: o import do layout e o layout passado adiante (D-208).
+        at: "modules/activation-test/ActivationTestAiDriver.ts:230",
         callee: "sendAiReply",
         caller: "deliverReply",
         category: "text_in_transit_named_origin",
@@ -2911,7 +2952,9 @@ describe("a cadeia de trânsito é seguida transitivamente até a raiz de cada r
     // Cinco raízes literais: as quatro do Goal041 e a confirmação do cliente
     // simulado no passo AI_CONFIRMS_APPOINTMENT (validação de 2026-10-11).
     // Duas raízes de decisão do assistente: o grafo e o teste de ativação,
-    // ambos chegando ao despachante em partes (2026-10-11).
+    // ambos chegando ao despachante em partes (2026-10-11). Duas raízes de
+    // texto composto: o lembrete/aviso e o retorno, que passam pelo mesmo
+    // despachante desde D-208.
     expect(rootKinds).toEqual(
       [
         "assistant_decision_text",
@@ -2921,6 +2964,8 @@ describe("a cadeia de trânsito é seguida transitivamente até a raiz de cada r
         "literal_text_at_link",
         "literal_text_at_link",
         "literal_text_at_link",
+        "text_composed_at_link",
+        "text_composed_at_link",
       ].sort(),
     );
   });
@@ -16193,10 +16238,10 @@ describe("Goal055 / FIX-001 (§10) — controles negativos: as dez amarras do ei
 });
 
 describe("resposta da IA em várias mensagens: a parte dividida segue como texto em trânsito da origem (2026-10-11)", () => {
-  it("`<partes>[i]` de `splitAiReplyIntoParts(<origem>.text)` no mesmo bloco é trânsito de `<origem>`; array de outra fonte é resíduo", () => {
+  it("`<partes>[i]` de `splitMessageIntoParts(<origem>.text, ...)` no mesmo bloco é trânsito de `<origem>`; array de outra fonte é resíduo", () => {
     const fixture = [
       "export async function despachar(provider: P, reply: { text: string }) {",
-      "  const parts = splitAiReplyIntoParts(reply.text);",
+      "  const parts = splitMessageIntoParts(reply.text, reply.layout);",
       "  for (let index = 0; index < parts.length; index += 1) {",
       '    await provider.sendText({ to: "1", text: parts[index] });',
       "  }",
@@ -16211,8 +16256,8 @@ describe("resposta da IA em várias mensagens: a parte dividida segue como texto
       },
     ]);
     const outraFonte = fixture.replace(
-      "splitAiReplyIntoParts(reply.text)",
-      "inventaPartes(reply.text)",
+      "splitMessageIntoParts(reply.text, reply.layout)",
+      "inventaPartes(reply.text, reply.layout)",
     );
     expect(() =>
       classifySendTextSites(outraFonte, "<fixture-residuo>"),

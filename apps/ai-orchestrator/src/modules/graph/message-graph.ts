@@ -37,10 +37,11 @@ import {
 } from "../media/audio-turn.js";
 import type { CustomerMemoryPromptPort } from "../memory/customer-memory-service.js";
 import {
-  type AiReplyDispatchOptions,
-  type AiReplyDispatchOutcome,
-  dispatchAiReply,
-} from "../outbox/ai-reply-dispatch.js";
+  aiReplyLayout,
+  dispatchMessage,
+  type MessageDispatchOptions,
+  type MessageDispatchOutcome,
+} from "../outbox/message-dispatch.js";
 import { classifySendFailure } from "../outbox/outbox-policy.js";
 import type { ServiceInstructionPromptPort } from "../prompts/service-instructions.js";
 import type { GraphSessionPort } from "../session/SessionService.js";
@@ -174,7 +175,7 @@ export interface MessageGraphDependencies {
    * quantas partes ja sairam (sem ele, o retry nao tem de onde retomar);
    * `sleep` so e trocado em teste.
    */
-  replyDispatch?: Pick<AiReplyDispatchOptions, "progress" | "sleep">;
+  replyDispatch?: Pick<MessageDispatchOptions, "progress" | "sleep">;
 }
 
 /** Ver `MessageGraphWorkflow.invoke`: ~20 idas a ferramentas por turno. */
@@ -1331,15 +1332,19 @@ export class MessageGraphWorkflow {
 
     const correlationId =
       state.response.correlationId ?? state.response.messageRecordId;
-    // A resposta sai em varias mensagens curtas (decisao 2026-10-11); a linha
-    // continua uma so e so vira SENT depois da ultima parte.
-    let sent: AiReplyDispatchOutcome;
+    // A resposta sai em varias mensagens curtas ou numa so, conforme o
+    // negocio (D-208); a linha continua uma so e so vira SENT depois da ultima
+    // parte. O layout gravado com a linha vence: o retry divide igual.
+    let sent: MessageDispatchOutcome;
     try {
-      sent = await dispatchAiReply(
+      sent = await dispatchMessage(
         this.dependencies.provider,
         {
           to: message.customerPhone,
           text: state.response.text,
+          layout:
+            state.response.layout ??
+            aiReplyLayout(state.tenantConfig?.messageDelivery ?? "PARTS"),
           correlationId,
           messageRecordId: state.response.messageRecordId,
           quotedMessageId: message.messageId,

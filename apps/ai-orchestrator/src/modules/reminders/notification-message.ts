@@ -1,5 +1,8 @@
 import type { NotificationFacts } from "../scheduling-service/types.js";
-import type { AiConversationStyle } from "../tenant-config/ai-settings.js";
+import type {
+  AiConversationStyle,
+  AiMessageDelivery,
+} from "../tenant-config/ai-settings.js";
 
 /**
  * Composicao do texto da notificacao (Goal021).
@@ -32,12 +35,24 @@ import type { AiConversationStyle } from "../tenant-config/ai-settings.js";
  * tres campos, o valor segue a politica de preco e a pergunta de confirmacao
  * entra no fim quando o negocio a pede. Exemplo com campo desconhecido, ou
  * com `{servico}` num atendimento sem servico nem titulo, volta ao padrao.
+ *
+ * **Em partes (D-208).** O texto e uma lista ordenada de partes — saudacao,
+ * "tudo bem?", o fato, o valor, a pergunta — separadas por linha em branco.
+ * Com o negocio em `PARTS`, cada parte sai como uma mensagem do WhatsApp; a
+ * saudacao do padrao se divide em duas ("Oi, Ana!" e "Tudo bem?"), como uma
+ * pessoa escreveria. Em `SINGLE` o texto e o de antes, numa mensagem so. No
+ * exemplo da profissional, cada linha e uma parte: a quebra de linha dela e
+ * a fronteira da mensagem. As frases com fato sao as mesmas nos dois modos.
  */
 
 /** Voz de cada estilo. So registro: nenhuma destas frases carrega fato. */
 interface StyleVoice {
-  /** Abertura, com o nome da pessoa quando o dono o conhece. */
-  greeting(customerName: string | null): string;
+  /**
+   * Abertura, com o nome da pessoa quando o dono o conhece, em partes: a
+   * saudacao e o "tudo bem?" (quando o estilo pergunta). Juntas por espaco,
+   * sao a abertura numa frase so.
+   */
+  greeting(customerName: string | null): string[];
   /** Pedido de confirmacao de presenca, quando o negocio o habilita. */
   confirmation: string;
   /** Fechamento. Vazio e valor legitimo: estilo curto nao precisa de um. */
@@ -46,18 +61,17 @@ interface StyleVoice {
 
 const STYLE_VOICES: Record<AiConversationStyle, StyleVoice> = {
   PROFESSIONAL: {
-    greeting: (name) => (name ? `Olá, ${name}.` : "Olá."),
+    greeting: (name) => [name ? `Olá, ${name}.` : "Olá."],
     confirmation: "Pode confirmar sua presença respondendo sim ou não?",
     closing: "Fico à disposição.",
   },
   BALANCED: {
-    greeting: (name) => (name ? `Oi, ${name}! Tudo bem?` : "Oi! Tudo bem?"),
+    greeting: (name) => [name ? `Oi, ${name}!` : "Oi!", "Tudo bem?"],
     confirmation: "Você confirma sua presença? É só responder sim ou não.",
     closing: "Qualquer coisa, é só me chamar!",
   },
   CASUAL: {
-    greeting: (name) =>
-      name ? `Oii, ${name}! Tudo bem? 😊` : "Oii! Tudo bem? 😊",
+    greeting: (name) => [name ? `Oii, ${name}!` : "Oii!", "Tudo bem? 😊"],
     confirmation: "Confirma pra mim? Pode responder sim ou não 💛",
     closing: "Qualquer coisa me chama por aqui 💛",
   },
@@ -215,8 +229,9 @@ function isExampleField(value: string): value is ExampleField {
  * O lembrete escrito a partir da mensagem de exemplo da profissional, ou
  * `null` quando o exemplo nao serve e o padrao deve valer.
  *
- * Cada linha nao vazia do exemplo vira um bloco, e os blocos saem separados
- * por linha em branco, como no padrao. Os campos sao trocados numa passada so
+ * Cada linha nao vazia do exemplo vira uma parte (D-208: a quebra de linha
+ * da profissional e a fronteira da mensagem), e as partes saem separadas por
+ * linha em branco, como no padrao. Os campos sao trocados numa passada so
  * — um nome com `{data}` dentro continua sendo so um nome. Sem nome
  * conhecido, `{nome}` sai junto com a virgula e o espaco que o precedem
  * ("Oii, {nome}!" vira "Oii!").
@@ -225,7 +240,7 @@ function composeFromExample(
   example: string,
   facts: NotificationFacts,
   voice: StyleVoice,
-): string | null {
+): string[] | null {
   const fields = new Set<ExampleField>();
   for (const match of example.matchAll(EXAMPLE_FIELD)) {
     const field = match[1];
@@ -279,29 +294,33 @@ function composeFromExample(
   if (facts.kind === "REMINDER" && facts.confirmationRequested) {
     blocks.push(voice.confirmation);
   }
-  return blocks.join("\n\n");
+  return blocks;
 }
 
 /**
- * Texto final: voz do estilo em volta das frases factuais.
+ * As partes da mensagem, em ordem: voz do estilo em volta das frases
+ * factuais.
  *
  * O aviso de alteracao nunca pede confirmacao de presenca, mesmo que o fato
  * chegue marcado: confirmar presenca e do lembrete. O endereco do negocio nao
  * aparece porque nao existe nos fatos — e assim que ele nao vira repeticao
- * automatica.
+ * automatica. Em `PARTS` a saudacao do padrao sai em duas partes; em
+ * `SINGLE`, numa so, como antes.
  */
-export function composeNotificationText(input: {
+export function composeNotificationParts(input: {
   style: AiConversationStyle;
   facts: NotificationFacts;
-}): string {
+  delivery?: AiMessageDelivery;
+}): string[] {
   const voice = STYLE_VOICES[input.style];
   const example = input.facts.messageExample?.trim();
   if (input.facts.kind === "REMINDER" && example) {
     const custom = composeFromExample(example, input.facts, voice);
     if (custom !== null) return custom;
   }
+  const greeting = voice.greeting(input.facts.customerName?.trim() || null);
   const blocks = [
-    voice.greeting(input.facts.customerName?.trim() || null),
+    ...(input.delivery === "SINGLE" ? [greeting.join(" ")] : greeting),
     ...notificationFactualLines(input.facts),
   ];
   if (input.facts.kind === "REMINDER" && input.facts.confirmationRequested) {
@@ -309,5 +328,17 @@ export function composeNotificationText(input: {
   } else if (voice.closing) {
     blocks.push(voice.closing);
   }
-  return blocks.join("\n\n");
+  return blocks;
+}
+
+/**
+ * Texto final: as partes separadas por linha em branco. E a forma gravada em
+ * `Message.body` e a que o despacho divide de volta em partes (`BLOCKS`).
+ */
+export function composeNotificationText(input: {
+  style: AiConversationStyle;
+  facts: NotificationFacts;
+  delivery?: AiMessageDelivery;
+}): string {
+  return composeNotificationParts(input).join("\n\n");
 }

@@ -695,24 +695,36 @@
   height: 16px;
 }
 
+/* Abas e período na mesma linha a partir de 600 px (tablet em pé,
+   2026-10-19); sem espaço para o "Este mês", a linha quebra em vez de
+   espremer. */
+@media (min-width: 600px) {
+  .revenue-controls {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    column-gap: 16px;
+  }
+  .revenue-period-tabs {
+    flex: 1 1 236px;
+    max-width: 320px;
+  }
+  .revenue-period-nav {
+    grid-template-columns: 44px minmax(140px, auto) 44px auto;
+    column-gap: 6px;
+  }
+  .revenue-today {
+    grid-column: auto;
+  }
+}
 @media (min-width: 768px) {
   .revenue-page {
     padding: 28px 28px 64px;
     gap: 20px;
   }
-  .revenue-controls {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .revenue-period-tabs {
-    width: 320px;
-  }
   .revenue-period-nav {
     grid-template-columns: 44px minmax(200px, auto) 44px auto;
-  }
-  .revenue-today {
-    grid-column: auto;
   }
   .revenue-card,
   .revenue-summary {

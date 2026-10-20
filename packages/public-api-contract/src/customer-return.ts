@@ -201,8 +201,14 @@ export const returnCampaignCountsSchema = z.object({
   declined: z.number().int(),
   skipped: z.number().int(),
   failed: z.number().int(),
+  /** Enviadas esperando resposta, antes ou depois do lembrete (D-210). */
+  awaiting: z.number().int(),
+  /** Enviadas que ficaram sem resposta, mesmo com o lembrete (D-210). */
+  noReply: z.number().int(),
   /** Faturado dos atendimentos marcados pela rodada e já concluídos. */
   revenue: z.number(),
+  /** Valor dos atendimentos marcados pela rodada que ainda vão acontecer. */
+  expectedRevenue: z.number(),
 });
 
 export const returnCampaignSummarySchema = z.object({
@@ -219,6 +225,24 @@ export const returnCampaignSummarySchema = z.object({
   completedAt: isoDateTimeSchema.nullable(),
   counts: returnCampaignCountsSchema,
 });
+
+/**
+ * Situação da cliente na aprovação, do jeito que a tela mostra (D-210). O
+ * servidor decide quando uma enviada fica "sem resposta": 3 dias depois do
+ * lembrete, ou 3 dias depois do envio quando o lembrete não vai sair.
+ */
+export const returnOutcomeSchema = z.enum([
+  "QUEUED",
+  "SENDING",
+  "AWAITING",
+  "REPLIED",
+  "BOOKED",
+  "NO_REPLY",
+  "DECLINED",
+  "STOPPED",
+  "NOT_SENT",
+  "FAILED",
+]);
 
 export const returnTargetSchema = z.object({
   id: z.string(),
@@ -239,6 +263,15 @@ export const returnTargetSchema = z.object({
   followUpSentAt: isoDateTimeSchema.nullable(),
   offeredSlots: z.array(z.object({ date: dateSchema, time: z.string() })),
   messageBody: z.string().nullable(),
+  outcome: returnOutcomeSchema,
+  /** O atendimento que a mensagem trouxe: quando, em que pé e quanto. */
+  appointment: z
+    .object({
+      startAt: isoDateTimeSchema,
+      status: z.string(),
+      value: z.number().nullable(),
+    })
+    .nullable(),
 });
 
 export const returnCampaignListSchema = z.array(returnCampaignSummarySchema);
@@ -246,6 +279,42 @@ export const returnCampaignListSchema = z.array(returnCampaignSummarySchema);
 export const returnCampaignDetailSchema = returnCampaignSummarySchema.extend({
   messageTemplate: z.string().nullable(),
   targets: z.array(returnTargetSchema),
+});
+
+/** Visão geral do retorno (D-210): desde a primeira aprovação. */
+export const returnOverviewSchema = z.object({
+  timezone: z.string(),
+  today: dateSchema,
+  campaigns: z.object({
+    total: z.number().int().nonnegative(),
+    /** Enviando ou pausadas. */
+    live: z.number().int().nonnegative(),
+  }),
+  totals: returnCampaignCountsSchema,
+  /** Clientes diferentes que marcaram depois de uma mensagem de retorno. */
+  customersBack: z.number().int().nonnegative(),
+  upcoming: z.object({
+    /** Hoje e os 6 dias seguintes; o previsto que ficou para trás conta hoje. */
+    days: z.array(
+      z.object({ date: dateSchema, count: z.number().int().nonnegative() }),
+    ),
+    /** As próximas da fila, na ordem de envio. */
+    next: z.array(
+      z.object({
+        targetId: z.string(),
+        campaignId: z.string(),
+        customerId: z.string(),
+        customerName: z.string().nullable(),
+        kind: returnKindSchema,
+        serviceName: z.string().nullable(),
+        plannedDate: dateSchema,
+      }),
+    ),
+    /** Na fila para depois dos 7 dias. */
+    later: z.number().int().nonnegative(),
+    /** Na fila de aprovações pausadas. */
+    paused: z.number().int().nonnegative(),
+  }),
 });
 
 export const customerReturnStatusSchema = z.object({
@@ -274,6 +343,8 @@ export type ReturnCampaignInput = z.infer<typeof returnCampaignInputSchema>;
 export type ReturnPlan = z.infer<typeof returnPlanSchema>;
 export type ReturnCampaignState = z.infer<typeof returnCampaignStateSchema>;
 export type ReturnTargetState = z.infer<typeof returnTargetStateSchema>;
+export type ReturnOutcome = z.infer<typeof returnOutcomeSchema>;
+export type ReturnOverview = z.infer<typeof returnOverviewSchema>;
 export type ReturnCampaignCounts = z.infer<typeof returnCampaignCountsSchema>;
 export type ReturnCampaignSummary = z.infer<typeof returnCampaignSummarySchema>;
 export type ReturnTarget = z.infer<typeof returnTargetSchema>;

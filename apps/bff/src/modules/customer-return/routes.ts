@@ -248,6 +248,16 @@ export async function registerV1CustomerReturnRoutes(
   );
 
   app.get(
+    "/v1/customer-return/overview",
+    { preHandler: requireTenantContext },
+    async (request) =>
+      dataResponse(
+        request,
+        await scheduling.returnOverview(internalContext(request)),
+      ),
+  );
+
+  app.get(
     "/v1/customer-return/campaigns",
     { preHandler: requireTenantContext },
     async (request) =>

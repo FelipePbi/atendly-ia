@@ -768,9 +768,24 @@ const returnCampaignSummaryInternalSchema = z.object({
     declined: z.number().int(),
     skipped: z.number().int(),
     failed: z.number().int(),
+    awaiting: z.number().int(),
+    noReply: z.number().int(),
     revenue: z.number(),
+    expectedRevenue: z.number(),
   }),
 });
+const returnOutcomeInternalSchema = z.enum([
+  "QUEUED",
+  "SENDING",
+  "AWAITING",
+  "REPLIED",
+  "BOOKED",
+  "NO_REPLY",
+  "DECLINED",
+  "STOPPED",
+  "NOT_SENT",
+  "FAILED",
+]);
 const returnCampaignDetailInternalSchema =
   returnCampaignSummaryInternalSchema.extend({
     messageTemplate: z.string().nullable(),
@@ -803,9 +818,40 @@ const returnCampaignDetailInternalSchema =
         followUpSentAt: z.string().nullable(),
         offeredSlots: z.array(z.object({ date: z.string(), time: z.string() })),
         messageBody: z.string().nullable(),
+        outcome: returnOutcomeInternalSchema,
+        appointment: z
+          .object({
+            startAt: z.string(),
+            status: z.string(),
+            value: z.number().nullable(),
+          })
+          .nullable(),
       }),
     ),
   });
+const returnOverviewInternalSchema = z.object({
+  timezone: z.string(),
+  today: z.string(),
+  campaigns: z.object({ total: z.number().int(), live: z.number().int() }),
+  totals: returnCampaignSummaryInternalSchema.shape.counts,
+  customersBack: z.number().int(),
+  upcoming: z.object({
+    days: z.array(z.object({ date: z.string(), count: z.number().int() })),
+    next: z.array(
+      z.object({
+        targetId: z.string(),
+        campaignId: z.string(),
+        customerId: z.string(),
+        customerName: z.string().nullable(),
+        kind: z.enum(["RENEWAL", "WINBACK"]),
+        serviceName: z.string().nullable(),
+        plannedDate: z.string(),
+      }),
+    ),
+    later: z.number().int(),
+    paused: z.number().int(),
+  }),
+});
 const customerReturnStatusInternalSchema = z.object({
   customerId: z.string(),
   blocked: z.boolean(),
@@ -1904,6 +1950,14 @@ export class SchedulingClient {
       "/internal/customer-return/campaigns",
       input,
       returnCampaignDetailInternalSchema,
+    );
+  }
+
+  async returnOverview(context: InternalRequestContext) {
+    return this.get(
+      context,
+      "/internal/customer-return/overview",
+      returnOverviewInternalSchema,
     );
   }
 

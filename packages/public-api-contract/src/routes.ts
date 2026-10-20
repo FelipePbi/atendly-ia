@@ -5,6 +5,7 @@ import {
   returnCampaignDetailSchema,
   returnCampaignListSchema,
   returnCandidateListSchema,
+  returnOverviewSchema,
   returnPlanSchema,
   returnSettingsSchema,
 } from "./customer-return.js";
@@ -257,6 +258,7 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
   { method: "PATCH", pathPattern: "/v1/customer-return/settings", schema: returnSettingsSchema },
   { method: "GET", pathPattern: "/v1/customer-return/candidates", schema: returnCandidateListSchema },
   { method: "POST", pathPattern: "/v1/customer-return/plan", schema: returnPlanSchema },
+  { method: "GET", pathPattern: "/v1/customer-return/overview", schema: returnOverviewSchema },
   { method: "GET", pathPattern: "/v1/customer-return/campaigns", schema: returnCampaignListSchema },
   { method: "POST", pathPattern: "/v1/customer-return/campaigns", schema: returnCampaignDetailSchema },
   { method: "GET", pathPattern: "/v1/customer-return/campaigns/:id", schema: returnCampaignDetailSchema },

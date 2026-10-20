@@ -7,6 +7,7 @@ import {
   returnCampaignDetailSchema,
   returnCandidateListSchema,
   returnMessageIssue,
+  returnOverviewSchema,
   returnSettingsSchema,
 } from "@avenly-ia/public-api-contract";
 
@@ -94,10 +95,54 @@ const campaignDetail = {
     declined: 0,
     skipped: 0,
     failed: 0,
+    awaiting: 0,
+    noReply: 0,
     revenue: 0,
+    expectedRevenue: 0,
   },
   messageTemplate: null,
   targets: [],
+};
+
+const overview = {
+  timezone: "America/Sao_Paulo",
+  today: "2026-10-20",
+  campaigns: { total: 2, live: 1 },
+  totals: {
+    total: 12,
+    queued: 4,
+    sent: 8,
+    replied: 4,
+    booked: 3,
+    declined: 1,
+    skipped: 0,
+    failed: 0,
+    awaiting: 2,
+    noReply: 2,
+    revenue: 240,
+    expectedRevenue: 120,
+  },
+  customersBack: 3,
+  upcoming: {
+    days: [
+      { date: "2026-10-20", count: 2 },
+      { date: "2026-10-21", count: 2 },
+    ],
+    next: [
+      {
+        targetId: "target-1",
+        campaignId: "campaign-1",
+        customerId: "customer-1",
+        customerName: "Ana",
+        kind: "RENEWAL",
+        serviceName: "Manutenção 5D",
+        plannedDate: "2026-10-20",
+        position: 3,
+      },
+    ],
+    later: 0,
+    paused: 0,
+  },
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -158,6 +203,9 @@ function stubUpstream() {
           },
           requestId: "up",
         });
+      }
+      if (url.pathname === "/internal/customer-return/overview") {
+        return jsonResponse({ data: overview, requestId: "up" });
       }
       if (url.pathname === "/internal/customer-return/campaigns") {
         return jsonResponse({ data: campaignDetail, requestId: "up" }, 201);
@@ -237,6 +285,9 @@ describe("D-206: contrato do retorno de clientes", () => {
     expect(
       findPublicApiRoute("PUT", "/v1/customers/:id/return-messages")?.schema,
     ).toBe(customerReturnStatusSchema);
+    expect(
+      findPublicApiRoute("GET", "/v1/customer-return/overview")?.schema,
+    ).toBe(returnOverviewSchema);
   });
 
   it("texto-base: campo desconhecido, data e horário escritos à mão são recusados", () => {
@@ -365,6 +416,24 @@ describe("D-206: aprovação e configuração", () => {
       method: "PUT",
       path: "/internal/customers/customer-1/return-status",
       body: { blocked: false },
+    });
+  });
+});
+
+describe("D-210: visão geral do retorno", () => {
+  it("devolve a situação, o valor e a fila pelo contrato, sem campo a mais", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/customer-return/overview",
+    });
+    expect(response.statusCode).toBe(200);
+    const data = response.json().data;
+    expect(returnOverviewSchema.parse(data)).toBeTruthy();
+    expect(data.totals).toMatchObject({ booked: 3, noReply: 2, awaiting: 2 });
+    expect(data.upcoming.next[0]).not.toHaveProperty("position");
+    expect(upstream[0]).toMatchObject({
+      method: "GET",
+      path: "/internal/customer-return/overview",
     });
   });
 });

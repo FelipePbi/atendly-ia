@@ -18,6 +18,10 @@ import {
   type RevenueAppointmentRow,
 } from "../revenue/revenue-report.js";
 import {
+  type ReturnOutcome,
+  returnOutcome,
+} from "./return-outcome.js";
+import {
   type CompletedVisit,
   type CustomerReturnHistory,
   DECLINE_BLOCK_DAYS,
@@ -214,8 +218,14 @@ export interface ReturnCampaignCounts {
   declined: number;
   skipped: number;
   failed: number;
+  /** Enviadas esperando resposta (antes ou depois do lembrete). */
+  awaiting: number;
+  /** Enviadas que ficaram sem resposta, mesmo com o lembrete. */
+  noReply: number;
   /** Faturado dos atendimentos marcados pela rodada e ja concluidos. */
   revenue: number;
+  /** Valor dos atendimentos marcados pela rodada que ainda vao acontecer. */
+  expectedRevenue: number;
 }
 
 export interface ReturnCampaignSummary {
@@ -252,6 +262,77 @@ export interface ReturnTargetView {
   followUpSentAt: string | null;
   offeredSlots: Array<{ date: string; time: string }>;
   messageBody: string | null;
+  outcome: ReturnOutcome;
+  /** O atendimento que a mensagem trouxe: quando e quanto. */
+  appointment: ReturnAppointmentView | null;
+}
+
+export interface ReturnAppointmentView {
+  startAt: string;
+  status: string;
+  /** Valor do atendimento; nulo sem preco definido. */
+  value: number | null;
+}
+
+export interface ReturnUpcomingTarget {
+  targetId: string;
+  campaignId: string;
+  customerId: string;
+  customerName: string | null;
+  kind: ReturnKind;
+  serviceName: string | null;
+  /** Dia previsto; o que ficou para trás conta como hoje. */
+  plannedDate: string;
+}
+
+export interface ReturnOverview {
+  timezone: string;
+  today: string;
+  campaigns: { total: number; live: number };
+  totals: ReturnCampaignCounts;
+  /** Clientes diferentes que marcaram depois de uma mensagem de retorno. */
+  customersBack: number;
+  upcoming: {
+    /** Hoje e os 6 dias seguintes, com quantas mensagens saem em cada um. */
+    days: Array<{ date: string; count: number }>;
+    /** As próximas da fila, na ordem de envio. */
+    next: ReturnUpcomingTarget[];
+    /** Na fila para depois dos 7 dias. */
+    later: number;
+    /** Na fila de aprovações pausadas: só saem quando você retomar. */
+    paused: number;
+  };
+}
+
+interface AppointmentFacts {
+  startAt: Date;
+  status: string;
+  valueCents: number | null;
+}
+
+interface ProgressTarget {
+  id: string;
+  campaignId: string;
+  customerId: string;
+  customerName: string | null;
+  serviceName: string | null;
+  plannedDate: Date | null;
+  position: number;
+  outcome: ReturnOutcome;
+}
+
+const UPCOMING_DAYS = 7;
+const UPCOMING_NEXT = 5;
+
+function appointmentView(
+  facts: AppointmentFacts | null | undefined,
+): ReturnAppointmentView | null {
+  if (!facts) return null;
+  return {
+    startAt: facts.startAt.toISOString(),
+    status: facts.status,
+    value: facts.valueCents === null ? null : facts.valueCents / 100,
+  };
 }
 
 export interface ReturnCampaignDetail extends ReturnCampaignSummary {
@@ -772,9 +853,8 @@ export class CustomerReturnService {
       orderBy: { createdAt: "desc" },
       take: 20,
     });
-    const counts = await this.countsFor(
-      campaigns.map((campaign) => campaign.id),
-    );
+    const now = await databaseNow(this.prisma);
+    const { counts } = await this.progress(campaigns, now);
     return campaigns.map((campaign) =>
       campaignSummary(campaign, counts.get(campaign.id) ?? emptyCounts()),
     );
@@ -798,7 +878,8 @@ export class CustomerReturnService {
         404,
       );
     }
-    const counts = await this.countsFor([campaign.id]);
+    const now = await databaseNow(this.prisma);
+    const { counts, appointments } = await this.progress([campaign], now);
     return {
       ...campaignSummary(campaign, counts.get(campaign.id) ?? emptyCounts()),
       messageTemplate: campaign.messageTemplate,
@@ -821,74 +902,231 @@ export class CustomerReturnService {
         followUpSentAt: iso(target.followUpSentAt),
         offeredSlots: parseSlots(target.offeredSlots),
         messageBody: target.messageBody,
+        outcome: returnOutcome(target, campaign, now),
+        appointment: appointmentView(
+          target.appointmentId ? appointments.get(target.appointmentId) : null,
+        ),
       })),
     };
   }
 
-  private async countsFor(
-    campaignIds: string[],
-  ): Promise<Map<string, ReturnCampaignCounts>> {
-    const result = new Map<string, ReturnCampaignCounts>();
-    if (campaignIds.length === 0) return result;
-    const targets = await this.prisma.returnCampaignTarget.findMany({
-      where: { tenantId: this.tenantId, campaignId: { in: campaignIds } },
+  /**
+   * Visão geral do retorno (D-210): a situação de todas as mensagens desde a
+   * primeira aprovação, quanto o retorno já trouxe (faturado e previsto),
+   * quantas clientes voltaram e o que sai nos próximos 7 dias.
+   */
+  async overview(): Promise<ReturnOverview> {
+    await this.reconcileBookings();
+    const timezone = await this.timezone();
+    const now = await databaseNow(this.prisma);
+    const today = instantToLocalDateTime(now, timezone).date;
+    const campaigns = await this.prisma.returnCampaign.findMany({
+      where: { tenantId: this.tenantId },
+      orderBy: { createdAt: "desc" },
+    });
+    const { counts, targets } = await this.progress(campaigns, now);
+    const totals = emptyCounts();
+    for (const campaignCounts of counts.values()) {
+      for (const key of Object.keys(totals) as Array<keyof typeof totals>) {
+        totals[key] += campaignCounts[key];
+      }
+    }
+    const customersBack = new Set(
+      targets
+        .filter((target) => target.outcome === "BOOKED")
+        .map((target) => target.customerId),
+    ).size;
+
+    const byId = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
+    const lastDay = addDays(today, UPCOMING_DAYS - 1);
+    const days = Array.from({ length: UPCOMING_DAYS }, (_, index) => ({
+      date: addDays(today, index),
+      count: 0,
+    }));
+    const queued: Array<ReturnUpcomingTarget & { position: number }> = [];
+    let later = 0;
+    let paused = 0;
+    for (const target of targets) {
+      if (target.outcome !== "QUEUED" && target.outcome !== "SENDING") continue;
+      const campaign = byId.get(target.campaignId);
+      if (!campaign) continue;
+      if (campaign.state === "PAUSED") {
+        paused += 1;
+        continue;
+      }
+      if (campaign.state !== "ACTIVE") continue;
+      // Previsto para um dia que já passou: sai no próximo envio.
+      const planned = dateOnly(target.plannedDate) ?? today;
+      const date = planned < today ? today : planned;
+      if (date > lastDay) later += 1;
+      else {
+        const day = days.find((item) => item.date === date);
+        if (day) day.count += 1;
+      }
+      queued.push({
+        targetId: target.id,
+        campaignId: campaign.id,
+        customerId: target.customerId,
+        customerName: target.customerName,
+        kind: campaign.kind,
+        serviceName: target.serviceName,
+        plannedDate: date,
+        position: target.position,
+      });
+    }
+    queued.sort(
+      (left, right) =>
+        left.plannedDate.localeCompare(right.plannedDate) ||
+        left.position - right.position,
+    );
+
+    return {
+      timezone,
+      today,
+      campaigns: {
+        total: campaigns.length,
+        live: campaigns.filter((campaign) =>
+          (LIVE_CAMPAIGN_STATES as readonly string[]).includes(campaign.state),
+        ).length,
+      },
+      totals: {
+        ...totals,
+        revenue: roundMoney(totals.revenue),
+        expectedRevenue: roundMoney(totals.expectedRevenue),
+      },
+      customersBack,
+      upcoming: {
+        days,
+        next: queued.slice(0, UPCOMING_NEXT).map((item) => ({
+          targetId: item.targetId,
+          campaignId: item.campaignId,
+          customerId: item.customerId,
+          customerName: item.customerName,
+          kind: item.kind,
+          serviceName: item.serviceName,
+          plannedDate: item.plannedDate,
+        })),
+        later,
+        paused,
+      },
+    };
+  }
+
+  /**
+   * Andamento das aprovações: a situação de cada cliente, os números de cada
+   * aprovação e os atendimentos que as mensagens trouxeram.
+   */
+  private async progress(
+    campaigns: Array<{ id: string; state: string; completedAt: Date | null }>,
+    now: Date,
+  ): Promise<{
+    counts: Map<string, ReturnCampaignCounts>;
+    targets: ProgressTarget[];
+    appointments: Map<string, AppointmentFacts>;
+  }> {
+    const counts = new Map<string, ReturnCampaignCounts>();
+    if (campaigns.length === 0) {
+      return { counts, targets: [], appointments: new Map() };
+    }
+    const byId = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
+    const rows = await this.prisma.returnCampaignTarget.findMany({
+      where: { tenantId: this.tenantId, campaignId: { in: [...byId.keys()] } },
       select: {
+        id: true,
         campaignId: true,
+        customerId: true,
         state: true,
+        reason: true,
+        serviceName: true,
+        plannedDate: true,
+        position: true,
         sentAt: true,
         repliedAt: true,
+        followUpState: true,
+        followUpSentAt: true,
         appointmentId: true,
+        customer: { select: { name: true } },
       },
     });
-    const appointmentIds = targets
-      .map((target) => target.appointmentId)
-      .filter((id): id is string => Boolean(id));
-    const appointments =
-      appointmentIds.length === 0
-        ? []
-        : await this.prisma.appointment.findMany({
-            where: {
-              tenantId: this.tenantId,
-              id: { in: appointmentIds },
-              status: "COMPLETED",
-            },
-            select: {
-              id: true,
-              finalValue: true,
-              items: {
-                select: { priceTypeSnapshot: true, priceSnapshot: true },
-              },
-            },
-          });
-    const valueById = new Map(
+    const appointments = await this.appointmentFacts(
+      rows
+        .map((row) => row.appointmentId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    const targets: ProgressTarget[] = [];
+    for (const row of rows) {
+      const campaign = byId.get(row.campaignId);
+      if (!campaign) continue;
+      const outcome = returnOutcome(row, campaign, now);
+      targets.push({
+        id: row.id,
+        campaignId: row.campaignId,
+        customerId: row.customerId,
+        customerName: row.customer?.name ?? null,
+        serviceName: row.serviceName,
+        plannedDate: row.plannedDate,
+        position: row.position,
+        outcome,
+      });
+      const item = counts.get(row.campaignId) ?? emptyCounts();
+      item.total += 1;
+      if (outcome === "QUEUED" || outcome === "SENDING") item.queued += 1;
+      if (row.sentAt) item.sent += 1;
+      if (row.repliedAt) item.replied += 1;
+      if (outcome === "BOOKED") item.booked += 1;
+      if (outcome === "DECLINED" || outcome === "STOPPED") item.declined += 1;
+      if (outcome === "NOT_SENT") item.skipped += 1;
+      if (outcome === "FAILED") item.failed += 1;
+      if (outcome === "AWAITING") item.awaiting += 1;
+      if (outcome === "NO_REPLY") item.noReply += 1;
+      const appointment = row.appointmentId
+        ? appointments.get(row.appointmentId)
+        : undefined;
+      if (appointment?.status === "COMPLETED") {
+        item.revenue += (appointment.valueCents ?? 0) / 100;
+      } else if (
+        appointment &&
+        !SETTLED_APPOINTMENT_STATES.has(appointment.status)
+      ) {
+        item.expectedRevenue += (appointment.valueCents ?? 0) / 100;
+      }
+      counts.set(row.campaignId, item);
+    }
+    return { counts, targets, appointments };
+  }
+
+  private async appointmentFacts(
+    ids: string[],
+  ): Promise<Map<string, AppointmentFacts>> {
+    if (ids.length === 0) return new Map();
+    const appointments = await this.prisma.appointment.findMany({
+      where: { tenantId: this.tenantId, id: { in: ids } },
+      select: {
+        id: true,
+        startAt: true,
+        status: true,
+        finalValue: true,
+        items: {
+          select: { priceTypeSnapshot: true, priceSnapshot: true },
+        },
+      },
+    });
+    return new Map(
       appointments.map((appointment) => [
         appointment.id,
-        appointmentValueCents({
-          finalValue: appointment.finalValue,
-          items: appointment.items.map((item) => ({
-            priceType: item.priceTypeSnapshot,
-            price: item.priceSnapshot,
-          })),
-        } as unknown as RevenueAppointmentRow) ?? 0,
+        {
+          startAt: appointment.startAt,
+          status: appointment.status,
+          valueCents: appointmentValueCents({
+            finalValue: appointment.finalValue,
+            items: appointment.items.map((item) => ({
+              priceType: item.priceTypeSnapshot,
+              price: item.priceSnapshot,
+            })),
+          } as unknown as RevenueAppointmentRow),
+        },
       ]),
     );
-    for (const target of targets) {
-      const counts = result.get(target.campaignId) ?? emptyCounts();
-      counts.total += 1;
-      if (target.state === "QUEUED" || target.state === "CLAIMED")
-        counts.queued += 1;
-      if (target.sentAt) counts.sent += 1;
-      if (target.repliedAt) counts.replied += 1;
-      if (target.state === "BOOKED") counts.booked += 1;
-      if (target.state === "DECLINED") counts.declined += 1;
-      if (target.state === "SKIPPED") counts.skipped += 1;
-      if (target.state === "FAILED") counts.failed += 1;
-      if (target.appointmentId) {
-        counts.revenue += (valueById.get(target.appointmentId) ?? 0) / 100;
-      }
-      result.set(target.campaignId, counts);
-    }
-    return result;
   }
 
   async changeCampaignState(
@@ -1217,7 +1455,10 @@ function emptyCounts(): ReturnCampaignCounts {
     declined: 0,
     skipped: 0,
     failed: 0,
+    awaiting: 0,
+    noReply: 0,
     revenue: 0,
+    expectedRevenue: 0,
   };
 }
 
@@ -1249,9 +1490,20 @@ function campaignSummary(
     pausedAt: iso(campaign.pausedAt),
     cancelledAt: iso(campaign.cancelledAt),
     completedAt: iso(campaign.completedAt),
-    counts: { ...counts, revenue: Math.round(counts.revenue * 100) / 100 },
+    counts: {
+      ...counts,
+      revenue: roundMoney(counts.revenue),
+      expectedRevenue: roundMoney(counts.expectedRevenue),
+    },
   };
 }
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/** Atendimento que ainda conta como previsto: nem concluido nem desfeito. */
+const SETTLED_APPOINTMENT_STATES = new Set(["COMPLETED", "CANCELLED", "NO_SHOW"]);
 
 export function parseSlots(
   value: unknown,

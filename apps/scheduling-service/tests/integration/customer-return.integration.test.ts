@@ -409,6 +409,31 @@ describeWithDatabase("customer return against PostgreSQL", () => {
     );
     expect(anaView).toMatchObject({ state: "BOOKED", messageBody: "Oi, Ana!" });
     expect(anaView.appointmentId).toBeTruthy();
+    // D-210: a situação de cada cliente e o atendimento que a mensagem trouxe.
+    expect(anaView.outcome).toBe("BOOKED");
+    expect(anaView.appointment).toMatchObject({
+      startAt: anaStart.toISOString(),
+      status: "CONFIRMED",
+    });
+    const outcomes = detailBody.targets
+      .map((target: { outcome: string }) => target.outcome)
+      .sort();
+    expect(outcomes).toEqual(["AWAITING", "BOOKED", "NOT_SENT"]);
+    expect(detailBody.counts).toMatchObject({ awaiting: 1, noReply: 0 });
+
+    const overview = await app.inject({
+      method: "GET",
+      url: "/internal/customer-return/overview",
+      headers: headers(),
+    });
+    expect(overview.statusCode).toBe(200);
+    expect(overview.json().data).toMatchObject({
+      campaigns: { total: 1, live: 0 },
+      customersBack: 1,
+      totals: { total: 3, sent: 2, booked: 1, awaiting: 1, skipped: 1 },
+      upcoming: { later: 0, paused: 0, next: [] },
+    });
+    expect(overview.json().data.upcoming.days).toHaveLength(7);
 
     // Bia não respondeu em 3 dias: um lembrete único.
     await prisma.returnCampaignTarget.update({
@@ -461,6 +486,18 @@ describeWithDatabase("customer return against PostgreSQL", () => {
       permanent: true,
       reason: "STOPPED",
     });
+    const afterStop = await app.inject({
+      method: "GET",
+      url: `/internal/customer-return/campaigns/${campaign.id}`,
+      headers: headers(),
+    });
+    expect(
+      afterStop
+        .json()
+        .data.targets.find(
+          (target: { customerId: string }) => target.customerId === bia,
+        ).outcome,
+    ).toBe("STOPPED");
     const unblock = await app.inject({
       method: "PUT",
       url: `/internal/customers/${bia}/return-status`,

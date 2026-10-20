@@ -163,6 +163,12 @@ export async function registerCustomerReturnRoutes(
   );
 
   app.get(
+    "/internal/customer-return/overview",
+    internalOnly,
+    async (request) => data(request, await service(request).overview()),
+  );
+
+  app.get(
     "/internal/customer-return/campaigns",
     internalOnly,
     async (request) => data(request, await service(request).listCampaigns()),

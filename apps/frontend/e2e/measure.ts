@@ -535,12 +535,14 @@ export async function measureComposition(marker: Locator): Promise<CompositionRe
 export const SIDEBAR_BREAKPOINT = 1100;
 export const SIDEBAR_WIDTH = 232;
 /**
- * How many items the bottom bar renders at a window width (D-194), mirroring
- * `BOTTOM_NAV_TIERS` in `src/shared/layout/navigation.ts`: Início, Conversas,
- * Agenda, Clientes and Mais on a phone; Serviços and Faturamento join from
- * 600px; from 768px all eight destinations fit and "Conta" replaces "Mais".
+ * How many items the bottom bar renders at a window width (D-194, D-210),
+ * mirroring `BOTTOM_NAV_TIERS` in `src/shared/layout/navigation.ts`: Início,
+ * Conversas, Agenda, Clientes and Mais on a phone; Retorno and Serviços join
+ * from 600px; Faturamento and Notificações from 768px; from 900px all nine
+ * destinations fit and "Conta" replaces "Mais".
  */
 export function bottomNavItemsAt(width: number): number {
+  if (width >= 900) return 10;
   if (width >= 768) return 9;
   if (width >= 600) return 7;
   return 5;

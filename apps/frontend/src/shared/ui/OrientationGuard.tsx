@@ -4,10 +4,10 @@ import { BrandMark } from "@/shared/ui/Brand";
  * Pedido de 2026-10-12: no celular, travar a orientação em retrato.
  *
  * Uma página no navegador não consegue travar a rotação (a Screen
- * Orientation API só trava em tela cheia ou app instalado). Quem instala a
- * Avenly na tela inicial ganha o retrato pelo `orientation` do manifest
- * (`src/app/manifest.ts`). No navegador, este aviso cobre a tela quando o
- * celular está deitado.
+ * Orientation API só trava em tela cheia ou app instalado). No celular com a
+ * Avenly instalada, o script do `<head>` trava o retrato
+ * (`OrientationBootScript`, D-211); no tablet, nada trava. No navegador,
+ * este aviso cobre a tela quando o celular está deitado.
  *
  * Só CSS, sem JS de detecção (`avenly-orientation.css`): fora da condição o
  * aviso tem `display: none`, que já o tira da árvore acessível (o mesmo

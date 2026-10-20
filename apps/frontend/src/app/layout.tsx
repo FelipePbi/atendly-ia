@@ -6,6 +6,7 @@ import { ProductRuntimeProvider } from "@/shared/runtime/ProductRuntime";
 import { DEFAULT_BROWSER_THEME_COLOR } from "@/shared/theme/appearance";
 import { AppearanceBootScript } from "@/shared/theme/AppearanceBootScript";
 import { AppearanceProvider } from "@/shared/theme/AppearanceProvider";
+import { OrientationBootScript } from "@/shared/ui/OrientationBootScript";
 import { OrientationGuard } from "@/shared/ui/OrientationGuard";
 import { RouteAnnouncer } from "@/shared/ui/RouteAnnouncer";
 
@@ -29,11 +30,13 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   // O script do <head> põe `data-accent`/`data-theme` no <html> antes da
-  // primeira pintura (D-181); o React não declara esses atributos.
+  // primeira pintura (D-181); o React não declara esses atributos. O outro
+  // trava o retrato só no celular instalado (D-211).
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <AppearanceBootScript />
+        <OrientationBootScript />
       </head>
       <body>
         <ProductRuntimeProvider>

@@ -1,6 +1,6 @@
 /*
  * Pedido de 2026-10-12: no celular, travar a orientação em retrato.
- * O navegador não trava a rotação; este aviso (OrientationGuard, no layout
+ * O navegador não trava a rotação (só o app instalado no celular, D-211); este aviso (OrientationGuard, no layout
  * raiz) cobre a tela só com o telefone deitado. A condição pega telefone na
  * horizontal (altura até 500px com toque) e deixa de fora tablet e desktop
  * (altura maior ou ponteiro fino). As larguras do gate (360x740 a 1440x900)

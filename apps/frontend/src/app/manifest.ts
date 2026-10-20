@@ -1,9 +1,9 @@
 import type { MetadataRoute } from "next";
 
 /**
- * Pedido de 2026-10-12: no celular, travar a orientação em retrato.
- * O navegador não deixa uma página travar a rotação; `orientation` só vale
- * quando a Avenly é instalada na tela inicial (display standalone). No
+ * Sem `orientation` (D-211): o campo vale para todo aparelho onde a Avenly é
+ * instalada, e o tablet deitado abria em retrato. O retrato do celular
+ * instalado vem do script do `<head>` (`OrientationBootScript`); no
  * navegador comum, o aviso "Gire o celular" (OrientationGuard) cobre a tela.
  * Cores: canvas (`--at-color-canvas`), igual ao `themeColor` do layout raiz.
  */
@@ -16,7 +16,6 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/inicio",
     scope: "/",
     display: "standalone",
-    orientation: "portrait",
     background_color: "#f7f4ef",
     theme_color: "#f7f4ef",
     icons: [

@@ -1,6 +1,6 @@
 # Retorno de clientes: Renovação e Resgate
 
-**Status:** implementada em 2026-10-18 ([[../../migration/DECISIONS#D-206|D-206]]): Renovação, Resgate, ritmo, horários de costume, a IA conduzindo a resposta e os números da rodada. Onde fica: "Chamar clientes de volta" na lista de Clientes (`/clientes/retorno`), "Retorno de clientes" em Configurações e "Mensagens de retorno" no Resumo do perfil. Ainda não: a linha do Retorno no bloco "O que a IA fez" do Faturamento, a marca "veio pelo Resgate" no próprio atendimento, os horários de costume em toda oferta da IA (hoje só na conversa do convite) e a menção na Política de Privacidade.
+**Status:** implementada em 2026-10-18 ([[../../migration/DECISIONS#D-206|D-206]]): Renovação, Resgate, ritmo, horários de costume, a IA conduzindo a resposta e os números da rodada. Onde fica (desde 2026-10-19, [[../../migration/DECISIONS#D-210|D-210]]): "Retorno" no menu (`/retorno`), com a visão geral, Chamar clientes, Aprovações e Configurações no mesmo lugar; "Mensagens de retorno" continua no Resumo do perfil. Na tela, cada rodada aprovada se chama **aprovação**. Ainda não: a linha do Retorno no bloco "O que a IA fez" do Faturamento, a marca "veio pelo Resgate" no próprio atendimento, os horários de costume em toda oferta da IA (hoje só na conversa do convite) e a menção na Política de Privacidade.
 
 ## Objetivo
 
@@ -125,6 +125,8 @@ Vale para as duas rotinas e para toda vez que a IA oferece horário a uma client
 
 ## 5. Medição
 
+Situação de cada cliente na aprovação ([[../../migration/DECISIONS#D-210|D-210]]), decidida pelo servidor: na fila, aguardando resposta, respondeu, agendou, **sem resposta** (3 dias depois do lembrete; sem lembrete possível, 3 dias depois do envio; com lembrete pendente, no máximo 7), recusou, pediu para parar, não enviada (com o motivo) ou falhou. As situações não se sobrepõem.
+
 Cada envio registra:
 - quando foi enviado;
 - se a cliente respondeu;
@@ -132,7 +134,8 @@ Cada envio registra:
 - quanto faturou quando o atendimento foi concluído.
 
 Onde isso aparece:
-- **Na rodada:** enviadas, respondidas, agendadas e faturamento.
+- **Na aprovação:** enviadas, na fila (com o dia previsto), cada situação e o valor — faturado do que já foi atendido e, à parte, o dos horários marcados que ainda vão acontecer.
+- **Na visão geral do Retorno:** o que o retorno trouxe (faturado + marcado), quantas clientes voltaram, a parte das enviadas que virou horário, a situação de todas as mensagens e a fila dos próximos 7 dias.
 - **No Faturamento, bloco "O que a IA fez" (D-178):** "Retorno trouxe 6 clientes e R$ 640 este mês".
 
 ## 6. Dados (rascunho)

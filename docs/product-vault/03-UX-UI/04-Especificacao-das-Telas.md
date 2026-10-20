@@ -268,20 +268,7 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 - criar cliente;
 - carregamento sob demanda: cerca de 15 por vez, mais ao chegar perto do fim da lista; a busca e o total no cabeçalho valem para todos os clientes, não só os já carregados;
 - título, total, "+" e busca ficam fixos; só os itens rolam;
-- abrir ou trocar de cliente não recarrega a lista: ela mantém o que já carregou, a busca e a rolagem, e só atualiza quando o cadastro muda;
-- na aba Ativos, a linha "Chamar clientes de volta" leva ao Retorno de clientes.
-
-### Retorno de clientes
-
-`/clientes/retorno` ([[../02-Fluxos/06-Retorno-de-Clientes|fluxo]], [[../../migration/DECISIONS#D-206|D-206]]), tela empurrada de Clientes (ao lado da lista a partir de 1024 px):
-
-- abas **Renovação** (Esta semana · Próxima semana) e **Resgate** (30, 45, 60, 90 ou 120 dias, começando pelo da configuração, com o incentivo e "Editar");
-- a lista chega toda marcada; cada linha tem caixa de marcar, nome, "Manutenção 5D vence em 5 dias" (ou "venceu há 2 dias"; no Resgate "Última vez há 3 meses · mais feito: …"), último atendimento e de onde veio o prazo ("a cada 15 dias, pelo serviço" ou "pela média dela") e o costume ("costuma vir sex ou sáb, das 16h às 19h"); "Marcar todas"/"Desmarcar todas"; abaixo, quem ficou de fora e por quê;
-- em cada linha, "Ver mensagem" (fora da caixa de marcar; só o ícone no celular) abre o diálogo centralizado "Como a IA chama …" com um celular: o nome do negócio no topo e as mensagens daquela cliente chegando em ordem, cada uma depois do "digitando…", com a hora; "Repetir" toca de novo; com menos movimento, todas aparecem de uma vez ([[../../migration/DECISIONS#D-208|D-208]]);
-- "Assim chega para …": a mensagem da primeira marcada, com o estilo da IA, um balão por mensagem (D-208); na Renovação os dois horários são exemplo (saem da agenda no envio, e a nota diz isso); "Editar mensagem" abre o texto-base num modal; o ritmo ("Saem até 10 por dia, seg a sáb, das 9h às 19h") com "Ajustar";
-- **Aprovar N clientes** (fixo no rodapé no celular). Quem não cabe até a própria data abre um modal com "Aumentar para N por dia", "Deixar essa(s) de fora" e "Voltar"; aprovado, toast "Rodada aprovada: N mensagens saem aos poucos.";
-- **Rodadas**: um cartão por rodada com a situação, enviadas, na fila, responderam, agendaram e o faturado de quem voltou; "Ver clientes e opções" abre um modal com cada cliente e a situação dela ("Na fila, previsto para 20/10", "Agendou", "Pediu para parar", "Não enviada: marcou antes da mensagem"), "Tirar da rodada", "Pausar envios"/"Retomar envios" e "Cancelar o que falta" (com confirmação);
-- carregando: o "A" animado só depois de ~150 ms; erro com "Tentar novamente"; vazio: "Ninguém vence nesta semana sem horário marcado." / "Ninguém está há tanto tempo sem vir.".
+- abrir ou trocar de cliente não recarrega a lista: ela mantém o que já carregou, a busca e a rolagem, e só atualiza quando o cadastro muda.
 
 ### Perfil
 
@@ -297,6 +284,50 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 - cabeçalho igual em Resumo, Atendimentos e Notas (nome, telefone, desde quando, tags, responsável confirmado, "Conversa" e "Agendar"): trocar de aba só troca o conteúdo abaixo;
 - "Conversa" fica sempre ao lado de "Agendar" e leva direto ao chat da pessoa (ou do responsável, se ela não tem telefone próprio); sem conversa ainda, aparece desabilitado;
 - **Mensagens de retorno** no Resumo (D-206): se ela recebe convites e, quando não, por quê (recusou, até quando; pediu para parar; você bloqueou), a data do último convite e a ação "Voltar a enviar" ou "Não enviar mensagens de retorno", com toast.
+
+## Retorno de clientes
+
+Destino "Retorno" do menu ([[../02-Fluxos/06-Retorno-de-Clientes|fluxo]], [[../../migration/DECISIONS#D-206|D-206]], [[../../migration/DECISIONS#D-210|D-210]]): depois de Clientes na sidebar; no celular, o primeiro do "Mais". Tudo do retorno fica aqui; Chamar clientes, Aprovações e Configurações são telas empurradas com voltar para a visão geral. Na tela, cada rodada aprovada se chama **aprovação**.
+
+### Visão geral
+
+`/retorno`, uma coluna no celular e duas a partir de 900 px:
+
+- título "Retorno de clientes" e uma frase do que ele faz;
+- **O que o retorno trouxe**: o valor (faturado + horários marcados), a linha "R$ X já faturados · R$ Y em horários marcados" e três números — clientes que voltaram, a parte das mensagens que virou horário e mensagens enviadas; sem valor ainda, "Quando as clientes chamadas marcarem, o valor aparece aqui.";
+- atalhos: **Chamar clientes** em destaque, com "N clientes no prazo esta semana" (Renovação desta semana), **Aprovações** ("N em andamento") e **Configurações** ("Até N por dia");
+- **Como as clientes responderam**: barra de situação das mensagens enviadas desde a primeira aprovação, com legenda escrita (Agendaram, Responderam, Aguardando resposta, Sem resposta, Recusaram) e "Ver cada aprovação";
+- **Próximos envios**: quantas na fila e a janela de envio, uma coluna por dia de hoje a 6 dias depois com o número em cima, as próximas três (nome, Renovação ou Resgate, serviço e o dia) e, se houver, quantas estão paradas em aprovação pausada;
+- antes da primeira aprovação, no lugar do valor e dos gráficos, "Traga de volta quem já é sua cliente" com os três passos;
+- carregando: o "A" animado só depois de ~150 ms; erro com "Tentar novamente".
+
+### Chamar clientes
+
+`/retorno/chamar`:
+
+- abas **Renovação** (Esta semana · Próxima semana) e **Resgate** (30, 45, 60, 90 ou 120 dias, começando pelo da configuração, com o incentivo e "Editar");
+- a lista chega toda marcada; cada linha tem caixa de marcar, nome, "Manutenção 5D vence em 5 dias" (ou "venceu há 2 dias"; no Resgate "Última vez há 3 meses · mais feito: …"), último atendimento e de onde veio o prazo ("a cada 15 dias, pelo serviço" ou "pela média dela") e o costume ("costuma vir sex ou sáb, das 16h às 19h"); "Marcar todas"/"Desmarcar todas"; abaixo, quem ficou de fora e por quê;
+- em cada linha, "Ver mensagem" (fora da caixa de marcar; só o ícone no celular) abre o diálogo centralizado "Como a IA chama …" com um celular: o nome do negócio no topo e as mensagens daquela cliente chegando em ordem, cada uma depois do "digitando…", com a hora; "Repetir" toca de novo; com menos movimento, todas aparecem de uma vez ([[../../migration/DECISIONS#D-208|D-208]]);
+- "Assim chega para …": a mensagem da primeira marcada, com o estilo da IA, um balão por mensagem (D-208); na Renovação os dois horários são exemplo (saem da agenda no envio, e a nota diz isso); "Editar mensagem" abre o texto-base num modal; o ritmo ("Saem até 10 por dia, seg a sáb, das 9h às 19h") com "Ajustar";
+- **Aprovar N clientes** (fixo no rodapé no celular). Quem não cabe até a própria data abre um modal com "Aumentar para N por dia", "Deixar essa(s) de fora" e "Voltar"; aprovado, toast "Aprovado: N mensagens saem aos poucos." e a tela abre o andamento da aprovação;
+- carregando: o "A" animado só depois de ~150 ms; erro com "Tentar novamente"; vazio: "Ninguém vence nesta semana sem horário marcado." / "Ninguém está há tanto tempo sem vir.".
+
+### Aprovações
+
+`/retorno/aprovacoes`: "Em andamento" (enviando ou pausadas) e "Encerradas". Cada aprovação é um cartão que abre o andamento: Renovação ou Resgate e a situação, o título ("Semana de 19/10" ou "60 dias ou mais sem vir"), quando foi aprovada e quantas clientes, a barra de situação e "7 de 12 enviadas · 5 na fila · 1 agendou · R$ 120,00 faturados". Vazio: "Nenhuma aprovação ainda" com "Chamar clientes".
+
+### Andamento da aprovação
+
+`/retorno/aprovacoes/detalhes?id=…`:
+
+- cartão do topo: Renovação ou Resgate, a situação, o título, quando foi aprovada, quantas clientes, o limite por dia e o incentivo; "N de M enviadas · K na fila"; a barra de situação; o valor; "Pausar envios"/"Retomar envios" e "Cancelar o que falta" (diálogo "Cancelar o que falta?" com quantas não vão receber);
+- **Clientes**: filtros Todas e cada situação com quantidade (só as que têm alguém); uma linha por cliente, na ordem de envio, com nome, a situação (com a cor da barra) e o quando — "Sai hoje", "Sai amanhã", "Pausada: sairia qua, 22/10", "Enviada 17/10 às 14h32 · lembrete em 20/10 se não responder", "Respondeu 19/10 às 8h10 · a IA está conversando com ela", "Marcou para sáb, 24/10 às 17h30 · R$ 120,00", "Enviada em 10/10 · não respondeu, nem depois do lembrete", "Recusou: fica 90 dias sem convite", "Pediu para não receber mais", "Não enviada: marcou antes da mensagem";
+- tocar na linha abre o serviço, a mensagem que saiu (na fila: "A mensagem é escrita na hora do envio"), "Ver cliente" e, para quem está na fila, "Tirar da fila" (toast "Ana saiu da fila.");
+- aprovação que não existe mais: "Essa aprovação não existe mais." com "Ver aprovações".
+
+### Configurações do retorno
+
+`/retorno/configuracoes`: mensagens por dia (1 a 30, com o porquê do limite baixo), dias e horário de envio, quantos dias antes da data a Renovação sai (1 a 5), quantos dias sem vir contam para o Resgate (30, 45, 60, 90, 120 ou outro), o incentivo do Resgate e os textos-base de cada rotina (modal com os campos e "Restaurar padrão"). "Salvar" confirma com toast. Vale para as próximas aprovações. Saiu de Configurações (D-210); `/configuracoes/retorno` leva para cá.
 
 ## Serviços
 
@@ -435,10 +466,6 @@ A partir de 1024 px, a lista de Configurações fica ao lado da seção aberta, 
 Antes de concluir primeira migração: fluxo de importação.
 
 Depois: histórico somente leitura.
-
-### Retorno de clientes
-
-Linha "Retorno de clientes" no grupo "Atendimento" (`/configuracoes/retorno`, D-206): mensagens por dia (1 a 30, com o porquê do limite baixo), dias e horário de envio, quantos dias antes da data a Renovação sai (1 a 5), quantos dias sem vir contam para o Resgate (30, 45, 60, 90, 120 ou outro), o incentivo do Resgate e os textos-base de cada rotina (modal com os campos e "Restaurar padrão"). "Salvar" confirma com toast. Vale para as próximas rodadas.
 
 ### Conversas / Retenção
 

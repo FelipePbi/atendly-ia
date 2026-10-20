@@ -8330,6 +8330,20 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 
 **Revisar se:** o volume de aprovações tornar a visão geral lenta (aí ela ganha período), ou o produto ganhar mais de um profissional (a fila passa a ser por profissional).
 
+## D-211 — O tablet abre na orientação em que está: o retrato só trava no celular instalado
+
+**Status:** ACCEPTED em 2026-10-20, por relato do usuário com vídeo: "quando abrir o sistema com um tablet na horizontal, o sistema deve abrir na horizontal também. Atualmente ele abre em formato retrato e somente depois de navegar no sistema ele fica na orientação correta". Correção de comportamento, fora do IA Loop.
+
+**Contexto:** o pedido de 2026-10-12 travou o celular em retrato com duas peças: `orientation: "portrait"` no manifest, para a Avenly instalada, e o aviso "Gire o celular" por CSS, para o navegador. O campo do manifest não distingue aparelho: o Android aplica a orientação a todo app instalado, e no tablet deitado a Avenly abria em retrato (no vídeo, a tela inicial e o splash em paisagem e o app girando para retrato). O vault já dizia que tablet e desktop não são afetados.
+
+**Decisão:** o manifest não pede orientação. O retrato do celular instalado vem de um script no `<head>` (`OrientationBootScript`, ao lado do script da aparência), que roda antes da primeira pintura e chama `screen.orientation.lock("portrait")` só quando o menor lado da tela é menor que 600 px e a Avenly está aberta como app (`display-mode` standalone, fullscreen ou minimal-ui); recusa ou falta de suporte são ignoradas. O tablet não trava e segue o aparelho desde a abertura. O aviso "Gire o celular" continua igual, no navegador e como rede de segurança. Prova: `tests/orientation-portrait.test.tsx` (sem `orientation` no manifest; o script trava o celular instalado em pé e deitado, não trava tablet de 600 a 1280 px nem o navegador comum, e não quebra quando a trava é recusada).
+
+**Alternativas:** manter o manifest e destravar no tablet com `screen.orientation.unlock()` (rejeitado: o app nasceria em retrato e giraria depois, o mesmo pulo do relato); `orientation: "natural"` (rejeitado: trava o tablet na orientação natural dele e o impede de girar).
+
+**Consequências:** um celular instalado que abre deitado pode mostrar a paisagem por um instante antes da trava; o aviso cobre esse instante. Se o navegador do celular recusar a trava no app instalado, vale o aviso, como no navegador. Quem já instalou a Avenly pode precisar abrir de novo (ou o sistema atualizar o app instalado) para o manifest novo valer.
+
+**Revisar se:** o manifest ganhar orientação por tamanho de tela, ou o celular dobrável aberto (menor lado acima de 600 px) precisar travar.
+
 ## D-209 — A barra inferior fica por cima da troca de seção: o conteúdo é recortado acima dela
 
 **Status:** ACCEPTED em 2026-10-19, por dois relatos do usuário: "Ao navegar do menu de Faturamento para outro, parece que a barra do menu some e depois aparece" e "Quando estou na lista de conversas e troco pra outra tela, o sistema mostra o chat sobreposto no menu por um leve momento" (vídeos de 2026-10-19, no tablet). Correção de comportamento, fora do IA Loop. Complementa o item 5 de D-173 (transição `section`).

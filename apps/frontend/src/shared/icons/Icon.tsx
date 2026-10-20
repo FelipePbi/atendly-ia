@@ -47,6 +47,7 @@ export type IconName =
   | "nav-home"
   | "nav-list"
   | "nav-more"
+  | "nav-return"
   | "nav-sliders"
   | "nav-user";
 

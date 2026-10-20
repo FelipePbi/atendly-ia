@@ -772,18 +772,18 @@ export function activitySentence(entry: ActivityEntry): string {
 
     case "customer_return.campaign_approved": {
       const total = count(details.customers);
-      return `${who} aprovou uma rodada de ${returnRoutine(details)}${
+      return `${who} aprovou envios de ${returnRoutine(details)}${
         total === null ? "" : ` para ${plural(total, "cliente", "clientes")}`
       }`;
     }
     case "customer_return.campaign_paused":
-      return `${who} pausou uma rodada de ${returnRoutine(details)}`;
+      return `${who} pausou envios de ${returnRoutine(details)}`;
     case "customer_return.campaign_resumed":
-      return `${who} retomou uma rodada de ${returnRoutine(details)}`;
+      return `${who} retomou envios de ${returnRoutine(details)}`;
     case "customer_return.campaign_cancelled":
-      return `${who} cancelou o que faltava de uma rodada de ${returnRoutine(details)}`;
+      return `${who} cancelou o que faltava de envios de ${returnRoutine(details)}`;
     case "customer_return.target_skipped":
-      return `${who} tirou ${person} de uma rodada de retorno`;
+      return `${who} tirou ${person} da fila do retorno`;
     case "customer.return_messages_blocked":
       return `${who} parou as mensagens de retorno para ${person}`;
     case "customer.return_messages_allowed":
@@ -943,6 +943,8 @@ export function activityHref(entry: ActivityEntry): string | null {
   if (entry.entity.type === "conversation") {
     return `/conversas/${encodeURIComponent(id)}`;
   }
-  if (entry.entity.type === "return_campaign") return "/clientes/retorno";
+  if (entry.entity.type === "return_campaign") {
+    return `/retorno/aprovacoes/detalhes?id=${encodeURIComponent(id)}`;
+  }
   return null;
 }

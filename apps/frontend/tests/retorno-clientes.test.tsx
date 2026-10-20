@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 /**
- * Retorno de clientes (D-206, `06-Retorno-de-Clientes.md`): a lista chega
- * toda marcada, a profissional desmarca quem não quer, vê a mensagem que vai
- * sair e aprova; quem não cabe até a própria data é avisado antes, com a
- * escolha de aumentar o limite do dia ou deixar de fora. O perfil mostra o
- * bloqueio e só a profissional libera quem pediu para parar.
+ * Retorno de clientes › Chamar clientes (D-206, D-210,
+ * `06-Retorno-de-Clientes.md`): a lista chega toda marcada, a profissional
+ * desmarca quem não quer, vê a mensagem que vai sair e aprova; quem não cabe
+ * até a própria data é avisado antes, com a escolha de aumentar o limite do
+ * dia ou deixar de fora. Aprovada, a tela leva ao andamento da aprovação. O
+ * perfil mostra o bloqueio e só a profissional libera quem pediu para parar.
  */
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -16,7 +17,7 @@ import type {
   ReturnSettings,
 } from "@/data";
 import { CustomerReturnMessages } from "@/features/customer-return/CustomerReturnMessages";
-import { CustomerReturnScreen } from "@/features/customer-return/CustomerReturnScreen";
+import { ReturnCallScreen } from "@/features/customer-return/ReturnCallScreen";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
 import { expectNoA11yViolations } from "./support/a11y";
@@ -33,10 +34,11 @@ const updateSettings = vi.fn();
 const customerStatus = vi.fn();
 const setCustomerBlocked = vi.fn();
 const showToast = vi.fn();
+const push = vi.fn();
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/clientes/retorno",
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/retorno/chamar",
+  useRouter: () => ({ push, replace: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }));
 
@@ -162,7 +164,10 @@ function detail(
       declined: 0,
       skipped: 0,
       failed: 0,
+      awaiting: 0,
+      noReply: 0,
       revenue: 120,
+      expectedRevenue: 0,
     },
     messageTemplate: null,
     targets: [
@@ -185,6 +190,12 @@ function detail(
         followUpSentAt: null,
         offeredSlots: [],
         messageBody: "Oi, Adriana!",
+        outcome: "BOOKED",
+        appointment: {
+          startAt: "2026-10-24T20:00:00.000Z",
+          status: "COMPLETED",
+          value: 120,
+        },
       },
       {
         id: "t2",
@@ -205,6 +216,8 @@ function detail(
         followUpSentAt: null,
         offeredSlots: [],
         messageBody: null,
+        outcome: "QUEUED",
+        appointment: null,
       },
     ],
     ...overrides,
@@ -225,6 +238,7 @@ beforeEach(() => {
     customerStatus,
     setCustomerBlocked,
     showToast,
+    push,
   ]) {
     mock.mockReset();
   }
@@ -266,7 +280,7 @@ beforeEach(() => {
 function renderScreen() {
   return render(
     <ShellConfigProvider>
-      <CustomerReturnScreen />
+      <ReturnCallScreen />
     </ShellConfigProvider>,
   );
 }
@@ -315,7 +329,7 @@ describe("Retorno de clientes › Renovação", () => {
     expect(bubbles[4]).toMatch(/^Tenho .+ ou .+\.$/u);
   });
 
-  test("desmarcar tira da rodada; aprovar simula o ritmo e aprova só as marcadas", async () => {
+  test("desmarcar tira da lista; aprovar simula o ritmo, aprova só as marcadas e abre o andamento", async () => {
     const user = userEvent.setup();
     renderScreen();
     await screen.findByText("Adriana Souza");
@@ -337,7 +351,10 @@ describe("Retorno de clientes › Renovação", () => {
       customerIds: ["adri"],
     });
     expect(showToast).toHaveBeenCalledWith(
-      "Rodada aprovada: 2 mensagens saem aos poucos.",
+      "Aprovado: 2 mensagens saem aos poucos.",
+    );
+    expect(push).toHaveBeenCalledWith(
+      "/retorno/aprovacoes/detalhes?id=campaign-1",
     );
   });
 
@@ -447,37 +464,6 @@ describe("Retorno de clientes › Resgate", () => {
       "Pra sua volta, tenho uma condição especial: hidratação de brinde na volta.",
     );
     expect(screen.getByText(/Última vez há 3 meses/u)).toBeVisible();
-  });
-});
-
-describe("Retorno de clientes › rodadas", () => {
-  test("mostra os números da rodada e pausa pelo diálogo", async () => {
-    const user = userEvent.setup();
-    campaigns.mockResolvedValue([detail()]);
-    campaign.mockResolvedValue(detail());
-    changeCampaign.mockResolvedValue(detail({ state: "PAUSED" }));
-    renderScreen();
-    await screen.findByText("Renovação · semana de 19/10");
-    expect(
-      screen.getByText("R$ 120,00 faturados com quem voltou"),
-    ).toBeVisible();
-    await user.click(
-      screen.getByRole("button", { name: "Ver clientes e opções" }),
-    );
-    const dialog = await screen.findByRole("dialog");
-    expect(await within(dialog).findByText("Agendou")).toBeVisible();
-    expect(
-      within(dialog).getByText("Na fila, previsto para 20/10"),
-    ).toBeVisible();
-    await user.click(
-      within(dialog).getByRole("button", { name: "Pausar envios" }),
-    );
-    await waitFor(() =>
-      expect(changeCampaign).toHaveBeenCalledWith("campaign-1", "pause"),
-    );
-    expect(showToast).toHaveBeenCalledWith(
-      "Rodada pausada: nada sai até você retomar.",
-    );
   });
 });
 

@@ -21,12 +21,14 @@ import {
 
 describe("modelo de navegação", () => {
   // D-177: Faturamento entrou como sexto destino, depois de Serviços.
-  test("a sidebar tem os seis destinos do produto, na ordem do vault", () => {
+  test("a sidebar tem os sete destinos do produto, na ordem do vault", () => {
     expect(SIDEBAR_DESTINATIONS.map((item) => item.label)).toEqual([
       "Início",
       "Conversas",
       "Agenda",
       "Clientes",
+      // Retorno de clientes virou destino do menu (D-210).
+      "Retorno",
       "Serviços",
       "Faturamento",
     ]);
@@ -43,9 +45,10 @@ describe("modelo de navegação", () => {
 
   // Goal067/WU-04: "Mais" ganhou Disponibilidade e Conversas, espelhando
   // todas as entradas do hub de Configurações — antes faltavam as duas.
-  test("'Mais' lista Notificações, Serviços, Faturamento e os destinos de Configurações da Especificação das Telas", () => {
+  test("'Mais' lista Notificações, Retorno, Serviços, Faturamento e os destinos de Configurações da Especificação das Telas", () => {
     expect(MORE_DESTINATIONS.map((item) => item.section)).toEqual([
       "notificacoes",
+      "retorno",
       "servicos",
       "faturamento",
       "negocio",
@@ -69,6 +72,7 @@ describe("modelo de navegação", () => {
 
   test.each([
     "notificacoes",
+    "retorno",
     "servicos",
     "faturamento",
     "negocio",

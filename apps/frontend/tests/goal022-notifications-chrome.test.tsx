@@ -135,6 +135,7 @@ describe("entrada de Notificações", () => {
     // No celular (sem `matchMedia`, vale a barra de 4 abas), os destinos que
     // não couberam, na ordem de prioridade da barra (D-194).
     expect(tiles).toEqual([
+      "Retorno",
       "Serviços",
       "Faturamento",
       expect.stringMatching(/^Notificações/),
@@ -157,7 +158,7 @@ describe("entrada de Notificações", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  test("na barra inferior, só entra quando tudo cabe (768 px, D-194), com o contador", async () => {
+  test("na barra inferior, entra a partir de 768 px (D-194), com o contador", async () => {
     notificationsSummary.mockResolvedValue({
       byLevel: { INFO: 1, ATTENTION: 0, CRITICAL: 0 },
       unreadCount: 1,

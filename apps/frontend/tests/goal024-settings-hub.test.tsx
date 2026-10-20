@@ -91,15 +91,13 @@ function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState 
 }
 
 describe("hub com fonte de agenda Avenly", () => {
-  test("lista as onze linhas, cada uma apontando para a rota certa", () => {
+  test("lista as dez linhas, cada uma apontando para a rota certa", () => {
     render(<SettingsHub settings={settingsFixture()} />);
 
     const expected: Array<[string, string]> = [
       ["Serviços", "/servicos"],
       ["IA", "/configuracoes/ia"],
       ["WhatsApp", "/configuracoes/whatsapp"],
-      // Retorno de clientes (D-206).
-      ["Retorno de clientes", "/configuracoes/retorno"],
       ["Negócio", "/configuracoes/negocio"],
       ["Agenda", "/configuracoes/agenda"],
       ["Importação", "/importacao"],
@@ -177,6 +175,6 @@ describe("hub sem fonte de agenda escolhida", () => {
       "href",
       "/configuracoes/agenda",
     );
-    expect(rowLinks()).toHaveLength(11);
+    expect(rowLinks()).toHaveLength(10);
   });
 });

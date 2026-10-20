@@ -2896,14 +2896,15 @@ p {
   font-weight: 700;
 }
 :where(.app-frame > nav) .bottom-nav-item[data-bottom-from="600"],
-:where(.app-frame > nav) .bottom-nav-item[data-bottom-from="768"] {
+:where(.app-frame > nav) .bottom-nav-item[data-bottom-from="768"],
+:where(.app-frame > nav) .bottom-nav-item[data-bottom-from="900"] {
   display: none;
 }
 @media (min-width: 600px) {
   :where(.app-frame > nav) .bottom-nav-item[data-bottom-from="600"] {
     display: flex;
   }
-  /* Vagas iguais de ponta a ponta: com 7 a 9 itens, cada um fica entre
+  /* Vagas iguais de ponta a ponta: com 7 a 10 itens, cada um fica entre
      ~85 e ~122 px, rótulo inteiro e alvo de toque folgado. */
   :where(.app-frame > nav) {
     padding-inline: 8px;
@@ -2921,7 +2922,12 @@ p {
   :where(.app-frame > nav) .bottom-nav-item[data-bottom-from="768"] {
     display: flex;
   }
-  :where(.app-frame > nav) .bottom-nav-item[data-bottom-until="768"] {
+}
+@media (min-width: 900px) {
+  :where(.app-frame > nav) .bottom-nav-item[data-bottom-from="900"] {
+    display: flex;
+  }
+  :where(.app-frame > nav) .bottom-nav-item[data-bottom-until="900"] {
     display: none;
   }
 }

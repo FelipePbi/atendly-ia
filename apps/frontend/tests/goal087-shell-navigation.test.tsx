@@ -180,7 +180,7 @@ beforeEach(() => {
 });
 
 describe("Goal087 prova 1: a sidebar", () => {
-  test("lista os oito destinos na ordem do protótipo (com Faturamento, D-177), todos links, sem linha de estado do WhatsApp", async () => {
+  test("lista os nove destinos na ordem do protótipo (com Retorno, D-210, e Faturamento, D-177), todos links, sem linha de estado do WhatsApp", async () => {
     const { container } = renderShell();
     await screen.findByText("IA ativa");
 
@@ -197,6 +197,8 @@ describe("Goal087 prova 1: a sidebar", () => {
       { href: "/conversas", name: "Conversas" },
       { href: "/agenda", name: "Agenda" },
       { href: "/clientes", name: "Clientes" },
+      // D-210: Retorno de clientes logo depois de Clientes.
+      { href: "/retorno", name: "Retorno" },
       { href: "/servicos", name: "Serviços" },
       // D-177: Faturamento depois de Serviços.
       { href: "/faturamento", name: "Faturamento" },
@@ -207,7 +209,7 @@ describe("Goal087 prova 1: a sidebar", () => {
     const nav = within(sidebar).getByRole("navigation", {
       name: "Navegação principal",
     });
-    expect(within(nav).getAllByRole("link")).toHaveLength(8);
+    expect(within(nav).getAllByRole("link")).toHaveLength(9);
     expect(within(nav).getByRole("link", { name: "Início" })).toHaveAttribute(
       "aria-current",
       "page",

@@ -85,12 +85,13 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 const labels = (items: { label: string }[]) => items.map((item) => item.label);
 
 describe("quantos destinos cabem na barra", () => {
-  test("a ordem de prioridade: os quatro do celular, depois Serviços, Faturamento, Notificações e Configurações", () => {
+  test("a ordem de prioridade: os quatro do celular, depois Retorno, Serviços, Faturamento, Notificações e Configurações", () => {
     expect(labels(BOTTOM_NAV_DESTINATIONS)).toEqual([
       "Início",
       "Conversas",
       "Agenda",
       "Clientes",
+      "Retorno",
       "Serviços",
       "Faturamento",
       "Notificações",
@@ -107,33 +108,39 @@ describe("quantos destinos cabem na barra", () => {
     [700, 6],
     [767, 6],
     [768, 8],
-    [900, 8],
-    [1024, 8],
-    [1099, 8],
+    [899, 8],
+    [900, 9],
+    [1024, 9],
+    [1099, 9],
   ])("a %i px cabem %i destinos", (width, tabs) => {
     expect(bottomNavTabCount(width)).toBe(tabs);
   });
 
   test("o que não cabe vai para o 'Mais'; quando tudo cabe, não sobra nada", () => {
     expect(labels(bottomNavOverflow(bottomNavTabCount(390)))).toEqual([
+      "Retorno",
       "Serviços",
       "Faturamento",
       "Notificações",
       "Configurações",
     ]);
     expect(labels(bottomNavOverflow(bottomNavTabCount(600)))).toEqual([
+      "Faturamento",
       "Notificações",
       "Configurações",
     ]);
+    expect(labels(bottomNavOverflow(bottomNavTabCount(768)))).toEqual([
+      "Configurações",
+    ]);
     expect(bottomNavOverflow(bottomNavTabCount(1024))).toEqual([]);
-    expect(bottomNavFitsAll(bottomNavTabCount(767))).toBe(false);
-    expect(bottomNavFitsAll(bottomNavTabCount(768))).toBe(true);
+    expect(bottomNavFitsAll(bottomNavTabCount(899))).toBe(false);
+    expect(bottomNavFitsAll(bottomNavTabCount(900))).toBe(true);
   });
 
   test("cada destino sabe a partir de que largura entra na barra", () => {
     expect(
       BOTTOM_NAV_DESTINATIONS.map((item) => bottomNavMinWidth(item.section)),
-    ).toEqual([0, 0, 0, 0, 600, 600, 768, 768]);
+    ).toEqual([0, 0, 0, 0, 600, 600, 768, 768, 900]);
   });
 
   test("as telas de dentro de Configurações acendem Configurações (ou o 'Mais', se ela não coube)", () => {
@@ -147,6 +154,8 @@ describe("quantos destinos cabem na barra", () => {
   test.each<[PlatformSection, number, boolean]>([
     ["servicos", 390, true],
     ["servicos", 600, false],
+    ["retorno", 390, true],
+    ["retorno", 600, false],
     ["notificacoes", 600, true],
     ["notificacoes", 768, false],
     ["inicio", 390, false],
@@ -230,7 +239,7 @@ describe("a casca em cada largura", () => {
     window.matchMedia = originalMatchMedia;
   });
 
-  test("390 px, em Serviços: 'Mais' ativo, e o modal lista os quatro que sobraram", async () => {
+  test("390 px, em Serviços: 'Mais' ativo, e o modal lista os cinco que sobraram", async () => {
     mockWidth(390);
     renderShell("servicos");
     const more = within(bottomNav()).getByRole("button", { name: "Mais" });
@@ -243,10 +252,16 @@ describe("a casca em cada largura", () => {
       [...dialog.querySelectorAll(".more-tile")].map(
         (tile) => tile.querySelector(".more-tile-label")?.textContent,
       ),
-    ).toEqual(["Serviços", "Faturamento", "Notificações", "Configurações"]);
+    ).toEqual([
+      "Retorno",
+      "Serviços",
+      "Faturamento",
+      "Notificações",
+      "Configurações",
+    ]);
   });
 
-  test("600 px, em Serviços: a aba Serviços fica ativa, o 'Mais' não, e ele lista só Notificações e Configurações", async () => {
+  test("600 px, em Serviços: a aba Serviços fica ativa, o 'Mais' não, e ele lista só Faturamento, Notificações e Configurações", async () => {
     mockWidth(600);
     renderShell("servicos");
     const nav = bottomNav();
@@ -263,7 +278,7 @@ describe("a casca em cada largura", () => {
       [...dialog.querySelectorAll(".more-tile-label")].map(
         (label) => label.textContent,
       ),
-    ).toEqual(["Notificações", "Configurações"]);
+    ).toEqual(["Faturamento", "Notificações", "Configurações"]);
     expect(within(dialog).getByRole("button", { name: "Sair" })).toBeVisible();
   });
 
@@ -306,12 +321,13 @@ describe("a casca em cada largura", () => {
       ["Conversas", null, null],
       ["Agenda", null, null],
       ["Clientes", null, null],
+      ["Retorno", "600", null],
       ["Serviços", "600", null],
-      ["Faturamento", "600", null],
+      ["Faturamento", "768", null],
       ["Notificações", "768", null],
-      ["Configurações", "768", null],
-      ["Mais", null, "768"],
-      ["Conta", "768", null],
+      ["Configurações", "900", null],
+      ["Mais", null, "900"],
+      ["Conta", "900", null],
     ]);
   });
 });

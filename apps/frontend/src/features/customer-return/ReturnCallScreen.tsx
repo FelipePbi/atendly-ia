@@ -2,6 +2,7 @@
 
 import clsx from "clsx";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import {
@@ -30,7 +31,6 @@ import { Dialog } from "@/shared/ui/Dialog";
 import { StatePanel } from "@/shared/ui/States";
 import { showToast } from "@/shared/ui/toastBus";
 
-import { ReturnCampaigns } from "./ReturnCampaigns";
 import {
   candidateDetail,
   countLabel,
@@ -46,13 +46,15 @@ import { ReturnMessageEditor } from "./ReturnMessageEditor";
 type Week = "this" | "next";
 
 /**
- * Retorno de clientes (D-206, `06-Retorno-de-Clientes.md`): a lista vem
- * pronta e toda marcada, a profissional desmarca quem não quer chamar, vê a
- * mensagem que vai sair e aprova. A aprovação vira uma rodada que sai aos
- * poucos, no ritmo da configuração; quem não cabe até a própria data é
- * avisado antes, com a escolha de aumentar o limite do dia ou deixar de fora.
+ * Chamar clientes, dentro do Retorno (D-206, D-210): a lista vem pronta e
+ * toda marcada, a profissional desmarca quem não quer chamar, vê a mensagem
+ * que vai sair e aprova. A aprovação sai aos poucos, no ritmo da
+ * configuração; quem não cabe até a própria data é avisado antes, com a
+ * escolha de aumentar o limite do dia ou deixar de fora. Aprovada, a tela
+ * leva direto ao andamento dela.
  */
-export function CustomerReturnScreen() {
+export function ReturnCallScreen() {
+  const router = useRouter();
   const [tone, setTone] = useState<AiTone>("BALANCED");
   // Como a IA envia (D-208) e o nome do negócio, para a prévia e o celular.
   const [delivery, setDelivery] = useState<AiMessageDelivery>("PARTS");
@@ -75,7 +77,6 @@ export function CustomerReturnScreen() {
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [plan, setPlan] = useState<ReturnPlan | null>(null);
-  const [campaignsVersion, setCampaignsVersion] = useState(0);
   const listHeadingId = useId();
   const closeEditor = useCallback(() => setEditing(false), []);
 
@@ -150,12 +151,12 @@ export function CustomerReturnScreen() {
   }, [kind, filter, reload]);
 
   useShellConfig({
-    active: "clientes",
+    active: "retorno",
     attention: Boolean(error && !list),
     loading: !list && !error,
     module: "directory",
     pushed: true,
-    title: "Retorno de clientes",
+    title: "Chamar clientes",
   });
 
   const candidates = useMemo(() => list?.candidates ?? [], [list]);
@@ -219,12 +220,13 @@ export function CustomerReturnScreen() {
       );
       setPlan(null);
       showToast(
-        `Rodada aprovada: ${countLabel(campaign.counts.total, "mensagem sai", "mensagens saem")} aos poucos.`,
+        `Aprovado: ${countLabel(campaign.counts.total, "mensagem sai", "mensagens saem")} aos poucos.`,
       );
-      setCampaignsVersion((value) => value + 1);
-      setReload((value) => value + 1);
+      router.push(
+        `/retorno/aprovacoes/detalhes?id=${encodeURIComponent(campaign.id)}`,
+      );
     } catch {
-      showToast("Não foi possível aprovar a rodada. Tente de novo.", "danger");
+      showToast("Não foi possível aprovar. Tente de novo.", "danger");
     } finally {
       setBusy(false);
     }
@@ -267,15 +269,14 @@ export function CustomerReturnScreen() {
   return (
     <div className="page return-page">
       <PushedBar
-        backHref="/clientes"
-        backLabel="Voltar para clientes"
-        title="Retorno de clientes"
+        backHref="/retorno"
+        backLabel="Voltar para o retorno"
+        title="Chamar clientes"
       />
       <div className="return-content">
         <p className="return-intro">
-          Chame de volta quem está no prazo de refazer um serviço e quem não vem
-          há um tempo. Você escolhe quem recebe; as mensagens saem aos poucos e
-          a IA continua a conversa quando a cliente responder.
+          Escolha quem recebe. As mensagens saem aos poucos e a IA continua a
+          conversa quando a cliente responder.
         </p>
         <div aria-label="Quem chamar" className="return-tabs" role="group">
           {(
@@ -466,7 +467,7 @@ export function CustomerReturnScreen() {
                 .{" "}
                 <Link
                   className="return-inline-link"
-                  href="/configuracoes/retorno"
+                  href="/retorno/configuracoes"
                 >
                   Ajustar
                 </Link>
@@ -493,8 +494,6 @@ export function CustomerReturnScreen() {
             </button>
           </div>
         )}
-
-        <ReturnCampaigns version={campaignsVersion} />
       </div>
 
       <Dialog

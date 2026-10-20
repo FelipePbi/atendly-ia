@@ -1,9 +1,6 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { CustomerReturnScreen } from "@/features/customer-return/CustomerReturnScreen";
-
-export const metadata: Metadata = { title: "Retorno de clientes" };
-
-export default function CustomerReturnPage() {
-  return <CustomerReturnScreen />;
+/** O retorno saiu de Clientes e virou destino do menu (D-210). */
+export default function LegacyCustomerReturnPage() {
+  redirect("/retorno");
 }

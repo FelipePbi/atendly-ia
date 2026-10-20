@@ -185,12 +185,6 @@ function hubGroups(
           icon: "phone",
           title: "WhatsApp",
         },
-        {
-          detail: "Renovação, Resgate e ritmo de envio",
-          href: "/configuracoes/retorno",
-          icon: "refresh",
-          title: "Retorno de clientes",
-        },
       ],
     },
     {

@@ -6,6 +6,7 @@ import type {
   ReturnCampaignSummary,
   ReturnCandidateList,
   ReturnKind,
+  ReturnOverview,
   ReturnPlan,
   ReturnPlanInput,
   ReturnSettings,
@@ -81,6 +82,18 @@ export class BffCustomerReturnService {
       schema: routeSchema<ReturnCampaignDetail>(
         "POST",
         "/v1/customer-return/campaigns",
+      ),
+      signal,
+    });
+  }
+
+  /** Visão geral (D-210): situação das mensagens, valor e próximos envios. */
+  overview(signal?: AbortSignal) {
+    return this.http.request({
+      path: "/v1/customer-return/overview",
+      schema: routeSchema<ReturnOverview>(
+        "GET",
+        "/v1/customer-return/overview",
       ),
       signal,
     });

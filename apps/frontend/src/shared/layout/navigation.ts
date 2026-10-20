@@ -15,6 +15,7 @@ export type PlatformSection =
   | "inicio"
   | "negocio"
   | "notificacoes"
+  | "retorno"
   | "servicos"
   | "whatsapp";
 
@@ -46,8 +47,9 @@ export type NavDestination = {
 };
 
 /**
- * Ordem e conteúdo da sidebar (tablet/notebook/desktop): seis destinos +
- * Configurações. Faturamento (D-177) vem depois de Serviços.
+ * Ordem e conteúdo da sidebar (tablet/notebook/desktop): sete destinos +
+ * Configurações. Retorno (D-210) vem logo depois de Clientes; Faturamento
+ * (D-177), depois de Serviços.
  */
 export const SIDEBAR_DESTINATIONS: NavDestination[] = [
   { href: "/inicio", icon: "nav-home", label: "Início", section: "inicio" },
@@ -68,6 +70,12 @@ export const SIDEBAR_DESTINATIONS: NavDestination[] = [
     icon: "nav-user",
     label: "Clientes",
     section: "clientes",
+  },
+  {
+    href: "/retorno",
+    icon: "nav-return",
+    label: "Retorno",
+    section: "retorno",
   },
   {
     href: "/servicos",
@@ -121,6 +129,7 @@ export const NOTIFICATIONS_DESTINATION: NavDestination = {
  */
 export const MORE_DESTINATIONS: NavDestination[] = [
   NOTIFICATIONS_DESTINATION,
+  { href: "/retorno", icon: "nav-return", label: "Retorno", section: "retorno" },
   { href: "/servicos", icon: "briefcase", label: "Serviços", section: "servicos" },
   {
     href: "/faturamento",
@@ -192,7 +201,8 @@ export const BOTTOM_NAV_TIERS: ReadonlyArray<{
 }> = [
   { minWidth: 0, tabs: MOBILE_TAB_SECTIONS.length },
   { minWidth: 600, tabs: 6 },
-  { minWidth: 768, tabs: BOTTOM_NAV_DESTINATIONS.length },
+  { minWidth: 768, tabs: 8 },
+  { minWidth: 900, tabs: BOTTOM_NAV_DESTINATIONS.length },
 ];
 
 /** Quantos destinos cabem na barra numa janela de `width` px. */

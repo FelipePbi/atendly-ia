@@ -1,15 +1,14 @@
 import type {
-  ReturnCampaignState,
   ReturnCandidate,
   ReturnExclusionCounts,
   ReturnHabit,
-  ReturnTarget,
 } from "@/data";
 
 /**
  * Frases da tela de Retorno de clientes (D-206): o que vence quando, há
  * quanto tempo ela não vem, os horários de costume e o andamento de cada
- * cliente na rodada — sempre em palavras, nunca o código do servidor.
+ * cliente — sempre em palavras, nunca o código do servidor. O andamento de
+ * cada aprovação fica em `returnProgress.ts`.
  */
 
 const WEEKDAY_SHORT = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
@@ -101,7 +100,11 @@ const EXCLUSION_LABELS: Array<[keyof ReturnExclusionCounts, string, string]> = [
     "recebeu convite há pouco",
     "receberam convite há pouco",
   ],
-  ["queued", "já está numa rodada", "já estão numa rodada"],
+  [
+    "queued",
+    "já está na fila de outra aprovação",
+    "já estão na fila de outra aprovação",
+  ],
   ["blocked", "pediu para não receber", "pediram para não receber"],
   ["ignored", "está nos contatos ignorados", "estão nos contatos ignorados"],
   ["personal", "é conversa pessoal", "são conversas pessoais"],
@@ -119,54 +122,6 @@ export function exclusionSummary(
   );
   if (parts.length === 0) return null;
   return `Ficaram de fora: ${parts.join(", ")}.`;
-}
-
-export const CAMPAIGN_STATE_LABELS: Record<ReturnCampaignState, string> = {
-  ACTIVE: "Enviando aos poucos",
-  PAUSED: "Pausada",
-  DONE: "Concluída",
-  CANCELLED: "Cancelada",
-};
-
-const SKIP_REASONS: Record<string, string> = {
-  DEACTIVATED: "cliente desativada",
-  NO_PHONE: "sem telefone",
-  HAS_APPOINTMENT: "marcou antes da mensagem",
-  OPTED_OUT: "pediu para não receber",
-  RECENTLY_CONTACTED: "recebeu outro convite há pouco",
-  DEADLINE_PASSED: "passou do prazo antes da data dela",
-  OWNER_SKIPPED: "você tirou da rodada",
-  CAMPAIGN_CANCELLED: "rodada cancelada",
-  CONTACT_IGNORED: "contato ignorado",
-  PERSONAL_CONTACT: "conversa pessoal",
-  NOT_ALLOWED_LOCALLY: "número fora da lista de teste",
-  INVALID_PHONE: "telefone inválido",
-};
-
-/** Estado da cliente na rodada, em palavras. */
-export function targetStateLabel(target: ReturnTarget): string {
-  switch (target.state) {
-    case "QUEUED":
-      return target.plannedDate
-        ? `Na fila, previsto para ${shortDate(target.plannedDate)}`
-        : "Na fila";
-    case "CLAIMED":
-      return "Enviando";
-    case "SENT":
-      return target.followUpState === "SENT"
-        ? "Enviada, com lembrete"
-        : "Enviada";
-    case "REPLIED":
-      return "Respondeu";
-    case "BOOKED":
-      return "Agendou";
-    case "DECLINED":
-      return target.reason === "STOPPED" ? "Pediu para parar" : "Recusou";
-    case "SKIPPED":
-      return `Não enviada: ${SKIP_REASONS[target.reason ?? ""] ?? "fora das regras"}`;
-    case "FAILED":
-      return "A mensagem não saiu";
-  }
 }
 
 export function countLabel(count: number, one: string, many: string): string {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Configuração do retorno de clientes (D-206): ritmo (mensagens por dia,
+ * Configuração do retorno de clientes (D-206), dentro do Retorno (D-210): ritmo (mensagens por dia,
  * dias e horário), prazo da Renovação, dias do Resgate, incentivo e o
  * texto-base de cada rotina. Salvar confirma com toast; texto-base com campo
  * desconhecido é recusado antes de chegar ao servidor.
@@ -19,7 +19,7 @@ const updateSettings = vi.fn();
 const showToast = vi.fn();
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/configuracoes/retorno",
+  usePathname: () => "/retorno/configuracoes",
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
@@ -58,7 +58,7 @@ beforeEach(() => {
   }));
 });
 
-describe("Configurações › Retorno de clientes", () => {
+describe("Retorno › Configurações", () => {
   test("mostra o padrão do produto e salva o ritmo com toast", async () => {
     const user = userEvent.setup();
     const { container } = render(<ReturnSettingsSection tone="BALANCED" />);

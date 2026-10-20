@@ -165,7 +165,7 @@ describe("Atividade do retorno", () => {
           details: { kind: "WINBACK", customers: 12, incentive: "brinde" },
         }),
       ),
-    ).toBe("Você aprovou uma rodada de Resgate para 12 clientes");
+    ).toBe("Você aprovou envios de Resgate para 12 clientes");
     expect(
       activityNote(
         entry({ details: { kind: "WINBACK", incentive: "brinde" } }),
@@ -178,7 +178,7 @@ describe("Atividade do retorno", () => {
           details: { kind: "RENEWAL" },
         }),
       ),
-    ).toBe("Você pausou uma rodada de Renovação");
+    ).toBe("Você pausou envios de Renovação");
     expect(
       activitySentence(
         entry({

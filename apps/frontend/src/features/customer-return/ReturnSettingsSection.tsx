@@ -35,10 +35,10 @@ const WEEKDAY_NAMES = [
 const LEAD_OPTIONS = [1, 2, 3, 4, 5];
 
 /**
- * Configuração do retorno de clientes (D-206): o ritmo das rodadas (quantas
+ * Configuração do retorno de clientes (D-206, D-210): o ritmo dos envios (quantas
  * mensagens por dia, em que dias e horários), o prazo da Renovação, quantos
  * dias contam como "sumida" no Resgate, o incentivo e o texto-base de cada
- * rotina. Vale para as próximas rodadas: a que já está correndo guarda as
+ * rotina. Vale para as próximas aprovações: a que já está correndo guarda as
  * regras do dia em que foi aprovada.
  */
 export function ReturnSettingsSection({
@@ -159,10 +159,10 @@ export function ReturnSettingsSection({
     <div className="rules-screen return-settings">
       <div className="rules-fields">
         <p className="return-settings-intro">
-          O ritmo e as mensagens das rodadas de retorno. Quem recebe você
-          escolhe e aprova em{" "}
-          <Link className="return-inline-link" href="/clientes/retorno">
-            Clientes › Chamar clientes de volta
+          O ritmo e as mensagens do retorno. Quem recebe você escolhe e aprova
+          em{" "}
+          <Link className="return-inline-link" href="/retorno/chamar">
+            Chamar clientes
           </Link>
           .
         </p>

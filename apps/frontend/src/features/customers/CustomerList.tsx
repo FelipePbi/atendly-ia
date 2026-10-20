@@ -366,15 +366,6 @@ export function CustomerListPanelView({
           </button>
         </div>
       )}
-      {!searching && !error && !inactiveTab && !loading && (
-        <div className="customer-return-row">
-          <Link className="customer-return-link" href="/clientes/retorno">
-            <Icon name="refresh" />
-            <span>Chamar clientes de volta</span>
-            <Icon name="chevron-right" />
-          </Link>
-        </div>
-      )}
       {!searching && !error && inactiveTab && (
         <div className="customer-bulk-row">
           <button

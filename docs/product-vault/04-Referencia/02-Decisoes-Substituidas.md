@@ -9,6 +9,10 @@ status: referencia
 
 Este documento evita que decisões antigas reapareçam durante design ou implementação.
 
+## Chamar clientes numa tela só, com abas
+
+Substituída em 2026-10-21 ([[../../migration/DECISIONS#D-212|D-212]]). "Chamar clientes" juntava as abas Renovação/Resgate, o período, a lista inteira, a prévia da mensagem e o botão de aprovar numa página que rolava. Agora são quatro etapas (Tipo, Clientes, Mensagem, Aprovar), com a lista paginada para a tela não rolar.
+
 ## Retorno de clientes dentro de Clientes e de Configurações
 
 Substituída em 2026-10-19 ([[../../migration/DECISIONS#D-210|D-210]]). O retorno abria por uma linha "Chamar clientes de volta" na lista de Clientes (`/clientes/retorno`), as rodadas eram cartões no fim dessa tela com o andamento num modal, e o ritmo e as mensagens ficavam em Configurações › Retorno de clientes. Agora "Retorno" é destino do menu, com visão geral, Chamar clientes, Aprovações (o andamento de cada cliente) e Configurações no mesmo lugar; os links antigos redirecionam.

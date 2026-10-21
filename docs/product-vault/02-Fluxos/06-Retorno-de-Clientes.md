@@ -41,7 +41,9 @@ Nos dois casos a profissional escolhe para quem a mensagem vai e aprova. A parti
 
 ### Tela: "Chamar clientes desta semana"
 
-1. A tela abre com a lista pronta, **todas as clientes marcadas**. Cada linha mostra:
+Desde 2026-10-21 a tela é feita em quatro etapas que não rolam: Tipo (com o que cada rotina faz e o período), Clientes (lista paginada), Mensagem e Aprovar ([[../../migration/DECISIONS#D-212|D-212]]; detalhe em [[../03-UX-UI/04-Especificacao-das-Telas#Chamar clientes|Especificação das telas]]). O conteúdo de cada passo abaixo continua o mesmo.
+
+1. A lista chega pronta, **todas as clientes marcadas**. Cada linha mostra:
    - nome;
    - serviço e quanto falta, por exemplo "Manutenção 5D vence em 5 dias" ou "venceu há 2 dias";
    - último atendimento;

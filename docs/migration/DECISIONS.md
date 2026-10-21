@@ -8357,3 +8357,25 @@ A borda das ações **não** chega a 3:1, em repouso nem no hover. Não é regre
 **Consequências:** o botão `+`, que fica acima da barra, continua na foto do root e ainda é coberto pelo fade do conteúdo durante a troca, como antes. O recorte parte do topo do grupo, que é o topo da tela nova (a navegação volta a página ao topo).
 
 **Revisar se:** a barra mudar de altura (o recorte repete as medidas), ou o WebKit passar a desenhar a foto nova de elementos fixos — aí a barra e o `+` podem ganhar nome próprio.
+
+## D-212 — Chamar clientes em quatro etapas, com a lista paginada para a tela não rolar
+
+**Status:** ACCEPTED em 2026-10-21, a pedido do usuário, com print do celular: a tela "Chamar clientes" tinha "muito espaçamento" e espaço mal aproveitado, e a lista vinha "enorme sem paginação". Pedido: "faça ele por etapas [...] a primeira etapa ele seleciona qual tipo [...] e daí ter ali um menuzinho explicando o que é cada um [...] na segunda etapa [...] bota uma paginação ali, nem que seja virtual, só no front-end [...] tente evitar ao máximo ter scroll". Fora do IA Loop. Substitui, em [[#D-210|D-210]], a forma da tela `/retorno/chamar` (abas, lista, mensagem e aprovar numa tela só); as regras de quem entra, ritmo, mensagem e aprovação continuam as de [[#D-206|D-206]] e D-210.
+
+**Contexto:** a tela juntava abas Renovação/Resgate, período, a lista inteira, a prévia da mensagem e o botão de aprovar. Com 20 clientes a página passava de 5.600 px no celular. As telas empurradas do Retorno ainda usavam a classe `.page` da casca antiga, que soma 36 px de cada lado ao respiro do próprio conteúdo: no celular o texto ficava com 56 px de margem.
+
+**Decisão:**
+
+1. **Quatro etapas**, com as quatro barras de progresso no topo ("Etapa N de 4 · Nome" no celular; o nome de cada etapa embaixo da barra a partir de 600 px) e o rodapé fixo com Voltar e Continuar. Continuar leva o foco ao título da etapa. A lista é lida já na primeira etapa.
+   - **Tipo:** Renovação ou Resgate como duas opções grandes; a escolhida explica para que serve, quem entra e como é a mensagem. O período fica aqui (Esta semana/Próxima semana; 30 a 120 dias, começando pelo da configuração).
+   - **Clientes:** "Quem recebe", com "Desmarcar todas/Marcar todas" (vale para a lista inteira, não só para a página), o período e "N de M marcadas". A lista vem toda marcada e paginada no navegador ("Página 1 de 3", anterior e próxima). Abaixo, "N clientes ficaram de fora" abre o porquê. Sem ninguém marcado, o botão vira "Marque quem vai receber".
+   - **Mensagem:** "Assim chega para …" com os balões (D-208), "Editar mensagem" e, no Resgate, o incentivo com "Editar".
+   - **Aprovar:** resumo (tipo, quem, quantas clientes, incentivo no Resgate e o ritmo com "Ajustar") e "Aprovar N clientes". O diálogo "Nem todas cabem antes da data", o toast e a ida ao andamento continuam iguais.
+2. **Quantas clientes por página** cabem entre o topo da lista e o rodapé, sem rolar a tela. Primeiro vale uma estimativa pelo tamanho da tela (`candidatesPerPage`: de 3 a 8 linhas, duas colunas a partir de 1100 px). Depois, a medida de verdade no navegador: o espaço livre dividido pela linha mais alta. A medida é refeita quando a janela ou a largura da lista mudam, no máximo duas vezes por lista. Trocar de página não mede de novo.
+3. **Um respiro só nas telas empurradas do Retorno:** sem a `.page` da casca antiga, 16 px de lado no celular e 28 px no tablet. No desktop, o andamento da aprovação põe o cartão parado à esquerda e as clientes à direita (a partir de 1200 px).
+
+**Alternativas:** rolagem infinita ou "carregar mais" (rejeitado: o pedido é não rolar); paginar no servidor (rejeitado: a lista de uma semana é pequena e já chega inteira; o pedido aceita paginação só no front); número fixo de clientes por página (rejeitado: as linhas têm alturas diferentes, e o celular pequeno rolaria); manter a prévia da mensagem na mesma etapa da lista (rejeitado: a lista perderia metade da página).
+
+**Consequências:** aprovar leva quatro toques a mais que antes. A tela não rola em 360×740, 390×844, 768×1024, 1180×820 e 1440×900 com 23 clientes; por página ficam 3 a 4 no celular, 6 no tablet e 8 no desktop. Prova: `tests/retorno-clientes.test.tsx` (etapas, foco, paginação, "Marcar todas" entre páginas, aprovação com clientes de várias páginas e `candidatesPerPage`).
+
+**Revisar se:** a lista passar de algumas dezenas de clientes por semana (aí vale busca ou filtro por serviço na etapa Clientes), ou se as profissionais pedirem para aprovar direto da lista sem passar pela mensagem.

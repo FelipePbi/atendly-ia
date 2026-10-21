@@ -303,14 +303,14 @@ Destino "Retorno" do menu ([[../02-Fluxos/06-Retorno-de-Clientes|fluxo]], [[../.
 
 ### Chamar clientes
 
-`/retorno/chamar`:
+`/retorno/chamar`, em quatro etapas que nunca rolam a tela ([[../../migration/DECISIONS#D-212|D-212]]): quatro barras de progresso no topo ("Etapa N de 4 · Nome" no celular; o nome de cada etapa embaixo da barra a partir de 600 px) e o rodapé fixo com "Voltar" (a partir da segunda) e "Continuar". Continuar leva o foco ao título da etapa.
 
-- abas **Renovação** (Esta semana · Próxima semana) e **Resgate** (30, 45, 60, 90 ou 120 dias, começando pelo da configuração, com o incentivo e "Editar");
-- a lista chega toda marcada; cada linha tem caixa de marcar, nome, "Manutenção 5D vence em 5 dias" (ou "venceu há 2 dias"; no Resgate "Última vez há 3 meses · mais feito: …"), último atendimento e de onde veio o prazo ("a cada 15 dias, pelo serviço" ou "pela média dela") e o costume ("costuma vir sex ou sáb, das 16h às 19h"); "Marcar todas"/"Desmarcar todas"; abaixo, quem ficou de fora e por quê;
-- em cada linha, "Ver mensagem" (fora da caixa de marcar; só o ícone no celular) abre o diálogo centralizado "Como a IA chama …" com um celular: o nome do negócio no topo e as mensagens daquela cliente chegando em ordem, cada uma depois do "digitando…", com a hora; "Repetir" toca de novo; com menos movimento, todas aparecem de uma vez ([[../../migration/DECISIONS#D-208|D-208]]);
-- "Assim chega para …": a mensagem da primeira marcada, com o estilo da IA, um balão por mensagem (D-208); na Renovação os dois horários são exemplo (saem da agenda no envio, e a nota diz isso); "Editar mensagem" abre o texto-base num modal; o ritmo ("Saem até 10 por dia, seg a sáb, das 9h às 19h") com "Ajustar";
-- **Aprovar N clientes** (fixo no rodapé no celular). Quem não cabe até a própria data abre um modal com "Aumentar para N por dia", "Deixar essa(s) de fora" e "Voltar"; aprovado, toast "Aprovado: N mensagens saem aos poucos." e a tela abre o andamento da aprovação;
-- carregando: o "A" animado só depois de ~150 ms; erro com "Tentar novamente"; vazio: "Ninguém vence nesta semana sem horário marcado." / "Ninguém está há tanto tempo sem vir.".
+1. **Quem você quer chamar?** Duas opções grandes, **Renovação** ("No prazo de refazer o serviço") e **Resgate** ("Não vem há um tempo"). A escolhida explica "Para que serve", "Quem entra" e "A mensagem". Embaixo, o período: Semana (Esta semana · Próxima semana) ou Sem vir há (30, 45, 60, 90 ou 120 dias, começando pelo da configuração).
+2. **Quem recebe.** "Desmarcar todas"/"Marcar todas" ao lado do título (vale para a lista inteira, não só para a página), o período e "N de M marcadas". A lista chega toda marcada; cada linha tem caixa de marcar, nome, "Manutenção 5D vence em 5 dias" (ou "venceu há 2 dias"; no Resgate "Última vez há 3 meses · mais feito: …"), último atendimento e de onde veio o prazo ("a cada 15 dias, pelo serviço" ou "pela média dela") e o costume ("costuma vir sex ou sáb, das 16h às 19h"). Em cada linha, "Ver mensagem" (fora da caixa de marcar; só o ícone no celular e em duas colunas) abre o diálogo centralizado "Como a IA chama …" com um celular: o nome do negócio no topo e as mensagens daquela cliente chegando em ordem, cada uma depois do "digitando…", com a hora; "Repetir" toca de novo; com menos movimento, todas aparecem de uma vez ([[../../migration/DECISIONS#D-208|D-208]]). A lista é paginada no navegador ("Página 1 de 3", anterior e próxima), com quantas cabem entre o topo da lista e o rodapé; duas colunas a partir de 1100 px. Abaixo, "N clientes ficaram de fora" abre o porquê. Sem ninguém marcado, o botão vira "Marque quem vai receber".
+3. **A mensagem.** "Assim chega para …": a mensagem da primeira marcada, com o estilo da IA, um balão por mensagem (D-208); na Renovação os dois horários são exemplo (saem da agenda no envio, e a nota diz isso); "Editar mensagem" abre o texto-base num modal; no Resgate, o incentivo com "Editar" (ou "Adicionar").
+4. **Revisar e aprovar.** Tipo, quem (período), quantas clientes, o incentivo no Resgate e o ritmo ("Até 10 por dia, seg a sáb, das 9h às 19h.") com "Ajustar"; no rodapé, **Aprovar N clientes**. Quem não cabe até a própria data abre um modal com "Aumentar para N por dia", "Deixar essa(s) de fora" e "Voltar"; aprovado, toast "Aprovado: N mensagens saem aos poucos." e a tela abre o andamento da aprovação.
+
+Carregando a lista: o "A" animado só depois de ~150 ms; erro com "Tentar novamente"; vazio: "Ninguém vence nesta semana sem horário marcado." (ou "na próxima semana") / "Ninguém está há tanto tempo sem vir.", com "Continuar" desligado.
 
 ### Aprovações
 
@@ -318,7 +318,7 @@ Destino "Retorno" do menu ([[../02-Fluxos/06-Retorno-de-Clientes|fluxo]], [[../.
 
 ### Andamento da aprovação
 
-`/retorno/aprovacoes/detalhes?id=…`:
+`/retorno/aprovacoes/detalhes?id=…` (uma coluna; a partir de 1200 px, o cartão do topo fica parado à esquerda e as clientes à direita, D-212):
 
 - cartão do topo: Renovação ou Resgate, a situação, o título, quando foi aprovada, quantas clientes, o limite por dia e o incentivo; "N de M enviadas · K na fila"; a barra de situação; o valor; "Pausar envios"/"Retomar envios" e "Cancelar o que falta" (diálogo "Cancelar o que falta?" com quantas não vão receber);
 - **Clientes**: filtros Todas e cada situação com quantidade (só as que têm alguém); uma linha por cliente, na ordem de envio, com nome, a situação (com a cor da barra) e o quando — "Sai hoje", "Sai amanhã", "Pausada: sairia qua, 22/10", "Enviada 17/10 às 14h32 · lembrete em 20/10 se não responder", "Respondeu 19/10 às 8h10 · a IA está conversando com ela", "Marcou para sáb, 24/10 às 17h30 · R$ 120,00", "Enviada em 10/10 · não respondeu, nem depois do lembrete", "Recusou: fica 90 dias sem convite", "Pediu para não receber mais", "Não enviada: marcou antes da mensagem";

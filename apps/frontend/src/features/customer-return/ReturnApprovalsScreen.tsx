@@ -65,7 +65,7 @@ export function ReturnApprovalsScreen() {
   const closed = campaigns?.filter((item) => !isLive(item.state)) ?? [];
 
   return (
-    <div className="page return-page">
+    <div className="return-page">
       <PushedBar
         backHref="/retorno"
         backLabel="Voltar para o retorno"

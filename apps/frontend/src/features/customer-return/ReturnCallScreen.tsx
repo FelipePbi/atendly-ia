@@ -3,7 +3,16 @@
 import clsx from "clsx";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import {
   type AiMessageDelivery,
@@ -16,7 +25,7 @@ import {
   type ReturnPlan,
   type ReturnSettings,
 } from "@/data";
-import { Icon } from "@/shared/icons/Icon";
+import { Icon, type IconName } from "@/shared/icons/Icon";
 import { PushedBar } from "@/shared/layout/PushedBar";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import {
@@ -34,6 +43,7 @@ import { showToast } from "@/shared/ui/toastBus";
 import {
   candidateDetail,
   countLabel,
+  exclusionCount,
   exclusionSummary,
   habitLabel,
   intervalSourceLabel,
@@ -44,17 +54,122 @@ import { composeReturnParts, type ReturnFacts } from "./returnMessage";
 import { ReturnMessageEditor } from "./ReturnMessageEditor";
 
 type Week = "this" | "next";
+type Step = 1 | 2 | 3 | 4;
+
+const STEPS: ReadonlyArray<{ step: Step; label: string; title: string }> = [
+  { step: 1, label: "Tipo", title: "Quem você quer chamar?" },
+  { step: 2, label: "Clientes", title: "Quem recebe" },
+  { step: 3, label: "Mensagem", title: "A mensagem" },
+  { step: 4, label: "Aprovar", title: "Revisar e aprovar" },
+];
+
+const KINDS: ReadonlyArray<{
+  kind: ReturnKind;
+  label: string;
+  hint: string;
+  icon: IconName;
+}> = [
+  {
+    kind: "RENEWAL",
+    label: "Renovação",
+    hint: "No prazo de refazer o serviço",
+    icon: "refresh",
+  },
+  {
+    kind: "WINBACK",
+    label: "Resgate",
+    hint: "Não vem há um tempo",
+    icon: "chat",
+  },
+];
 
 /**
- * Chamar clientes, dentro do Retorno (D-206, D-210): a lista vem pronta e
- * toda marcada, a profissional desmarca quem não quer chamar, vê a mensagem
- * que vai sair e aprova. A aprovação sai aos poucos, no ritmo da
- * configuração; quem não cabe até a própria data é avisado antes, com a
- * escolha de aumentar o limite do dia ou deixar de fora. Aprovada, a tela
- * leva direto ao andamento dela.
+ * Quantas clientes cabem numa página da lista sem a tela rolar: a altura
+ * que sobra depois da barra, das etapas, do cabeçalho da lista, do
+ * paginador e do rodapé, dividida pela altura de uma linha; duas colunas a
+ * partir de 1100 px. Entre 3 e 8 linhas, para a página nunca ficar vazia
+ * nem comprida demais.
+ */
+export function candidatesPerPage(width: number, height: number): number {
+  const columns = width >= 1100 ? 2 : 1;
+  const row = width >= 600 ? 84 : 100;
+  const reserved = width >= 600 ? 360 : 330;
+  const rows = Math.min(8, Math.max(3, Math.floor((height - reserved) / row)));
+  return rows * columns;
+}
+
+function subscribeViewport(listener: () => void): () => void {
+  window.addEventListener("resize", listener);
+  return () => window.removeEventListener("resize", listener);
+}
+
+function useViewport(): string {
+  return useSyncExternalStore(
+    subscribeViewport,
+    () => `${window.innerWidth}x${window.innerHeight}`,
+    () => "390x844",
+  );
+}
+
+/** Altura do paginador mais o espaço acima dele. */
+const PAGER_SPACE = 50;
+
+/**
+ * Depois de a lista aparecer, a conta de `candidatesPerPage` é trocada pela
+ * medida de verdade: o espaço entre o topo da lista e o rodapé fixo,
+ * descontado o que fica abaixo dela (paginador, quem ficou de fora), dividido
+ * pela linha mais alta. Sem layout (jsdom, servidor), vale a estimativa.
+ */
+function measuredPageSize(
+  listElement: HTMLElement,
+  footer: HTMLElement,
+  total: number,
+  hasPager: boolean,
+): number | null {
+  const items = [...listElement.children] as HTMLElement[];
+  const row = Math.max(
+    0,
+    ...items.map((item) => item.getBoundingClientRect().height),
+  );
+  if (row === 0) return null;
+  const style = getComputedStyle(listElement);
+  const gap = Number.parseFloat(style.rowGap) || 0;
+  const columns =
+    style.display === "grid"
+      ? style.gridTemplateColumns.split(" ").filter(Boolean).length
+      : 1;
+  const section = listElement.parentElement;
+  const body = section?.parentElement;
+  const listBox = listElement.getBoundingClientRect();
+  const footerBox = footer.getBoundingClientRect();
+  const footerTop = Math.min(
+    footerBox.top,
+    window.innerHeight - footerBox.height,
+  );
+  const below =
+    (section ? section.getBoundingClientRect().bottom - listBox.bottom : 0) +
+    (body ? Number.parseFloat(getComputedStyle(body).paddingBottom) || 0 : 0);
+  const fits = (space: number) =>
+    Math.max(2, Math.floor((space + gap) / (row + gap))) * Math.max(1, columns);
+  const available = footerTop - listBox.top - below;
+  const size = fits(available);
+  // Sem paginador na tela, ele só aparece se nem todas couberem: aí ele
+  // ocupa o lugar de uma linha.
+  return hasPager || size >= total ? size : fits(available - PAGER_SPACE);
+}
+
+/**
+ * Chamar clientes, dentro do Retorno (D-206, D-210), em quatro etapas
+ * (D-212): o tipo (Renovação ou Resgate, com o que cada um faz e o
+ * período), as clientes (a lista vem toda marcada, paginada para a tela não
+ * rolar), a mensagem que vai sair e a revisão com o ritmo antes de aprovar.
+ * A aprovação sai aos poucos, no ritmo da configuração; quem não cabe até a
+ * própria data é avisado antes, com a escolha de aumentar o limite do dia
+ * ou deixar de fora. Aprovada, a tela leva direto ao andamento dela.
  */
 export function ReturnCallScreen() {
   const router = useRouter();
+  const [step, setStep] = useState<Step>(1);
   const [tone, setTone] = useState<AiTone>("BALANCED");
   // Como a IA envia (D-208) e o nome do negócio, para a prévia e o celular.
   const [delivery, setDelivery] = useState<AiMessageDelivery>("PARTS");
@@ -64,8 +179,8 @@ export function ReturnCallScreen() {
   const [week, setWeek] = useState<Week>("this");
   const [days, setDays] = useState<number | null>(null);
   const [settings, setSettings] = useState<ReturnSettings | null>(null);
-  // Lista e erro guardados com o filtro a que pertencem: trocar de aba ou
-  // de semana não mostra a lista anterior enquanto a nova não chega.
+  // Lista e erro guardados com o filtro a que pertencem: trocar de tipo ou
+  // de período não mostra a lista anterior enquanto a nova não chega.
   const [loaded, setLoaded] = useState<{
     key: string;
     list: ReturnCandidateList | null;
@@ -74,10 +189,20 @@ export function ReturnCallScreen() {
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const [unchecked, setUnchecked] = useState<Set<string>>(() => new Set());
+  const [page, setPage] = useState(0);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [plan, setPlan] = useState<ReturnPlan | null>(null);
-  const listHeadingId = useId();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
+  const movedStep = useRef(false);
+  const viewport = useViewport();
+  const [fit, setFit] = useState<{
+    key: string;
+    size: number;
+    passes: number;
+  } | null>(null);
   const closeEditor = useCallback(() => setEditing(false), []);
 
   useEffect(() => {
@@ -100,6 +225,7 @@ export function ReturnCallScreen() {
       .customerReturn.settings(controller.signal)
       .then((value) => {
         setSettings(value);
+        setSettingsError(null);
         setDays((current) => current ?? value.winbackDays);
       })
       .catch(() => {
@@ -121,6 +247,8 @@ export function ReturnCallScreen() {
   const list = loaded?.key === listKey ? loaded.list : null;
   const error =
     (loaded?.key === listKey ? loaded.error : null) ?? settingsError;
+  // A lista é lida já na primeira etapa: ao continuar, ela costuma estar
+  // pronta.
   useEffect(() => {
     if (filter === null) return;
     const controller = new AbortController();
@@ -135,6 +263,7 @@ export function ReturnCallScreen() {
       .then((value) => {
         setLoaded({ key, list: value, error: null });
         setUnchecked(new Set());
+        setPage(0);
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
@@ -153,15 +282,73 @@ export function ReturnCallScreen() {
   useShellConfig({
     active: "retorno",
     attention: Boolean(error && !list),
-    loading: !list && !error,
+    loading: !settings && !settingsError,
     module: "directory",
     pushed: true,
     title: "Chamar clientes",
   });
 
+  // Cada etapa nova leva o foco ao título dela (leitor de tela e teclado).
+  useEffect(() => {
+    if (!movedStep.current) return;
+    headingRef.current?.focus();
+  }, [step]);
+
+  function goTo(next: Step) {
+    movedStep.current = true;
+    setStep(next);
+  }
+
   const candidates = useMemo(() => list?.candidates ?? [], [list]);
   const selected = candidates.filter(
     (candidate) => !unchecked.has(candidate.customerId),
+  );
+  const [viewportWidth, viewportHeight] = viewport.split("x").map(Number);
+  // A largura da lista também entra na chave: ela muda sem a janela mudar
+  // (a barra de rolagem que some, a largura da etapa que termina de
+  // assentar), e linhas mais largas ficam mais baixas.
+  const [listWidth, setListWidth] = useState(0);
+  const hasRows = step === 2 && candidates.length > 0;
+  useLayoutEffect(() => {
+    const element = listRef.current;
+    if (!hasRows || !element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      setListWidth(Math.round(entry.contentRect.width));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [hasRows, list]);
+  const fitKey = `${listKey}:${viewport}:${listWidth}`;
+  const pageSize =
+    fit?.key === fitKey
+      ? fit.size
+      : candidatesPerPage(viewportWidth, viewportHeight);
+  const pageCount = Math.max(1, Math.ceil(candidates.length / pageSize));
+  // Mede por lista e por tamanho de tela, no máximo duas vezes: a primeira
+  // medida sai da estimativa, que pode passar da tela (e a barra de rolagem
+  // estreita as linhas); a segunda confere com a página já do tamanho
+  // certo. Mudar de página não mede de novo, para o número de clientes por
+  // página não oscilar.
+  useLayoutEffect(() => {
+    if (step !== 2) return;
+    const sameKey = fit?.key === fitKey;
+    if (sameKey && fit.passes >= 2) return;
+    if (!listRef.current || !footerRef.current) return;
+    const size = measuredPageSize(
+      listRef.current,
+      footerRef.current,
+      candidates.length,
+      pageCount > 1,
+    );
+    if (size === null) return;
+    const first = Math.min(page, pageCount - 1) * pageSize;
+    setFit({ key: fitKey, size, passes: sameKey ? fit.passes + 1 : 1 });
+    setPage(Math.floor(first / size));
+  }, [candidates.length, fit, fitKey, page, pageCount, pageSize, step]);
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageItems = candidates.slice(
+    currentPage * pageSize,
+    (currentPage + 1) * pageSize,
   );
   const showLoader = useDeferredLoading(!list && !error);
   const template =
@@ -170,6 +357,14 @@ export function ReturnCallScreen() {
       : (settings?.winbackMessage ?? null);
   const incentive =
     kind === "WINBACK" ? (settings?.winbackIncentive ?? null) : null;
+  const periodLabel =
+    kind === "RENEWAL"
+      ? list?.weekStart && list.weekEnd
+        ? `${week === "this" ? "Esta semana" : "Próxima semana"} · ${shortDate(list.weekStart)} a ${shortDate(list.weekEnd)}`
+        : week === "this"
+          ? "Esta semana"
+          : "Próxima semana"
+      : `${list?.days ?? winbackDays} dias ou mais sem vir`;
 
   function toggle(customerId: string) {
     setUnchecked((current) => {
@@ -265,221 +460,272 @@ export function ReturnCallScreen() {
     [phoneFor, delivery, incentive, kind, template, list, tone],
   );
   const closePhone = useCallback(() => setPhoneFor(null), []);
+  const current = STEPS[step - 1];
+  const canContinue =
+    step === 1 ? true : step === 2 ? selected.length > 0 : true;
 
   return (
-    <div className="page return-page">
+    <div className={clsx("return-page return-flow", `is-step-${step}`)}>
       <PushedBar
         backHref="/retorno"
         backLabel="Voltar para o retorno"
         title="Chamar clientes"
       />
-      <div className="return-content">
-        <p className="return-intro">
-          Escolha quem recebe. As mensagens saem aos poucos e a IA continua a
-          conversa quando a cliente responder.
+      <div className="return-steps">
+        <ol aria-label="Etapas" className="return-steps-list">
+          {STEPS.map((item) => (
+            <li
+              aria-current={item.step === step ? "step" : undefined}
+              className={clsx(
+                "return-step",
+                item.step === step && "is-current",
+                item.step < step && "is-done",
+              )}
+              key={item.step}
+            >
+              <span aria-hidden="true" className="return-step-bar" />
+              <span className="return-step-label">
+                <span className="sr-only">Etapa {item.step} de 4: </span>
+                {item.label}
+              </span>
+            </li>
+          ))}
+        </ol>
+        {/* No celular os nomes não cabem embaixo das barras: só o da atual. */}
+        <p aria-hidden="true" className="return-steps-caption">
+          Etapa {step} de 4 · {current.label}
         </p>
-        <div aria-label="Quem chamar" className="return-tabs" role="group">
-          {(
-            [
-              ["RENEWAL", "Renovação"],
-              ["WINBACK", "Resgate"],
-            ] as const
-          ).map(([value, label]) => (
+      </div>
+
+      <div className="return-flow-body">
+        <div className="return-flow-head">
+          <h2 className="return-flow-title" ref={headingRef} tabIndex={-1}>
+            {current.title}
+          </h2>
+          {/* Vale para a lista inteira, não só para a página à vista. */}
+          {step === 2 && list && candidates.length > 0 && (
             <button
-              aria-pressed={kind === value}
-              className={clsx("return-tab", kind === value && "is-active")}
-              key={value}
-              onClick={() => setKind(value)}
+              className="return-link-button"
+              onClick={toggleAll}
               type="button"
             >
-              {label}
+              {selected.length === candidates.length
+                ? "Desmarcar todas"
+                : "Marcar todas"}
             </button>
-          ))}
+          )}
         </div>
 
-        {kind === "RENEWAL" ? (
-          <div className="return-filter">
-            <p className="return-filter-copy">
-              Quem está no prazo de voltar, pelo prazo do serviço ou pela média
-              da própria cliente.
-            </p>
-            <div aria-label="Semana" className="return-chips" role="group">
-              {(
-                [
-                  ["this", "Esta semana"],
-                  ["next", "Próxima semana"],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  aria-pressed={week === value}
-                  className={clsx("return-chip", week === value && "is-active")}
-                  key={value}
-                  onClick={() => setWeek(value)}
-                  type="button"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="return-filter">
-            <p className="return-filter-copy">
-              Quem não vem há um tempo. Uma mensagem leve, de saudade, sem
-              pressão.
-            </p>
-            <div aria-label="Sem vir há" className="return-chips" role="group">
-              {RETURN_WINBACK_DAY_OPTIONS.map((value) => (
-                <button
-                  aria-pressed={winbackDays === value}
-                  className={clsx(
-                    "return-chip",
-                    winbackDays === value && "is-active",
-                  )}
-                  key={value}
-                  onClick={() => setDays(value)}
-                  type="button"
-                >
-                  {value} dias
-                </button>
-              ))}
-            </div>
-            <div className="return-incentive">
-              <span className="return-incentive-label">Incentivo</span>
-              <span className="return-incentive-text">
-                {incentive
-                  ? `“${incentive}”`
-                  : "Sem incentivo: a mensagem é só de reaproximação."}
-              </span>
-              <button
-                className="return-link-button"
-                onClick={() => setEditing(true)}
-                type="button"
-              >
-                {incentive ? "Editar" : "Adicionar"}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {!list && !error && showLoader && (
-          <BrandLoader inline label="Carregando a lista" />
-        )}
-        {!list && error && (
-          <StatePanel
-            actionLabel="Tentar novamente"
-            description={error}
-            icon="alert"
-            onAction={() => setReload((value) => value + 1)}
-            title="Lista indisponível"
-            tone="error"
+        {step === 1 && (
+          <KindStep
+            days={winbackDays}
+            kind={kind}
+            onDays={setDays}
+            onKind={setKind}
+            onWeek={setWeek}
+            week={week}
           />
         )}
-        {list && (
-          <section aria-labelledby={listHeadingId} className="return-list">
-            <div className="return-list-head">
-              <h2 className="return-list-title" id={listHeadingId}>
-                {kind === "RENEWAL"
-                  ? week === "this"
-                    ? "Chamar clientes desta semana"
-                    : "Chamar clientes da próxima semana"
-                  : `Sem vir há ${list.days ?? winbackDays} dias ou mais`}
-              </h2>
-              {candidates.length > 0 && (
+
+        {step === 2 && (
+          <>
+            {!list && !error && showLoader && (
+              <BrandLoader inline label="Carregando a lista" />
+            )}
+            {!list && error && (
+              <StatePanel
+                actionLabel="Tentar novamente"
+                description={error}
+                icon="alert"
+                onAction={() => setReload((value) => value + 1)}
+                title="Lista indisponível"
+                tone="error"
+              />
+            )}
+            {list && (
+              <section aria-label="Clientes" className="return-list">
+                <p className="return-list-summary">
+                  <span className="return-list-period">{periodLabel}</span>
+                  {candidates.length > 0 && (
+                    <span className="return-list-count">
+                      {" "}
+                      · {selected.length} de {candidates.length} marcadas
+                    </span>
+                  )}
+                </p>
+                {candidates.length === 0 ? (
+                  <p className="return-empty">
+                    {kind === "RENEWAL"
+                      ? week === "this"
+                        ? "Ninguém vence nesta semana sem horário marcado."
+                        : "Ninguém vence na próxima semana sem horário marcado."
+                      : "Ninguém está há tanto tempo sem vir."}
+                  </p>
+                ) : (
+                  <ul className="return-candidates" ref={listRef}>
+                    {pageItems.map((candidate) => (
+                      <CandidateRow
+                        candidate={candidate}
+                        checked={!unchecked.has(candidate.customerId)}
+                        key={candidate.customerId}
+                        onPreview={() => setPhoneFor(candidate)}
+                        onToggle={() => toggle(candidate.customerId)}
+                        today={list.today}
+                      />
+                    ))}
+                  </ul>
+                )}
+                {pageCount > 1 && (
+                  <Pager
+                    count={pageCount}
+                    onChange={setPage}
+                    page={currentPage}
+                  />
+                )}
+                {/* Uma linha que abre o porquê: o motivo não toma o lugar
+                    de uma cliente na página. */}
+                {exclusionSummary(list.excluded) && (
+                  <details className="return-excluded">
+                    <summary>
+                      {countLabel(
+                        exclusionCount(list.excluded),
+                        "cliente ficou de fora",
+                        "clientes ficaram de fora",
+                      )}
+                      <Icon name="chevron-down" />
+                    </summary>
+                    <p>{exclusionSummary(list.excluded)}</p>
+                  </details>
+                )}
+              </section>
+            )}
+          </>
+        )}
+
+        {step === 3 && (
+          <>
+            <section className="return-message" aria-label="Mensagem">
+              <div className="return-message-head">
+                <span className="return-message-title">
+                  Assim chega para{" "}
+                  {firstName(selected[0]?.name ?? candidates[0]?.name) ??
+                    "a cliente"}
+                </span>
                 <button
                   className="return-link-button"
-                  onClick={toggleAll}
+                  onClick={() => setEditing(true)}
                   type="button"
                 >
-                  {selected.length === candidates.length
-                    ? "Desmarcar todas"
-                    : "Marcar todas"}
+                  Editar mensagem
                 </button>
-              )}
-            </div>
-            {list.weekStart && list.weekEnd && (
-              <p className="return-list-range">
-                {shortDate(list.weekStart)} a {shortDate(list.weekEnd)}
-              </p>
-            )}
-            {candidates.length === 0 ? (
-              <p className="return-empty">
-                {kind === "RENEWAL"
-                  ? "Ninguém vence nesta semana sem horário marcado."
-                  : "Ninguém está há tanto tempo sem vir."}
-              </p>
-            ) : (
-              <ul className="return-candidates">
-                {candidates.map((candidate) => (
-                  <CandidateRow
-                    candidate={candidate}
-                    checked={!unchecked.has(candidate.customerId)}
-                    key={candidate.customerId}
-                    onPreview={() => setPhoneFor(candidate)}
-                    onToggle={() => toggle(candidate.customerId)}
-                    today={list.today}
-                  />
-                ))}
-              </ul>
-            )}
-            {exclusionSummary(list.excluded) && (
-              <p className="return-excluded">
-                {exclusionSummary(list.excluded)}
-              </p>
-            )}
-          </section>
-        )}
-
-        {list && candidates.length > 0 && (
-          <section className="return-message" aria-label="Mensagem">
-            <div className="return-message-head">
-              <span className="return-message-title">
-                Assim chega para{" "}
-                {firstName(selected[0]?.name ?? candidates[0]?.name) ??
-                  "a cliente"}
-              </span>
-              <button
-                className="return-link-button"
-                onClick={() => setEditing(true)}
-                type="button"
-              >
-                Editar mensagem
-              </button>
-            </div>
-            <MessageBubbles
-              bubbleClassName="return-message-bubble"
-              bubbles={preview}
-              label={`${preview.length} mensagens, nesta ordem`}
-            />
-            <p className="return-message-note">
-              {kind === "RENEWAL"
-                ? "Cada cliente recebe o próprio nome, serviço e dois horários livres da sua agenda no momento do envio, perto dos dias e horários de costume dela."
-                : "Cada cliente recebe o próprio nome. Quando ela responder, a IA oferece horários perto dos de costume dela."}
-            </p>
-            {settings && (
+              </div>
+              <MessageBubbles
+                bubbleClassName="return-message-bubble"
+                bubbles={preview}
+                label={`${preview.length} mensagens, nesta ordem`}
+              />
               <p className="return-message-note">
-                Saem até {settings.dailyLimit} por dia,{" "}
-                {windowLabel(
-                  settings.windowDays,
-                  settings.windowStart,
-                  settings.windowEnd,
-                )}
-                .{" "}
-                <Link
-                  className="return-inline-link"
-                  href="/retorno/configuracoes"
-                >
-                  Ajustar
-                </Link>
+                {kind === "RENEWAL"
+                  ? "Cada cliente recebe o próprio nome, serviço e dois horários livres da sua agenda no momento do envio, perto dos dias e horários de costume dela."
+                  : "Cada cliente recebe o próprio nome. Quando ela responder, a IA oferece horários perto dos de costume dela."}
               </p>
+            </section>
+            {kind === "WINBACK" && (
+              <div className="return-incentive">
+                <span className="return-incentive-label">Incentivo</span>
+                <button
+                  className="return-link-button"
+                  onClick={() => setEditing(true)}
+                  type="button"
+                >
+                  {incentive ? "Editar" : "Adicionar"}
+                </button>
+                <span className="return-incentive-text">
+                  {incentive
+                    ? `“${incentive}”`
+                    : "Sem incentivo: a mensagem é só de reaproximação."}
+                </span>
+              </div>
             )}
-          </section>
+          </>
         )}
 
-        {list && candidates.length > 0 && (
-          <div className="return-approve">
+        {step === 4 && (
+          <section aria-label="Resumo" className="return-review">
+            <dl className="return-review-list">
+              <div>
+                <dt>Tipo</dt>
+                <dd>{kind === "RENEWAL" ? "Renovação" : "Resgate"}</dd>
+              </div>
+              <div>
+                <dt>Quem</dt>
+                <dd>{periodLabel}</dd>
+              </div>
+              <div>
+                <dt>Clientes</dt>
+                <dd>{countLabel(selected.length, "cliente", "clientes")}</dd>
+              </div>
+              {kind === "WINBACK" && (
+                <div>
+                  <dt>Incentivo</dt>
+                  <dd>{incentive ?? "Sem incentivo"}</dd>
+                </div>
+              )}
+              {settings && (
+                <div>
+                  <dt>Ritmo</dt>
+                  <dd>
+                    Até {settings.dailyLimit} por dia,{" "}
+                    {windowLabel(
+                      settings.windowDays,
+                      settings.windowStart,
+                      settings.windowEnd,
+                    )}
+                    .{" "}
+                    <Link
+                      className="return-inline-link"
+                      href="/retorno/configuracoes"
+                    >
+                      Ajustar
+                    </Link>
+                  </dd>
+                </div>
+              )}
+            </dl>
+            <p className="return-message-note">
+              Nada sai de uma vez: as mensagens saem aos poucos, no ritmo acima,
+              e a IA continua a conversa quando a cliente responder.
+            </p>
+          </section>
+        )}
+      </div>
+
+      <div className="return-flow-footer" ref={footerRef}>
+        <div className="return-flow-actions">
+          {step > 1 && (
             <button
-              className="btn btn-primary return-approve-button"
+              className="btn btn-secondary return-flow-back"
+              disabled={busy}
+              onClick={() => goTo((step - 1) as Step)}
+              type="button"
+            >
+              Voltar
+            </button>
+          )}
+          {step < 4 ? (
+            <button
+              className="btn btn-primary return-flow-next"
+              disabled={!canContinue || (step === 2 && !list)}
+              onClick={() => goTo((step + 1) as Step)}
+              type="button"
+            >
+              {step === 2 && list && candidates.length > 0 && !canContinue
+                ? "Marque quem vai receber"
+                : "Continuar"}
+            </button>
+          ) : (
+            <button
+              className="btn btn-primary return-flow-next"
               disabled={busy || selected.length === 0}
               onClick={() =>
                 void approve(selected.map((candidate) => candidate.customerId))
@@ -488,12 +734,10 @@ export function ReturnCallScreen() {
             >
               {busy
                 ? "Aprovando..."
-                : selected.length === 0
-                  ? "Marque quem vai receber"
-                  : `Aprovar ${countLabel(selected.length, "cliente", "clientes")}`}
+                : `Aprovar ${countLabel(selected.length, "cliente", "clientes")}`}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <Dialog
@@ -562,6 +806,198 @@ export function ReturnCallScreen() {
         )}
       </Dialog>
     </div>
+  );
+}
+
+/**
+ * Primeira etapa: o tipo, o que ele faz e o período. A explicação muda com
+ * a escolha, para a profissional saber o que cada um faz antes de ver a
+ * lista.
+ */
+function KindStep({
+  days,
+  kind,
+  onDays,
+  onKind,
+  onWeek,
+  week,
+}: {
+  days: number | null;
+  kind: ReturnKind;
+  onDays: (value: number) => void;
+  onKind: (value: ReturnKind) => void;
+  onWeek: (value: Week) => void;
+  week: Week;
+}) {
+  const name = useId();
+  const explanationId = useId();
+  return (
+    <>
+      <fieldset className="return-kinds">
+        <legend className="sr-only">Tipo</legend>
+        {KINDS.map((option) => (
+          <label
+            className={clsx(
+              "return-kind",
+              kind === option.kind && "is-checked",
+            )}
+            key={option.kind}
+          >
+            <input
+              aria-describedby={
+                kind === option.kind ? explanationId : undefined
+              }
+              checked={kind === option.kind}
+              className="return-kind-input"
+              name={name}
+              onChange={() => onKind(option.kind)}
+              type="radio"
+              value={option.kind}
+            />
+            <span aria-hidden="true" className="return-kind-icon">
+              <Icon name={option.icon} />
+            </span>
+            <span className="return-kind-copy">
+              <strong>{option.label}</strong>
+              <span>{option.hint}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+
+      <div aria-live="polite" className="return-explain" id={explanationId}>
+        {kind === "RENEWAL" ? (
+          <dl className="return-explain-list">
+            <div>
+              <dt>Para que serve</dt>
+              <dd>
+                Lembrar quem está na hora de refazer um serviço, como a
+                manutenção dos cílios, antes que passe do ponto.
+              </dd>
+            </div>
+            <div>
+              <dt>Quem entra</dt>
+              <dd>
+                Quem vence na semana escolhida, pelo prazo do serviço ou pela
+                média da própria cliente, e não tem horário marcado.
+              </dd>
+            </div>
+            <div>
+              <dt>A mensagem</dt>
+              <dd>
+                Leva o nome dela, o serviço e dois horários livres perto dos
+                dias e horários de costume.
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <dl className="return-explain-list">
+            <div>
+              <dt>Para que serve</dt>
+              <dd>
+                Reaproximar quem sumiu, com uma mensagem leve, de saudade, sem
+                pressão.
+              </dd>
+            </div>
+            <div>
+              <dt>Quem entra</dt>
+              <dd>
+                Quem não vem há {days ?? "N"} dias ou mais e não tem horário
+                marcado.
+              </dd>
+            </div>
+            <div>
+              <dt>A mensagem</dt>
+              <dd>
+                Só de reaproximação, ou com o incentivo que você definir. Quando
+                ela responder, a IA oferece horários.
+              </dd>
+            </div>
+          </dl>
+        )}
+      </div>
+
+      {kind === "RENEWAL" ? (
+        <div aria-label="Semana" className="return-period" role="group">
+          <span aria-hidden="true" className="return-period-label">
+            Semana
+          </span>
+          <div className="return-chips">
+            {(
+              [
+                ["this", "Esta semana"],
+                ["next", "Próxima semana"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                aria-pressed={week === value}
+                className={clsx("return-chip", week === value && "is-active")}
+                key={value}
+                onClick={() => onWeek(value)}
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div aria-label="Sem vir há" className="return-period" role="group">
+          <span aria-hidden="true" className="return-period-label">
+            Sem vir há
+          </span>
+          <div className="return-chips">
+            {RETURN_WINBACK_DAY_OPTIONS.map((value) => (
+              <button
+                aria-pressed={days === value}
+                className={clsx("return-chip", days === value && "is-active")}
+                key={value}
+                onClick={() => onDays(value)}
+                type="button"
+              >
+                {value} dias
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function Pager({
+  count,
+  onChange,
+  page,
+}: {
+  count: number;
+  onChange: (page: number) => void;
+  page: number;
+}) {
+  return (
+    <nav aria-label="Páginas da lista" className="return-pager">
+      <button
+        aria-label="Página anterior"
+        className="return-pager-button"
+        disabled={page === 0}
+        onClick={() => onChange(page - 1)}
+        type="button"
+      >
+        <Icon name="chevron-left" />
+      </button>
+      <span aria-live="polite" className="return-pager-status">
+        Página {page + 1} de {count}
+      </span>
+      <button
+        aria-label="Próxima página"
+        className="return-pager-button"
+        disabled={page >= count - 1}
+        onClick={() => onChange(page + 1)}
+        type="button"
+      >
+        <Icon name="chevron-right" />
+      </button>
+    </nav>
   );
 }
 

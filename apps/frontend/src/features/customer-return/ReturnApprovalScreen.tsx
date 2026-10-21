@@ -148,7 +148,7 @@ export function ReturnApprovalScreen({ id }: { id: string | undefined }) {
   }, [busy]);
 
   return (
-    <div className="page return-page">
+    <div className="return-page">
       <PushedBar
         backHref="/retorno/aprovacoes"
         backLabel="Voltar para as aprovações"

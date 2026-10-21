@@ -5,66 +5,38 @@
  * deslocamento.
  */
 .return-link-button:focus-visible,
-.return-tab:focus-visible,
 .return-chip:focus-visible,
 .return-candidate-input:focus-visible + .return-candidate-box,
+.return-kind:has(.return-kind-input:focus-visible),
+.return-pager-button:focus-visible,
 .return-stepper-button:focus-visible {
   outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
   outline-offset: 2px;
 }
 
+/* As telas empurradas do Retorno não usam o `.page` da casca antiga: o
+   respiro dele (36 px de cada lado) somado ao do conteúdo deixava o celular
+   com 56 px de margem (2026-10-21). Um respiro só, de 16 px no celular. */
 .return-page {
+  width: 100%;
   min-width: 0;
+  box-sizing: border-box;
 }
 .return-content {
   width: 100%;
   max-width: 760px;
   margin: 0 auto;
-  padding: 8px 20px 32px;
+  padding: 12px 16px 32px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   box-sizing: border-box;
 }
-.return-intro,
-.return-filter-copy,
 .return-settings-intro {
-  margin: 0;
+  margin: 0 0 4px;
   color: var(--fg-soft);
   font-size: 14px;
   line-height: 1.5;
-}
-.return-settings-intro {
-  margin-bottom: 4px;
-}
-.return-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 12px;
-  background: var(--surface-secondary);
-}
-.return-tab {
-  min-height: 40px;
-  border: 0;
-  border-radius: 9px;
-  color: var(--fg-soft);
-  background: transparent;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.return-tab.is-active {
-  color: var(--fg);
-  background: var(--surface);
-  box-shadow: 0 1px 3px rgb(var(--at-shadow-rgb) / 0.12);
-}
-.return-filter {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 .return-chips {
   display: flex;
@@ -139,7 +111,6 @@
   font-weight: 600;
 }
 
-.return-list,
 .return-message {
   padding: 16px;
   display: flex;
@@ -149,6 +120,12 @@
   border-radius: var(--r-card);
   background: var(--surface);
 }
+.return-list {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .return-list-head,
 .return-message-head {
   display: flex;
@@ -156,7 +133,6 @@
   justify-content: space-between;
   gap: 12px;
 }
-.return-list-title,
 .return-section-title {
   margin: 0;
   color: var(--fg);
@@ -164,7 +140,6 @@
   font-size: 18px;
   font-weight: 500;
 }
-.return-list-range,
 .return-excluded,
 .return-empty,
 .return-message-note {
@@ -185,7 +160,8 @@
 .return-candidate {
   position: relative;
   min-height: 56px;
-  padding: 12px;
+  padding: 9px 12px;
+  line-height: 1.35;
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -230,7 +206,33 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+}
+.return-excluded summary {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--fg-soft);
+  font-weight: 600;
+  cursor: pointer;
+}
+.return-excluded summary::-webkit-details-marker {
+  display: none;
+}
+.return-excluded summary .icon {
+  width: 16px;
+  height: 16px;
+}
+.return-excluded[open] summary .icon {
+  transform: rotate(180deg);
+}
+.return-excluded summary:focus-visible {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 2px;
+}
+.return-excluded p {
+  margin: 2px 0 0;
 }
 .return-candidate-copy strong {
   color: var(--fg);
@@ -268,18 +270,387 @@
   white-space: pre-line;
   overflow-wrap: anywhere;
 }
-.return-approve {
+/* --- Chamar clientes em etapas (D-212) ---------------------------------
+   A tela ocupa a altura que sobra e não rola: a barra, as etapas, o corpo
+   da etapa e o rodapé fixo com Voltar/Continuar. Cada etapa cabe numa tela
+   de celular; a lista de clientes é paginada para caber também. */
+.app-frame > main:has(> .return-flow) {
+  min-height: calc(100dvh - var(--shell-status-h, 0px));
+  display: flex;
+  flex-direction: column;
+}
+.return-flow {
+  flex: 1;
+  min-height: calc(100dvh - var(--shell-status-h, 0px));
+  display: flex;
+  flex-direction: column;
+}
+.app-frame > main:has(> .return-flow) > .return-flow {
+  min-height: 0;
+}
+.return-steps {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 8px 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-sizing: border-box;
+}
+.return-steps-list {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  list-style: none;
+}
+.return-step {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.return-step-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-secondary);
+}
+.return-step.is-done .return-step-bar,
+.return-step.is-current .return-step-bar {
+  background: var(--at-color-primary);
+}
+/* No celular os nomes ficam só para o leitor de tela; a legenda abaixo
+   das barras diz a etapa atual. */
+.return-step-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.return-steps-caption {
+  margin: 0;
+  color: var(--at-color-primary-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.return-flow-body {
+  width: 100%;
+  max-width: 760px;
+  min-height: 0;
+  flex: 1;
+  margin: 0 auto;
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-sizing: border-box;
+}
+.return-flow-title {
+  margin: 0;
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+  outline: none;
+}
+.return-flow-footer {
   position: sticky;
   bottom: 0;
-  z-index: 2;
-  margin: 0 -20px;
-  padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+  z-index: 3;
+  padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
   background: var(--bg);
+}
+.return-flow-actions {
+  width: 100%;
+  max-width: 728px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.return-flow-next {
+  flex: 1;
+}
+
+/* Etapa 1: o tipo, o que ele faz e o período. */
+.return-kinds {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  border: 0;
+}
+.return-kind {
+  position: relative;
+  min-width: 0;
+  min-height: 76px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  cursor: pointer;
+}
+.return-kind.is-checked {
+  border-color: var(--at-color-primary);
+  background: var(--at-color-primary-tint);
+}
+.return-kind-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.return-kind-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--at-color-primary);
+  background: var(--at-color-primary-tint-strong);
+}
+.return-kind.is-checked .return-kind-icon {
+  color: var(--at-color-on-primary);
+  background: var(--at-color-primary);
+}
+.return-kind-icon .icon {
+  width: 18px;
+  height: 18px;
+}
+.return-kind-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.return-kind-copy strong {
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+}
+.return-kind-copy span {
+  color: var(--fg-soft);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.return-explain {
+  padding: 14px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.return-explain-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.return-explain-list dt {
+  color: var(--at-color-primary-ink);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.return-explain-list dd {
+  margin: 2px 0 0;
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.return-period {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.return-period-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.return-flow-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Etapa 2: a lista paginada. */
+.return-list-summary {
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+.return-list-period {
+  color: var(--fg);
+  font-weight: 600;
+}
+.return-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.return-pager-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--fg);
+  background: var(--surface);
+  cursor: pointer;
+}
+.return-pager-button:disabled {
+  color: var(--muted);
+  border-color: var(--border);
+  cursor: default;
+}
+.return-pager-button .icon {
+  width: 18px;
+  height: 18px;
+}
+.return-pager-status {
+  min-width: 112px;
+  color: var(--fg-soft);
+  font-size: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Etapa 4: o resumo antes de aprovar. */
+.return-review {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.return-review-list {
+  margin: 0;
+  padding: 4px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+.return-review-list div {
+  padding: 12px 0;
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 12px;
+}
+.return-review-list div + div {
   border-top: 1px solid var(--border);
 }
-.return-approve-button {
-  width: 100%;
+.return-review-list dt {
+  color: var(--muted);
+  font-size: 13px;
 }
+.return-review-list dd {
+  margin: 0;
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+@media (min-width: 600px) {
+  .return-step-label {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: hidden;
+    clip: auto;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+  }
+  .return-step.is-done .return-step-label {
+    color: var(--fg-soft);
+  }
+  .return-step.is-current .return-step-label {
+    color: var(--at-color-primary-ink);
+  }
+  .return-steps-caption {
+    display: none;
+  }
+  .return-kind {
+    padding: 16px;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+  .return-kind-icon {
+    width: 40px;
+    height: 40px;
+    flex: none;
+  }
+  .return-flow-next {
+    flex: none;
+    min-width: 200px;
+  }
+}
+
+@media (min-width: 768px) {
+  .return-steps {
+    padding: 12px 28px 0;
+  }
+  .return-flow-body {
+    padding: 18px 28px 20px;
+    gap: 16px;
+  }
+  .return-flow-footer {
+    padding: 14px 28px max(14px, env(safe-area-inset-bottom));
+  }
+}
+
+/* Duas colunas de clientes a partir de 1100 px: a página leva o dobro. */
+@media (min-width: 1100px) {
+  .return-flow.is-step-2 .return-steps,
+  .return-flow.is-step-2 .return-flow-body {
+    max-width: 1040px;
+  }
+  .return-flow.is-step-2 .return-flow-actions {
+    max-width: 984px;
+  }
+  .return-flow .return-candidates {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+  .return-flow .return-candidate {
+    height: 100%;
+    box-sizing: border-box;
+  }
+  /* Em duas colunas o "Ver mensagem" fica só no ícone: o texto da cliente
+     ganha a largura e cabe em menos linhas. */
+  .return-flow .return-candidate-copy strong,
+  .return-flow .return-candidate-detail {
+    padding-right: 40px;
+  }
+  .return-flow .return-candidate-preview-label {
+    display: none;
+  }
+}
+
 .return-fit,
 .return-editor {
   display: flex;
@@ -389,16 +760,6 @@
   .return-content {
     padding: 16px 28px 40px;
   }
-  .return-approve {
-    position: static;
-    margin: 0;
-    padding: 0;
-    border-top: 0;
-    background: transparent;
-  }
-  .return-approve-button {
-    width: auto;
-  }
   .return-fit-actions {
     flex-direction: row;
     flex-wrap: wrap;
@@ -411,8 +772,14 @@
 .return-candidate-item {
   position: relative;
 }
-.return-candidate-item .return-candidate {
-  padding-right: 56px;
+/* Só o nome e o prazo desviam do botão, que fica no canto de cima; as
+   linhas de baixo usam a largura toda e a linha fica mais baixa. */
+.return-candidate-copy {
+  flex: 1;
+}
+.return-candidate-copy strong,
+.return-candidate-detail {
+  padding-right: 40px;
 }
 .return-candidate-preview {
   position: absolute;
@@ -453,8 +820,9 @@
   gap: 12px;
 }
 @media (min-width: 480px) {
-  .return-candidate-item .return-candidate {
-    padding-right: 150px;
+  .return-candidate-copy strong,
+  .return-candidate-detail {
+    padding-right: 130px;
   }
   .return-candidate-preview-label {
     display: inline;
@@ -1236,5 +1604,22 @@
   }
   .return-shortcut:not(.is-primary) .return-shortcut-chevron {
     display: block;
+  }
+}
+
+/* Andamento da aprovação no desktop (2026-10-21): o cartão da aprovação
+   fica parado à esquerda e as clientes ao lado, em vez de uma coluna
+   estreita no meio da tela. */
+@media (min-width: 1200px) {
+  .return-content:has(> .return-approval-summary-card) {
+    max-width: 1120px;
+    display: grid;
+    grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+    align-items: start;
+    column-gap: 24px;
+  }
+  .return-content > .return-approval-summary-card {
+    position: sticky;
+    top: 24px;
   }
 }

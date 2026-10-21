@@ -124,6 +124,11 @@ export function exclusionSummary(
   return `Ficaram de fora: ${parts.join(", ")}.`;
 }
 
+/** Quantas clientes ficaram de fora da lista, somados todos os motivos. */
+export function exclusionCount(excluded: ReturnExclusionCounts): number {
+  return EXCLUSION_LABELS.reduce((total, [key]) => total + excluded[key], 0);
+}
+
 export function countLabel(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }

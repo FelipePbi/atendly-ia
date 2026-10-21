@@ -9,7 +9,7 @@
  */
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type {
   ReturnCampaignDetail,
@@ -17,7 +17,10 @@ import type {
   ReturnSettings,
 } from "@/data";
 import { CustomerReturnMessages } from "@/features/customer-return/CustomerReturnMessages";
-import { ReturnCallScreen } from "@/features/customer-return/ReturnCallScreen";
+import {
+  candidatesPerPage,
+  ReturnCallScreen,
+} from "@/features/customer-return/ReturnCallScreen";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
 import { expectNoA11yViolations } from "./support/a11y";
@@ -285,10 +288,95 @@ function renderScreen() {
   );
 }
 
+type User = ReturnType<typeof userEvent.setup>;
+
+async function next(user: User) {
+  await user.click(screen.getByRole("button", { name: "Continuar" }));
+}
+
+/** Da primeira etapa (tipo) para a lista de clientes. */
+async function openClients(user: User, name = "Adriana Souza") {
+  await next(user);
+  await screen.findByText(name);
+}
+
+/** Da primeira etapa até a revisão, com a lista como chegou. */
+async function openReview(user: User) {
+  await openClients(user);
+  await next(user);
+  await next(user);
+  await screen.findByRole("heading", { name: "Revisar e aprovar" });
+}
+
+function manyCandidates(count: number): ReturnCandidateList {
+  const base = renewalList();
+  return {
+    ...base,
+    candidates: Array.from({ length: count }, (_, index) => ({
+      ...base.candidates[0],
+      customerId: `c${index + 1}`,
+      name: `Cliente ${String(index + 1).padStart(2, "0")}`,
+    })),
+  };
+}
+
+describe("Retorno de clientes › etapas (D-212)", () => {
+  test("começa no tipo: escolher explica o que cada um faz e o período", async () => {
+    const user = userEvent.setup();
+    const { container } = renderScreen();
+    expect(
+      await screen.findByRole("heading", { name: "Quem você quer chamar?" }),
+    ).toBeVisible();
+    const steps = screen.getByRole("list", { name: "Etapas" });
+    expect(
+      within(steps)
+        .getByText(/Etapa 1 de 4/u)
+        .closest("li"),
+    ).toHaveAttribute("aria-current", "step");
+    expect(screen.getByRole("radio", { name: /Renovação/u })).toBeChecked();
+    expect(
+      screen.getByText(/Lembrar quem está na hora de refazer/u),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Esta semana" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expectNoA11yViolations(container);
+
+    await user.click(screen.getByRole("radio", { name: /Resgate/u }));
+    expect(screen.getByText(/Reaproximar quem sumiu/u)).toBeVisible();
+    expect(
+      screen.getByText(
+        "Quem não vem há 60 dias ou mais e não tem horário marcado.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "60 dias" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    // Na primeira etapa não há "Voltar": o voltar da barra leva ao Retorno.
+    expect(screen.queryByRole("button", { name: "Voltar" })).toBeNull();
+  });
+
+  test("continuar leva o foco ao título da etapa; voltar guarda o que foi desmarcado", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await openClients(user);
+    expect(screen.getByRole("heading", { name: "Quem recebe" })).toHaveFocus();
+    await user.click(screen.getByRole("checkbox", { name: /Bia/u }));
+    await next(user);
+    expect(screen.getByRole("heading", { name: "A mensagem" })).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Voltar" }));
+    expect(screen.getByRole("checkbox", { name: /Bia/u })).not.toBeChecked();
+    expect(screen.getByText(/1 de 2 marcadas/u)).toBeVisible();
+  });
+});
+
 describe("Retorno de clientes › Renovação", () => {
   test("a lista chega toda marcada, com prazo, último atendimento e costume", async () => {
+    const user = userEvent.setup();
     const { container } = renderScreen();
-    await screen.findByText("Adriana Souza");
+    await openClients(user);
     const adri = screen.getByRole("checkbox", { name: /Adriana Souza/u });
     const bia = screen.getByRole("checkbox", { name: /Bia/u });
     expect(adri).toBeChecked();
@@ -301,11 +389,12 @@ describe("Retorno de clientes › Renovação", () => {
       screen.getByText("costuma vir sex ou sáb, das 16h às 19h"),
     ).toBeVisible();
     expect(screen.getByText(/a cada 21 dias, pela média dela/u)).toBeVisible();
-    expect(
-      screen.getByText(
-        "Ficaram de fora: 2 já têm horário marcado, 1 está nos contatos ignorados, 1 não tem telefone.",
-      ),
-    ).toBeVisible();
+    // Quem ficou de fora é uma linha que abre o porquê.
+    const why =
+      "Ficaram de fora: 2 já têm horário marcado, 1 está nos contatos ignorados, 1 não tem telefone.";
+    expect(screen.getByText(why)).not.toBeVisible();
+    await user.click(screen.getByText("4 clientes ficaram de fora"));
+    expect(screen.getByText(why)).toBeVisible();
     expect(candidates).toHaveBeenCalledWith(
       { kind: "RENEWAL", week: "this" },
       expect.any(AbortSignal),
@@ -314,8 +403,10 @@ describe("Retorno de clientes › Renovação", () => {
   });
 
   test("a mensagem que vai sair usa o nome, o serviço e o prazo da primeira marcada", async () => {
+    const user = userEvent.setup();
     renderScreen();
-    await screen.findByText("Adriana Souza");
+    await openClients(user);
+    await next(user);
     // Em várias mensagens (D-208, o padrão): um balão por mensagem, em ordem.
     const bubbles = [
       ...document.querySelectorAll(".return-message .return-message-bubble"),
@@ -332,12 +423,20 @@ describe("Retorno de clientes › Renovação", () => {
   test("desmarcar tira da lista; aprovar simula o ritmo, aprova só as marcadas e abre o andamento", async () => {
     const user = userEvent.setup();
     renderScreen();
-    await screen.findByText("Adriana Souza");
+    await openClients(user);
     await user.click(screen.getByRole("checkbox", { name: /Bia/u }));
-    const approveButton = screen.getByRole("button", {
-      name: "Aprovar 1 cliente",
-    });
-    await user.click(approveButton);
+    await next(user);
+    await next(user);
+    const review = screen.getByRole("region", { name: "Resumo" });
+    expect(within(review).getByText("Renovação")).toBeVisible();
+    expect(
+      within(review).getByText("Esta semana · 19/10 a 25/10"),
+    ).toBeVisible();
+    expect(within(review).getByText("1 cliente")).toBeVisible();
+    expect(
+      within(review).getByText(/Até 10 por dia, seg a sáb, das 9h às 19h/u),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Aprovar 1 cliente" }));
 
     await waitFor(() => expect(approve).toHaveBeenCalled());
     expect(plan).toHaveBeenCalledWith({
@@ -368,7 +467,7 @@ describe("Retorno de clientes › Renovação", () => {
       lastPlannedDate: "2026-10-20",
     });
     renderScreen();
-    await screen.findByText("Adriana Souza");
+    await openReview(user);
     await user.click(
       screen.getByRole("button", { name: "Aprovar 2 clientes" }),
     );
@@ -403,7 +502,7 @@ describe("Retorno de clientes › Renovação", () => {
       lastPlannedDate: "2026-10-20",
     });
     renderScreen();
-    await screen.findByText("Adriana Souza");
+    await openReview(user);
     await user.click(
       screen.getByRole("button", { name: "Aprovar 2 clientes" }),
     );
@@ -425,9 +524,12 @@ describe("Retorno de clientes › Renovação", () => {
     const user = userEvent.setup();
     candidates.mockRejectedValueOnce(new Error("offline"));
     renderScreen();
+    await screen.findByRole("heading", { name: "Quem você quer chamar?" });
+    await next(user);
     expect(
       await screen.findByText("Não foi possível carregar a lista de clientes."),
     ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
     candidates.mockResolvedValueOnce({ ...renewalList(), candidates: [] });
     await user.click(screen.getByRole("button", { name: "Tentar novamente" }));
     expect(
@@ -435,9 +537,94 @@ describe("Retorno de clientes › Renovação", () => {
         "Ninguém vence nesta semana sem horário marcado.",
       ),
     ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
     expect(
       screen.queryByRole("button", { name: /Aprovar/u }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("Retorno de clientes › lista paginada (D-212)", () => {
+  // jsdom abre com 1024 × 768; cada teste escolhe o tamanho da tela.
+  function setViewport(width: number, height: number) {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: width,
+    });
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: height,
+    });
+  }
+  afterEach(() => setViewport(1024, 768));
+
+  test("quantas cabem por página: mais no tablet, duas colunas no desktop", () => {
+    expect(candidatesPerPage(390, 844)).toBe(5);
+    expect(candidatesPerPage(360, 640)).toBe(3);
+    expect(candidatesPerPage(768, 1024)).toBe(7);
+    expect(candidatesPerPage(1440, 900)).toBe(12);
+    // Nunca menos de 3 linhas, nem mais de 8.
+    expect(candidatesPerPage(390, 400)).toBe(3);
+    expect(candidatesPerPage(768, 2000)).toBe(8);
+  });
+
+  test("a lista longa vem em páginas, sem rolar a tela", async () => {
+    setViewport(390, 844);
+    candidates.mockResolvedValue(manyCandidates(12));
+    const user = userEvent.setup();
+    renderScreen();
+    await openClients(user, "Cliente 01");
+    const list = screen.getByRole("region", { name: "Clientes" });
+    expect(within(list).getAllByRole("checkbox")).toHaveLength(5);
+    expect(screen.getByText("Página 1 de 3")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Página anterior" }),
+    ).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Próxima página" }));
+    expect(screen.getByText("Página 2 de 3")).toBeVisible();
+    expect(screen.getByText("Cliente 06")).toBeVisible();
+    expect(screen.queryByText("Cliente 01")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Próxima página" }));
+    expect(within(list).getAllByRole("checkbox")).toHaveLength(2);
+    expect(
+      screen.getByRole("button", { name: "Próxima página" }),
+    ).toBeDisabled();
+  });
+
+  test("marcar todas vale para todas as páginas, e a aprovação leva as de todas", async () => {
+    setViewport(390, 844);
+    candidates.mockResolvedValue(manyCandidates(12));
+    const user = userEvent.setup();
+    renderScreen();
+    await openClients(user, "Cliente 01");
+
+    await user.click(screen.getByRole("button", { name: "Desmarcar todas" }));
+    expect(screen.getByText(/0 de 12 marcadas/u)).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Marque quem vai receber" }),
+    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Próxima página" }));
+    expect(
+      screen.getByRole("checkbox", { name: /Cliente 06/u }),
+    ).not.toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "Marcar todas" }));
+    expect(screen.getByText(/12 de 12 marcadas/u)).toBeVisible();
+    // Desmarca uma da segunda página e aprova as outras onze.
+    await user.click(screen.getByRole("checkbox", { name: /Cliente 07/u }));
+    await next(user);
+    await next(user);
+    await user.click(
+      screen.getByRole("button", { name: "Aprovar 11 clientes" }),
+    );
+    await waitFor(() => expect(approve).toHaveBeenCalled());
+    const [input] = approve.mock.calls[0] as [{ customerIds: string[] }];
+    const ids = input.customerIds;
+    expect(ids).toHaveLength(11);
+    expect(ids).not.toContain("c7");
+    expect(ids).toContain("c12");
   });
 });
 
@@ -445,17 +632,19 @@ describe("Retorno de clientes › Resgate", () => {
   test("pede pelos dias da configuração e mostra o incentivo na mensagem", async () => {
     const user = userEvent.setup();
     renderScreen();
-    await screen.findByText("Adriana Souza");
-    await user.click(screen.getByRole("button", { name: "Resgate" }));
-    expect(await screen.findByText("Joice")).toBeVisible();
-    expect(candidates).toHaveBeenCalledWith(
-      { kind: "WINBACK", days: 60 },
-      expect.any(AbortSignal),
-    );
+    await screen.findByRole("heading", { name: "Quem você quer chamar?" });
+    await user.click(screen.getByRole("radio", { name: /Resgate/u }));
     expect(screen.getByRole("button", { name: "60 dias" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
+    await openClients(user, "Joice");
+    expect(candidates).toHaveBeenCalledWith(
+      { kind: "WINBACK", days: 60 },
+      expect.any(AbortSignal),
+    );
+    expect(screen.getByText(/Última vez há 3 meses/u)).toBeVisible();
+    await next(user);
     expect(screen.getByText("“hidratação de brinde na volta”")).toBeVisible();
     const bubbles = [
       ...document.querySelectorAll(".return-message .return-message-bubble"),
@@ -463,7 +652,6 @@ describe("Retorno de clientes › Resgate", () => {
     expect(bubbles).toContain(
       "Pra sua volta, tenho uma condição especial: hidratação de brinde na volta.",
     );
-    expect(screen.getByText(/Última vez há 3 meses/u)).toBeVisible();
   });
 });
 
@@ -535,7 +723,7 @@ describe("Retorno de clientes › ver a mensagem de cada cliente", () => {
     stubReducedMotion(true);
     const user = userEvent.setup();
     const { container } = renderScreen();
-    await screen.findByText("Adriana Souza");
+    await openClients(user);
     const adriana = screen.getByRole("checkbox", { name: /Adriana/u });
     expect(adriana).toBeChecked();
 
@@ -566,7 +754,7 @@ describe("Retorno de clientes › ver a mensagem de cada cliente", () => {
     stubReducedMotion(true);
     const user = userEvent.setup();
     renderScreen();
-    await screen.findByText("Adriana Souza");
+    await openClients(user);
 
     await user.click(
       screen.getByRole("button", { name: /^Ver a mensagem para Bia/u }),
@@ -585,7 +773,7 @@ describe("Retorno de clientes › ver a mensagem de cada cliente", () => {
     aiSettings = { enabled: true, tone: "BALANCED", messageDelivery: "SINGLE" };
     const user = userEvent.setup();
     renderScreen();
-    await screen.findByText("Adriana Souza");
+    await openClients(user);
 
     await user.click(
       screen.getByRole("button", { name: "Ver a mensagem para Adriana Souza" }),

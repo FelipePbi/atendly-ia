@@ -40,7 +40,7 @@ export function ReturnSettingsScreen() {
   });
 
   return (
-    <div className="page return-page">
+    <div className="return-page">
       <PushedBar
         backHref="/retorno"
         backLabel="Voltar para o retorno"

@@ -161,6 +161,13 @@ export function ProductRuntimeProvider({ children }: { children: ReactNode }) {
         (phase === "onboarding" || phase === "unauthenticated")));
   const checkingAccess =
     protectedPath && (phase === "checking" || waitingForRedirect);
+  // Quem chega ao login (ou a outra tela de acesso) vindo de fora — a landing,
+  // um favorito, o `/` — não vê o formulário piscar antes de ir para a tela
+  // logada (pedido de 2026-10-21): o splash cobre a verificação da sessão.
+  // Logada, a pessoa segue para dentro sob o mesmo splash; deslogada, o
+  // formulário aparece quando a verificação termina.
+  const checkingAuthPage =
+    isAuthPath(pathname) && (phase === "checking" || waitingForRedirect);
   // Primeiro carregamento de uma tela logada (D-168, revisão de 2026-10-12):
   // o splash cobre a verificação da sessão E a primeira leitura da tela, que
   // monta por baixo dele; sai quando ela terminou (a casca arma a saída no
@@ -169,14 +176,19 @@ export function ProductRuntimeProvider({ children }: { children: ReactNode }) {
   const splash = useSplash();
   const screenMounted =
     protectedPath && !isOnboardingPath(pathname) && phase === "authenticated";
+  // Na tela de acesso o splash só passa a valer como o do primeiro
+  // carregamento quando a sessão confirma que a pessoa vai entrar; deslogada,
+  // ele nunca foi armado e o formulário não fica preso sob ele.
+  const enteringFromAuthPage = checkingAuthPage && phase === "authenticated";
   useEffect(() => {
-    if (checkingAccess) coverSplash();
-  }, [checkingAccess]);
+    if (checkingAccess || enteringFromAuthPage) coverSplash();
+  }, [checkingAccess, enteringFromAuthPage]);
   useEffect(() => {
     if (screenMounted) scheduleSplashTimeout();
   }, [screenMounted]);
+  const holdingScreen = checkingAccess || checkingAuthPage;
   const splashShown =
-    checkingAccess || (screenMounted && (splash.covering || splash.leaving));
+    holdingScreen || (screenMounted && (splash.covering || splash.leaving));
 
   if (publicDocument) {
     return (
@@ -199,7 +211,7 @@ export function ProductRuntimeProvider({ children }: { children: ReactNode }) {
   // recomeçar no meio.
   return (
     <ProductRuntimeContext.Provider value={value}>
-      {checkingAccess ? null : children}
+      {holdingScreen ? null : children}
       {splashShown && <RuntimeLoading leaving={splash.leaving} />}
     </ProductRuntimeContext.Provider>
   );

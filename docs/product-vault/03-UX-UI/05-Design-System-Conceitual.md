@@ -130,6 +130,8 @@ Carregamento (D-168): nenhum esqueleto aparece em cima de conteúdo que já esta
 
 Primeiro carregamento (F5, URL digitada; D-168, revisão de 2026-10-12): o splash da marca cobre a verificação do acesso **e** a primeira leitura da tela — depois dele nunca há esqueleto. A tela monta por baixo e, quando o splash sai (160 ms), se apresenta: os blocos entram escalonados — cabeçalho/barra, depois a grade ou lista, depois o painel — com fade e 8 px de subida em 240 ms, 120 ms entre um e outro. Só nesse momento; trocar de dia ou de visão não repete. Com `prefers-reduced-motion` a tela aparece inteira no mesmo quadro.
 
+Telas de acesso (login, cadastro, recuperação de senha) abertas de fora — a landing, um favorito, o endereço raiz (2026-10-21): o mesmo splash cobre a verificação da sessão, e o formulário nunca pisca antes. Com sessão, a pessoa segue para dentro sob o mesmo splash, que sai como no primeiro carregamento; sem sessão, o formulário aparece quando a verificação termina.
+
 ## Componentes principais esperados
 
 - Button / IconButton

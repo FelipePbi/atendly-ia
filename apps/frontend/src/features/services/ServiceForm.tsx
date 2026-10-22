@@ -1,7 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
   type Service,
@@ -16,12 +22,18 @@ import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { CurrencyInput } from "@/shared/ui/CurrencyInput";
 
+import { colorTokenOptions, describeServiceChanges } from "./serviceChanges";
 import {
   formatServiceDuration,
   formatServicePreview,
   formatServicePrice,
   formatServiceRecurrence,
 } from "./serviceFormatting";
+import {
+  type LeaveDestination,
+  ServiceLeaveSheet,
+  useServiceLeaveGuard,
+} from "./ServiceLeaveGuard";
 import {
   DirectoryState,
   requestError,
@@ -36,15 +48,6 @@ const priceTypeOptions: Array<{
   { value: "STARTING_AT", label: "A partir de" },
   { value: "ON_REQUEST", label: "Sob consulta" },
   { value: "NOT_INFORMED", label: "Sem preço" },
-];
-
-const colorTokenOptions: Array<{ value: ServiceColorToken; label: string }> = [
-  { value: "SKY", label: "Ameixa" },
-  { value: "AMBER", label: "Terracota" },
-  { value: "EMERALD", label: "Oliva" },
-  { value: "SLATE", label: "Ardósia" },
-  { value: "ROSE", label: "Rosa-antigo" },
-  { value: "VIOLET", label: "Lavanda" },
 ];
 
 /*
@@ -151,7 +154,6 @@ export function ServiceForm({
 }) {
   const wide = useWideLayout();
   const router = useRouter();
-  const [dirty, setDirty] = useState(false);
   const [catalog, setCatalog] = useState<ServiceListResult | null>(null);
   const [service, setService] = useState<Service | null>(null);
   const [name, setName] = useState("");
@@ -183,11 +185,34 @@ export function ServiceForm({
   const [createdServiceId, setCreatedServiceId] = useState<string | null>(
     null,
   );
+  const [active, setActive] = useState(true);
+  const formRef = useRef<HTMLFormElement>(null);
+  const saveDestinationRef = useRef<LeaveDestination | null>(null);
 
   const reviewMode =
     edit &&
     service !== null &&
     (service.needsReview || service.durationMinutes === null);
+  const serviceChanges =
+    edit && service
+      ? describeServiceChanges(service, {
+          active: reviewMode ? service.active : active,
+          aiInstruction: aiInstructionValue,
+          aiInstructionOriginal,
+          aiInstructionReadError,
+          bufferAfter: buffers.bufferAfter,
+          bufferBefore: buffers.bufferBefore,
+          colorToken,
+          description,
+          durationValue,
+          name,
+          priceCents,
+          priceType,
+          recurrenceValue,
+        })
+      : null;
+  const hasChanges = serviceChanges?.hasChanges ?? false;
+  const leaveGuard = useServiceLeaveGuard(hasChanges, serviceId);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -206,6 +231,7 @@ export function ServiceForm({
           return;
         }
         setService(found);
+        setActive(found.active);
         setName(found.name);
         setDurationValue(
           found.durationMinutes === null ? "" : String(found.durationMinutes),
@@ -248,6 +274,8 @@ export function ServiceForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const destination = saveDestinationRef.current;
+    saveDestinationRef.current = null;
     const data = new FormData(event.currentTarget);
     setPriceError(null);
     if (priceRequiresValue(priceType) && priceCents === null) {
@@ -305,7 +333,8 @@ export function ServiceForm({
           return;
         }
       }
-      router.replace("/servicos");
+      leaveGuard.release();
+      navigate(destination ?? { href: "/servicos", replace: true });
     } catch (caught: unknown) {
       setMessage(requestError(caught, "Não foi possível salvar o serviço."));
     } finally {
@@ -313,15 +342,35 @@ export function ServiceForm({
     }
   }
 
+  function navigate(destination: LeaveDestination) {
+    if (destination.replace) router.replace(destination.href);
+    else router.push(destination.href);
+  }
+
+  function saveBeforeLeaving() {
+    const destination = leaveGuard.pending;
+    const form = formRef.current;
+    leaveGuard.dismiss();
+    if (!destination || !form) return;
+    saveDestinationRef.current = destination;
+    form.requestSubmit();
+    saveDestinationRef.current = null;
+  }
+
+  function discardAndLeave() {
+    const destination = leaveGuard.pending;
+    if (!destination) return;
+    leaveGuard.release();
+    navigate(destination);
+  }
+
   function incrementDuration() {
-    setDirty(true);
     setDurationValue((current) =>
       current === "" ? "5" : String(Number(current) + 5),
     );
   }
 
   function decrementDuration() {
-    setDirty(true);
     setDurationValue((current) =>
       current === "" ? current : String(Math.max(5, Number(current) - 5)),
     );
@@ -371,7 +420,6 @@ export function ServiceForm({
   }
 
   function stepBuffer(field: BufferField, delta: number) {
-    setDirty(true);
     setBuffers((current) => {
       const value = current[field] === "" ? 0 : Number(current[field]);
       return { ...current, [field]: String(Math.max(0, value + delta)) };
@@ -399,7 +447,6 @@ export function ServiceForm({
             type="radio"
             value={option.value}
             onChange={() => {
-              setDirty(true);
               setPriceType(option.value);
               setPriceError(null);
             }}
@@ -426,7 +473,6 @@ export function ServiceForm({
       hideSymbol={reviewMode}
       key={service?.id ?? "new"}
       onValueChange={(value) => {
-        setDirty(true);
         setPriceCents(value);
         setPriceError(null);
       }}
@@ -539,13 +585,19 @@ export function ServiceForm({
 
   const barTitle = edit ? (service?.name ?? "Editar serviço") : "Novo serviço";
   const screen = (
-    <section className="directory-page is-form-page service-form-screen">
+    <section
+      className={
+        leaveGuard.pending
+          ? "directory-page is-form-page service-form-screen is-leaving"
+          : "directory-page is-form-page service-form-screen"
+      }
+    >
       <PushedBar
         backHref="/servicos"
         backIcon={reviewMode ? "chevron-left" : "x"}
         backLabel="Voltar para serviços"
         hideBackWide={reviewMode}
-        subtitle={edit && dirty ? "alterações não salvas" : undefined}
+        subtitle={hasChanges ? "alterações não salvas" : undefined}
         title={barTitle}
       />
       <div className="service-form-body">
@@ -579,7 +631,7 @@ export function ServiceForm({
         ) : reviewMode ? (
           <form
             className="directory-form-card service-form-review"
-            onChange={() => setDirty(true)}
+            ref={formRef}
             onSubmit={(event) => void submit(event)}
           >
             <div className="service-essentials service-review-body">
@@ -681,7 +733,6 @@ export function ServiceForm({
                         key={minutes}
                         type="button"
                         onClick={() => {
-                          setDirty(true);
                           setDurationValue(String(minutes));
                         }}
                       >
@@ -773,7 +824,7 @@ export function ServiceForm({
                 ? "directory-form-card service-form-edit"
                 : "directory-form-card service-form-split"
             }
-            onChange={() => setDirty(true)}
+            ref={formRef}
             onSubmit={(event) => void submit(event)}
           >
             {edit && (
@@ -866,7 +917,6 @@ export function ServiceForm({
                           key={minutes}
                           type="button"
                           onClick={() => {
-                            setDirty(true);
                             setDurationValue(String(minutes));
                           }}
                         >
@@ -1086,9 +1136,10 @@ export function ServiceForm({
               {edit && (
                 <label className="check service-active-option">
                   <input
-                    defaultChecked={service?.active ?? true}
+                    checked={active}
                     name="active"
                     type="checkbox"
+                    onChange={(event) => setActive(event.target.checked)}
                   />
                   <span className="check-box" />
                   <span className="service-active-copy">
@@ -1118,6 +1169,15 @@ export function ServiceForm({
           </form>
         )}
       </div>
+      {leaveGuard.pending && serviceChanges?.hasChanges && (
+        <ServiceLeaveSheet
+          changes={serviceChanges}
+          saveDisabled={busy || (reviewMode && !durationReady)}
+          onContinue={leaveGuard.dismiss}
+          onDiscard={discardAndLeave}
+          onSave={saveBeforeLeaving}
+        />
+      )}
     </section>
   );
 

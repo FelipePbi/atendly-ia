@@ -376,9 +376,9 @@ test("resolveRelativeDays troca {today}, {today-N} e {today+N} pelo dia semeado 
   assert.equal(json.data[0].at, "{today}T13:42:00-03:00");
 });
 
-test("targets.json: só W1 a W3, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 2.I6, 2.I7, 2.I8, 2.I9, 2.I10, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL1, CL2, CL3, CL8, CL9, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2 e S7 declaram responses", () => {
+test("targets.json: só W1 a W3, R2, I1, AG2, NT2, 2.6, 2.I3, 2.I4, 2.I5, 2.I6, 2.I7, 2.I8, 2.I9, 2.I10, 4.4, 4.5, 4.7 a 4.9, A2, A12, C1 a C4, CL1, CL2, CL3, CL8, CL9, CL10, K1 a K6, H1 a H5 e H7, L2 e L7, S2, S7 e S9 declaram responses", () => {
   const declaring = declaringTargets();
-  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I10", "2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL1", "CL10", "CL2", "CL3", "CL8", "CL9", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "W1", "W2", "W3"]);
+  assert.deepEqual(declaring.map((target) => target.code).sort(), ["2.6", "2.I10", "2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "4.4", "4.5", "4.7", "4.8", "4.9", "A12", "A2", "AG2", "C1", "C2", "C3", "C4", "CL1", "CL10", "CL2", "CL3", "CL8", "CL9", "H1", "H2", "H3", "H4", "H5", "H7", "I1", "K1", "K2", "K3", "K4", "K5", "K6", "L2", "L7", "NT2", "R2", "S2", "S7", "S9", "W1", "W2", "W3"]);
   for (const target of declaring) {
     const owner = ["2.I3", "2.I4", "2.I5", "2.I6", "2.I7", "2.I8", "2.I9", "2.I10"].includes(target.code)
       ? "Onboarding-2-Importacao.dc.html"
@@ -1573,4 +1573,44 @@ test("targets.json: CL9 é o único alvo com entrada retida, retém só GET /v1/
   assert.deepEqual(cl9.steps, [{ waitFor: "Carregando clientes" }]);
   assert.match(cl9.notes, /retido/);
   assert.match(cl9.notes, /FREEZE_CSS/);
+});
+
+test("targets.json: S9 dá o Corte feminino de 45 min e R$ 90 no id da rota, só GET, e os passos chegam ao título do quadro", () => {
+  const s9 = declaringTargets().find((target) => target.file === "Servicos.dc.html" && target.code === "S9");
+  assert.equal(s9.label, "Serviço · descartar alterações");
+  assert.equal(s9.route, "/servicos/editar?id=visual-compare-s9");
+  assert.deepEqual(
+    s9.responses.map((entry) => `${entry.method} ${entry.path}`),
+    ["GET /v1/status", "GET /v1/services", "GET /v1/services/visual-compare-s9/ai-instruction"],
+  );
+  for (const entry of s9.responses) {
+    assert.equal(entry.method, "GET");
+    assert.equal(entry.status, undefined);
+    assert.equal(typeof entry.json.requestId, "string");
+  }
+  const status = s9.responses.find((entry) => entry.path === "/v1/status");
+  assert.equal(status.json.data.whatsapp.status, "CONNECTED");
+  const catalogue = s9.responses.find((entry) => entry.path === "/v1/services").json.data;
+  assert.equal(catalogue.editable, true);
+  const corte = catalogue.items.find((item) => item.id === "visual-compare-s9");
+  assert.equal(corte.name, "Corte feminino");
+  assert.equal(corte.durationMinutes, 45);
+  assert.equal(corte.priceType, "FIXED");
+  assert.equal(corte.price, 90);
+  assert.equal(corte.colorToken, "SKY");
+  assert.equal(corte.needsReview, false);
+  assert.deepEqual(s9.responses.find((entry) => entry.path.endsWith("/ai-instruction")).json.data, { content: "" });
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    for (const route of ["/v1/services", "/v1/services/visual-compare-s9", "/v1/services/visual-compare-s9/ai-instruction"]) {
+      assert.equal(pickFixedResponse(s9, method, route), null, `S9: ${method} ${route} não deveria casar`);
+    }
+  }
+  assert.equal(pickFixedResponse(s9, "GET", "/v1/settings"), null, "S9: /v1/settings vem da conta de teste");
+  const last = s9.steps[s9.steps.length - 1];
+  assert.deepEqual(last, { waitFor: "Salvar antes de sair?" });
+  assert.ok(s9.steps.some((step) => step.clickRole?.name === "Aumentar duração"), "S9: a duração sobe a 50 min");
+  assert.ok(s9.steps.some((step) => step.clickRole?.name === "Voltar para serviços" && step.clickRole.role === "link"), "S9: clica no x da barra");
+  assert.deepEqual(s9.steps.filter((step) => step.press).map((step) => step.press), ["Control+A", "9", "5"], "S9: o preço vai a R$ 95");
+  assert.equal(s9.steps.some((step) => step.clickRole?.name === "Salvar alterações" || step.clickRole?.name === "Descartar"), false, "S9: nenhum passo grava nem descarta");
+  assert.match(s9.notes, /Goal151/);
 });

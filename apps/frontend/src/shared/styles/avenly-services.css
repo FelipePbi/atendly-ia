@@ -1424,3 +1424,185 @@
   height: 54px;
   min-height: 0;
 }
+
+/*
+ * Salvar antes de sair (S9, Goal151). O quadro é uma folha no celular e um
+ * diálogo de 480 px do tablet em diante; não tem "Fechar" no cabeçalho.
+ */
+.service-leave-overlay {
+  position: fixed;
+  z-index: var(--at-z-dialog);
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(34, 30, 26, 0.38);
+}
+.service-leave-sheet {
+  width: 100%;
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 20px 46px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  border-radius: 24px 24px 0 0;
+  background: #fffdfa;
+  box-shadow: 0 -12px 40px rgba(34, 30, 26, 0.18);
+  box-sizing: border-box;
+}
+.service-leave-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: #d6cec2;
+  align-self: center;
+}
+.service-leave-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.service-leave-title {
+  margin: 0;
+  font-family: var(--font-display, Literata, Georgia, serif);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+.service-leave-sentence {
+  margin: 0;
+  color: #5f574e;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.service-leave-sentence strong {
+  color: #221e1a;
+  font-weight: 700;
+}
+.service-leave-note {
+  margin: 0;
+  color: #716859;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.service-leave-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* O quadro dá `height: 52px` sem `box-sizing`: com a borda de 1 px o "Descartar" mede 54 px. */
+.service-leave-save,
+.service-leave-discard {
+  height: 52px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: content-box;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: normal;
+  cursor: pointer;
+}
+.service-leave-save {
+  color: #f7f4ef;
+  background: #0f5f63;
+}
+.service-leave-save:not(:disabled):is(:hover, :active) {
+  background: #0b484c;
+}
+.service-leave-save:disabled {
+  color: var(--disabled-fg);
+  background: var(--disabled-bg);
+  cursor: not-allowed;
+}
+.service-leave-discard {
+  border: 1px solid #d6cec2;
+  color: #8a2a21;
+  background: transparent;
+}
+.service-leave-discard:hover {
+  border-color: #c9c0b3;
+  background: #efeae2;
+}
+.service-leave-discard:active {
+  background: #e5ded4;
+}
+.service-leave-continue {
+  padding: 6px 0;
+  border: 0;
+  color: #0f5f63;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: normal;
+  text-align: center;
+  cursor: pointer;
+}
+.service-leave-continue:hover {
+  color: #0b484c;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.service-leave-continue:active {
+  color: #0b484c;
+}
+/* No celular o quadro põe `opacity: .5` no topo e no corpo atrás do véu. */
+@media (max-width: 767px) {
+  .service-form-screen.is-leaving > :is(.pushed-bar, .service-form-body) {
+    opacity: 0.5;
+  }
+}
+@media (min-width: 768px) {
+  .service-leave-overlay {
+    align-items: center;
+    justify-content: center;
+  }
+  .service-leave-sheet {
+    width: 480px;
+    max-width: calc(100% - 40px);
+    max-height: calc(100% - 80px);
+    padding: 22px 24px 24px;
+    border-radius: 20px;
+    box-shadow: 0 24px 64px rgba(34, 30, 26, 0.28);
+  }
+  .service-leave-handle {
+    display: none;
+  }
+}
+/* O quadro do tablet em pé mede 480 px; o de 1024 px em diante, 440 px. */
+@media (min-width: 1024px) {
+  .service-leave-sheet {
+    width: 440px;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .service-leave-overlay {
+    animation: at-fade 0.2s ease-out both;
+  }
+  .service-leave-sheet {
+    animation: at-sheet 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  :is(.service-leave-save, .service-leave-discard) {
+    transition:
+      background-color 160ms cubic-bezier(0.2, 0.7, 0.2, 1),
+      border-color 160ms cubic-bezier(0.2, 0.7, 0.2, 1),
+      color 160ms cubic-bezier(0.2, 0.7, 0.2, 1),
+      transform 120ms ease;
+  }
+  :is(.service-leave-save:not(:disabled), .service-leave-discard):active {
+    transform: scale(0.98);
+  }
+  .service-leave-continue {
+    transition: color 160ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+}
+@media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
+  .service-leave-sheet {
+    animation: at-dialog 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+}

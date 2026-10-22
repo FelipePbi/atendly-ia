@@ -73,7 +73,7 @@ describe("alvo CL8 do visual:compare (perfil com responsável)", () => {
     expect(cl8.file).toBe(FILE);
     expect(cl8.steps).toBeUndefined();
     expect(targets.filter((item) => item.code === "CL8")).toHaveLength(1);
-    expect(targets).toHaveLength(103);
+    expect(targets).toHaveLength(104);
   });
 
   test("o CL8 declara só GET, com requestId, e os GET que o perfil faz", () => {

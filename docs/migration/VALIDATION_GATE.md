@@ -10507,3 +10507,167 @@ Goal150 aceito na rodada 1 de 1 ([review150](reviews/150-review.md)), em review 
 - Aceito sem prova completa: o typecheck, o lint e os `goal150` do IA Loop na árvore A (repetidos pelo Developer na B); os quatro controles negativos, na árvore A e não refeitos pelo Tech Lead; a causa dos 4 a 6 px da letra "A" do Goal149, registrada como provável; a largura da linha em 360 px por captura (o `validate:ui` cobre o overflow); e a contagem de testes por passo de `validate:core`.
 
 Esta seção traz os números da rodada 1, na árvore B (`code-v1:fca9b804…8edf662f`) para a suíte, `test:gate`, `validate:core` e `validate:ui`, e na árvore A para o typecheck, o lint e os `goal150` do IA Loop (repetidos na B pelo Developer).
+
+## Sair do serviço com alterações não salvas igual ao protótipo, do Goal151
+
+Rodada 1, 2026-10-09, na worktree `goal-151`. Baseline `f604dc9` (`HEAD` `2769f27`, que só difere dela em `docs/`). WU-01: as partidas, as três capturas da baseline e a função das mudanças; WU-02: a guarda, a sheet e o CSS; WU-03: o alvo S9; WU-04: a fidelidade visual, as medidas e uma correção de CSS; WU-05: os controles negativos; WU-06 a WU-12: a verificação determinística; WU-13: estes registros. Todas as unidades terminaram `COMPLETED` na primeira tentativa (`attemptId` `a1`), sem DIAG nem FIX. **Há uma única árvore de código nos números:** `code-v1:2af8f60a8a12a695876a4c87dac9d743ec4920cc6ee2a7af6b51b9a34a1b5fba`, a que o harness registrou em todos os sete gates (WU-06 a WU-12), depois da última edição de código (o `line-height` dos botões, em WU-04) e dos controles negativos (WU-05), que voltaram ao byte original.
+
+### Contagens
+
+| Suíte | Partida (baseline, antes da primeira edição, WU-01, 2026-10-09 20:05:01 a 20:06:03 -0300) | Final (rodada 1, árvore `2af8f60a…`) | Diferença |
+| --- | --- | --- | --- |
+| Frontend (`npx vitest run` em `apps/frontend`) | **214** arquivos e **3113** testes, saída 0 | **217** arquivos e **3176** testes passando | +3 arquivos e +63 (`goal151-mudancas-servico.test.ts` 36, `goal151-guarda-servico.test.tsx` 19 e `goal151-alvo-captura.test.ts` 8) |
+| `goal151` do frontend (`npx vitest run goal151`) | arquivos novos | **63** em 3 arquivos | — |
+| `scripts/tests/visual-responses.test.mjs` | **80** passando, 0 falhas | **81** passando, 0 falhas | +1 (o teste de conteúdo do S9) |
+| `test:gate` | **313** (Goal150) | **314** testes, 314 passando, 0 falhas, 0 pulados | +1 |
+
+**Como a partida foi medida.** Na worktree limpa em `f604dc9`, antes da primeira edição: `cd apps/frontend && npx vitest run` (20:05:01; 214 arquivos e 3113 testes, 54,91 s) e `node --test scripts/tests/visual-responses.test.mjs` (20:06:02; 80 testes, 80 passando, 0 falhas, cerca de 0,9 s). Bate com a última contagem aceita (Goal150: 214 arquivos e 3113 testes; `visual-responses` 80). Passos intermediários do mesmo frontend: 215 arquivos e 3149 testes depois de WU-01 (+36) e 216 e 3168 depois de WU-02 (+19); 217 e 3176 com o alvo S9 (+8).
+
+Gates da execução final, rodados pelo IA Loop (todos com `attemptId` `a1`, publicados entre 21:01 e 21:06 -0300, e todos na mesma árvore):
+
+| Gate | Unidade | Comando | Resultado |
+| --- | --- | --- | --- |
+| Typecheck | WU-06 | `npx tsc --noEmit` em `apps/frontend` | saída 0 (1863 ms) |
+| Lint | WU-07 | `npm run lint` em `apps/frontend` | saída 0 (20,7 s) |
+| Testes `goal151` | WU-08 | `npx vitest run goal151` em `apps/frontend` | saída 0 (5,9 s), 3 arquivos e **63** testes |
+| Testes do frontend | WU-09 | `npm test` em `apps/frontend` | saída 0 (55,4 s), **217** arquivos e **3176** testes passando |
+| `test:gate` | WU-10 | `npm run test:gate` | saída 0 (1,6 s), **314** testes, 314 passando, 0 falhas, 0 pulados |
+| `validate:core` | WU-11 | `npm run validate:core` | saída 0 (128,4 s), 17 passos, **15 passaram**, 0 falharam, 2 pulados (`test:bff` e `test:health-worker`); `audit:static` com 34 verificações, 33 passaram e 1 pulada (`production_health`) |
+| `validate:ui` | WU-12 | `npm run validate:ui` | saída 0 (46,6 s), **169 passed**, 21 pulados, retentativas **0** ("every test passed on its first attempt") |
+
+Conferência do Developer (WU-13) sobre a mesma árvore, com os arquivos de código intocados desde WU-12: `sha256sum -c` dos quatro arquivos que os controles negativos mutam deu `OK` (lista abaixo) e `git diff --check` deu saída 0 antes e depois de escrever os três registros. O `git diff --check` do plano (WU-14) roda depois destes registros e é do harness.
+
+**O que não foi contado.** O relatório de `validate:core` não traz contagem de testes por passo, só a saída 0 e os passos. `validate:integration` e os typechecks do BFF e do Scheduling não fazem parte do plano deste Goal (nada muda no BFF, no Scheduling, no contrato nem no banco) e não foram rodados. O relatório do `test:gate` não registra o `npx prisma generate` dos três serviços (lição 8); o gate saiu 0.
+
+### As três capturas e o ruído da baseline (WU-01 e WU-04)
+
+`npm run visual:compare -- --target S3,S4,S7` rodado três vezes na baseline `f604dc9` antes da primeira edição (WU-01, 20:06 a 20:08): o diff % (celular / tablet em retrato / tablet em paisagem / desktop) foi igual nas três: S3 6,3 / 2,8 / 12,8 / 4,3; S4 9,9 / 6,0 / 13,7 / 5,3; S7 7,2 / 1,1 / 11,7 / 3,1. Comparadas `app.png` a `app.png`, duas a duas, o máximo foi de **49 px** diferentes por imagem (S7 em paisagem), com 0 px em S3 e S4 no celular e no retrato e em S7 no desktop, 8 px em S3 e S4 no desktop, 14 px em S7 no celular e no retrato e 40 a 48 px em paisagem de S3 e S4.
+
+Para a comparação com a árvore final, WU-04 refez a baseline: com um backup e `sha256sum` conferido, voltou só `ServiceForm.tsx` e `avenly-services.css` a `f604dc9` (os arquivos novos `serviceChanges.ts` e `ServiceLeaveGuard.tsx` ficaram sem uso), capturou S3, S4 e S7 três vezes (`base1` a `base3`), restaurou os dois arquivos (`sha256sum` idêntico, `git status` igual) e capturou os quatro alvos três vezes depois do ajuste de CSS (`final1` a `final3`). Não ficou registrado se a pilha era a do harness ou uma própria; a baseline e a final foram capturadas no mesmo ambiente, que é o que a lição 1 exige. Um login 429 do BFF atrasou a baseline; a captura foi repetida depois de esperar. Os números abaixo foram recalculados por WU-13 sobre essas seis pastas (script de canvas no Chromium do Playwright; **qualquer** diferença de canal conta, e o delta é o maior delta de um canal em uma imagem), pixels diferentes / delta máximo.
+
+**Ruído (mesma árvore, capturas diferentes):**
+
+| Imagem | baseline 1×2 | baseline 2×3 | baseline 1×3 | final 1×2 | final 2×3 | final 1×3 |
+| --- | --- | --- | --- | --- | --- | --- |
+| S3 desktop | 8 / 5 | 0 / 0 | 8 / 5 | 8 / 5 | 0 / 0 | 8 / 5 |
+| S3 paisagem | 22 / 21 | 0 / 0 | 22 / 21 | 41 / 21 | 22 / 21 | 19 / 1 |
+| S4 desktop | 0 / 0 | 0 / 0 | 0 / 0 | 8 / 5 | 0 / 0 | 8 / 5 |
+| S4 paisagem | 0 / 0 | 40 / 21 | 40 / 21 | 40 / 21 | 0 / 0 | 40 / 21 |
+| S7 desktop | 0 / 0 | 35 / 5 | 35 / 5 | 0 / 0 | 16 / 16 | 16 / 16 |
+| S7 celular | 0 / 0 | 14 / 2 | 14 / 2 | 0 / 0 | 0 / 0 | 0 / 0 |
+| S7 paisagem | 0 / 0 | 49 / 21 | 49 / 21 | 0 / 0 | 49 / 21 | 49 / 21 |
+| S7 retrato | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 14 / 2 | 14 / 2 |
+
+S3 no celular e no retrato e S4 no celular e no retrato dão 0 / 0 em todos os pares. Teto do ruído: **49 px** e delta **21**, em S7 em paisagem, nas duas árvores.
+
+**Tabela por imagem: baseline contra final, capturas de mesmo número (1×1 / 2×2 / 3×3), pixels diferentes / delta máximo.**
+
+| Alvo | Device | baseline 1 × final 1 | baseline 2 × final 2 | baseline 3 × final 3 |
+| --- | --- | --- | --- | --- |
+| S3 | celular | 0 / 0 | 0 / 0 | 0 / 0 |
+| S3 | tablet em retrato | 0 / 0 | 0 / 0 | 0 / 0 |
+| S3 | tablet em paisagem | 41 / 21 | 22 / 21 | 0 / 0 |
+| S3 | desktop | 8 / 5 | 8 / 5 | 8 / 5 |
+| S4 | celular | 0 / 0 | 0 / 0 | 0 / 0 |
+| S4 | tablet em retrato | 0 / 0 | 0 / 0 | 0 / 0 |
+| S4 | tablet em paisagem | 40 / 21 | 0 / 0 | 40 / 21 |
+| S4 | desktop | 0 / 0 | 8 / 5 | 8 / 5 |
+| S7 | celular | 0 / 0 | 0 / 0 | 14 / 2 |
+| S7 | tablet em retrato | 14 / 2 | 14 / 2 | 0 / 0 |
+| S7 | tablet em paisagem | 49 / 21 | 49 / 21 | 49 / 21 |
+| S7 | desktop | 0 / 0 | 0 / 0 | 51 / 16 |
+
+**Leitura.** Nenhuma imagem de S3, S4 ou S7 difere fora do ruído: o maior delta é 21, igual ao do ruído, e o maior número de pixels é 51 (S7 no desktop, captura 3), **2 px acima** do teto de 49 px visto dentro de uma mesma árvore. O 51 é provável soma de 35 px que a captura 3 da baseline difere das outras (baseline 2×3) e 16 px que a captura 3 da final difere das outras (final 2×3), com delta 16, abaixo de 21; não foi isolado em separado. O diff % de uma casa decimal do `REPORT.md` é **idêntico à baseline nos 12 pares** (S3, S4 e S7, quatro devices). Com o limiar de canal acima de 8 usado por WU-04, a diferença baseline contra final foi de 0 px, salvo 1 px em paisagem de S3, S4 e S7 e até 4 px no desktop de S7.
+
+### Fidelidade visual
+
+**Diff % do S9 contra o quadro (REPORT.md, três capturas finais iguais entre si):** celular **1,4 %**, tablet em retrato **5,7 %**, tablet em paisagem **7,0 %**, desktop **5,4 %**. S4, S7 e S3 iguais à baseline (acima). Os `side-by-side.png` dos quatro alvos nos quatro devices (16 imagens, em `apps/frontend/e2e-results/visual/<página>-<quadro>-<device>/side-by-side.png`) foram **abertos um a um** por WU-04 (40 aberturas: 16 da captura final, 16 da segunda e 8 da terceira, S9 e S4 × 4 devices):
+
+`servicos-S9-mobile`, `servicos-S9-tablet-portrait`, `servicos-S9-tablet-landscape`, `servicos-S9-desktop`, `servicos-S4-mobile`, `servicos-S4-tablet-portrait`, `servicos-S4-tablet-landscape`, `servicos-S4-desktop`, `servicos-S7-mobile`, `servicos-S7-tablet-portrait`, `servicos-S7-tablet-landscape`, `servicos-S7-desktop`, `servicos-S3-mobile`, `servicos-S3-tablet-portrait`, `servicos-S3-tablet-landscape` e `servicos-S3-desktop`.
+
+**Medidas do S9 aberto, no DOM, app contra quadro (px).** Diferença de **0,00** em x, y, largura e altura nos quatro devices:
+
+| Device | Caixa | Largura | Topo (y) | Altura |
+| --- | --- | --- | --- | --- |
+| Celular | sheet | 402 | 430,52 | 381,48 |
+| Celular | alça | 40 | — | 4 |
+| Celular | título | — | 462,52 | 28,8 |
+| Celular | frase | — | 499,31 | 45 |
+| Celular | nota | — | 552,31 | 37,69 |
+| Celular | "Salvar alterações" | — | 608 | 52 |
+| Celular | "Descartar" | — | 670 | 54 (52 mais a borda de 1 px, como o quadro) |
+| Celular | "Continuar editando" | — | 734 | 32 |
+| Tablet em retrato | diálogo | 480 (x 144) | 337,25 | 349,48 |
+| Tablet em retrato | título, frase, nota | — | 359,25 / 396,05 / 449,05 | — |
+| Tablet em retrato | "Salvar", "Descartar", "Continuar" | — | 504,73 / 566,73 / 630,73 | — |
+| Tablet em paisagem e desktop | diálogo | 440 (x 292 e 463) | 209,25 | 349,48 |
+| Tablet em paisagem e desktop | título, frase, nota | — | 231,25 / 268,05 / 321,05 | — |
+| Tablet em paisagem e desktop | "Salvar", "Descartar", "Continuar" | — | 376,73 / 438,73 / 502,73 | — |
+
+Raio, padding, gap, sombra, cores e fontes iguais ao quadro. As únicas diferenças de estilo computado foram a pilha de fallback do `font-family` (mesma primeira família) e o `line-height` dos botões "Salvar alterações" e "Descartar" (o app tinha 1,5 e o quadro `normal`), **corrigido em WU-04** (`line-height: normal`; o texto é centralizado em flex com altura fixa, e o diff do S9 no celular foi de 1,7 % para 1,4 %). Na primeira medida (WU-02, alvo temporário) o "Continuar editando" também tinha `line-height` 1,5 e a folha ficava 3 px mais alta, e o diálogo de 1024 px em diante tinha 480 px no lugar de 440 px; os dois foram corrigidos em WU-02, antes de WU-04.
+
+**Medidas que o `validate:ui` não alcança (S9 aberto, WU-04):**
+
+| Medida | Resultado |
+| --- | --- |
+| Contraste do texto contra `#FFFDFA` | título **16,30**; frase **6,99**; `<strong>` **16,30**; nota **5,41**; "Salvar alterações" (sobre `#0F5F63`) **6,75**; "Descartar" **8,50**; "Continuar editando" **7,29**; todos acima de 4,5 |
+| Alvo de toque de "Continuar editando" | **32 px** de altura (mínimo AA de 24 px) |
+| Overflow horizontal da sheet em 360 px | documento 360 / 360 e sheet 360 / 360; em 390 px, 390 / 390; sem overflow nos quatro devices de captura |
+
+**Diferenças que restam, com a causa.** S9: o formulário atrás do véu é o formulário real do app, no lugar dos três cartões vazios a 50 % do quadro; a casca (sidebar, abas, aviso de WhatsApp desconectado, lista ao lado com busca e dados da conta, barra inferior); "de Corte feminino" no lugar de "do" (o artigo depende do nome); a barra de status e o indicador do iPhone do quadro. S4: dados da conta (Coloração × Corte feminino, 5 × 6 ativos, a ordem da lista, o campo de busca, "Notificações" na sidebar), o aviso de WhatsApp desconectado em S3 e S4, e o S4 do quadro em estado "alterações não salvas" que a conta de captura não reproduz; são as mesmas da baseline (WU-04). Nenhuma foi introduzida por este Goal: as imagens de S3, S4 e S7 são iguais à baseline fora do ruído. Todas nas `notes` dos alvos e em D-165, item 9.
+
+### Controles negativos (depois da última edição de código, WU-05, árvore `2af8f60a…`)
+
+Método: `sha256sum` dos quatro arquivos que os controles mutam e cópia de cada um em `scratchpad` fora do repositório; a mutação é aplicada, o teste roda, o arquivo é restaurado por `cp` e `sha256sum -c` confere (`OK` depois de cada reversão e no fim); `git status --short` ficou igual ao do início. Partida de WU-05: `cd apps/frontend && npx vitest run goal151` deu 3 arquivos e 63 testes passando, e `node --test scripts/tests/visual-responses.test.mjs` deu 81 passando e 0 falhas; depois de reverter tudo, os mesmos números (63 e 81). Hashes:
+
+```
+96890e4975e14dd39b4bbe26a7861a868a98a89d7365533207b017aed76f27e1  apps/frontend/src/features/services/serviceChanges.ts
+858a3e391f1cca4f98f63ab84b9b01c49da74f0465af44f1fe9f5110e647ed2a  apps/frontend/src/features/services/ServiceLeaveGuard.tsx
+7f0244f4abcf76e285482888581639d4fb9b563b1bcb8bfff85a00ff6ab89bfa  apps/frontend/src/features/services/ServiceForm.tsx
+08bf30c5682ed7564dbffff64b246b3f28a67690423e2738ec54a7fa989f919f  apps/frontend/e2e/visual/targets.json
+```
+
+| Controle | Mutação | Comando, arquivo e teste que reprovou | Mensagem exata |
+| --- | --- | --- | --- |
+| (a) a função das mudanças contando um campo que voltou ao original | em `serviceChanges.ts`, `if (durationBefore !== durationAfter)` virou `if (durationBefore !== durationAfter \|\| durationAfter !== null)` | `cd apps/frontend && npx vitest run goal151` (26 reprovados e 37 aprovados). `tests/goal151-mudancas-servico.test.ts` > "Goal151 — describeServiceChanges > campo de volta ao valor original não conta > só o campo devolvido sai da frase". Também reprovaram, no mesmo arquivo, "duração e preço editados e devolvidos" e "o formulário igual ao serviço carregado não muda nada", e, em `goal151-guarda-servico.test.tsx`, "um campo que volta ao valor original deixa de contar" | `expected 'Você mudou o nome (Corte feminino → C…' to be 'Você mudou o nome (Corte feminino → C…' // Object.is equality`; esperado "Você mudou o nome (Corte feminino → Corte e escova) e o preço (R$ 90 → R$ 95) de Corte feminino.", recebido "Você mudou o nome (Corte feminino → Corte e escova), a duração (45 → 45 min) e o preço (R$ 90 → R$ 95) de Corte feminino."; "duração e preço editados e devolvidos": `expected true to be false // Object.is equality`; "um campo que volta ao valor original deixa de contar": `expected <span></span> to be null` |
+| (b) a guarda sem impedir a navegação do link da lista ao lado | em `ServiceLeaveGuard.tsx`, `if (!anchor.classList.contains("pushed-bar-back")) return null;` em `destinationOf`, antes da checagem de `download` (só o "x" da barra seria interceptado) | `cd apps/frontend && npx vitest run goal151` (3 reprovados e 60 aprovados). `tests/goal151-guarda-servico.test.tsx` > "S9 — quando a guarda abre > uma linha da lista ao lado e um link da casca abrem a guarda". Também reprovaram "Descartar numa linha da lista empilha o destino" e "Salvar alterações a partir de uma linha da lista empilha o destino" | `TestingLibraryElementError: Unable to find role="dialog"`; nos outros dois, `Unable to find role="button" and name "Descartar"` e `Unable to find role="dialog" and name "Salvar antes de sair?"` |
+| (c) "Descartar" enviando o `PATCH` | em `ServiceForm.tsx`, `formRef.current?.requestSubmit();` em `discardAndLeave`, antes de `leaveGuard.release()` | `cd apps/frontend && npx vitest run goal151` (3 reprovados e 60 aprovados). `tests/goal151-guarda-servico.test.tsx` > "S9 — as três saídas > Descartar não envia nada e navega pelo destino guardado". Também reprovaram "Descartar numa linha da lista empilha o destino" e "S9 — modo de revisão > o ‹ abre a guarda e Salvar fica desabilitado com a duração vazia" | `AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times`; o `update` recebeu `["s1", {durationMinutes: 50, name: "Corte feminino", price: 90, priceType: "FIXED", …}]` |
+| (d1) o S9 com um passo `POST` | em `targets.json`, a linha 4635 de `"GET"` para `"POST"` (feito por `sed` de uma linha, sem reformatar o arquivo) | frontend: `cd apps/frontend && npx vitest run goal151-alvo` (1 reprovado e 7 aprovados), `tests/goal151-alvo-captura.test.ts` > "alvo S9 do visual:compare (guarda de saída do serviço) > declara só GET, com requestId, e nenhum status de erro". Raiz: `node --test scripts/tests/visual-responses.test.mjs` (37 passando e 44 reprovados), "targets.json: S9 dá o Corte feminino de 45 min e R$ 90 no id da rota, só GET, e os passos chegam ao título do quadro" | frontend: `AssertionError: expected [ 'GET /v1/status', …(2) ] to deeply equal [ 'GET /v1/status', …(2) ]`, com `-   "GET /v1/services"` e `+   "POST /v1/services"`. mjs: `Error: targets.json: alvo S9 (Servicos.dc.html): responses[1].method "POST" não é aceito; só "GET"` (`scripts/lib/visual-responses.mjs:60`). Os outros 43 reprovados do mjs são efeito colateral: `declaringTargets` valida todos os alvos e lança no S9 |
+| (d2) o S9 sem `/v1/services` | em `targets.json`, a linha 4636 de `"/v1/services"` para `"/v1/customers"` | frontend: `npx vitest run goal151-alvo` (3 reprovados e 5 aprovados): "declara só GET, com requestId, e nenhum status de erro", "a lista traz o Corte feminino de 45 min, R$ 90 e SKY no id da rota, editável" e "cada caminho é rota do contrato e cada corpo é válido para o schema da rota". Raiz: `node --test scripts/tests/visual-responses.test.mjs` (80 passando e 1 reprovado), o mesmo teste de conteúdo do S9 | frontend: `AssertionError: expected [ 'GET /v1/status', …(2) ] to deeply equal [ 'GET /v1/status', …(2) ]` (`-   "GET /v1/services"`, `+   "GET /v1/customers"`), `Error: S9 sem resposta de /v1/services`. mjs: `AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:` (`+ 'GET /v1/customers'`, `- 'GET /v1/services'`, `scripts/tests/visual-responses.test.mjs:1582`) |
+
+O controle (d) reprovou **os dois** testes que o Goal nomeia (o `goal151` do alvo e `visual-responses.test.mjs`), nas duas variantes. Uma primeira tentativa de (d) reescreveu o `targets.json` inteiro com `JSON.stringify`, o que mudou a formatação e fez outros testes do mjs reprovarem por motivo alheio; foi descartada, revertida e refeita por `sed` de uma linha. As mensagens foram copiadas da saída bruta de WU-05 (guardada fora do repositório); o vitest corta o corpo longo com `…`, e o texto acima é o literal dele.
+
+### Testes ajustados
+
+- `apps/frontend/tests/goal144-alvos-captura.test.ts`: `expect(targets).toHaveLength(103)` virou `toHaveLength(104)`, no teste do alvo CL8. A asserção prova a contagem de alvos de `targets.json` (e que o CL8 é único); a única mudança de contagem é o S9 novo, e nada mais entrou ou saiu. A prova continua no mesmo teste, no mesmo arquivo.
+- `scripts/tests/visual-responses.test.mjs`: o título e a lista esperada dos alvos que declaram `responses` ganharam o S9 ("… L2 e L7, S2, S7 e S9"), porque o S9 declara `responses`; e um teste novo, o de conteúdo do S9 (80 para 81). Nenhum outro valor esperado mudou.
+- Nenhum teste existente lia o `dirty` nem o texto "alterações não salvas" (busca em `tests` e `e2e`), então a troca do `dirty` por `hasChanges` não ajustou nenhuma asserção. Nenhuma asserção existente foi afrouxada, pulada ou desabilitada.
+
+### Escopo
+
+Mudaram: `apps/frontend/src/features/services/ServiceForm.tsx`, os dois arquivos novos `serviceChanges.ts` e `ServiceLeaveGuard.tsx`, `apps/frontend/src/shared/styles/avenly-services.css` (+182, só `.service-leave-*` e `.service-form-screen.is-leaving`), `apps/frontend/e2e/visual/targets.json` (o S9, +194), `scripts/tests/visual-responses.test.mjs`, `apps/frontend/tests/goal144-alvos-captura.test.ts`, os três testes novos `goal151-*` e os três registros. Não mudaram: `shared/ui/Dialog.tsx`, `shared/layout/PushedBar.tsx`, `ServiceList.tsx`, a casca e `avenly.css`, `ListDetailLayout`, o BFF, a IA, o Scheduling, o contrato, `PUBLIC_API_V1.md`, o banco, `scripts/visual-compare.mjs`, `scripts/lib/visual-responses.mjs`, `e2e/routes.ts` e `e2e/authenticated-matrix.spec.ts`. `goals/`, `reviews/`, `MIGRATION_STATUS.md` e `MASTER_PLAN.md` não foram editados.
+
+### Desvios do texto do Goal, para o review
+
+- `ServiceForm.tsx` e `colorTokenOptions`: o Goal lista `features/services/` para a ligação, e a constante `colorTokenOptions` saiu de `ServiceForm.tsx` para `serviceChanges.ts` (exportada) para não duplicar os nomes de cor; sem mudança de comportamento.
+- A baseline de S3, S4 e S7 usada na tabela por imagem é a refeita em WU-04 (só `ServiceForm.tsx` e `avenly-services.css` voltados a `f604dc9`); a de WU-01 (worktree limpa em `f604dc9`) deu os mesmos diff % e um ruído de até 49 px.
+- Não ficou registrado se o `visual:compare` usou uma pilha descartável própria ou a que o harness deixou pronta; baseline e final no mesmo ambiente.
+- A tabela por imagem e o ruído foram recalculados por WU-13 a partir das capturas de WU-04 (qualquer diferença de canal; WU-04 tinha usado o limiar de canal acima de 8).
+- O `prettier --check` acusa estilo em arquivos novos, mas também em arquivos já versionados; o `format:check` não é gate do Goal.
+
+### Não executado
+
+- `validate:integration`, e o typecheck do BFF e do Scheduling: nada muda nesses serviços, no contrato nem no banco, e o plano do Goal não os pede.
+- A contagem de testes por passo de `validate:core`.
+- O registro do `npx prisma generate` dos três serviços (lição 8) na saída do `test:gate`.
+- Conferência em aparelho real: o Goal pede as capturas do `visual:compare`, não aparelho; o voltar do navegador e o gesto do Android estão fora da guarda (D-165, item 4).
+
+### Verificação final do Developer
+
+`git diff --check` depois de escrever os três registros: saída 0, sem erro de espaço em branco; `git diff --stat -- docs` mostra só acréscimos (206 inserções, 0 remoções: `DECISIONS.md` +26, `CURRENT_STATE.md` +16 e `VALIDATION_GATE.md` +164). O `git diff --check` do plano (WU-14) repete a conferência.
+
+### Aceite
+
+Pendente: Goal151 aguarda o review do Tech Lead Agent. D-165 está `PROPOSED`.
+
+Esta seção traz os números da rodada 1, todos na árvore `code-v1:2af8f60a8a12a695876a4c87dac9d743ec4920cc6ee2a7af6b51b9a34a1b5fba`.

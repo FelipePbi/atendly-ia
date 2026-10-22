@@ -42,6 +42,16 @@ export const LIVENESS = Object.freeze({
  */
 export const BOOT_TOLERANCE_MS = 120_000;
 
+/**
+ * Two start times within this distance are the same process.
+ *
+ * A start time stamped by the process itself (`now - process.uptime()`) and the
+ * one the OS reports for the same pid (CIM CreationDate, `ps lstart`) come from
+ * different clocks and roundings, so they differ by up to a few hundred
+ * milliseconds for ONE process. A recycled pid starts seconds to hours later.
+ */
+export const PROCESS_START_TOLERANCE_MS = 2_000;
+
 /** When this machine last booted, derived from uptime. */
 export function currentBootAt(now = Date.now()) {
   return now - Math.round(uptime() * 1000);
@@ -64,6 +74,11 @@ export function sameBoot(a, b, { toleranceMs = BOOT_TOLERANCE_MS } = {}) {
   const tb = Date.parse(b);
   if (Number.isNaN(ta) || Number.isNaN(tb)) return null; // unknowable, not equal
   return Math.abs(ta - tb) <= toleranceMs;
+}
+
+/** True when two start times are close enough to be the same process; null when unparseable. */
+export function sameProcessStart(a, b, { toleranceMs = PROCESS_START_TOLERANCE_MS } = {}) {
+  return sameBoot(a, b, { toleranceMs });
 }
 
 /**

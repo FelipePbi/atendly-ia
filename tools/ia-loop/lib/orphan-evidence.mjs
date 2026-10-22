@@ -23,7 +23,7 @@
  * for evidence of absence.
  */
 
-import { LIVENESS, sameBoot } from './process-inspector.mjs';
+import { LIVENESS, sameBoot, sameProcessStart } from './process-inspector.mjs';
 import { LEASE_STATUS, classifyLease } from './leases.mjs';
 
 export const OWNER_STATUS = Object.freeze({
@@ -172,7 +172,7 @@ export function judgeOwner({ lease, evidence, now = Date.now(), config }) {
   // 3. The pid is alive but it is not the same process.
   if (evidence.pidLiveness === LIVENESS.ALIVE) {
     if (evidence.leaseProcessStartedAt && evidence.observedProcessStartedAt) {
-      if (evidence.leaseProcessStartedAt !== evidence.observedProcessStartedAt) {
+      if (sameProcessStart(evidence.leaseProcessStartedAt, evidence.observedProcessStartedAt) === false) {
         return {
           status: OWNER_STATUS.ORPHAN_CONFIRMED,
           proof: 'PID_REUSED',

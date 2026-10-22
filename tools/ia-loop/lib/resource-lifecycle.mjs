@@ -28,7 +28,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-import { LIVENESS, createProcessInspector } from './process-inspector.mjs';
+import { LIVENESS, createProcessInspector, sameProcessStart } from './process-inspector.mjs';
 import { RESOURCE_STATUS } from './resource-registry.mjs';
 import { provePostgresOwnership, isCleanable } from './postgres-ownership.mjs';
 import { RESOURCE_TYPE_POSTGRES, stopTemporaryPostgres } from './temporary-postgres.mjs';
@@ -85,7 +85,7 @@ async function ownerProcessLooksAlive(resource, inspector) {
   if (!resource.ownerProcessStartTime) return { alive: null, detail: `Owner process ${pid} is alive but has no recorded start time to compare.` };
   const observed = await inspector.startedAt(pid);
   if (!observed) return { alive: null, detail: `Owner process ${pid}'s start time could not be observed.` };
-  if (observed !== resource.ownerProcessStartTime) {
+  if (sameProcessStart(observed, resource.ownerProcessStartTime) === false) {
     return { alive: false, detail: `Owner process ${pid} started at ${observed}, not ${resource.ownerProcessStartTime} — the id was recycled.` };
   }
   return { alive: true, detail: `Owner process ${pid} is the same one that created this resource.` };

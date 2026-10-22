@@ -159,6 +159,35 @@ test('an owner process still alive is left completely untouched by the scavenger
   assert.equal(driver.running.size, 1);
 }));
 
+test('an owner whose OS-reported start time differs by sub-second jitter is the same process, not a recycled pid', () => withDir(async (dir) => {
+  const driver = fakeDriver();
+  const { registry, resource } = await makeResource(dir, driver, { jobId: 'j4b', attemptId: 'j4b-a1' });
+  const inspector = {
+    ...fakeInspector(driver, { ownerAlive: true }),
+    startedAt: async (pid) => (pid === process.pid ? '2026-09-08T09:00:00.107Z' : '2026-09-08T10:00:00.000Z'),
+  };
+
+  const { report } = await scavengeOrphans(registry, { stateDir: dir, inspector, commandLineFn: (pid) => fakeCommandLine(pid, driver), driver });
+
+  assert.equal(report[0].verdict, 'OWNER_ALIVE');
+  assert.equal((await registry.get(resource.resourceId)).status, RESOURCE_STATUS.ACTIVE);
+  assert.equal(driver.running.size, 1);
+}));
+
+test('an owner pid whose start time is minutes away IS a recycled pid and the orphan is still cleaned', () => withDir(async (dir) => {
+  const driver = fakeDriver();
+  const { registry, resource } = await makeResource(dir, driver, { jobId: 'j4c', attemptId: 'j4c-a1' });
+  const inspector = {
+    ...fakeInspector(driver, { ownerAlive: true }),
+    startedAt: async (pid) => (pid === process.pid ? '2026-09-08T09:05:00.000Z' : '2026-09-08T10:00:00.000Z'),
+  };
+
+  const { report } = await scavengeOrphans(registry, { stateDir: dir, inspector, commandLineFn: (pid) => fakeCommandLine(pid, driver), driver });
+
+  assert.notEqual(report[0].verdict, 'OWNER_ALIVE');
+  assert.equal((await registry.get(resource.resourceId)).status, RESOURCE_STATUS.CLEANED);
+}));
+
 // 11/12 restated at the scavenger level: unknown ownership never authorises a kill
 test('owner gone but postgres ownership cannot be proven -> ORPHAN_SUSPECTED, never cleaned', () => withDir(async (dir) => {
   const driver = fakeDriver();

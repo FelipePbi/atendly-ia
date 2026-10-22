@@ -44,6 +44,31 @@ function tail(text, limit) {
 }
 
 /**
+ * The pattern as the action's own working directory will read it.
+ *
+ * A plan names a file the way git and every other part of the loop does, from
+ * the worktree root: `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`.
+ * A SCOPE action runs INSIDE `apps/ai-orchestrator`, and Vitest resolves a CLI
+ * filter against its own root, so that same string matches nothing and the run
+ * exits 1 with "No test files found" — a verification that failed by never
+ * loading the code it was pointed at, and then reported as a failure of that
+ * code. Measured on Goal 038 round 1.
+ *
+ * Stripping the scope prefix makes both spellings name the same file. It
+ * removes no filter and widens none: a pattern that does not start with the
+ * scope is passed through untouched, and a pattern that IS the scope becomes
+ * the scope directory itself rather than an empty argument, which would have
+ * dropped the filter entirely.
+ */
+export function resolveActionPattern({ pattern, cwdKind, scope }) {
+  if (!pattern || cwdKind !== ACTION_CWD.SCOPE || !scope) return pattern ?? null;
+  const normalisedScope = scope.replace(/\/+$/, '');
+  if (pattern === normalisedScope) return '.';
+  const prefix = `${normalisedScope}/`;
+  return pattern.startsWith(prefix) ? pattern.slice(prefix.length) : pattern;
+}
+
+/**
  * Runs one deterministic action.
  *
  * `spawnFn` is injected so tests can prove the whole path — including that no
@@ -64,7 +89,8 @@ export async function runDeterministicAction({
     ? join(worktree, unit.scope)
     : worktree;
 
-  const argv = [...spec.command, ...(spec.appendPattern && unit.pattern ? [unit.pattern] : [])];
+  const pattern = resolveActionPattern({ pattern: unit.pattern, cwdKind: spec.cwd, scope: unit.scope });
+  const argv = [...spec.command, ...(spec.appendPattern && pattern ? [pattern] : [])];
   const startedAt = Date.now();
 
   // A precondition the harness cannot satisfy is not a failure of the Goal,

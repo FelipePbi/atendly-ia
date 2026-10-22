@@ -11,7 +11,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 
-import { runDeterministicAction } from '../lib/deterministic-executor.mjs';
+import { ACTION_CWD } from '../lib/deterministic-actions.mjs';
+import { resolveActionPattern, runDeterministicAction } from '../lib/deterministic-executor.mjs';
 
 /** A fake child_process.ChildProcess, controllable from the test. */
 function fakeChild() {
@@ -198,4 +199,70 @@ test('10. a timeout kills the process and is reported distinctly from a real fai
   assert.equal(result.ok, false);
   assert.equal(result.signal, 'SIGKILL');
   assert.match(result.error, /TIMEOUT/);
+});
+
+test('11. a worktree-relative test pattern is resolved against the scope the action runs in', async () => {
+  // Goal 038 round 1: the plan pointed `targeted-tests` at
+  // `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` while the
+  // action runs inside `apps/ai-orchestrator`. Vitest resolves a CLI filter
+  // against its own root, matched no file, and exited 1 with "No test files
+  // found" — a green test file reported as a failure of the code it never
+  // loaded.
+  const seen = [];
+  const spawnFn = (command, args, opts) => {
+    seen.push({ args, cwd: opts.cwd });
+    const child = fakeChild();
+    queueMicrotask(() => child.emit('close', 0, null));
+    return child;
+  };
+
+  const result = await runDeterministicAction({
+    unit: unit({
+      action: 'targeted-tests',
+      scope: 'apps/ai-orchestrator',
+      pattern: 'apps/ai-orchestrator/tests/assistant/assistant.service.test.ts',
+    }),
+    worktree: '/repo/worktree',
+    spawnFn,
+    resolveTarget: (argv) => ({ command: argv[0], args: argv.slice(1) }),
+  });
+
+  assert.deepEqual(seen[0].args, ['vitest', 'run', 'tests/assistant/assistant.service.test.ts']);
+  assert.deepEqual(result.argv, ['npx', 'vitest', 'run', 'tests/assistant/assistant.service.test.ts'],
+    'argv reports what actually ran, prefix already stripped');
+  assert.equal(result.ok, true);
+});
+
+test('12. a pattern that is already scope-relative is passed through untouched', () => {
+  assert.equal(
+    resolveActionPattern({
+      pattern: 'tests/assistant/assistant.service.test.ts',
+      cwdKind: ACTION_CWD.SCOPE,
+      scope: 'apps/ai-orchestrator',
+    }),
+    'tests/assistant/assistant.service.test.ts',
+  );
+  // A different workspace's path is NOT stripped: it names no file under this
+  // scope, and silently rewriting it would invent a filter nobody wrote.
+  assert.equal(
+    resolveActionPattern({
+      pattern: 'apps/bff/tests/x.test.ts',
+      cwdKind: ACTION_CWD.SCOPE,
+      scope: 'apps/ai-orchestrator',
+    }),
+    'apps/bff/tests/x.test.ts',
+  );
+});
+
+test('13. stripping never produces an empty filter, and never applies to a WORKTREE action', () => {
+  // The whole scope as the pattern must stay a filter, not disappear: an empty
+  // argument would run every test file the config can see.
+  assert.equal(
+    resolveActionPattern({ pattern: 'apps/ai-orchestrator', cwdKind: ACTION_CWD.SCOPE, scope: 'apps/ai-orchestrator' }),
+    '.',
+  );
+  assert.equal(
+    resolveActionPattern({ pattern: 'apps/ai-orchestrator/tests/x.test.ts', cwdKind: ACTION_CWD.WORKTREE, scope: null }),
+    'apps/ai-orchestrator/tests/x.test.ts',
+  );
 });

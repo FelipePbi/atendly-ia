@@ -180,6 +180,51 @@ test('9. an unresolvable npm/npx on Windows fails closed before ever calling spa
   assert.match(result.error, /SPAWN_FAILED: Could not resolve a Windows entry point for "npm"/);
 });
 
+test('11. a targeted-tests pattern repeating the scope prefix is stripped before it reaches vitest', async () => {
+  const spawnFn = () => {
+    const child = fakeChild();
+    queueMicrotask(() => child.emit('close', 0, null));
+    return child;
+  };
+
+  const result = await runDeterministicAction({
+    unit: unit({
+      action: 'targeted-tests',
+      scope: 'apps/ai-orchestrator',
+      pattern: 'apps/ai-orchestrator/tests/assistant/assistant.service.test.ts',
+    }),
+    worktree: '/repo/worktree',
+    spawnFn,
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    result.argv,
+    ['npx', 'vitest', 'run', 'tests/assistant/assistant.service.test.ts'],
+    'the redundant scope prefix must not double up with cwd already inside scope',
+  );
+});
+
+test('12. a targeted-tests pattern already relative to scope is passed through unchanged', async () => {
+  const spawnFn = () => {
+    const child = fakeChild();
+    queueMicrotask(() => child.emit('close', 0, null));
+    return child;
+  };
+
+  const result = await runDeterministicAction({
+    unit: unit({
+      action: 'targeted-tests',
+      scope: 'apps/ai-orchestrator',
+      pattern: 'tests/assistant/assistant.service.test.ts',
+    }),
+    worktree: '/repo/worktree',
+    spawnFn,
+  });
+
+  assert.deepEqual(result.argv, ['npx', 'vitest', 'run', 'tests/assistant/assistant.service.test.ts']);
+});
+
 test('10. a timeout kills the process and is reported distinctly from a real failure', async () => {
   const spawnFn = () => {
     const child = fakeChild();

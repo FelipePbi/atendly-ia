@@ -64,7 +64,18 @@ export async function runDeterministicAction({
     ? join(worktree, unit.scope)
     : worktree;
 
-  const argv = [...spec.command, ...(spec.appendPattern && unit.pattern ? [unit.pattern] : [])];
+  // The planner writes `pattern` from habit as a repo-root-relative path
+  // (`apps/ai-orchestrator/tests/...`), the same shape `scope` and every other
+  // path in a plan use. But the process actually runs with `cwd` already
+  // inside `scope`, so that habit doubles the prefix and vitest's filter
+  // matches nothing — a silent "No test files found", not a test failure.
+  // Stripping a redundant `scope/` prefix makes the same intent resolve
+  // correctly regardless of which base the planner had in mind.
+  const pattern = spec.cwd === ACTION_CWD.SCOPE && unit.scope && unit.pattern?.startsWith(`${unit.scope}/`)
+    ? unit.pattern.slice(unit.scope.length + 1)
+    : unit.pattern;
+
+  const argv = [...spec.command, ...(spec.appendPattern && pattern ? [pattern] : [])];
   const startedAt = Date.now();
 
   // A precondition the harness cannot satisfy is not a failure of the Goal,

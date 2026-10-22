@@ -21,7 +21,8 @@
  */
 
 import { spawn } from 'node:child_process';
-import { join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { SpikeError } from './claude-process.mjs';
 import { ACTION_CWD, assertDeterministicAction } from './deterministic-actions.mjs';
@@ -43,6 +44,38 @@ function tail(text, limit) {
 }
 
 /**
+ * On Windows, `npm` and `npx` are `.cmd` wrappers, and Node refuses to spawn a
+ * `.cmd` directly without a shell (that refusal is the fix for
+ * CVE-2024-27980, where the shell hop it used to take silently was itself the
+ * injection). `shell: true` would get the process running again but hands
+ * argument parsing to cmd.exe, exactly the metacharacter risk this file's
+ * argv-only design exists to avoid.
+ *
+ * npm ships its real entry points, plain `.js` files that need no shell,
+ * right next to `node.exe`. Running those under `node.exe` — itself a real
+ * executable, never a batch file — reaches the same command with no shell
+ * opened at all.
+ */
+const WINDOWS_NPM_CLI_ENTRY = Object.freeze({ npm: 'npm-cli.js', npx: 'npx-cli.js' });
+
+function resolveWindowsNpmArgv(command, args) {
+  const entry = WINDOWS_NPM_CLI_ENTRY[command];
+  if (!entry) return null;
+  const cliPath = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', entry);
+  if (!existsSync(cliPath)) return null;
+  return { command: process.execPath, args: [cliPath, ...args] };
+}
+
+/** The `spawn` used when a caller does not inject its own (i.e. in production, never in tests). */
+function platformSpawn(command, args, options) {
+  if (process.platform === 'win32') {
+    const resolved = resolveWindowsNpmArgv(command, args);
+    if (resolved) return spawn(resolved.command, resolved.args, options);
+  }
+  return spawn(command, args, options);
+}
+
+/**
  * Runs one deterministic action.
  *
  * `spawnFn` is injected so tests can prove the whole path — including that no
@@ -52,7 +85,7 @@ export async function runDeterministicAction({
   unit,
   worktree,
   timeoutMs = DEFAULT_ACTION_TIMEOUT_MS,
-  spawnFn = spawn,
+  spawnFn = platformSpawn,
   env = process.env,
 }) {
   const spec = assertDeterministicAction(unit.action, `${unit.id}.action`);

@@ -44,6 +44,22 @@ function tail(text, limit) {
 }
 
 /**
+ * A targeted-tests/typecheck/lint pattern is a path into the Work Unit's
+ * `scope`. The command actually runs with `cwd` already inside that scope
+ * (see below), so a pattern a plan wrote repo-root-relative — the same shape
+ * `relevantFiles` uses everywhere else in a plan — would silently resolve to
+ * nothing: e.g. `apps/ai-orchestrator/tests/x.test.ts` under a cwd already at
+ * `apps/ai-orchestrator` looks for `apps/ai-orchestrator/apps/ai-orchestrator/…`.
+ * Stripping a leading `${scope}/` makes both shapes land on the same file,
+ * without weakening PATTERN_SAFE validation upstream.
+ */
+function scopeRelativePattern(pattern, scope) {
+  if (!pattern || !scope) return pattern;
+  const prefix = `${scope}/`;
+  return pattern.startsWith(prefix) ? pattern.slice(prefix.length) : pattern;
+}
+
+/**
  * Runs one deterministic action.
  *
  * `spawnFn` is injected so tests can prove the whole path — including that no
@@ -64,7 +80,10 @@ export async function runDeterministicAction({
     ? join(worktree, unit.scope)
     : worktree;
 
-  const argv = [...spec.command, ...(spec.appendPattern && unit.pattern ? [unit.pattern] : [])];
+  const pattern = spec.cwd === ACTION_CWD.SCOPE
+    ? scopeRelativePattern(unit.pattern, unit.scope)
+    : unit.pattern;
+  const argv = [...spec.command, ...(spec.appendPattern && pattern ? [pattern] : [])];
   const startedAt = Date.now();
 
   // A precondition the harness cannot satisfy is not a failure of the Goal,

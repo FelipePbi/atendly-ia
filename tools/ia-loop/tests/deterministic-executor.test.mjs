@@ -199,3 +199,46 @@ test('10. a timeout kills the process and is reported distinctly from a real fai
   assert.equal(result.signal, 'SIGKILL');
   assert.match(result.error, /TIMEOUT/);
 });
+
+test('11. a targeted-tests pattern written repo-root-relative (scope prefix included) is stripped to scope-relative before it reaches argv, since cwd is already inside scope', async () => {
+  const seen = [];
+  const spawnFn = (command, args, opts) => {
+    seen.push({ command, args });
+    const child = fakeChild();
+    queueMicrotask(() => child.emit('close', 0, null));
+    return child;
+  };
+
+  const result = await runDeterministicAction({
+    unit: unit({
+      action: 'targeted-tests',
+      scope: 'apps/ai-orchestrator',
+      pattern: 'apps/ai-orchestrator/tests/assistant/assistant.service.test.ts',
+    }),
+    worktree: '/repo/worktree',
+    spawnFn,
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.argv, ['npx', 'vitest', 'run', 'tests/assistant/assistant.service.test.ts']);
+});
+
+test('12. a targeted-tests pattern already scope-relative is left untouched', async () => {
+  const spawnFn = () => {
+    const child = fakeChild();
+    queueMicrotask(() => child.emit('close', 0, null));
+    return child;
+  };
+
+  const result = await runDeterministicAction({
+    unit: unit({
+      action: 'targeted-tests',
+      scope: 'apps/ai-orchestrator',
+      pattern: 'tests/assistant/assistant.service.test.ts',
+    }),
+    worktree: '/repo/worktree',
+    spawnFn,
+  });
+
+  assert.deepEqual(result.argv, ['npx', 'vitest', 'run', 'tests/assistant/assistant.service.test.ts']);
+});

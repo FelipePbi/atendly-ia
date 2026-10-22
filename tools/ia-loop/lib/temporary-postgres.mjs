@@ -169,9 +169,18 @@ export function createPostgresDriver({ pgBin = resolvePgBinDirectory() } = {}) {
   };
 }
 
-/** A database name derived from an env var name: BFF_TEST_DATABASE_URL -> bff. */
+/**
+ * A database name derived from an env var name: BFF_TEST_DATABASE_URL ->
+ * ia_bff_test.
+ *
+ * The gate scripts refuse any database whose name doesn't contain "test" as
+ * a bounded word (`validate-integration.mjs`'s `DISPOSABLE_NAME`) — the one
+ * signal they have that a database is throwaway. Dropping that word here, as
+ * an earlier version of this function did, produced names like "ia_bff" that
+ * the very gate this module exists to satisfy would refuse on sight.
+ */
 export function databaseNameForEnv(name) {
-  return `ia_${String(name).toLowerCase().replace(/_test_database_url$/, '').replace(/[^a-z0-9]+/g, '_')}`;
+  return `ia_${String(name).toLowerCase().replace(/_test_database_url$/, '').replace(/[^a-z0-9]+/g, '_')}_test`;
 }
 
 /** Reads the postgres data directory's postmaster.pid for the live PID, if any. */

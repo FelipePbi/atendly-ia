@@ -169,9 +169,18 @@ export function createPostgresDriver({ pgBin = resolvePgBinDirectory() } = {}) {
   };
 }
 
-/** A database name derived from an env var name: BFF_TEST_DATABASE_URL -> bff. */
+/**
+ * A database name derived from an env var name: BFF_TEST_DATABASE_URL -> ia_bff_test.
+ *
+ * `scripts/validate-integration.mjs` refuses any database whose name does not
+ * contain "test" as a delimited word — on purpose, so the gate can never fall
+ * back to a shared or product database. The service prefix alone (`ia_bff`)
+ * does not satisfy that guard, which is why `test` is appended here instead
+ * of only trimmed off the source env var name.
+ */
 export function databaseNameForEnv(name) {
-  return `ia_${String(name).toLowerCase().replace(/_test_database_url$/, '').replace(/[^a-z0-9]+/g, '_')}`;
+  const service = String(name).toLowerCase().replace(/_test_database_url$/, '').replace(/[^a-z0-9]+/g, '_');
+  return `ia_${service}_test`;
 }
 
 /** Reads the postgres data directory's postmaster.pid for the live PID, if any. */

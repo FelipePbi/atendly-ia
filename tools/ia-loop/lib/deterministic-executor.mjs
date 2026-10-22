@@ -37,6 +37,27 @@ export const DEFAULT_ACTION_TIMEOUT_MS = Number(
   process.env.IA_LOOP_DETERMINISTIC_TIMEOUT_MS ?? 30 * 60 * 1000,
 );
 
+/**
+ * A test filter is resolved against the directory the action runs in, and for
+ * a scoped action that directory is `<worktree>/<scope>` — so `apps/frontend`
+ * + `apps/frontend/tests` means the literal path `apps/frontend/apps/frontend/tests`,
+ * which matches nothing and makes Vitest exit 1 with "No test files found".
+ * A planner that repeats the scope means the same directory it already named,
+ * so the prefix is dropped rather than turned into a failure no model can
+ * repair by editing the tree.
+ */
+function patternRelativeToScope(pattern, scope) {
+  if (!pattern || !scope) return pattern;
+  const root = scope.replace(/\/+$/, '');
+  // The scope directory itself is not a filter: it names every test under the
+  // scope, which is exactly what the action runs with no filter at all.
+  if (pattern === root) return null;
+  const prefix = `${root}/`;
+  if (!pattern.startsWith(prefix)) return pattern;
+  const relative = pattern.slice(prefix.length);
+  return relative === '' ? null : relative;
+}
+
 /** The last N characters, which is where a failure almost always is. */
 function tail(text, limit) {
   if (text.length <= limit) return text;
@@ -64,7 +85,11 @@ export async function runDeterministicAction({
     ? join(worktree, unit.scope)
     : worktree;
 
-  const argv = [...spec.command, ...(spec.appendPattern && unit.pattern ? [unit.pattern] : [])];
+  const pattern = spec.cwd === ACTION_CWD.SCOPE
+    ? patternRelativeToScope(unit.pattern, unit.scope)
+    : unit.pattern;
+
+  const argv = [...spec.command, ...(spec.appendPattern && pattern ? [pattern] : [])];
   const startedAt = Date.now();
 
   // A precondition the harness cannot satisfy is not a failure of the Goal,

@@ -199,3 +199,62 @@ test('10. a timeout kills the process and is reported distinctly from a real fai
   assert.equal(result.signal, 'SIGKILL');
   assert.match(result.error, /TIMEOUT/);
 });
+
+test('11. a targeted-tests pattern that repeats the scope is passed relative to the directory the action runs in', async () => {
+  const seen = [];
+  const spawnFn = (command, args, opts) => {
+    seen.push({ command, args, opts });
+    const child = fakeChild();
+    queueMicrotask(() => child.emit('close', 0, null));
+    return child;
+  };
+
+  const result = await runDeterministicAction({
+    unit: unit({ action: 'targeted-tests', scope: 'apps/frontend', pattern: 'apps/frontend/tests' }),
+    worktree: '/repo/worktree',
+    spawnFn,
+    resolveTarget: (argv) => ({ command: argv[0], args: argv.slice(1) }),
+  });
+
+  assert.deepEqual(seen[0].args, ['vitest', 'run', 'tests']);
+  assert.deepEqual(result.argv, ['npx', 'vitest', 'run', 'tests']);
+  assert.equal(result.ok, true);
+});
+
+test('12. a pattern already relative to the scope is passed through untouched', async () => {
+  const seen = [];
+  const spawnFn = (command, args, opts) => {
+    seen.push({ command, args, opts });
+    const child = fakeChild();
+    queueMicrotask(() => child.emit('close', 0, null));
+    return child;
+  };
+
+  await runDeterministicAction({
+    unit: unit({ action: 'targeted-tests', scope: 'apps/bff', pattern: 'tests/notifications' }),
+    worktree: '/repo/worktree',
+    spawnFn,
+    resolveTarget: (argv) => ({ command: argv[0], args: argv.slice(1) }),
+  });
+
+  assert.deepEqual(seen[0].args, ['vitest', 'run', 'tests/notifications']);
+});
+
+test('13. a pattern that is the scope directory itself runs the scope with no filter', async () => {
+  const seen = [];
+  const spawnFn = (command, args, opts) => {
+    seen.push({ command, args, opts });
+    const child = fakeChild();
+    queueMicrotask(() => child.emit('close', 0, null));
+    return child;
+  };
+
+  await runDeterministicAction({
+    unit: unit({ action: 'targeted-tests', scope: 'apps/frontend', pattern: 'apps/frontend' }),
+    worktree: '/repo/worktree',
+    spawnFn,
+    resolveTarget: (argv) => ({ command: argv[0], args: argv.slice(1) }),
+  });
+
+  assert.deepEqual(seen[0].args, ['vitest', 'run']);
+});
